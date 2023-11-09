@@ -4,12 +4,14 @@ import logging
 from redbot.core import app_commands, checks
 
 from rscapi import ApiClient, TeamsApi
+from rscapi.models.team import Team
 from rscapi.models.team_list import TeamList
 
 from rsc.abc import RSCMeta
 from rsc.embeds import ErrorEmbed
 from rsc.franchises import FranchiseMixIn
 from rsc.tiers import TierMixIn
+from rsc.utils import get_franchise_role_from_name, get_gm, is_gm
 
 from typing import Optional, List, Dict, Tuple
 
@@ -127,17 +129,50 @@ class TeamMixIn(metaclass=RSCMeta):
         elif len(teams) > 1:
             names = ", ".join(t.name for t in teams)
             await interaction.response.send_message(
-                content=f"Found multiple results for team name: **{names}",
+                content=f"Found multiple results for team name: **{names}**",
                 ephemeral=True,
             )
             return
 
-        log.debug(teams)
-
         # Fetch roster information
-        roster = await self.team_by_id(teams[0].id)
+        roster = await self.team_by_id(str(teams[0].id))
         log.debug(roster)
-        # TODO when fixed
+
+        tier_role = discord.utils.get(interaction.guild.roles, name=roster.tier)
+        # franchise_role = await get_franchise_role_from_name(interaction.guild, roster.franchise)
+        log.debug(f"Tier Role: {tier_role}")
+        # log.debug(f"Franchise Role: {franchise_role}")
+
+        if tier_role:
+            tier_color = tier_role.color 
+        else:
+            tier_color = discord.Color.blue()
+
+        # Get GM
+        franchise_info = await self.franchises(interaction.guild, name=roster.franchise)
+        gm_id = franchise_info[0].gm.discord_id
+        gm = interaction.guild.get_member(gm_id)
+        log.debug(f"GM: {gm}")
+
+        player_str = ""
+        for p in roster.players:
+            player_str += f"{p.name}"
+            if p.captain:
+                player_str += " (C)"
+            # Add GM in here. Waiting on discord IDs to be returned
+            player_str += "\n"
+        
+
+        # Team API endpoint is currently missing IR status. Need to add eventually.            
+
+        embed = discord.Embed(
+            title=f"{team} - {roster.franchise} - {roster.tier}",
+            description=player_str,
+            color=tier_color,
+        )
+        await interaction.response.send_message(embed=embed)
+
+
 
     # Functions
 
@@ -169,7 +204,7 @@ class TeamMixIn(metaclass=RSCMeta):
     async def team_by_id(
         self,
         id: str,
-    ) -> List[TeamList]:
+    ) -> Team:
         """Fetch team data by id"""
         async with ApiClient(self._api_conf) as client:
             api = TeamsApi(client)
