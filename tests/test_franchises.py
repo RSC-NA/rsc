@@ -11,12 +11,12 @@ log = logging.getLevelName(__name__)
 @pytest.mark.asyncio
 class TestFranchises:
     async def test_franchises_list(self, FranchiseApi):
-        data = await FranchiseApi.franchises_list(league="1")
+        data = await FranchiseApi.franchises_list(league=1)
         assert len(data) > 0
         assert isinstance(data[0], FranchiseList)
         assert isinstance(data[0].gm, FranchiseGM)
         data = await FranchiseApi.franchises_list(
-            league="1",
+            league=1,
             prefix="test",
             gm_name="test",
             name="test",

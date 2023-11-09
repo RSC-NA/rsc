@@ -4,7 +4,7 @@ RSCBot is a discored Cog written in Python that can be installed and used with t
 
 This was designed for use within [RSC (Rocket Soccar Confederation)](https://www.rocketsoccarconfederation.com/), a Rocket League Amateur League that run has leagues operating in NA, EU, and SSS.
 
-- [RSC NA 3v3 Discord](https://discord.gg/Q6RkvYm).
+- [RSC NA 3v3 Discord](https://discord.gg/rsc)
 - [RSC NA 2v2 Discord](https://discord.gg/se6NwxKjpZ)
 - [RSC EU 3v3 Discord](https://discord.gg/Bw4rvpG)
 - [RSC SSA 3v3 Discord](https://discord.gg/r7G6Kczb)
