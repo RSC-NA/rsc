@@ -7,7 +7,7 @@ This was designed for use within [RSC (Rocket Soccar Confederation)](https://www
 - [RSC NA 3v3 Discord](https://discord.gg/rsc)
 - [RSC NA 2v2 Discord](https://discord.gg/se6NwxKjpZ)
 - [RSC EU 3v3 Discord](https://discord.gg/Bw4rvpG)
-- [RSC SSA 3v3 Discord](https://discord.gg/r7G6Kczb)
+- [RSC SSA 3v3 Discord](https://discord.gg/h2ynTF4mNJ)
 
 ## Installation
 
