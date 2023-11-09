@@ -48,10 +48,6 @@ class RSC(
         log.debug("rsc cog_load() called")
         self.bot.add_listener(self.populate_cache, 'on_ready')
 
-    @commands.Cog.listener()
-    async def initialize(self):
-        await self.populate_cache()
-
     async def populate_cache(self):
         """Populate caches for autocompletion. Requires API config"""
         if self._api_conf:
