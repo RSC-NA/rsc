@@ -7,33 +7,31 @@ from redbot.core import app_commands, checks
 from rscapi import ApiClient, LeaguesApi
 from rscapi.models.league import League
 
+from rsc.abc import RSCMeta
 from rsc.embeds import ErrorEmbed
+from rsc.teams import TeamMixIn
 
-from typing import List
+from typing import List, Optional
 
 log = logging.getLogger("red.rsc.matches")
 
 
-class MatchMixIn:
+class MatchMixIn(metaclass=RSCMeta):
     # App Commands
 
     @app_commands.command(
-        name="schedule", description="Display your entire schedule or a specific team"
+        name="schedule", description="Display your team or another teams schedule"
     )
+    @app_commands.autocomplete(team=TeamMixIn.teams_autocomplete)
     @app_commands.guild_only()
-    async def _schedule(self, interaction: discord.Interaction):
-        leagues = await self.leagues()
-        if leagues:
-            output = "\n- ".join(f"{l.name}: {l.league_data.game_mode}" for l in l)
-            interaction.response.send_message(
-                discord.Embed(name="RSC Leagues", description=output)
-            )
+    async def _schedule(
+        self, interaction: discord.Interaction, team: Optional[str] = None
+    ):
+        pass
 
     # Functionality
 
     async def leagues(self) -> List[League]:
         async with ApiClient(self._api_conf) as client:
-            leagues = LeaguesApi(client)
-            resp = await leagues.leagues_list()
-            log.debug(resp)
-            # return parse_obj_as(List[League], resp)
+            api = LeaguesApi(client)
+            return await api.leagues_list()

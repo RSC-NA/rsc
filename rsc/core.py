@@ -5,12 +5,13 @@ from redbot.core import Config, app_commands, commands, checks
 
 from rscapi import Configuration
 
-from rsc.abc import CoreMeta
+from rsc.abc import CompositeMetaClass
 from rsc.transactions import TransactionMixIn
 from rsc.numbers import NumbersMixIn
-from rsc.league import LeagueMixIn
+from rsc.leagues import LeagueMixIn
 from rsc.franchises import FranchiseMixIn
 from rsc.teams import TeamMixIn
+from rsc.tiers import TierMixIn
 
 from typing import Optional
 
@@ -25,9 +26,12 @@ defaults_global = {
 class RSC(
     FranchiseMixIn,
     LeagueMixIn,
+    TeamMixIn,
+    TierMixIn,
     NumbersMixIn,
     TransactionMixIn,
     commands.Cog,
+    metaclass=CompositeMetaClass,
 ):
     def __init__(self, bot):
         self.bot = bot
@@ -62,7 +66,7 @@ class RSC(
     @api_settings.command(name="key", description="Configure the RSC API key.")
     @checks.admin_or_permissions(manage_guild=True)
     async def _rscapi_set_key(self, interaction: discord.Interaction, key: str):
-        await self._set_api_key(interaction.guild, key)
+        await self._set_api_key(key)
         await interaction.response.send_message(
             embed=discord.Embed(
                 title="RSC API Key",
@@ -75,7 +79,7 @@ class RSC(
     @api_settings.command(name="url", description="Configure the RSC API web address.")
     @checks.admin_or_permissions(manage_guild=True)
     async def _rscapi_set_url(self, interaction: discord.Interaction, url: str):
-        await self._set_api_url(interaction.guild, url)
+        await self._set_api_url(url)
         await interaction.response.send_message(
             embed=discord.Embed(
                 title="RSC API Url",
@@ -90,12 +94,8 @@ class RSC(
     )
     @checks.admin_or_permissions(manage_guild=True)
     async def _rscapi_settings(self, interaction: discord.Interaction):
-        key = (
-            "Configured"
-            if await self._get_api_key(interaction.guild)
-            else "Not Configured"
-        )
-        url = await self._get_api_url(interaction.guild) or "Not Configured"
+        key = "Configured" if await self._get_api_key() else "Not Configured"
+        url = await self._get_api_url() or "Not Configured"
         log.debug(f"Key: {key} URL: {url}")
         settings_embed = discord.Embed(
             title="RSC API Settings",
@@ -106,9 +106,6 @@ class RSC(
         settings_embed.add_field(name="API Key", value=key, inline=False)
         settings_embed.add_field(name="API URL", value=url, inline=False)
         await interaction.response.send_message(embed=settings_embed, ephemeral=True)
-
-    async def _set_leauge(self, key: str):
-        await self.config.ApiKey.set(key)
 
     async def _set_api_key(self, key: str):
         await self.config.ApiKey.set(key)
