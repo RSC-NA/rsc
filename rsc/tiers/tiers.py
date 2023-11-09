@@ -16,12 +16,13 @@ log = logging.getLogger("red.rsc.tiers")
 
 
 class TierMixIn(metaclass=RSCMeta):
+
     def __init__(self):
         log.debug("Initializing TierMixIn")
         self._tier_cache: Dict[int, List[str]] = {}
         super().__init__()
 
-    # Autocomplion
+    # Autocomplete
 
     async def tiers_autocomplete(
         self, interaction: discord.Interaction, current: str
@@ -103,7 +104,7 @@ class TierMixIn(metaclass=RSCMeta):
             if tiers:
                 if self._tier_cache.get(guild.id):
                     cached = set(self._tier_cache[guild.id])
-                    different = cached - set([t.name for t in tiers])
+                    different = set([t.name for t in tiers]) - cached
                     self._tier_cache[guild.id] += list(different)
                 else:
                     self._tier_cache[guild.id] = [t.name for t in tiers]

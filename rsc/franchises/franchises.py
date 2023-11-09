@@ -23,7 +23,7 @@ class FranchiseMixIn(metaclass=RSCMeta):
         self._franchise_cache: Dict[int, List[str]] = {}
         super().__init__()
 
-    # Autocomplion
+    # Autocomplete
 
     async def franchise_autocomplete(
         self, interaction: discord.Interaction, current: str

@@ -17,7 +17,7 @@ log = logging.getLogger("red.rsc.leagues")
 
 
 class LeagueMixIn(metaclass=RSCMeta):
-    # App Commands
+    # Commands
 
     @app_commands.command(name="leagues", description="Show all configured RSC leagues")
     @app_commands.guild_only()

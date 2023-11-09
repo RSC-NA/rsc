@@ -17,13 +17,14 @@ log = logging.getLogger("red.rsc.teams")
 
 
 class TeamMixIn(metaclass=RSCMeta):
-    # Roster
+
     def __init__(self):
         log.debug("Initializing TeamMixIn")
         self._team_cache: Dict[int, List[str]] = {}
         super().__init__()
 
-    # Autocomplion
+    # Autocomplete
+
     async def teams_autocomplete(
         self, interaction: discord.Interaction, current: str
     ) -> List[app_commands.Choice[str]]:
@@ -159,7 +160,7 @@ class TeamMixIn(metaclass=RSCMeta):
             if teams:
                 if self._team_cache.get(guild.id):
                     cached = set(self._team_cache[guild.id])
-                    different = cached - set([t.name for t in teams])
+                    different = set([t.name for t in teams]) - cached
                     self._team_cache[guild.id] += list(different)
                 else:
                     self._team_cache[guild.id] = [t.name for t in teams]

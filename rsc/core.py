@@ -6,8 +6,6 @@ from redbot.core import Config, app_commands, commands, checks
 from rscapi import Configuration
 
 from rsc.abc import CompositeMetaClass
-from rsc.transactions import TransactionMixIn
-from rsc.numbers import NumbersMixIn
 from rsc.leagues import LeagueMixIn
 from rsc.franchises import FranchiseMixIn
 from rsc.teams import TeamMixIn
@@ -28,8 +26,6 @@ class RSC(
     LeagueMixIn,
     TeamMixIn,
     TierMixIn,
-    NumbersMixIn,
-    TransactionMixIn,
     commands.Cog,
     metaclass=CompositeMetaClass,
 ):
@@ -45,6 +41,26 @@ class RSC(
         self._api_conf = None
         super().__init__()
         log.info("RSC Bot has been started.")
+
+    # Setup 
+
+    def cog_load(self):
+        log.debug("rsc cog_load() called")
+        self.bot.add_listener(self.populate_cache, 'on_ready')
+
+    @commands.Cog.listener()
+    async def initialize(self):
+        await self.populate_cache()
+
+    async def populate_cache(self):
+        """Populate caches for autocompletion. Requires API config"""
+        if self._api_conf:
+            for guild in self.bot.guilds:
+                log.debug(f"Preparing cache for {guild}")
+                await self.franchises(guild)
+                await self.tiers(guild)
+
+
 
     async def prepare_api(self):
         url = await self._get_api_url()
