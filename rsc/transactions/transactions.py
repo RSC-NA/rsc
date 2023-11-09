@@ -36,7 +36,7 @@ class TransactionMixIn(metaclass=RSCMeta):
     )
 
     @_transactions.command(
-        name="settings", description="Display settings for transactions"
+        name="settings", description="Display settings for transactions", guild_only=True
     )
     @app_commands.checks.has_permissions(manage_guild=True)
     async def _show_transactions_settings(self, interaction: discord.Interaction):
