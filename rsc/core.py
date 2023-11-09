@@ -10,6 +10,7 @@ from rsc.leagues import LeagueMixIn
 from rsc.franchises import FranchiseMixIn
 from rsc.teams import TeamMixIn
 from rsc.tiers import TierMixIn
+from rsc.transactions import TransactionMixIn
 
 from typing import Optional
 
@@ -26,6 +27,7 @@ class RSC(
     LeagueMixIn,
     TeamMixIn,
     TierMixIn,
+    TransactionMixIn,
     commands.Cog,
     metaclass=CompositeMetaClass,
 ):
@@ -76,7 +78,7 @@ class RSC(
     )
 
     @api_settings.command(name="key", description="Configure the RSC API key.")
-    @checks.admin_or_permissions(manage_guild=True)
+    @app_commands.checks.has_permissions(manage_guild=True)
     async def _rscapi_set_key(self, interaction: discord.Interaction, key: str):
         await self._set_api_key(key)
         await interaction.response.send_message(
@@ -89,7 +91,7 @@ class RSC(
         )
 
     @api_settings.command(name="url", description="Configure the RSC API web address.")
-    @checks.admin_or_permissions(manage_guild=True)
+    @app_commands.checks.has_permissions(manage_guild=True)
     async def _rscapi_set_url(self, interaction: discord.Interaction, url: str):
         await self._set_api_url(url)
         await interaction.response.send_message(
@@ -104,7 +106,7 @@ class RSC(
     @api_settings.command(
         name="settings", description="Display the current RSC API settings."
     )
-    @checks.admin_or_permissions(manage_guild=True)
+    @app_commands.checks.has_permissions(manage_guild=True)
     async def _rscapi_settings(self, interaction: discord.Interaction):
         key = "Configured" if await self._get_api_key() else "Not Configured"
         url = await self._get_api_url() or "Not Configured"
