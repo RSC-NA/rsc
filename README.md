@@ -2,7 +2,7 @@
 
 RSCBot is a discored Cog written in Python that can be installed and used with the [Red Discord Bot](https://docs.discord.red/en/stable/index.html).
 
-This was designed for use within [RSC (Rocket Soccar Confederation)](https://www.rocketsoccarconfederation.com/), a Rocket League Amateur League that run has leagues operating in NA, EU, and SSS.
+This was designed for use within [RSC (Rocket Soccar Confederation)](https://www.rocketsoccarconfederation.com/), a Rocket League Amateur League that has leagues operating in NA, EU, and SSA.
 
 - [RSC NA 3v3 Discord](https://discord.gg/rsc)
 - [RSC NA 2v2 Discord](https://discord.gg/se6NwxKjpZ)
