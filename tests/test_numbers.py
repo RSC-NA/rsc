@@ -9,7 +9,6 @@ RSC_ID = "RSC002892" # nickm
 
 @pytest.mark.asyncio
 class TestNumbers:
-    @pytest.mark.xfail
     async def test_numbers_list(self, NumberApi):
         r = await NumberApi.numbers_mmr_list(rscid=RSC_ID)
         assert r
