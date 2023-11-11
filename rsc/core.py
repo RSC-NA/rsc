@@ -11,6 +11,7 @@ from rsc.franchises import FranchiseMixIn
 from rsc.teams import TeamMixIn
 from rsc.tiers import TierMixIn
 from rsc.transactions import TransactionMixIn
+from rsc.utils import UtilsMixIn
 
 from typing import Optional, Dict
 
@@ -28,6 +29,7 @@ class RSC(
     TeamMixIn,
     TierMixIn,
     TransactionMixIn,
+    UtilsMixIn,
     commands.Cog,
     metaclass=CompositeMetaClass,
 ):

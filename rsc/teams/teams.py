@@ -11,7 +11,7 @@ from rsc.abc import RSCMeta
 from rsc.embeds import ErrorEmbed
 from rsc.franchises import FranchiseMixIn
 from rsc.tiers import TierMixIn
-from rsc.utils import get_franchise_role_from_name, get_gm, is_gm
+from rsc.utils.utils import get_franchise_role_from_name, get_gm, is_gm
 
 from typing import Optional, List, Dict, Tuple
 
