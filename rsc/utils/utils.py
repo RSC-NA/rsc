@@ -48,6 +48,7 @@ async def get_franchise_role_from_name(
             return role
     return None
 
+
 class UtilsMixIn(metaclass=RSCMeta):
     @app_commands.command(
         name="getid",
@@ -131,11 +132,22 @@ class UtilsMixIn(metaclass=RSCMeta):
         role: discord.Role,
         member: discord.Member,
     ):
-        try: 
+        try:
             await member.add_roles(role)
-            await interaction.response.send_message(embed=SuccessEmbed(description=f"Added {role.mention} role to {member.mention}"), ephemeral=True)
+            await interaction.response.send_message(
+                embed=SuccessEmbed(
+                    description=f"Added {role.mention} role to {member.mention}"
+                ),
+                ephemeral=True,
+            )
         except discord.Forbidden as exc:
-            await interaction.response.send_message(embed=ExceptionErrorEmbed(description=f"Unable to add {role.mention} role to {member.mention}", exc_message=exc.text), ephemeral=True)
+            await interaction.response.send_message(
+                embed=ExceptionErrorEmbed(
+                    description=f"Unable to add {role.mention} role to {member.mention}",
+                    exc_message=exc.text,
+                ),
+                ephemeral=True,
+            )
 
     @app_commands.command(
         name="bulkaddrole", description="Add a role a list of user(s)"
@@ -156,13 +168,16 @@ class UtilsMixIn(metaclass=RSCMeta):
 
         # Avoid discord field limits (1024 max)
         if len(members) >= 1024:
-            await interaction.response.send_message(content=f"Unable to process more than 1024 users at a time. (Total: {len(members)})", ephemeral=True)
+            await interaction.response.send_message(
+                content=f"Unable to process more than 1024 users at a time. (Total: {len(members)})",
+                ephemeral=True,
+            )
             return
 
         success: List[discord.Member] = []
         failed: List[discord.Member] = []
         for m in members:
-            try: 
+            try:
                 await m.add_roles(role)
                 success.append(m)
             except:
@@ -173,11 +188,16 @@ class UtilsMixIn(metaclass=RSCMeta):
             description=f"Added {role.mention} to the following user(s).",
             color=discord.Color.green(),
         )
-        embed.add_field(name="Succeeded", value="\n".join(f"{s.mention}" for s in success), inline=True)
-        embed.add_field(name="Failed", value="\n".join(f"{f.mention}" for f in failed), inline=True)
+        embed.add_field(
+            name="Succeeded",
+            value="\n".join(f"{s.mention}" for s in success),
+            inline=True,
+        )
+        embed.add_field(
+            name="Failed", value="\n".join(f"{f.mention}" for f in failed), inline=True
+        )
         embed.set_footer(text=f"Applied role to {len(success)}/{len(members)} members.")
         await interaction.response.send_message(embed=embed, ephemeral=True)
-
 
     @app_commands.command(
         name="removerole", description="Remove a role to the specified user"
@@ -191,11 +211,22 @@ class UtilsMixIn(metaclass=RSCMeta):
         role: discord.Role,
         member: discord.Member,
     ):
-        try: 
+        try:
             await member.remove_roles(role)
-            await interaction.response.send_message(embed=SuccessEmbed(description=f"Removed {role.mention} role to {member.mention}"), ephemeral=True)
+            await interaction.response.send_message(
+                embed=SuccessEmbed(
+                    description=f"Removed {role.mention} role to {member.mention}"
+                ),
+                ephemeral=True,
+            )
         except discord.Forbidden as exc:
-            await interaction.response.send_message(embed=ExceptionErrorEmbed(description=f"Unable to remove {role.mention} role to {member.mention}", exc_message=exc.text), ephemeral=True)
+            await interaction.response.send_message(
+                embed=ExceptionErrorEmbed(
+                    description=f"Unable to remove {role.mention} role to {member.mention}",
+                    exc_message=exc.text,
+                ),
+                ephemeral=True,
+            )
 
     @app_commands.command(
         name="bulkremoverole", description="Remove a role a list of user(s)"
@@ -216,13 +247,16 @@ class UtilsMixIn(metaclass=RSCMeta):
 
         # Avoid discord field limits (1024 max)
         if len(members) >= 1024:
-            await interaction.response.send_message(content=f"Unable to process more than 1024 users at a time. (Total: {len(members)})", ephemeral=True)
+            await interaction.response.send_message(
+                content=f"Unable to process more than 1024 users at a time. (Total: {len(members)})",
+                ephemeral=True,
+            )
             return
 
         success: List[discord.Member] = []
         failed: List[discord.Member] = []
         for m in members:
-            try: 
+            try:
                 await m.remove_roles(role)
                 success.append(m)
             except:
@@ -233,7 +267,15 @@ class UtilsMixIn(metaclass=RSCMeta):
             description=f"Removed {role.mention} to the following user(s).",
             color=discord.Color.green(),
         )
-        embed.add_field(name="Succeeded", value="\n".join(f"{s.mention}" for s in success), inline=True)
-        embed.add_field(name="Failed", value="\n".join(f"{f.mention}" for f in failed), inline=True)
-        embed.set_footer(text=f"Removed role from {len(success)}/{len(members)} members.")
+        embed.add_field(
+            name="Succeeded",
+            value="\n".join(f"{s.mention}" for s in success),
+            inline=True,
+        )
+        embed.add_field(
+            name="Failed", value="\n".join(f"{f.mention}" for f in failed), inline=True
+        )
+        embed.set_footer(
+            text=f"Removed role from {len(success)}/{len(members)} members."
+        )
         await interaction.response.send_message(embed=embed, ephemeral=True)

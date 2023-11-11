@@ -1,16 +1,19 @@
 import discord
 
+
 class SuccessEmbed(discord.Embed):
     """Generic Success Embed"""
 
     def __init__(self, **kwargs):
         super().__init__(title="Success", color=discord.Color.green(), **kwargs)
 
+
 class ErrorEmbed(discord.Embed):
     """Generic Error Embed"""
 
     def __init__(self, **kwargs):
         super().__init__(title="Error", color=discord.Color.red(), **kwargs)
+
 
 class ExceptionErrorEmbed(discord.Embed):
     """Generic Error Embed"""

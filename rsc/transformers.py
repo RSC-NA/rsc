@@ -5,6 +5,7 @@ from discord import AppCommandOptionType
 
 from typing import List
 
+
 class MemberTransformer(Transformer):
     """Transform space delimited string of Discord IDs into List[discord.Member] (Guild Only)"""
 
