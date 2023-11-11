@@ -185,7 +185,7 @@ class TeamMixIn(metaclass=RSCMeta):
         tier: Optional[str] = None,
     ) -> List[TeamList]:
         """Fetch teams from API"""
-        async with ApiClient(self._api_conf) as client:
+        async with ApiClient(self._api_conf[guild]) as client:
             api = TeamsApi(client)
             teams = await api.teams_list(
                 seasons=seasons, franchise=franchise, name=name, tier=tier, league="1"
@@ -203,9 +203,10 @@ class TeamMixIn(metaclass=RSCMeta):
 
     async def team_by_id(
         self,
+        guild: discord.Guild,
         id: str,
     ) -> Team:
         """Fetch team data by id"""
-        async with ApiClient(self._api_conf) as client:
+        async with ApiClient(self._api_conf[guild]) as client:
             api = TeamsApi(client)
             return await api.teams_read(id)

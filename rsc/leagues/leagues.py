@@ -60,11 +60,11 @@ class LeagueMixIn(metaclass=RSCMeta):
     # Functionality
 
     async def leagues(self, guild: discord.Guild) -> List[League]:
-        async with ApiClient(self._api_conf) as client:
+        async with ApiClient(self._api_conf[guild]) as client:
             api = LeaguesApi(client)
             return await api.leagues_list()
 
     async def season(self, guild: discord.Guild) -> List[Season]:
-        async with ApiClient(self._api_conf) as client:
+        async with ApiClient(self._api_conf[guild]) as client:
             api = SeasonsApi(client)
             return await api.seasons_league_season(1)

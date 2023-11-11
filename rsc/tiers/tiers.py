@@ -96,7 +96,7 @@ class TierMixIn(metaclass=RSCMeta):
         self, guild: discord.Guild, name: Optional[str] = None
     ) -> List[Tier]:
         """Fetch a list of tiers"""
-        async with ApiClient(self._api_conf) as client:
+        async with ApiClient(self._api_conf[guild]) as client:
             api = TiersApi(client)
             tiers = await api.tiers_list(name=name, league="1")
 
@@ -110,8 +110,8 @@ class TierMixIn(metaclass=RSCMeta):
                     self._tier_cache[guild.id] = [t.name for t in tiers]
             return tiers
 
-    async def tier_by_id(self, id: int) -> Tier:
-        async with ApiClient(self._api_conf) as client:
+    async def tier_by_id(self, guild: discord.Guild, id: int) -> Tier:
+        async with ApiClient(self._api_conf[guild]) as client:
             api = TiersApi(client)
             tier = await api.tiers_read(id)
             return tier

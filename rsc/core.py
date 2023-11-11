@@ -12,11 +12,11 @@ from rsc.teams import TeamMixIn
 from rsc.tiers import TierMixIn
 from rsc.transactions import TransactionMixIn
 
-from typing import Optional
+from typing import Optional, Dict
 
 log = logging.getLogger("red.rsc.core")
 
-defaults_global = {
+defaults_guild = {
     "ApiKey": None,
     "ApiUrl": None,
 }
@@ -37,34 +37,48 @@ class RSC(
             self, identifier=6349109713, force_registration=True
         )
 
-        self.config.register_global(**defaults_global)
+        self.config.register_guild(**defaults_guild)
 
         # Define state of API connection
-        self._api_conf = None
+        self._api_conf: Dict[discord.Guild, Configuration] = {}
         super().__init__()
         log.info("RSC Bot has been started.")
 
     # Setup 
 
-    def cog_load(self):
-        log.debug("rsc cog_load() called")
-        self.bot.add_listener(self.populate_cache, 'on_ready')
+    async def cog_load(self):
+        """Perform initial bot setup on Cog reload"""
+        log.debug("In cog_load()")
+        await self.setup()
 
-    async def populate_cache(self):
-        """Populate caches for autocompletion. Requires API config"""
-        if self._api_conf:
-            for guild in self.bot.guilds:
-                log.debug(f"Preparing cache for {guild}")
+    @commands.Cog.listener()
+    async def on_ready(self):
+        """
+        Perform initial bot setup on ready. This event ensures we are connected to guilds first.
+
+        Does NOT trigger on Cog reload.
+        """
+        log.debug("In on_ready()")
+        await self.setup()
+
+    async def setup(self):
+        """Prepare the bot API and caches. Requires API configuration"""
+        log.debug("In RSC setup()")
+        for guild in self.bot.guilds:
+            log.debug(f"[{guild}] Preparing API configuration")
+            await self.prepare_api(guild)
+            if self._api_conf.get(guild):
+                log.debug(f"[{guild}] Preparing cache")
                 await self.franchises(guild)
                 await self.tiers(guild)
 
 
 
-    async def prepare_api(self):
-        url = await self._get_api_url()
-        key = await self._get_api_key()
+    async def prepare_api(self, guild: discord.Guild):
+        url = await self._get_api_url(guild)
+        key = await self._get_api_key(guild)
         if url and key:
-            self._api_conf = Configuration(
+            self._api_conf[guild] = Configuration(
                 host=url,
                 api_key=key,
             )
@@ -73,14 +87,14 @@ class RSC(
 
     # Configuration
 
-    api_settings = app_commands.Group(
-        name="rscapi", description="RSC API Configuration"
+    rsc_settings = app_commands.Group(
+        name="rsc", description="RSC API Configuration", guild_only=True
     )
 
-    @api_settings.command(name="key", description="Configure the RSC API key.")
+    @rsc_settings.command(name="key", description="Configure the RSC API key.")
     @app_commands.checks.has_permissions(manage_guild=True)
     async def _rscapi_set_key(self, interaction: discord.Interaction, key: str):
-        await self._set_api_key(key)
+        await self._set_api_key(interaction.guild, key)
         await interaction.response.send_message(
             embed=discord.Embed(
                 title="RSC API Key",
@@ -90,10 +104,10 @@ class RSC(
             ephemeral=True,
         )
 
-    @api_settings.command(name="url", description="Configure the RSC API web address.")
+    @rsc_settings.command(name="url", description="Configure the RSC API web address.")
     @app_commands.checks.has_permissions(manage_guild=True)
     async def _rscapi_set_url(self, interaction: discord.Interaction, url: str):
-        await self._set_api_url(url)
+        await self._set_api_url(interaction.guild, url)
         await interaction.response.send_message(
             embed=discord.Embed(
                 title="RSC API Url",
@@ -103,13 +117,13 @@ class RSC(
             ephemeral=True,
         )
 
-    @api_settings.command(
+    @rsc_settings.command(
         name="settings", description="Display the current RSC API settings."
     )
     @app_commands.checks.has_permissions(manage_guild=True)
-    async def _rscapi_settings(self, interaction: discord.Interaction):
-        key = "Configured" if await self._get_api_key() else "Not Configured"
-        url = await self._get_api_url() or "Not Configured"
+    async def _rscrsc_settings(self, interaction: discord.Interaction):
+        key = "Configured" if await self._get_api_key(interaction.guild) else "Not Configured"
+        url = await self._get_api_url(interaction.guild) or "Not Configured"
         log.debug(f"Key: {key} URL: {url}")
         settings_embed = discord.Embed(
             title="RSC API Settings",
@@ -121,14 +135,16 @@ class RSC(
         settings_embed.add_field(name="API URL", value=url, inline=False)
         await interaction.response.send_message(embed=settings_embed, ephemeral=True)
 
-    async def _set_api_key(self, key: str):
-        await self.config.ApiKey.set(key)
+    async def _set_api_key(self, guild: discord.Guild, key: str):
+        await self.config.guild(guild).ApiKey.set(key)
+        if self._get_api_url(guild):
+            self.prepare_api(guild)
 
-    async def _get_api_key(self) -> Optional[str]:
-        return await self.config.ApiKey()
+    async def _get_api_key(self, guild: discord.Guild) -> Optional[str]:
+        return await self.config.guild(guild).ApiKey()
 
-    async def _set_api_url(self, url: str):
-        await self.config.ApiUrl.set(url)
+    async def _set_api_url(self, guild: discord.Guild, url: str):
+        await self.config.guild(guild).ApiUrl.set(url)
 
-    async def _get_api_url(self) -> Optional[str]:
-        return await self.config.ApiUrl()
+    async def _get_api_url(self, guild: discord.Guild) -> Optional[str]:
+        return await self.config.guild(guild).ApiUrl()

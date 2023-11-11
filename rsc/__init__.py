@@ -8,11 +8,8 @@ log = logging.getLogger("red.rsc.__init__")
 async def setup(bot):
     rsc = RSC(bot)
 
-    # Setup API Configuration
-    await rsc.prepare_api()
-
-    # Handle cache population on reload
-    if rsc._api_conf:
-        await rsc.populate_cache()
+    # Handle reload of Cog
+    # if rsc._api_conf:
+    #     await rsc.setup()
 
     await bot.add_cog(rsc)
