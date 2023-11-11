@@ -44,7 +44,7 @@ class RSC(
         super().__init__()
         log.info("RSC Bot has been started.")
 
-    # Setup 
+    # Setup
 
     async def cog_load(self):
         """Perform initial bot setup on Cog reload"""
@@ -71,8 +71,6 @@ class RSC(
                 log.debug(f"[{guild}] Preparing cache")
                 await self.franchises(guild)
                 await self.tiers(guild)
-
-
 
     async def prepare_api(self, guild: discord.Guild):
         url = await self._get_api_url(guild)
@@ -122,7 +120,11 @@ class RSC(
     )
     @app_commands.checks.has_permissions(manage_guild=True)
     async def _rscrsc_settings(self, interaction: discord.Interaction):
-        key = "Configured" if await self._get_api_key(interaction.guild) else "Not Configured"
+        key = (
+            "Configured"
+            if await self._get_api_key(interaction.guild)
+            else "Not Configured"
+        )
         url = await self._get_api_url(interaction.guild) or "Not Configured"
         log.debug(f"Key: {key} URL: {url}")
         settings_embed = discord.Embed(

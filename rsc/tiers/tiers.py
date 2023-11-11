@@ -16,7 +16,6 @@ log = logging.getLogger("red.rsc.tiers")
 
 
 class TierMixIn(metaclass=RSCMeta):
-
     def __init__(self):
         log.debug("Initializing TierMixIn")
         self._tier_cache: Dict[int, List[str]] = {}

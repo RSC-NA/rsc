@@ -83,10 +83,25 @@ class FranchiseMixIn(metaclass=RSCMeta):
 
     # Functions
 
-    async def franchises(self, guild: discord.Guild, prefix: Optional[str]=None, gm_name: Optional[str]=None, name: Optional[str]=None, tier: Optional[str]=None, tier_name: Optional[str]=None) -> List[FranchiseList]:
+    async def franchises(
+        self,
+        guild: discord.Guild,
+        prefix: Optional[str] = None,
+        gm_name: Optional[str] = None,
+        name: Optional[str] = None,
+        tier: Optional[str] = None,
+        tier_name: Optional[str] = None,
+    ) -> List[FranchiseList]:
         async with ApiClient(self._api_conf[guild]) as client:
             api = FranchisesApi(client)
-            franchises = await api.franchises_list(prefix=prefix, gm_name=gm_name, name=name, tier=tier, tier_name=tier_name, league="1")
+            franchises = await api.franchises_list(
+                prefix=prefix,
+                gm_name=gm_name,
+                name=name,
+                tier=tier,
+                tier_name=tier_name,
+                league="1",
+            )
 
             # Populate cache
             self._franchise_cache[guild.id] = [f.name for f in franchises]

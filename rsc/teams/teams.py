@@ -19,7 +19,6 @@ log = logging.getLogger("red.rsc.teams")
 
 
 class TeamMixIn(metaclass=RSCMeta):
-
     def __init__(self):
         log.debug("Initializing TeamMixIn")
         self._team_cache: Dict[int, List[str]] = {}
@@ -135,7 +134,7 @@ class TeamMixIn(metaclass=RSCMeta):
             return
 
         # Fetch roster information
-        roster = await self.team_by_id(str(teams[0].id))
+        roster = await self.team_by_id(interaction.guild, str(teams[0].id))
         log.debug(roster)
 
         tier_role = discord.utils.get(interaction.guild.roles, name=roster.tier)
@@ -144,7 +143,7 @@ class TeamMixIn(metaclass=RSCMeta):
         # log.debug(f"Franchise Role: {franchise_role}")
 
         if tier_role:
-            tier_color = tier_role.color 
+            tier_color = tier_role.color
         else:
             tier_color = discord.Color.blue()
 
@@ -161,9 +160,8 @@ class TeamMixIn(metaclass=RSCMeta):
                 player_str += " (C)"
             # Add GM in here. Waiting on discord IDs to be returned
             player_str += "\n"
-        
 
-        # Team API endpoint is currently missing IR status. Need to add eventually.            
+        # Team API endpoint is currently missing IR status. Need to add eventually.
 
         embed = discord.Embed(
             title=f"{team} - {roster.franchise} - {roster.tier}",
@@ -171,8 +169,6 @@ class TeamMixIn(metaclass=RSCMeta):
             color=tier_color,
         )
         await interaction.response.send_message(embed=embed)
-
-
 
     # Functions
 

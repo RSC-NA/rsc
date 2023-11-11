@@ -30,9 +30,7 @@ class TransactionMixIn(metaclass=RSCMeta):
     # Settings
 
     _transactions = app_commands.Group(
-        name="transactions",
-        description="Transactions Configuration",
-        guild_only=True
+        name="transactions", description="Transactions Configuration", guild_only=True
     )
 
     @_transactions.command(

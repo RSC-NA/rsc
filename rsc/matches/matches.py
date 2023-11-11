@@ -30,8 +30,3 @@ class MatchMixIn(metaclass=RSCMeta):
         pass
 
     # Functionality
-
-    async def leagues(self, guild: discord.Guild) -> List[League]:
-        async with ApiClient(self._api_conf[guild]) as client:
-            api = LeaguesApi(client)
-            return await api.leagues_list()
