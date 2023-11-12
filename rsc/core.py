@@ -7,6 +7,7 @@ from rscapi import Configuration
 
 from rsc.abc import CompositeMetaClass
 from rsc.combines import CombineMixIn
+from rsc.freeagents import FreeAgentMixIn
 from rsc.franchises import FranchiseMixIn
 from rsc.leagues import LeagueMixIn
 from rsc.teams import TeamMixIn
@@ -30,6 +31,7 @@ class RSC(
     CombineMixIn,
     FranchiseMixIn,
     LeagueMixIn,
+    FreeAgentMixIn,
     TeamMixIn,
     TierMixIn,
     TransactionMixIn,

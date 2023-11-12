@@ -5,16 +5,13 @@ from discord import VoiceState
 
 from redbot.core import app_commands, checks, commands
 
-from rscapi import ApiClient, FranchisesApi, TeamsApi
 from rscapi.models.tier import Tier
-from rscapi.models.franchise_list import FranchiseList
-from rscapi.models.team_list import TeamList
 
 from rsc.abc import RSCMeta
 from rsc.const import LEAGUE_ROLE, MUTED_ROLE
 from rsc.embeds import ErrorEmbed, SuccessEmbed
 
-from typing import List, Dict, Optional, Tuple
+from typing import List, Dict, Tuple
 
 log = logging.getLogger("red.rsc.combines")
 
@@ -23,8 +20,6 @@ defaults_guild = {
     "Public": False,
     "Active": False,
 }
-
-
 
 class CombineMixIn(metaclass=RSCMeta):
 
