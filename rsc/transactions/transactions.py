@@ -30,13 +30,15 @@ class TransactionMixIn(metaclass=RSCMeta):
     # Settings
 
     _transactions = app_commands.Group(
-        name="transactions", description="Transactions Configuration", guild_only=True
+        name="transactions",
+        description="Transactions Configuration",
+        guild_only=True,
+        default_permissions=discord.Permissions(manage_guild=True),
     )
 
     @_transactions.command(
         name="settings", description="Display settings for transactions"
     )
-    @app_commands.checks.has_permissions(manage_guild=True)
     async def _show_transactions_settings(self, interaction: discord.Interaction):
         """Show transactions settings"""
         log_channel = await self._trans_log_channel(interaction.guild)
@@ -96,7 +98,6 @@ class TransactionMixIn(metaclass=RSCMeta):
     @_transactions.command(
         name="notifications", description="Toggle channel notifications on or off"
     )
-    @app_commands.checks.has_permissions(manage_guild=True)
     async def _toggle_notifications(self, interaction: discord.Interaction):
         """Toggle channel notifications on or off"""
         status = await self._notifications_enabled(interaction.guild)
@@ -115,7 +116,6 @@ class TransactionMixIn(metaclass=RSCMeta):
         )
 
     @_transactions.command(name="channel")
-    @app_commands.checks.has_permissions(manage_guild=True)
     async def _set_transactions_channel(
         self, interaction: discord.Interaction, trans_channel: discord.TextChannel
     ):
@@ -133,7 +133,6 @@ class TransactionMixIn(metaclass=RSCMeta):
     @_transactions.command(
         name="log", description="Set the transactions committee log channel"
     )
-    @app_commands.checks.has_permissions(manage_guild=True)
     async def _set_transactions_logchannel(
         self, interaction: discord.Interaction, log_channel: discord.TextChannel
     ):

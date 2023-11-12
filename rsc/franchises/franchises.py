@@ -50,10 +50,7 @@ class FranchiseMixIn(metaclass=RSCMeta):
     async def _franchises(self, interaction: discord.Interaction):
         """Get a list of all RSC franchises"""
         franchises = await self.franchises(interaction.guild)
-        log.debug(franchises)
 
-        # Sort franchises
-        franchises.sort(key=lambda x: x.name)
         gm_names = []
         for f in franchises:
             member = interaction.guild.get_member(f.gm.discord_id)
@@ -100,9 +97,11 @@ class FranchiseMixIn(metaclass=RSCMeta):
                 name=name,
                 tier=tier,
                 tier_name=tier_name,
-                league="1",
+                league=str(self._league[guild]),  # INT
             )
 
             # Populate cache
-            self._franchise_cache[guild.id] = [f.name for f in franchises]
+            if franchises:
+                franchises.sort(key=lambda f: f.name)
+                self._franchise_cache[guild.id] = [f.name for f in franchises]
             return franchises

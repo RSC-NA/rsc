@@ -96,7 +96,6 @@ class TeamMixIn(metaclass=RSCMeta):
             await interaction.response.send_message(embed=embed)
         elif tier:
             # Sort by Team Name
-            teams.sort(key=lambda x: x.name)
             embed.title = f"{tier} Teams"
             embed.add_field(
                 name="Team", value="\n".join([t.name for t in teams]), inline=True
@@ -184,7 +183,11 @@ class TeamMixIn(metaclass=RSCMeta):
         async with ApiClient(self._api_conf[guild]) as client:
             api = TeamsApi(client)
             teams = await api.teams_list(
-                seasons=seasons, franchise=franchise, name=name, tier=tier, league="1"
+                seasons=seasons,
+                franchise=franchise,
+                name=name,
+                tier=tier,
+                league=str(self._league[guild]),  # INT
             )
 
             # Populate cache

@@ -243,8 +243,6 @@ class UtilsMixIn(metaclass=RSCMeta):
         role: discord.Role,
         members: Transform[List[discord.Member], MemberTransformer],
     ):
-        log.debug(members)
-
         # Avoid discord field limits (1024 max)
         if len(members) >= 1024:
             await interaction.response.send_message(

@@ -47,9 +47,6 @@ class TierMixIn(metaclass=RSCMeta):
         """Get a list of all league tiers"""
         tiers = await self.tiers(interaction.guild)
 
-        # Sort tiers by position
-        tiers.sort(key=lambda x: x.position, reverse=True)
-
         # Get roles from guild and additional data
         tier_roles = []
         for t in tiers:
@@ -71,9 +68,7 @@ class TierMixIn(metaclass=RSCMeta):
     async def _tier(self, interaction: discord.Interaction, tier: str):
         """Get a list of teams in a tier"""
         teams = await self.teams(interaction.guild, tier=tier)
-
-        # Sort tiers by position
-        # tiers.sort(key=lambda x: x.position, reverse=True)
+        teams.sort(key=lambda t: t.name)
 
         embed = discord.Embed(
             title=f"{tier} Teams",
@@ -97,7 +92,10 @@ class TierMixIn(metaclass=RSCMeta):
         """Fetch a list of tiers"""
         async with ApiClient(self._api_conf[guild]) as client:
             api = TiersApi(client)
-            tiers = await api.tiers_list(name=name, league="1")
+            tiers = await api.tiers_list(
+                name=name, league=str(self._league[guild])
+            )  # INT
+            tiers.sort(key=lambda t: t.position, reverse=True)
 
             # Populate cache
             if tiers:

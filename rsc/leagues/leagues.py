@@ -11,7 +11,7 @@ from rscapi.models.season import Season
 from rsc.abc import RSCMeta
 from rsc.embeds import ErrorEmbed
 
-from typing import List
+from typing import List, Optional
 
 log = logging.getLogger("red.rsc.leagues")
 
@@ -63,6 +63,11 @@ class LeagueMixIn(metaclass=RSCMeta):
         async with ApiClient(self._api_conf[guild]) as client:
             api = LeaguesApi(client)
             return await api.leagues_list()
+
+    async def league_by_id(self, guild: discord.Guild, id: int) -> Optional[League]:
+        async with ApiClient(self._api_conf[guild]) as client:
+            api = LeaguesApi(client)
+            return await api.leagues_read(id)
 
     async def season(self, guild: discord.Guild) -> List[Season]:
         async with ApiClient(self._api_conf[guild]) as client:
