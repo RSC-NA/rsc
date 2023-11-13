@@ -9,6 +9,7 @@ from rscapi.models.tier import Tier
 
 from rsc.abc import RSCMeta
 from rsc.embeds import ErrorEmbed
+from rsc.utils.utils import get_role_by_name
 
 from typing import List, Dict, Optional
 
@@ -92,9 +93,7 @@ class TierMixIn(metaclass=RSCMeta):
         """Fetch a list of tiers"""
         async with ApiClient(self._api_conf[guild]) as client:
             api = TiersApi(client)
-            tiers = await api.tiers_list(
-                name=name, league=str(self._league[guild])
-            )  # INT
+            tiers = await api.tiers_list(name=name, league=self._league[guild])
             tiers.sort(key=lambda t: t.position, reverse=True)
 
             # Populate cache

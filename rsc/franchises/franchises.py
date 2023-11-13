@@ -98,7 +98,7 @@ class FranchiseMixIn(metaclass=RSCMeta):
                 name=name,
                 tier=tier,
                 tier_name=tier_name,
-                league=str(self._league[guild]),  # INT
+                league=self._league[guild], 
             )
 
             # Populate cache

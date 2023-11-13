@@ -33,11 +33,27 @@ async def is_gm(member: discord.Member) -> bool:
     return False
 
 
+async def get_member_from_rsc_name(
+    guild: discord.Guild, name: str
+) -> Optional[discord.Member]:
+    for m in guild.members:
+        try:
+            n = await remove_prefix(m)
+            if n.startswith(name):
+                return m
+        except ValueError:
+            continue
+
+
 async def get_gm(franchise_role: discord.Role) -> Optional[discord.Member]:
     for member in franchise_role.members:
         if is_gm(member):
             return member
     return None
+
+
+async def get_role_by_name(guild: discord.Guild, name: str) -> Optional[discord.Role]:
+    return discord.utils.get(guild.roles, name=name)
 
 
 async def get_franchise_role_from_name(
