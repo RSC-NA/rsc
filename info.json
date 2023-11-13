@@ -1,0 +1,9 @@
+{
+    "author" : ["nickm"],
+    "description" : "Discord COG used to run and operate leagues related to RSC (Rocket Soccar Confederation)",
+    "short" : "RSC Discord Bot",
+    "requirements" : [],
+    "permissions" : [],
+    "tags" : ["RSC"],
+    "min_python_version": [3, 11, 0]
+}
