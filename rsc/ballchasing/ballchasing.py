@@ -1,7 +1,9 @@
 import discord
 import logging
+import pytz
 
 from discord import VoiceState
+from discord.app_commands import Choice
 
 from redbot.core import app_commands, checks, commands, Config
 
@@ -21,9 +23,9 @@ defaults_guild = {
     "TopLevelGroup": None,
     "TimeZone": "America/New_York",
     "LogChannel": None,
-    "StatsManagerRole": None,
+    "ManagerRole": None,
     "RscSteamId": None,
-    "ScoreReportCategory": None,
+    "ReportCategory": None,
 }
 
 verify_timeout = 30
@@ -44,7 +46,7 @@ class BallchasingMixIn(metaclass=RSCMeta):
         self.config: Config
         self.config.init_custom("Ballchasing", 1)
         self.config.register_custom("Ballchasing", **defaults_guild)
-        self._ballchasing_api = None
+        self._ballchasing_api = {}
         # self.task = asyncio.create_task(self.pre_load_data())
         # self.ffp = {}  # forfeit processing
         super().__init__()
@@ -53,18 +55,29 @@ class BallchasingMixIn(metaclass=RSCMeta):
 
     # async def prepare_ballchasing_api(self, guild: discord.Guild):
 
+    # Autocomplete
+
+    async def timezone_autocomplete(
+        self, interaction: discord.Interaction, current: str
+    ) -> List[app_commands.Choice[str]]:
+        return [
+            Choice(name=tz, value=tz)
+            for tz in pytz.common_timezones
+            if current.lower() in tz.lower()
+        ]
+
     # Settings
-    _ballchasing = app_commands.Group(
+    _ballchasing: app_commands.Group = app_commands.Group(
         name="ballchasing",
         description="Ballchasing Configuration",
         guild_only=True,
-        default_permissions=discord.Permissions(manage_guild=True),
     )
 
     @_ballchasing.command(
         name="settings",
         description="Display settings for ballchasing replay management",
     )
+    @app_commands.checks.has_permissions(manage_guild=True)
     async def _bc_settings(self, interaction: discord.Interaction):
         """Show transactions settings"""
         url = BALLCHASING_URL
@@ -76,6 +89,7 @@ class BallchasingMixIn(metaclass=RSCMeta):
         log_channel = await self._get_bc_log_channel(interaction.guild)
         tz = await self._get_time_zone(interaction.guild)
         score_category = await self._get_score_reporting_category(interaction.guild)
+        role = await self._get_bc_manager_role(interaction.guild)
 
         embed = discord.Embed(
             title="Ballchasing Settings",
@@ -86,25 +100,140 @@ class BallchasingMixIn(metaclass=RSCMeta):
         embed.add_field(name="Ballchasing URL", value=url, inline=False)
         embed.add_field(name="Ballchasing API Token", value=token, inline=False)
         embed.add_field(
+            name="Management Role", value=role.mention if role else "None", inline=False
+        )
+        embed.add_field(
             name="Log Channel",
             value=log_channel.mention if log_channel else "None",
             inline=False,
         )
         embed.add_field(
-            name="Score Reporting Category",
-            value=score_category.mention if score_category else "None",
+            name="Report Category",
+            value=score_category,
             inline=False,
         )
+        embed.add_field(name="Time Zone", value=tz, inline=False)
 
         await interaction.response.send_message(embed=embed, ephemeral=True)
+
+    @_ballchasing.command(
+        name="key", description="Configure the Ballchasing API key for the server"
+    )
+    @app_commands.checks.has_permissions(manage_guild=True)
+    async def _bc_key(self, interaction: discord.Interaction, key: str):
+        await self._save_bc_auth_token(interaction.guild, key)
+        await interaction.response.send_message(
+            embed=SuccessEmbed(
+                description="Ballchasing API key have been successfully configured"
+            ),
+            ephemeral=True,
+        )
+
+    @_ballchasing.command(
+        name="manager",
+        description="Configure the ballchasing management role (Ex: @stats-committee)",
+    )
+    @app_commands.checks.has_permissions(manage_guild=True)
+    async def _bc_management_role(
+        self, interaction: discord.Interaction, role: discord.Role
+    ):
+        await self._save_bc_manager_role(interaction.guild, role)
+        await interaction.response.send_message(
+            embed=SuccessEmbed(
+                description=f"Ballchasing management role set to {role.mention}"
+            ),
+            ephemeral=True,
+        )
+
+    @_ballchasing.command(
+        name="log",
+        description="Configure the logging channel for Ballchasing commands (Ex: #stats-committee)",
+    )
+    @app_commands.checks.has_permissions(manage_guild=True)
+    async def _bc_log_channel(
+        self, interaction: discord.Interaction, channel: discord.TextChannel
+    ):
+        await self._save_bc_log_channel(interaction.guild, channel)
+        await interaction.response.send_message(
+            embed=SuccessEmbed(
+                description=f"Ballchasing log channel set to {channel.mention}"
+            ),
+            ephemeral=True,
+        )
+
+    @_ballchasing.command(
+        name="category",
+        description="Configure the score reporting category for the server",
+    )
+    @app_commands.checks.has_permissions(manage_guild=True)
+    async def _bc_score_category(
+        self, interaction: discord.Interaction, category: discord.CategoryChannel
+    ):
+        await self._save_score_reporting_category(interaction.guild, category)
+        await interaction.response.send_message(
+            embed=SuccessEmbed(
+                description=f"Score reporting category set to **{category.name}**"
+            ),
+            ephemeral=True,
+        )
+
+    @_ballchasing.command(
+        name="timezone", description="Configure the desired timezone for the server"
+    )
+    @app_commands.describe(timezone="Common time zone string (Ex: American/New_York)")
+    @app_commands.autocomplete(timezone=timezone_autocomplete)
+    @app_commands.checks.has_permissions(manage_guild=True)
+    async def _bc_timezone(self, interaction: discord.Interaction, timezone: str):
+        if timezone not in pytz.common_timezones:
+            await interaction.response.send_message(
+                embed=ErrorEmbed(
+                    description=f"Invalid time zone provided: **{timezone}**"
+                ),
+                ephemeral=True,
+            )
+            return
+
+        await self._save_time_zone(interaction.guild, timezone)
+        await interaction.response.send_message(
+            embed=SuccessEmbed(description=f"Time zone set to **{timezone}**"),
+            ephemeral=True,
+        )
+
+    # Commands
+
+    @_ballchasing.command(
+        name="reportall",
+        description="Find and report all matches for the day on ballchasing",
+    )
+    async def _bc_report_all(self, interaction: discord.Interaction):
+        if not await self.has_bc_permissions(interaction.user):
+            await interaction.response.send_message(
+                "You do not have permission to run this command.", ephemeral=True
+            )
+            return
+
+    # Functions
+
+    async def has_bc_permissions(self, member: discord.Member) -> bool:
+        """Determine if member is able to manage guild or part of manager role"""
+        if member.guild_permissions.manage_guild:
+            log.debug(f"[{member.guild}] {member.display_name} is a guild manager")
+            return True
+
+        manager_role = await self._get_bc_manager_role(member.guild)
+        if manager_role in member.roles:
+            log.debug(f"[{member.guild}] {member.display_name} is a ballchasing manager")
+            return True
+        log.debug(f"[{member.guild}] {member.display_name} lacks ballchasing permissions")
+        return False
 
     # Config
 
     async def _get_bc_auth_token(self, guild: discord.Guild):
         return await self.config.custom("Ballchasing", guild.id).AuthToken()
 
-    async def _save_bc_auth_token(self, guild: discord.Guild, token):
-        await self.config.custom("Ballchasing", guild.id).AuthToken.set(token)
+    async def _save_bc_auth_token(self, guild: discord.Guild, key: str):
+        await self.config.custom("Ballchasing", guild.id).AuthToken.set(key)
 
     # async def _save_top_level_group(self, guild: discord.Guild, group_id):
     #     await self.config.custom("Ballchasing", guild.id).TopLevelGroup.set(group_id)
@@ -112,7 +241,7 @@ class BallchasingMixIn(metaclass=RSCMeta):
     # async def _get_top_level_group(self, guild: discord.Guild):
     #     return await self.config.custom("Ballchasing", guild.id).TopLevelGroup()
 
-    async def _save_time_zone(self, guild, time_zone):
+    async def _save_time_zone(self, guild, time_zone: str):
         await self.config.custom("Ballchasing", guild.id).TimeZone.set(time_zone)
 
     async def _get_time_zone(self, guild):
@@ -128,20 +257,22 @@ class BallchasingMixIn(metaclass=RSCMeta):
     ):
         await self.config.custom("Ballchasing", guild.id).LogChannel.set(channel.id)
 
-    async def _get_stats_manager_role(self, guild: discord.Guild):
+    async def _get_bc_manager_role(self, guild: discord.Guild):
         return guild.get_role(
-            await self.config.custom("Ballchasing", guild.id).StatsManagerRole()
+            await self.config.custom("Ballchasing", guild.id).ManagerRole()
         )
 
-    async def _save_stats_manager_role(self, guild: discord.Guild, role: discord.Role):
-        await self.config.custom("Ballchasing", guild.id).StatsManagerRole.set(role.id)
+    async def _save_bc_manager_role(self, guild: discord.Guild, role: discord.Role):
+        await self.config.custom("Ballchasing", guild.id).ManagerRole.set(role.id)
 
     async def _save_score_reporting_category(
         self, guild, category: discord.CategoryChannel
     ):
-        await self.config.custom("Ballchasing", guild.id).ScoreReportCategory.set(
+        await self.config.custom("Ballchasing", guild.id).ReportCategory.set(
             category.id
         )
 
     async def _get_score_reporting_category(self, guild):
-        return await self.config.custom("Ballchasing", guild.id).ScoreReportCategory()
+        return guild.get_channel(
+            await self.config.custom("Ballchasing", guild.id).ReportCategory()
+        )
