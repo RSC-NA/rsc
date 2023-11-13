@@ -11,6 +11,7 @@ from rscapi.models.team_list import TeamList
 
 from rsc.abc import RSCMeta
 from rsc.embeds import ErrorEmbed
+from rsc.enums import Status
 
 from typing import List, Dict, Optional
 

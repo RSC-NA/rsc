@@ -5,10 +5,62 @@ from rscapi.models.league import League
 
 from rsc.const import DEFAULT_TIMEOUT
 
-from typing import List, Optional
+from typing import List, Optional, Union, Callable
 
 log = logging.getLogger("red.rsc.views")
 
+
+# Generic View structures for use in any module
+
+class AuthorOnlyView(discord.ui.View):
+    """View class designed to only interact with the interaction author. Can subclass"""
+
+    def __init__(
+        self, interaction: discord.Interaction, timeout: float=DEFAULT_TIMEOUT
+    ):
+        super().__init__()
+        self.timeout = timeout
+        self.interaction = interaction
+        self.author = interaction.user
+
+    async def on_timeout(self):
+        """Display time out message if we have reference to original"""
+        if self.message:
+            embed = discord.Embed(
+                title="Time out",
+                description=f"{self.author.mention} Sorry, you didn't respond quick enough. Please try again.",
+                colour=discord.Colour.orange(),
+            )
+
+            await self.message.edit(embed=embed, view=None)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        """Check if the interaction user is the author. Allow or deny callbacks"""
+        if interaction.user != self.author:
+            return False
+        return True
+
+
+class ConfirmButton(discord.ui.Button):
+    """Generic Confirm Button"""
+    def __init__(self):
+        super().__init__(label="Confirm", custom_id="confirmed", style=discord.ButtonStyle.green)
+
+    async def callback(self, interaction: discord.Interaction):
+        """Button will callback to the containing view `confirm()` function"""
+        await self.view.confirm()
+
+class DeclineButton(discord.ui.Button):
+    """Generic Decline Button"""
+    def __init__(self):
+        super().__init__(label="Decline", custom_id="declined", style=discord.ButtonStyle.red)
+
+    async def callback(self, interaction: discord.Interaction):
+        """Button will callback to the containing view `decline()` function"""
+        await self.view.decline()
+
+
+# RSC Core
 
 class LeagueSelect(discord.ui.Select):
     def __init__(self, leagues: List[League]):
@@ -28,7 +80,7 @@ class LeagueSelectView(discord.ui.View):
         self,
         interaction: discord.Interaction,
         leagues: List[League],
-        timeout=DEFAULT_TIMEOUT,
+        timeout: float=DEFAULT_TIMEOUT,
     ):
         self.result: Optional[int] = None
         self.interaction = interaction

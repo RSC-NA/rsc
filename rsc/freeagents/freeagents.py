@@ -12,6 +12,7 @@ from rsc.abc import RSCMeta
 from rsc.tiers import TierMixIn
 from rsc.const import LEAGUE_ROLE, MUTED_ROLE
 from rsc.embeds import ErrorEmbed, SuccessEmbed
+from rsc.enums import Status
 
 from typing import List, Dict, Tuple, TypedDict
 
@@ -44,8 +45,38 @@ class FreeAgentMixIn(metaclass=RSCMeta):
     @app_commands.command(name="fa", description="List free agents in a specified tier")
     @app_commands.autocomplete(tier=TierMixIn.tiers_autocomplete)
     @app_commands.guild_only()
-    async def _fa(self, interaction: discord.Interaction, tier: str):
+    async def _free_agents(self, interaction: discord.Interaction, tier: str):
         free_agents = await self.free_agents(interaction.guild, tier)
+        #TODO
+
+    @app_commands.command(name="checkin", description="Check in as an available free agent for the current match day")
+    @app_commands.guild_only()
+    async def _fa_checkin(self, interaction: discord.Interaction):
+        pass
+
+    @app_commands.command(name="checkout", description="Check out as an available free agent for the current match day")
+    @app_commands.guild_only()
+    async def _fa_checkout(self, interaction: discord.Interaction):
+        pass
+
+    @app_commands.command(name="availability", description="Get list of available free agents for specified tier")
+    @app_commands.autocomplete(tier=TierMixIn.tiers_autocomplete)
+    @app_commands.guild_only()
+    async def _fa_availability(self, interaction: discord.Interaction, tier: str):
+        pass
+
+    @app_commands.command(name="clearavailability", description="Clear free agent availability for a specified tier")
+    @app_commands.autocomplete(tier=TierMixIn.tiers_autocomplete)
+    @app_commands.checks.has_permissions(manage_guild=True)
+    @app_commands.guild_only()
+    async def _clear_fa_availability(self, interaction: discord.Interaction, tier: str):
+        pass
+
+    @app_commands.command(name="clearallavailability", description="Clear free agent availability for all tiers")
+    @app_commands.checks.has_permissions(manage_guild=True)
+    @app_commands.guild_only()
+    async def _clear_all_fa_availability(self, interaction: discord.Interaction):
+        pass
 
 
     # API Calls
@@ -54,5 +85,14 @@ class FreeAgentMixIn(metaclass=RSCMeta):
         """Fetch a list of Free Agents for specified tier"""
         async with ApiClient(self._api_conf[guild]) as client:
             api = LeaguePlayersApi(client)
-            players = await api.league_players_list(status="FA", tier_name=tier)
+            players = await api.league_players_list(status=str(Status.FREE_AGENT), tier_name=tier)
             log.debug(players)
+            #TODO
+
+    async def perm_free_agents(self, guild: discord.Guild, tier: str):
+        """Fetch a list of Free Agents for specified tier"""
+        async with ApiClient(self._api_conf[guild]) as client:
+            api = LeaguePlayersApi(client)
+            players = await api.league_players_list(status=str(Status.PERM_FA), tier_name=tier)
+            log.debug(players)
+            #TODO
