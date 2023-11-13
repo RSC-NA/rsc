@@ -13,25 +13,21 @@ RSCID = "RSC002982"
 
 @pytest.mark.asyncio
 class TestTrackers:
-    @pytest.mark.xfail
     async def test_trackers_links_links_stats(self, TrackerApi):
         r = await TrackerApi.tracker_links_links_stats(member=RSCID)
         assert r
         assert isinstance(r[0], TrackerLink)
 
-    @pytest.mark.xfail
     async def test_trackers_links_list(self, TrackerApi):
         r = await TrackerApi.tracker_links_list(member="nickm")
         assert r
         assert isinstance(r[0], TrackerLink)
 
-    @pytest.mark.xfail
     async def test_trackers_links_next(self, TrackerApi):
         r = await TrackerApi.tracker_links_next(member="nickm", limit=1)
         assert r
         assert isinstance(r[0], TrackerLink)
 
-    @pytest.mark.xfail
     async def test_trackers_links_read(self, TrackerApi):
         r = await TrackerApi.tracker_links_read(1)
         assert isinstance(r, TrackerLink)

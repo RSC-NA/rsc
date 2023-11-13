@@ -14,7 +14,6 @@ class TestNumbers:
         assert r
         assert isinstance(r[0], PlayerMMR)
 
-    @pytest.mark.xfail
     async def test_numbers_read(self, NumberApi):
         r = await NumberApi.numbers_mmr_read(1)
         print(r)

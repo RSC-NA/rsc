@@ -21,7 +21,6 @@ class TestTeams:
         r = await TeamApi.teams_list(seasons="18", franchise="test", name="test", tier="Premier", league="1")
         assert not r
 
-    @pytest.mark.xfail
     async def test_teams_match(self, TeamApi):
         r = await TeamApi.teams_match("1", 1, preseason=0)
         assert isinstance(r, Match)
@@ -35,7 +34,6 @@ class TestTeams:
         assert r
         assert isinstance(r[0], Player)
 
-    @pytest.mark.xfail
     async def test_teams_postseason_stats(self, TeamApi):
         r = await TeamApi.teams_postseason_stats("1", season=18)
         assert isinstance(r, TeamSeasonStats)
@@ -44,7 +42,6 @@ class TestTeams:
         r = await TeamApi.teams_read("1")
         assert isinstance(r, Team)
 
-    @pytest.mark.xfail
     async def test_teams_season_matches(self, TeamApi):
         r = await TeamApi.teams_season_matches("1", preseason=False, season=18)
         assert r

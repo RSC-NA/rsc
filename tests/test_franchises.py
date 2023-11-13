@@ -25,7 +25,6 @@ class TestFranchises:
         )
         assert not data
 
-    @pytest.mark.xfail
     async def test_franchises_read(self, FranchiseApi):
         data = await FranchiseApi.franchises_read(1)
         print(data)

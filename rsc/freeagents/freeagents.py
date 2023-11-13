@@ -52,7 +52,15 @@ class FreeAgentMixIn(metaclass=RSCMeta):
     @app_commands.command(name="checkin", description="Check in as an available free agent for the current match day")
     @app_commands.guild_only()
     async def _fa_checkin(self, interaction: discord.Interaction):
-        pass
+        # Validate user is FA, change to a role check?
+        member = await self.members(interaction.guild, discord_username=interaction.user.name, limit=1)
+        log.debug(member)
+        # Get Tier / Player Info
+        # Check if it's a match day for that tier
+        # Check in
+        #TODO
+
+
 
     @app_commands.command(name="checkout", description="Check out as an available free agent for the current match day")
     @app_commands.guild_only()

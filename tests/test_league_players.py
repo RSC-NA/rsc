@@ -33,7 +33,6 @@ class TestLeaguePlayers:
         assert isinstance(r, LeaguePlayersList200Response)
         assert r.count == 0 
 
-    @pytest.mark.xfail
     async def test_league_players_postseason_stats(self, LeaguePlayerApi):
         r = await LeaguePlayerApi.league_players_postseason_stats(1)
         assert isinstance(r, PlayerSeasonStats)

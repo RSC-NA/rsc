@@ -21,8 +21,8 @@ defaults_guild = {
     "Active": False,
 }
 
-class CombineMixIn(metaclass=RSCMeta):
 
+class CombineMixIn(metaclass=RSCMeta):
     COMBINE_PLAYER_RATIO = 0.5
 
     def __init__(self):
@@ -37,7 +37,9 @@ class CombineMixIn(metaclass=RSCMeta):
     # Setup
 
     async def _populate_combines_cache(self, guild: discord.Guild):
-        self._combine_cache[guild] = [c.id for c in await self.get_combine_categories(guild)]
+        self._combine_cache[guild] = [
+            c.id for c in await self.get_combine_categories(guild)
+        ]
 
     # Listeners
 
@@ -60,12 +62,11 @@ class CombineMixIn(metaclass=RSCMeta):
         log.debug(f"After: {after}")
         # Room Joined
         if after.channel:
-            await self._maybe_add_combine_channel(after) 
+            await self._maybe_add_combine_channel(after)
         # Room Left
         if before.channel:
             await self._maybe_remove_combine_channel(before)
 
-        
     # Settings
 
     _combines = app_commands.Group(
@@ -328,22 +329,28 @@ class CombineMixIn(metaclass=RSCMeta):
         for c in category.channels:
             if not isinstance(c, discord.VoiceChannel):
                 continue
-            log.debug(f"[{c.name}] Members: {len(c.members)} Limit: {c.user_limit} Ratio: {len(c.members) / c.user_limit}")
+            log.debug(
+                f"[{c.name}] Members: {len(c.members)} Limit: {c.user_limit} Ratio: {len(c.members) / c.user_limit}"
+            )
             # If member ratio is below COMBINE_PLAYER_RATIO, there are enough spots still
             if (len(c.members) / c.user_limit) < self.COMBINE_PLAYER_RATIO:
                 log.debug(f"[{category.name}] Enough combine slots in {c.name}")
                 return
-            
+
         # All channels are above or equal to COMBINE_PLAYER_RATIO. Add Channel
         log.debug(f"Total Channels in Combine Category: {len(category.channels)}")
         num = len(category.channels) + 1
         tier = category.name.removesuffix(" Combines")
         size = await self._get_room_capacity(state.channel.guild)
-        log.debug(f"[{category.name}] Creating new voice channel: {tier}{num} // {tier}{num}")
-        await category.create_voice_channel(
-            name=f"{tier}{num} // {tier}{num}", position=0, user_limit=size, reason="Adding combine channel to accomodate more players"
+        log.debug(
+            f"[{category.name}] Creating new voice channel: {tier}{num} // {tier}{num}"
         )
-
+        await category.create_voice_channel(
+            name=f"{tier}{num} // {tier}{num}",
+            position=0,
+            user_limit=size,
+            reason="Adding combine channel to accomodate more players",
+        )
 
     async def _maybe_remove_combine_channel(self, state: VoiceState):
         """Determine if we should remove a combine voice channel"""
@@ -353,7 +360,7 @@ class CombineMixIn(metaclass=RSCMeta):
         # Do nothing if user still in voice
         if len(state.channel.members):
             return
-            
+
         # Check if category is a combines category
         if state.channel.category_id not in self._combine_cache[state.channel.guild]:
             return
@@ -365,32 +372,35 @@ class CombineMixIn(metaclass=RSCMeta):
         category = state.channel.guild.get_channel(state.channel.category_id)
         log.debug(f"Found combine category: {category.name}")
 
-        # Check if another channel is below 
+        # Check if another channel is below
         for c in category.channels:
             if not isinstance(c, discord.VoiceChannel):
                 continue
             # If channel has open slots acccording to COMBINE_PLAYER_RATIO, remove channel
             if (len(c.members) / c.user_limit) < self.COMBINE_PLAYER_RATIO:
-                log.debug(f"[{category.name}] Enough combine slots in {c.name}. Deleting {state.channel.name}")
-                await state.channel.delete(reason="Removing dynamically created combine channel.")
-
+                log.debug(
+                    f"[{category.name}] Enough combine slots in {c.name}. Deleting {state.channel.name}"
+                )
+                await state.channel.delete(
+                    reason="Removing dynamically created combine channel."
+                )
 
     # Config
 
     async def _get_room_capacity(self, guild: discord.Guild) -> int:
-        return await self.config.custom("Combines", guild).Capacity()
+        return await self.config.custom("Combines", guild.id).Capacity()
 
     async def _save_room_capacity(self, guild: discord.Guild, capacity: int):
-        await self.config.custom("Combines", guild).Capacity.set(capacity)
+        await self.config.custom("Combines", guild.id).Capacity.set(capacity)
 
     async def _get_publicity(self, guild: discord.Guild) -> bool:
-        return await self.config.custom("Combines", guild).Public()
+        return await self.config.custom("Combines", guild.id).Public()
 
     async def _save_publicity(self, guild: discord.Guild, public: bool):
-        await self.config.custom("Combines", guild).Public.set(public)
+        await self.config.custom("Combines", guild.id).Public.set(public)
 
     async def _get_combines_active(self, guild: discord.Guild) -> bool:
-        return await self.config.custom("Combines", guild).Active()
+        return await self.config.custom("Combines", guild.id).Active()
 
     async def _save_combines_active(self, guild: discord.Guild, active: bool):
-        await self.config.custom("Combines", guild).Active.set(active)
+        await self.config.custom("Combines", guild.id).Active.set(active)

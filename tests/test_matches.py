@@ -14,7 +14,6 @@ NOW = datetime.now().strftime("%Y-%m-%d")
 
 @pytest.mark.asyncio
 class TestMatches:
-    @pytest.mark.xfail
     async def test_matches_find_match(self, MatchApi):
         r = await MatchApi.matches_find_match(league=1, limit=1)
         assert r
@@ -62,7 +61,6 @@ class TestMatches:
         assert isinstance(r, MatchesList200Response)
         assert r.count == 0
 
-    @pytest.mark.xfail
     async def test_matches_read(self, MatchApi):
         r = await MatchApi.matches_read(1)
         assert isinstance(r, Match)
@@ -70,7 +68,6 @@ class TestMatches:
         assert isinstance(r.away_team, Team)
         assert isinstance(r.results, MatchResults)
 
-    @pytest.mark.xfail
     async def test_matches_results(self, MatchApi):
         r = await MatchApi.matches_results(1)
         assert isinstance(r, MatchResults)

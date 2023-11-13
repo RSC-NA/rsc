@@ -6,9 +6,11 @@ from redbot.core import Config, app_commands, commands, checks
 from rscapi import Configuration
 
 from rsc.abc import CompositeMetaClass
+from rsc.ballchasing import BallchasingMixIn
 from rsc.combines import CombineMixIn
 from rsc.freeagents import FreeAgentMixIn
 from rsc.franchises import FranchiseMixIn
+from rsc.members import MemberMixIn
 from rsc.leagues import LeagueMixIn
 from rsc.teams import TeamMixIn
 from rsc.tiers import TierMixIn
@@ -28,10 +30,12 @@ defaults_guild = {
 
 
 class RSC(
+    BallchasingMixIn,
     CombineMixIn,
     FranchiseMixIn,
     LeagueMixIn,
     FreeAgentMixIn,
+    MemberMixIn,
     TeamMixIn,
     TierMixIn,
     TransactionMixIn,

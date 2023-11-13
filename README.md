@@ -24,9 +24,9 @@ Follow the Red Discord Bot installation guide for [Windows](https://docs.discord
 
 After installation, you will need to configure some core values for each RSC discord. You can do this after inviting the bot to your RSC server and using the following commands.
 
-- `/rsc key` - "Set the RSC API key"
-- `/rsc url` - "Set the RSC API url"
-- `/rsc league` - "Select the league that correlates to the discord server"
+- `/rsc key` - Set the RSC API key
+- `/rsc url` - Set the RSC API url
+- `/rsc league` - Select the league that correlates to the discord server
 
 ### Other Module Settings
 

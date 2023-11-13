@@ -12,7 +12,6 @@ log = logging.getLevelName(__name__)
 
 @pytest.mark.asyncio
 class TestLeague:
-    @pytest.mark.xfail
     async def test_leagues_current_season(self, LeagueApi):
         r = await LeagueApi.leagues_current_season("1")
         assert isinstance(r, Season)
@@ -28,7 +27,6 @@ class TestLeague:
         assert isinstance(r, League)
         assert isinstance(r.league_data, LeagueData)
 
-    @pytest.mark.xfail
     async def test_leagues_seasons(self, LeagueApi):
         r = await LeagueApi.leagues_seasons("1")
         assert r

@@ -21,7 +21,6 @@ class TestTiers:
         assert r
         assert isinstance(r[0], PlayerSeasonStatsInDepth)
 
-    @pytest.mark.xfail
     async def test_tiers_players(self, TierApi):
         r = await TierApi.tiers_players(1, 1, season=18)
         assert r
