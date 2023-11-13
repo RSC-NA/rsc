@@ -19,3 +19,21 @@ Follow the Red Discord Bot installation guide for [Windows](https://docs.discord
 <p>cog install RSCBot rsc 
 <p>load rsc 
 ```
+
+## Configuration
+
+After installation, you will need to configure some core values for each RSC discord. You can do this after inviting the bot to your RSC server and using the following commands.
+
+- `/rsc key` - "Set the RSC API key"
+- `/rsc url` - "Set the RSC API url"
+- `/rsc league` - "Select the league that correlates to the discord server"
+
+### Other Module Settings
+
+There are a variety of settings available in a large number of modules for the bot. Please see the following for options.
+
+- `/ballchasing` - Ballchasing Replay Settings
+- `/combines` - Combine Settings
+- `/moderation` - Mod Settings
+- `/transactions` - Transactions Setings
+
