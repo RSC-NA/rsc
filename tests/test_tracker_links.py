@@ -2,6 +2,7 @@ import logging
 import pytest
 
 from rscapi.models.tracker_link import TrackerLink
+from rscapi.models.tracker_link_stats import TrackerLinkStats
 from rscapi.models.player_season_stats_in_depth import PlayerSeasonStatsInDepth
 from rscapi.models.league_player import LeaguePlayer
 from rscapi.models.team_season_stats import TeamSeasonStats
@@ -16,7 +17,7 @@ class TestTrackers:
     async def test_trackers_links_links_stats(self, TrackerApi):
         r = await TrackerApi.tracker_links_links_stats(member_name="nickm")
         assert r
-        assert isinstance(r[0], TrackerLink)
+        assert isinstance(r, TrackerLinkStats)
 
     async def test_trackers_links_list(self, TrackerApi):
         r = await TrackerApi.tracker_links_list(member_name="nickm")

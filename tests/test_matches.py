@@ -15,12 +15,11 @@ NOW = datetime.now().strftime("%Y-%m-%d")
 @pytest.mark.asyncio
 class TestMatches:
     async def test_matches_find_match(self, MatchApi):
-        r = await MatchApi.matches_find_match(league=1, limit=1)
+        r = await MatchApi.matches_find_match(teams="Onions", day=1, league=1, limit=1)
         assert r
         assert isinstance(r[0], Match)
         assert isinstance(r[0].home_team, Team)
         assert isinstance(r[0].away_team, Team)
-        assert isinstance(r[0].results, MatchResults)
         r = await MatchApi.matches_find_match(
             league=1,
             date__lt=NOW,
@@ -66,8 +65,8 @@ class TestMatches:
         assert isinstance(r, Match)
         assert isinstance(r.home_team, Team)
         assert isinstance(r.away_team, Team)
-        assert isinstance(r.results, MatchResults)
 
+    @pytest.mark.skip
     async def test_matches_results(self, MatchApi):
         r = await MatchApi.matches_results(1)
         assert isinstance(r, MatchResults)

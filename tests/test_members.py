@@ -4,6 +4,7 @@ from datetime import datetime
 
 from rscapi.exceptions import ApiException
 from rscapi.models.member import Member
+from rscapi.models.member_tracker import MemberTracker
 from rscapi.models.league_player import LeaguePlayer
 from rscapi.models.members_list200_response import MembersList200Response
 from rscapi.models.player_season_stats import PlayerSeasonStats
@@ -16,7 +17,7 @@ NOW = datetime.now().strftime("%Y-%m-%d")
 class TestMembers:
     async def test_members_accounts(self, MemberApi):
         r = await MemberApi.members_accounts(1)
-        assert r.isinstance(r, Member)
+        assert isinstance(r, MemberTracker)
 
     async def test_members_contract_status(self, MemberApi, discord_id):
         r = await MemberApi.members_contract_status(discord_id, 1)
