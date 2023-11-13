@@ -26,7 +26,6 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-
 @pytest.fixture(scope="session")
 def event_loop():
     """Have to define event_loop as session scope to use other fixtures in that scope"""
@@ -34,6 +33,9 @@ def event_loop():
     yield loop
     loop.close()
 
+@pytest.fixture(scope="session")
+async def discord_id():
+    yield 138778232802508801 # nickm discord ID
 
 @pytest.fixture(scope="session")
 @pytest.mark.asyncio

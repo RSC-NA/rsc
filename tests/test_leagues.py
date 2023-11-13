@@ -13,7 +13,7 @@ log = logging.getLevelName(__name__)
 @pytest.mark.asyncio
 class TestLeague:
     async def test_leagues_current_season(self, LeagueApi):
-        r = await LeagueApi.leagues_current_season("1")
+        r = await LeagueApi.leagues_current_season(1)
         assert isinstance(r, Season)
         assert isinstance(r.league, SeasonLeague)
 
@@ -28,7 +28,7 @@ class TestLeague:
         assert isinstance(r.league_data, LeagueData)
 
     async def test_leagues_seasons(self, LeagueApi):
-        r = await LeagueApi.leagues_seasons("1")
+        r = await LeagueApi.leagues_seasons(1)
         assert r
         assert isinstance(r[0], Season)
         assert isinstance(r[0].league, SeasonLeague)

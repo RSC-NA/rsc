@@ -27,6 +27,5 @@ class TestFranchises:
 
     async def test_franchises_read(self, FranchiseApi):
         data = await FranchiseApi.franchises_read(1)
-        print(data)
-        assert isinstance(data, FranchiseList)
+        assert isinstance(data, Franchise)
         assert isinstance(data.gm, FranchiseGM)

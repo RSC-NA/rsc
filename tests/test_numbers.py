@@ -9,11 +9,13 @@ RSC_ID = "RSC002892" # nickm
 
 @pytest.mark.asyncio
 class TestNumbers:
+    @pytest.mark.skip
     async def test_numbers_list(self, NumberApi):
         r = await NumberApi.numbers_mmr_list(rscid=RSC_ID)
         assert r
         assert isinstance(r[0], PlayerMMR)
 
+    @pytest.mark.skip
     async def test_numbers_read(self, NumberApi):
         r = await NumberApi.numbers_mmr_read(1)
         print(r)

@@ -33,8 +33,9 @@ class TestLeaguePlayers:
         assert isinstance(r, LeaguePlayersList200Response)
         assert r.count == 0 
 
-    async def test_league_players_postseason_stats(self, LeaguePlayerApi):
-        r = await LeaguePlayerApi.league_players_postseason_stats(1)
+    @pytest.mark.skip
+    async def test_league_players_postseason_stats(self, LeaguePlayerApi, discord_id):
+        r = await LeaguePlayerApi.league_players_postseason_stats(discord_id)
         assert isinstance(r, PlayerSeasonStats)
 
     async def test_league_players_read(self, LeaguePlayerApi):

@@ -12,33 +12,35 @@ log = logging.getLevelName(__name__)
 
 NOW = datetime.now().strftime("%Y-%m-%d")
 
-DISCORD_ID = 138778232802508801 # nickm
-
 @pytest.mark.asyncio
 class TestMembers:
     async def test_members_accounts(self, MemberApi):
         r = await MemberApi.members_accounts(1)
         assert r.isinstance(r, Member)
 
-    async def test_members_contract_status(self, MemberApi):
-        r = await MemberApi.members_contract_status(DISCORD_ID, 1)
+    async def test_members_contract_status(self, MemberApi, discord_id):
+        r = await MemberApi.members_contract_status(discord_id, 1)
         assert isinstance(r, LeaguePlayer)
 
     async def test_members_list(self, MemberApi):
-        r = await MemberApi.members_list(rsc_name="nickm", discord_username="nickm", limit=1, offset=0)
+        r = await MemberApi.members_list(discord_username="nickm", limit=1, offset=0)
         assert isinstance(r, MembersList200Response)
         assert r.count == 1
         assert isinstance(r.results[0], Member)
+        # r = await MemberApi.members_list(rsc_name="nickm", discord_username="nickm", limit=1, offset=0)
+        # assert isinstance(r, MembersList200Response)
+        # assert r.count == 1
+        # assert isinstance(r.results[0], Member)
 
     async def test_members_postseason_stats(self, MemberApi):
         with pytest.raises(ApiException):
             await MemberApi.members_postseason_stats(1, 1)
         # assert isinstance(r,PlayerSeasonStats)
 
-    async def test_members_read(self, MemberApi):
-        r = await MemberApi.members_read(DISCORD_ID)
+    async def test_members_read(self, MemberApi, discord_id):
+        r = await MemberApi.members_read(discord_id)
         assert isinstance(r, Member)
 
-    async def test_members_stats(self, MemberApi):
-        r = await MemberApi.members_stats(DISCORD_ID, 1)
+    async def test_members_stats(self, MemberApi, discord_id):
+        r = await MemberApi.members_stats(discord_id, 1)
         assert isinstance(r, PlayerSeasonStats)

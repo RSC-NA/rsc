@@ -12,7 +12,7 @@ log = logging.getLevelName(__name__)
 @pytest.mark.asyncio
 class TestTiers:
     async def test_tiers_(self, TierApi):
-        r = await TierApi.tiers_list(name="Premier", league="1")
+        r = await TierApi.tiers_list(name="Premier", league=1)
         assert r
         assert isinstance(r[0], Tier)
 
@@ -28,7 +28,7 @@ class TestTiers:
 
     @pytest.mark.skip
     async def test_tiers_postseason_player_stats(self, TierApi):
-        r = await TierApi.tiers_postseason_player_stats(1, 1, season=18)
+        r = await TierApi.tiers_postseason_player_stats(league=1, id=1, season=18)
         assert r
         assert isinstance(r[0], PlayerSeasonStatsInDepth)
 

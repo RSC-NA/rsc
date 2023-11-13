@@ -14,17 +14,17 @@ RSCID = "RSC002982"
 @pytest.mark.asyncio
 class TestTrackers:
     async def test_trackers_links_links_stats(self, TrackerApi):
-        r = await TrackerApi.tracker_links_links_stats(member=RSCID)
+        r = await TrackerApi.tracker_links_links_stats(member_name="nickm")
         assert r
         assert isinstance(r[0], TrackerLink)
 
     async def test_trackers_links_list(self, TrackerApi):
-        r = await TrackerApi.tracker_links_list(member="nickm")
+        r = await TrackerApi.tracker_links_list(member_name="nickm")
         assert r
         assert isinstance(r[0], TrackerLink)
 
     async def test_trackers_links_next(self, TrackerApi):
-        r = await TrackerApi.tracker_links_next(member="nickm", limit=1)
+        r = await TrackerApi.tracker_links_next(member_name="nickm", limit=1)
         assert r
         assert isinstance(r[0], TrackerLink)
 

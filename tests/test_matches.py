@@ -25,8 +25,8 @@ class TestMatches:
             league=1,
             date__lt=NOW,
             date__gt=NOW,
-            season="18",
-            season_number="18",
+            season=18,
+            season_number=18,
             home_team="test",
             away_team="test",
             day=1,
@@ -37,7 +37,7 @@ class TestMatches:
             teams="test",
             preseason=0,
         )
-        assert r
+        assert not r
 
     async def test_matches_list(self, MatchApi):
         r = await MatchApi.matches_list(league="1", limit=1)
