@@ -1,0 +1,16 @@
+[tool.pytest.ini_options]
+minversion = "7.0"
+asyncio_mode = "auto"
+python_files = [
+    "test_*.py"
+]
+filterwarnings = [
+    "ignore::DeprecationWarning:aiohttp_json_rpc",
+    "ignore::DeprecationWarning:aiohttp"
+]
+env_files = [
+    ".env"
+]
+
+[tool.mypy]
+check_untyped-defs = true
