@@ -7,7 +7,7 @@ from redbot.core import app_commands, checks
 from rscapi import ApiClient, FranchisesApi, TiersApi
 from rscapi.models.tier import Tier
 
-from rsc.abc import RSCMeta
+from rsc.abc import RSCMixIn
 from rsc.embeds import ErrorEmbed
 from rsc.utils.utils import get_role_by_name
 
@@ -16,7 +16,7 @@ from typing import List, Dict, Optional
 log = logging.getLogger("red.rsc.tiers")
 
 
-class TierMixIn(metaclass=RSCMeta):
+class TierMixIn(RSCMixIn):
     def __init__(self):
         log.debug("Initializing TierMixIn")
         self._tier_cache: Dict[int, List[str]] = {}
@@ -91,9 +91,9 @@ class TierMixIn(metaclass=RSCMeta):
         self, guild: discord.Guild, name: Optional[str] = None
     ) -> List[Tier]:
         """Fetch a list of tiers"""
-        async with ApiClient(self._api_conf[guild]) as client:
+        async with ApiClient(self._api_conf[guild.id]) as client:
             api = TiersApi(client)
-            tiers = await api.tiers_list(name=name, league=self._league[guild])
+            tiers = await api.tiers_list(name=name, league=self._league[guild.id])
             tiers.sort(key=lambda t: t.position, reverse=True)
 
             # Populate cache
@@ -107,7 +107,7 @@ class TierMixIn(metaclass=RSCMeta):
             return tiers
 
     async def tier_by_id(self, guild: discord.Guild, id: int) -> Tier:
-        async with ApiClient(self._api_conf[guild]) as client:
+        async with ApiClient(self._api_conf[guild.id]) as client:
             api = TiersApi(client)
             tier = await api.tiers_read(id)
             return tier

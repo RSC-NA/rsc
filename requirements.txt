@@ -1,2 +1,4 @@
 rscapi
 python-ballchasing
+pytz
+validators

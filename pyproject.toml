@@ -13,4 +13,4 @@ env_files = [
 ]
 
 [tool.mypy]
-check_untyped-defs = true
+check_untyped_defs = true

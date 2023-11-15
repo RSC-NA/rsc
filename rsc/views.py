@@ -1,5 +1,7 @@
-import discord
 import logging
+
+import discord
+from discord.ui import TextInput
 
 from rscapi.models.league import League
 
@@ -16,23 +18,22 @@ class AuthorOnlyView(discord.ui.View):
     """View class designed to only interact with the interaction author. Can subclass"""
 
     def __init__(
-        self, interaction: discord.Interaction, timeout: float=DEFAULT_TIMEOUT
+        self, interaction: discord.Interaction, timeout: float=DEFAULT_TIMEOUT 
     ):
-        super().__init__()
-        self.timeout = timeout
+        super().__init__(timeout=timeout)
         self.interaction = interaction
         self.author = interaction.user
 
     async def on_timeout(self):
         """Display time out message if we have reference to original"""
-        if self.message:
+        if self.interaction:
             embed = discord.Embed(
                 title="Time out",
-                description=f"{self.author.mention} Sorry, you didn't respond quick enough. Please try again.",
+                description=f"Sorry, you didn't respond quick enough. Please try again.",
                 colour=discord.Colour.orange(),
             )
 
-            await self.message.edit(embed=embed, view=None)
+            await self.interaction.edit_original_response(embed=embed, view=None)
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         """Check if the interaction user is the author. Allow or deny callbacks"""
@@ -48,7 +49,7 @@ class ConfirmButton(discord.ui.Button):
 
     async def callback(self, interaction: discord.Interaction):
         """Button will callback to the containing view `confirm()` function"""
-        await self.view.confirm()
+        await self.view.confirm(interaction)
 
 class DeclineButton(discord.ui.Button):
     """Generic Decline Button"""
@@ -57,10 +58,10 @@ class DeclineButton(discord.ui.Button):
 
     async def callback(self, interaction: discord.Interaction):
         """Button will callback to the containing view `decline()` function"""
-        await self.view.decline()
+        await self.view.decline(interaction)
 
 
-# RSC Core
+# RSC League Selection
 
 class LeagueSelect(discord.ui.Select):
     def __init__(self, leagues: List[League]):
@@ -120,3 +121,24 @@ class LeagueSelectView(discord.ui.View):
         )
         await self.interaction.edit_original_response(embed=embed, view=None)
         self.stop()
+
+# RSC Setup Modal
+
+class RSCSetupModal(discord.ui.Modal, title="RSC Setup"):
+    url: TextInput = TextInput(
+        label="Provide the RSC API url.",
+        placeholder="https://staging-api.rscna.com/api/v1",
+        min_length=10, # Url size validation
+        style=discord.TextStyle.short,
+        required=True,
+    )
+    key: TextInput = TextInput(
+        label="Provide your RSC API key",
+        placeholder="...",
+        min_length=30, # Key size validation
+        style=discord.TextStyle.short,
+        required=True,
+    )
+
+    async def on_submit(self, interaction: discord.Interaction):
+        await interaction.response.defer()

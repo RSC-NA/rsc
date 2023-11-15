@@ -7,7 +7,7 @@ from rscapi import ApiClient, TeamsApi
 from rscapi.models.team import Team
 from rscapi.models.team_list import TeamList
 
-from rsc.abc import RSCMeta
+from rsc.abc import RSCMixIn
 from rsc.embeds import ErrorEmbed
 from rsc.franchises import FranchiseMixIn
 from rsc.tiers import TierMixIn
@@ -18,7 +18,7 @@ from typing import Optional, List, Dict, Tuple
 log = logging.getLogger("red.rsc.teams")
 
 
-class TeamMixIn(metaclass=RSCMeta):
+class TeamMixIn(RSCMixIn):
     def __init__(self):
         log.debug("Initializing TeamMixIn")
         self._team_cache: Dict[int, List[str]] = {}
@@ -118,14 +118,14 @@ class TeamMixIn(metaclass=RSCMeta):
     ):
         """Get a roster for a team"""
         # Verify team exists and get data
-        teams = await self.teams(interaction.guild, name=team)
+        teams: List[TeamList] = await self.teams(interaction.guild, name=team)
         if not teams:
             await interaction.response.send_message(
                 content=f"No results found for **{team}**.", ephemeral=True
             )
             return
         elif len(teams) > 1:
-            names = ", ".join(t.name for t in teams)
+            names = ", ".join([t.name for t in teams])
             await interaction.response.send_message(
                 content=f"Found multiple results for team name: **{names}**",
                 ephemeral=True,
@@ -133,38 +133,54 @@ class TeamMixIn(metaclass=RSCMeta):
             return
 
         # Fetch roster information
-        roster = await self.team_by_id(interaction.guild, str(teams[0].id))
-        log.debug(roster)
+        roster = await self.team_by_id(interaction.guild, teams[0].id)
 
         tier_role = discord.utils.get(interaction.guild.roles, name=roster.tier)
-        # franchise_role = await get_franchise_role_from_name(interaction.guild, roster.franchise)
-        log.debug(f"Tier Role: {tier_role}")
-        # log.debug(f"Franchise Role: {franchise_role}")
 
         if tier_role:
             tier_color = tier_role.color
         else:
             tier_color = discord.Color.blue()
 
-        # Get GM
+        # Fetch franchise info
         franchise_info = await self.franchises(interaction.guild, name=roster.franchise)
-        gm_id = franchise_info[0].gm.discord_id
-        gm = interaction.guild.get_member(gm_id)
-        log.debug(f"GM: {gm}")
 
-        player_str = ""
+        # API has some malformed data
+        if not franchise_info:
+            log.error(f"Unable to fetch franchise info for **{roster.franchise}**")
+            await interaction.response.send_message(
+                embed=ErrorEmbed(
+                    description="Unable to fetch franchise info for **{roster.franchise}**"
+                ),
+                ephemeral=True,
+            )
+            return
+
+        # Get GM discord id
+        gm_id = None
+        if franchise_info[0].gm:
+            gm_id = franchise_info[0].gm.discord_id
+
+        players = []
         for p in roster.players:
-            player_str += f"{p.name}"
-            if p.captain:
-                player_str += " (C)"
-            # Add GM in here. Waiting on discord IDs to be returned
-            player_str += "\n"
+            m = interaction.guild.get_member(p.discord_id)
+            name = m.display_name if m else p.name
+            if p.captain and p.discord_id == gm_id:
+                players.append(f"{name} (GM|C)")
+            elif p.captain:
+                players.append(f"{name} (C)")
+            elif p.discord_id == gm_id:
+                players.append(f"{name} (GM)")
+            else:
+                players.append(name)
+        
+        player_str = "\n".join(players)
 
         # Team API endpoint is currently missing IR status. Need to add eventually.
 
         embed = discord.Embed(
-            title=f"{team} - {roster.franchise} - {roster.tier}",
-            description=player_str,
+            title=f"{team} ({roster.franchise} - {roster.tier})",
+            description=f"```\n{player_str}\n```",
             color=tier_color,
         )
         await interaction.response.send_message(embed=embed)
@@ -180,14 +196,14 @@ class TeamMixIn(metaclass=RSCMeta):
         tier: Optional[str] = None,
     ) -> List[TeamList]:
         """Fetch teams from API"""
-        async with ApiClient(self._api_conf[guild]) as client:
+        async with ApiClient(self._api_conf[guild.id]) as client:
             api = TeamsApi(client)
             teams = await api.teams_list(
                 seasons=seasons,
                 franchise=franchise,
                 name=name,
                 tier=tier,
-                league=self._league[guild]
+                league=self._league[guild.id],
             )
 
             # Populate cache
@@ -203,9 +219,9 @@ class TeamMixIn(metaclass=RSCMeta):
     async def team_by_id(
         self,
         guild: discord.Guild,
-        id: str,
+        id: int,
     ) -> Team:
         """Fetch team data by id"""
-        async with ApiClient(self._api_conf[guild]) as client:
+        async with ApiClient(self._api_conf[guild.id]) as client:
             api = TeamsApi(client)
             return await api.teams_read(id)

@@ -3,7 +3,7 @@ import logging
 
 from redbot.core import Config, app_commands, commands, checks
 
-from rsc.abc import RSCMeta
+from rsc.abc import RSCMixIn
 from rsc.embeds import ErrorEmbed
 from rsc.teams import TeamMixIn
 from rsc.transactions.views import TradeAnnouncementModal, TradeAnnouncementView
@@ -22,7 +22,7 @@ defaults = {
 }
 
 
-class TransactionMixIn(metaclass=RSCMeta):
+class TransactionMixIn(RSCMixIn):
     def __init__(self):
         # Prepare configuration group
         self.config.init_custom("Transactions", 1)
@@ -229,9 +229,7 @@ class TransactionMixIn(metaclass=RSCMeta):
             )
             return
 
-        await trans_channel.send(
-            message, allowed_mentions=discord.AllowedMentions(users=True)
-        )
+        await trans_channel.send(message, allowed_mentions=discord.AllowedMentions(users=True))
         await interaction.response.send_message(content="Done", ephemeral=True)
 
     @app_commands.command(
@@ -240,7 +238,9 @@ class TransactionMixIn(metaclass=RSCMeta):
     )
     @app_commands.checks.has_permissions(manage_roles=True)
     @app_commands.guild_only()
-    async def _transaction_announcetrade(self, interaction: discord.Interaction):
+    async def _transaction_announcetrade(
+        self, interaction: discord.Interaction
+    ):
         trans_channel = await self._trans_channel(interaction.guild)
         if not trans_channel:
             await interaction.response.send_message(
@@ -249,9 +249,13 @@ class TransactionMixIn(metaclass=RSCMeta):
             )
             return
 
-        embed = discord.Embed(title="Trade Announcement", color=discord.Color.blue())
+        embed = discord.Embed(
+            title="Trade Announcement",
+            color=discord.Color.blue()
+        )
         trade_view = TradeAnnouncementView()
         await interaction.response.send_message(embed=embed, view=trade_view)
+
 
         # if not trade.trade:
         #     await interaction.followup.send_message(content="No trade announcement provided.", ephemeral=True)
@@ -259,7 +263,7 @@ class TransactionMixIn(metaclass=RSCMeta):
 
         # log.debug(f"Trade Announcement: {trade.trade}")
         # await trans_channel.send(content=trade.trade, allowed_mentions=discord.AllowedMentions(users=True))
-        # TODO - modal not working for this because mentions
+        #TODO - modal not working for this because mentions
 
     # API
 
@@ -285,9 +289,7 @@ class TransactionMixIn(metaclass=RSCMeta):
     async def _save_trans_channel(
         self, guild: discord.Guild, trans_channel: Optional[int]
     ):
-        await self.config.custom("Transactions", guild.id).TransChannel.set(
-            trans_channel
-        )
+        await self.config.custom("Transactions", guild.id).TransChannel.set(trans_channel)
 
     async def _trans_log_channel(
         self, guild: discord.Guild
@@ -314,6 +316,4 @@ class TransactionMixIn(metaclass=RSCMeta):
         return await self.config.custom("Transactions", guild.id).TransNotifications()
 
     async def _set_notifications(self, guild: discord.Guild, enabled: bool):
-        await self.config.custom("Transactions", guild.id).TransNotifications.set(
-            enabled
-        )
+        await self.config.custom("Transactions", guild.id).TransNotifications.set(enabled)

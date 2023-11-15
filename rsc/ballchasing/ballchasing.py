@@ -9,7 +9,7 @@ from redbot.core import app_commands, checks, commands, Config
 
 from rscapi.models.tier import Tier
 
-from rsc.abc import RSCMeta
+from rsc.abc import RSCMixIn
 from rsc.const import LEAGUE_ROLE, MUTED_ROLE
 from rsc.embeds import ErrorEmbed, SuccessEmbed
 
@@ -21,7 +21,6 @@ defaults_guild = {
     "ReplayDumpChannel": None,
     "AuthToken": None,
     "TopLevelGroup": None,
-    "TimeZone": "America/New_York",
     "LogChannel": None,
     "ManagerRole": None,
     "RscSteamId": None,
@@ -37,13 +36,12 @@ RSC_STEAM_ID = 76561199096013422  # RSC Steam ID
 # RSC_STEAM_ID = 76561197960409023 # REMOVEME - my steam id for development
 
 
-class BallchasingMixIn(metaclass=RSCMeta):
+class BallchasingMixIn(RSCMixIn):
     COMBINE_PLAYER_RATIO = 0.5
 
     def __init__(self):
         log.debug("Initializing BallchasingMixIn")
 
-        self.config: Config
         self.config.init_custom("Ballchasing", 1)
         self.config.register_custom("Ballchasing", **defaults_guild)
         self._ballchasing_api = {}
@@ -55,16 +53,7 @@ class BallchasingMixIn(metaclass=RSCMeta):
 
     # async def prepare_ballchasing_api(self, guild: discord.Guild):
 
-    # Autocomplete
 
-    async def timezone_autocomplete(
-        self, interaction: discord.Interaction, current: str
-    ) -> List[app_commands.Choice[str]]:
-        return [
-            Choice(name=tz, value=tz)
-            for tz in pytz.common_timezones
-            if current.lower() in tz.lower()
-        ]
 
     # Settings
     _ballchasing: app_commands.Group = app_commands.Group(
@@ -87,7 +76,7 @@ class BallchasingMixIn(metaclass=RSCMeta):
             else "Not Configured"
         )
         log_channel = await self._get_bc_log_channel(interaction.guild)
-        tz = await self._get_time_zone(interaction.guild)
+        tz = await self.timezone(interaction.guild)
         score_category = await self._get_score_reporting_category(interaction.guild)
         role = await self._get_bc_manager_role(interaction.guild)
 
@@ -112,7 +101,7 @@ class BallchasingMixIn(metaclass=RSCMeta):
             value=score_category,
             inline=False,
         )
-        embed.add_field(name="Time Zone", value=tz, inline=False)
+        embed.add_field(name="Time Zone", value=str(tz), inline=False)
 
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
@@ -177,28 +166,6 @@ class BallchasingMixIn(metaclass=RSCMeta):
             ephemeral=True,
         )
 
-    @_ballchasing.command(
-        name="timezone", description="Configure the desired timezone for the server"
-    )
-    @app_commands.describe(timezone="Common time zone string (Ex: American/New_York)")
-    @app_commands.autocomplete(timezone=timezone_autocomplete)
-    @app_commands.checks.has_permissions(manage_guild=True)
-    async def _bc_timezone(self, interaction: discord.Interaction, timezone: str):
-        if timezone not in pytz.common_timezones:
-            await interaction.response.send_message(
-                embed=ErrorEmbed(
-                    description=f"Invalid time zone provided: **{timezone}**"
-                ),
-                ephemeral=True,
-            )
-            return
-
-        await self._save_time_zone(interaction.guild, timezone)
-        await interaction.response.send_message(
-            embed=SuccessEmbed(description=f"Time zone set to **{timezone}**"),
-            ephemeral=True,
-        )
-
     # Commands
 
     @_ballchasing.command(
@@ -240,12 +207,6 @@ class BallchasingMixIn(metaclass=RSCMeta):
 
     # async def _get_top_level_group(self, guild: discord.Guild):
     #     return await self.config.custom("Ballchasing", guild.id).TopLevelGroup()
-
-    async def _save_time_zone(self, guild, time_zone: str):
-        await self.config.custom("Ballchasing", guild.id).TimeZone.set(time_zone)
-
-    async def _get_time_zone(self, guild):
-        return await self.config.custom("Ballchasing", guild.id).TimeZone()
 
     async def _get_bc_log_channel(self, guild: discord.Guild):
         return guild.get_channel(

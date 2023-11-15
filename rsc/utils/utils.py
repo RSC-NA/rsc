@@ -11,15 +11,16 @@ from typing import Optional, List
 
 from rsc.transformers import MemberTransformer
 from rsc.const import GM_ROLE
-from rsc.abc import RSCMeta
+from rsc.abc import RSCMixIn
 from rsc.embeds import ErrorEmbed, SuccessEmbed, ExceptionErrorEmbed
 
 log = logging.getLogger("red.rsc.utils")
 
-FRANCHISE_ROLE_REGEX = re.compile(r"^[\w\s]+\(\w+\)$")
+# FRANCHISE_ROLE_REGEX = re.compile(r"^[\w\s]+\(\w+\)$")
 
 
 async def remove_prefix(member: discord.Member) -> str:
+    """Remove team prefix from guild members display name"""
     result = member.display_name.split(" | ")
     if len(result) != 2:
         raise ValueError(f"Unable to remove prefix from {member.display_name}")
@@ -27,6 +28,7 @@ async def remove_prefix(member: discord.Member) -> str:
 
 
 async def is_gm(member: discord.Member) -> bool:
+    """Check if user has General Manager role in guild"""
     for role in member.roles:
         if role.name == GM_ROLE:
             return True
@@ -36,16 +38,22 @@ async def is_gm(member: discord.Member) -> bool:
 async def get_member_from_rsc_name(
     guild: discord.Guild, name: str
 ) -> Optional[discord.Member]:
+    """Get guild member by rsc name ("nickm"). Not recommended."""
     for m in guild.members:
         try:
             n = await remove_prefix(m)
             if n.startswith(name):
                 return m
         except ValueError:
+            """Handle former player or spectator"""
+            if n.startswith(name):
+                return m
             continue
+    return None
 
 
 async def get_gm(franchise_role: discord.Role) -> Optional[discord.Member]:
+    """Get GM from guild franchise role"""
     for member in franchise_role.members:
         if is_gm(member):
             return member
@@ -53,19 +61,33 @@ async def get_gm(franchise_role: discord.Role) -> Optional[discord.Member]:
 
 
 async def get_role_by_name(guild: discord.Guild, name: str) -> Optional[discord.Role]:
+    """Get a guild discord role by name"""
     return discord.utils.get(guild.roles, name=name)
 
 
 async def get_franchise_role_from_name(
     guild: discord.Guild, franchise_name: str
 ) -> Optional[discord.Role]:
+    """Get guild franchise role from franchise name (Ex: "The Garden")"""
     for role in guild.roles:
         if role.name.lower().startswith(franchise_name.lower()):
             return role
     return None
 
+async def get_tier_color_by_name(guild: discord.Guild, name: str) -> Optional[discord.Color]:
+    tier_role = discord.utils.get(guild.roles, name=name)
+    if tier_role:
+        return tier_role.color
+    return None
 
-class UtilsMixIn(metaclass=RSCMeta):
+
+async def is_guild_interaction(interaction: discord.Interaction) -> bool:
+    """Check if interaction was sent from guild. Mostly for type issues since guild_only() exists"""
+    if interaction.guild:
+        return True
+    return False
+
+class UtilsMixIn(RSCMixIn):
     @app_commands.command(
         name="getid",
         description='Get the discord ID of a user. (Return: "name:username:id")',

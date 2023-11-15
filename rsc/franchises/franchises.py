@@ -9,7 +9,7 @@ from rscapi.models.franchise import Franchise
 from rscapi.models.franchise_list import FranchiseList
 from rscapi.models.team_list import TeamList
 
-from rsc.abc import RSCMeta
+from rsc.abc import RSCMixIn
 from rsc.embeds import ErrorEmbed
 from rsc.enums import Status
 
@@ -18,7 +18,7 @@ from typing import List, Dict, Optional
 log = logging.getLogger("red.rsc.franchises")
 
 
-class FranchiseMixIn(metaclass=RSCMeta):
+class FranchiseMixIn(RSCMixIn):
     def __init__(self):
         log.debug("Initializing FranchiseMixIn")
         self._franchise_cache: Dict[int, List[str]] = {}
@@ -90,7 +90,7 @@ class FranchiseMixIn(metaclass=RSCMeta):
         tier: Optional[str] = None,
         tier_name: Optional[str] = None,
     ) -> List[FranchiseList]:
-        async with ApiClient(self._api_conf[guild]) as client:
+        async with ApiClient(self._api_conf[guild.id]) as client:
             api = FranchisesApi(client)
             franchises = await api.franchises_list(
                 prefix=prefix,
@@ -98,7 +98,7 @@ class FranchiseMixIn(metaclass=RSCMeta):
                 name=name,
                 tier=tier,
                 tier_name=tier_name,
-                league=self._league[guild], 
+                league=self._league[guild.id], 
             )
 
             # Populate cache
