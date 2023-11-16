@@ -5,8 +5,7 @@ from rscapi import Configuration as ApiConfig
 from redbot.core import Config as RedConfig
 from redbot.core.bot import Red
 
-from pytz import BaseTzInfo
-from pytz.tzinfo import StaticTzInfo, DstTzInfo
+from zoneinfo import ZoneInfo
 
 from rscapi.models.league import League
 from rscapi.models.members_list200_response import MembersList200Response
@@ -30,7 +29,7 @@ class RSCMixIn(ABC):
     # Core
 
     @abstractmethod
-    async def timezone(self, guild: discord.Guild) -> BaseTzInfo | StaticTzInfo | DstTzInfo:
+    async def timezone(self, guild: discord.Guild) -> ZoneInfo:
         ...
 
     # Franchises

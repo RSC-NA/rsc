@@ -1,19 +1,23 @@
 import discord
 import logging
 import pytz
+from datetime import datetime, timedelta
 
 from discord import VoiceState
-from discord.app_commands import Choice
+from discord.app_commands import Choice, Transform
 
 from redbot.core import app_commands, checks, commands, Config
 
 from rscapi.models.tier import Tier
+from rscapi.models.match import Match
 
 from rsc.abc import RSCMixIn
 from rsc.const import LEAGUE_ROLE, MUTED_ROLE
 from rsc.embeds import ErrorEmbed, SuccessEmbed
+from rsc.teams import TeamMixIn
+from rsc.transformers import DateTransformer
 
-from typing import List, Dict, Tuple
+from typing import List, Dict, Tuple, Optional
 
 log = logging.getLogger("red.rsc.ballchasing")
 
@@ -52,8 +56,6 @@ class BallchasingMixIn(RSCMixIn):
     # Setup
 
     # async def prepare_ballchasing_api(self, guild: discord.Guild):
-
-
 
     # Settings
     _ballchasing: app_commands.Group = app_commands.Group(
@@ -172,26 +174,131 @@ class BallchasingMixIn(RSCMixIn):
         name="reportall",
         description="Find and report all matches for the day on ballchasing",
     )
-    async def _bc_report_all(self, interaction: discord.Interaction):
+    async def _bc_reportall(self, interaction: discord.Interaction):
         if not await self.has_bc_permissions(interaction.user):
             await interaction.response.send_message(
                 "You do not have permission to run this command.", ephemeral=True
             )
             return
 
+        # Check if league match day (Ex: Mon/Wed)
+        # if not self.is_match_day(interaction.guild):
+        #     #TODO
+
+        # Todays Date
+        tz = await self.timezone(interaction.guild)
+        # dt_today = datetime.now(tz).date()
+        dt_today = datetime(2023, 9, 1, tzinfo=tz)  # Dev TEST TIME
+        log.info(f"Reporting all matches on {dt_today}")
+        # TODO
+
+    @_ballchasing.command(
+        name="reportmatch",
+        description="Report a specific match on ballchasing",
+    )
+    @app_commands.autocomplete(home=TeamMixIn.teams_autocomplete)
+    @app_commands.autocomplete(away=TeamMixIn.teams_autocomplete)
+    @app_commands.describe(
+        home="Home team name",
+        away="Away team name",
+        date='Match date in ISO 8601 format. Defaults to todays date. (Example: "2023-01-25")',
+    )
+    async def _bc_reportmatch(
+        self,
+        interaction: discord.Interaction,
+        home: str,
+        away: str,
+        date: Optional[Transform[datetime, DateTransformer]] = None,
+    ):
+        if not await self.has_bc_permissions(interaction.user):
+            await interaction.response.send_message(
+                "You do not have permission to run this command.", ephemeral=True
+            )
+            return
+
+        # Get guild timezone
+        tz = await self.timezone(interaction.guild)
+
+        # Add timezone to date. If date not supplied, use todays date()
+        if date:
+            date = date.replace(tzinfo=tz)
+        else:
+            date = datetime.now(tz=tz).replace(
+                hour=0, minute=0, second=0, microsecond=0
+            )
+
+        date = datetime(2023, 9, 1, tzinfo=tz)  # PRESEASON TEST REMOVE ME
+        log.info(f"Reporting individual match. Home: {home} Away: {away} Date: {date}")
+
+        # Get match by teams and date
+        date_gt, date_lt = await self.get_date_search_range(date)
+        matches = await self.matches(
+            interaction.guild,
+            date__lt=date_lt,
+            date__gt=date_gt,
+            home_team=home,
+            away_team=away,
+        )
+
+        # No match found
+        if not matches:
+            await interaction.response.send_message(
+                embed=ErrorEmbed(
+                    description="No matches found for specified teams and date."
+                )
+            )
+            return
+
+        # Teams should only play once on the day
+        if len(matches) > 1:
+            log.error(
+                f"Found more than one match result. Home: {home} Away: {away} Date: {date}"
+            )
+            await interaction.response.send_message(
+                embed=ErrorEmbed(
+                    description=f"Found more than one match result for criteria\n\nHome: {home}\nAway: {away}\nDate: {date}"
+                )
+            )
+            return
+
+        # Send "working" message
+        await interaction.response.send_message(
+            embed=discord.Embed(
+                title="Processing Match",
+                description=f"Searching ballchasing for match **{home}** vs **{away}**",
+                color=discord.Color.yellow()
+            )
+        )
+
+        # Get detailed information for match
+        match = await self.match_by_id(interaction.guild, matches[0].id)
+        log.debug(match)
+
+        result = await self.bc_report_match(match)
+
+        #TODO display results
+
     # Functions
+
+    async def bc_report_match(self, match: Match):
+        pass
+
+    async def get_date_search_range(self, date: datetime) -> Tuple[datetime, datetime]:
+        """Return a tuple of datetime objects that has a search range for specified date"""
+        date_gt = date - timedelta(minutes=1)
+        date_lt = date.replace(hour=23, minute=59, second=59)
+        return (date_gt, date_lt)
 
     async def has_bc_permissions(self, member: discord.Member) -> bool:
         """Determine if member is able to manage guild or part of manager role"""
+        # Guild Manager
         if member.guild_permissions.manage_guild:
-            log.debug(f"[{member.guild}] {member.display_name} is a guild manager")
             return True
 
+        # BC Manager Role
         manager_role = await self._get_bc_manager_role(member.guild)
         if manager_role in member.roles:
-            log.debug(f"[{member.guild}] {member.display_name} is a ballchasing manager")
             return True
-        log.debug(f"[{member.guild}] {member.display_name} lacks ballchasing permissions")
         return False
 
     # Config

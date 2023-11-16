@@ -24,6 +24,12 @@ class TeamMixIn(RSCMixIn):
         self._team_cache: Dict[int, List[str]] = {}
         super().__init__()
 
+    # Setup
+
+    async def _populate_teams_cache(self, guild: discord.Guild):
+        teams = await self.teams(guild)
+        self._team_cache[guild.id] = [x.name for x in teams if x.name]
+
     # Autocomplete
 
     async def teams_autocomplete(
@@ -186,6 +192,9 @@ class TeamMixIn(RSCMixIn):
         await interaction.response.send_message(embed=embed)
 
     # Functions
+
+
+    # API
 
     async def teams(
         self,

@@ -4,8 +4,7 @@ import validators
 from aiohttp import ClientConnectionError
 
 import pytz
-from pytz import timezone, BaseTzInfo
-from pytz.tzinfo import StaticTzInfo, DstTzInfo
+from zoneinfo import ZoneInfo 
 
 from redbot.core import Config, app_commands, commands, checks
 
@@ -107,6 +106,7 @@ class RSC(
                     await self.tiers(guild)
                     await self._populate_combines_cache(guild)
                     await self._populate_free_agent_cache(guild)
+                    await self._populate_teams_cache(guild)
                 except ClientConnectionError:
                     # Pass so that the package loads successfully with invalid url/key
                     pass
@@ -282,9 +282,9 @@ class RSC(
 
     async def timezone(
         self, guild: discord.Guild
-    ) -> BaseTzInfo | StaticTzInfo | DstTzInfo:
-        """Returns server timezone as pytz object for use in datetime objects"""
-        return timezone(await self._get_timezone(guild))
+    ) -> ZoneInfo:
+        """Returns server timezone as ZoneInfo object for use in datetime objects"""
+        return ZoneInfo(await self._get_timezone(guild))
 
     # Config
 

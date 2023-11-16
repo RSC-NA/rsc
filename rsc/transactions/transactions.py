@@ -50,7 +50,7 @@ class TransactionMixIn(RSCMixIn):
         notifications = await self._notifications_enabled(interaction.guild)
         settings_embed = discord.Embed(
             title="Transactions Settings",
-            description="Current configuration for Transactions Cog.",
+            description="Current configuration for Transactions",
             color=discord.Color.blue(),
         )
 

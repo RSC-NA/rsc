@@ -87,7 +87,7 @@ class CheckOutView(AuthorOnlyView):
         self.result = True
         await self.interaction.edit_original_response(
             embed=SuccessEmbed(
-                title="Checked In",
+                title="Checked Out",
                 description="You have been removed from the available free agent list.\n\nThank you for updating your availability.",
             ),
             view=None,

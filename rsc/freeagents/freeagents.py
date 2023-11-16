@@ -4,7 +4,6 @@ import logging
 from datetime import datetime, time, timedelta
 from discord import VoiceState
 from discord.ext import tasks
-from pytz import timezone
 
 from redbot.core import app_commands, checks, commands, Config
 
@@ -31,8 +30,9 @@ from typing import List, Dict, Tuple, TypedDict, Optional
 
 log = logging.getLogger("red.rsc.freeagents")
 
-LOOP_TIMEZONE = timezone("America/New_York")
-FA_LOOP_TIME = time(hour=12, tzinfo=LOOP_TIMEZONE)
+# Noon - Eastern (-5) - Not DST aware
+# Have to use UTC for loop. TZ aware object causes issues with clock drift calculations
+FA_LOOP_TIME = time(hour=17)
 
 class CheckIn(TypedDict):
     """
@@ -62,6 +62,9 @@ class FreeAgentMixIn(RSCMixIn):
         self.config.register_custom("FreeAgents", **defaults_guild)
         super().__init__()
 
+        # Start FA check in loop
+        self.expire_free_agent_checkins_loop.start()
+
     # Setup
 
     async def _populate_free_agent_cache(self, guild: discord.Guild):
@@ -80,7 +83,7 @@ class FreeAgentMixIn(RSCMixIn):
             
             # Validate the guild exists
             if not guild:
-                log.error(f"Unable to resolve guild during FA loop: {k}")
+                log.error(f"Unable to resolve guild during expire FA check in loop: {k}")
                 continue
 
             log.info(f"[{guild.name}] Removing expired free agents.")
@@ -91,12 +94,12 @@ class FreeAgentMixIn(RSCMixIn):
             for player in v:
                 checkin_date = datetime.fromisoformat(player["date"])
                 if checkin_date.date() <= yesterday.date():
-                    log.debug(f"[{guild.name} Expiring free agent check in: {player['player']}")
+                    log.debug(f"[{guild.name} Expiring FA check in: {player['player']}")
                     await self.remove_checkin(guild, player)
     
     # Commands
 
-    @app_commands.command(name="fa", description="List free agents in a specified tier")
+    @app_commands.command(name="freeagents", description="List free agents in a specified tier")
     @app_commands.autocomplete(tier=TierMixIn.tiers_autocomplete)
     @app_commands.guild_only()
     async def _free_agents(self, interaction: discord.Interaction, tier: str):
