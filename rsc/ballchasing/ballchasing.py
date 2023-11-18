@@ -122,7 +122,7 @@ class BallchasingMixIn(RSCMixIn):
 
     @_ballchasing.command(
         name="manager",
-        description="Configure the ballchasing management role (Ex: @stats-committee)",
+        description="Configure the ballchasing management role (Ex: @Stats Committee)",
     )
     @app_commands.checks.has_permissions(manage_guild=True)
     async def _bc_management_role(
@@ -196,8 +196,10 @@ class BallchasingMixIn(RSCMixIn):
         name="reportmatch",
         description="Report a specific match on ballchasing",
     )
-    @app_commands.autocomplete(home=TeamMixIn.teams_autocomplete)
-    @app_commands.autocomplete(away=TeamMixIn.teams_autocomplete)
+    @app_commands.autocomplete(
+        home=TeamMixIn.teams_autocomplete,
+        away=TeamMixIn.teams_autocomplete
+    )
     @app_commands.describe(
         home="Home team name",
         away="Away team name",
@@ -256,17 +258,23 @@ class BallchasingMixIn(RSCMixIn):
             )
             await interaction.response.send_message(
                 embed=ErrorEmbed(
-                    description=f"Found more than one match result for criteria\n\nHome: {home}\nAway: {away}\nDate: {date}"
+                    description="Found more than one match result for criteria\n\n"
+                    f"Home: {home}\n"
+                    f"Away: {away}\n"
+                    f"Date: {date}"
                 )
             )
             return
+
+        # Check if away team matches
+        # TODO
 
         # Send "working" message
         await interaction.response.send_message(
             embed=discord.Embed(
                 title="Processing Match",
                 description=f"Searching ballchasing for match **{home}** vs **{away}**",
-                color=discord.Color.yellow()
+                color=discord.Color.yellow(),
             )
         )
 
@@ -276,7 +284,7 @@ class BallchasingMixIn(RSCMixIn):
 
         result = await self.bc_report_match(match)
 
-        #TODO display results
+        # TODO display results
 
     # Functions
 

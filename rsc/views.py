@@ -41,6 +41,7 @@ class AuthorOnlyView(discord.ui.View):
             return False
         return True
 
+# Generic Buttons
 
 class ConfirmButton(discord.ui.Button):
     """Generic Confirm Button"""
@@ -60,6 +61,54 @@ class DeclineButton(discord.ui.Button):
         """Button will callback to the containing view `decline()` function"""
         await self.view.decline(interaction)
 
+class CancelButton(discord.ui.Button):
+    """Generic Cancel Button"""
+    def __init__(self):
+        super().__init__(label="Cancel", custom_id="cancel", style=discord.ButtonStyle.red)
+
+    async def callback(self, interaction: discord.Interaction):
+        """Button will callback to the containing view `cancel()` function"""
+        await self.view.decline(interaction)
+
+class NextButton(discord.ui.Button):
+    """Generic Next Button"""
+    def __init__(self):
+        super().__init__(label="Next", custom_id="next", style=discord.ButtonStyle.green)
+
+    async def callback(self, interaction: discord.Interaction):
+        """Button will callback to the containing view `decline()` function"""
+        await self.view.confirm(interaction)
+
+class NoButton(discord.ui.Button):
+    """Generic No Button"""
+    def __init__(self):
+        super().__init__(label="No", custom_id="no", style=discord.ButtonStyle.red)
+
+    async def callback(self, interaction: discord.Interaction):
+        """Button will callback to the containing view `no()` function"""
+        await self.view.decline(interaction)
+
+class YesButton(discord.ui.Button):
+    """Generic Yes Button"""
+    def __init__(self):
+        super().__init__(label="Yes", custom_id="yes", style=discord.ButtonStyle.green)
+
+    async def callback(self, interaction: discord.Interaction):
+        """Button will callback to the containing view `confirm()` function"""
+        await self.view.confirm(interaction)
+
+class AgreeButton(discord.ui.Button):
+    """Generic Agree Button"""
+    def __init__(self):
+        super().__init__(label="Agree", custom_id="agree", style=discord.ButtonStyle.green)
+
+    async def callback(self, interaction: discord.Interaction):
+        """Button will callback to the containing view `confirm()` function"""
+        await self.view.confirm(interaction)
+
+class LinkButton(discord.ui.Button):
+    def __init__(self, label: str, url: str):
+        super().__init__(label=label, url=url, style=discord.ButtonStyle.link)
 
 # RSC League Selection
 

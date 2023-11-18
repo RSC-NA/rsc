@@ -108,3 +108,9 @@ class TrackerLinksStatus(StrEnum):
     STALE = "STL" # Stale
     PULLED = "PLD" # Pulled
     FAILED = "FLD" # Failed
+
+
+class MatchTeamEnum(StrEnum):
+    HOME = "HME" # Home
+    AWAY = "AWY" # Away
+    ALL = "ALL" # All Games

@@ -49,22 +49,23 @@ class RSCMixIn(ABC):
     # League
 
     @abstractmethod
-    def leagues(self, guild: discord.Guild) -> List[League]:
+    async def leagues(self, guild: discord.Guild) -> List[League]:
         ...
 
     @abstractmethod
-    def league(self, guild: discord.Guild) -> Optional[League]:
+    async def league(self, guild: discord.Guild) -> Optional[League]:
         ...
 
     @abstractmethod
-    def league_by_id(self, guild: discord.Guild) -> Optional[League]:
+    async def league_by_id(self, guild: discord.Guild) -> Optional[League]:
         ...
 
     @abstractmethod
-    def current_season(self, guild: discord.Guild) -> Optional[Season]:
+    async def current_season(self, guild: discord.Guild) -> Optional[Season]:
         ...
 
     # Members
+    @abstractmethod
     async def members(
         self,
         guild: discord.Guild,

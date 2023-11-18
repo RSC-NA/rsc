@@ -11,7 +11,7 @@ from rscapi.models.match_list import MatchList
 from rscapi.models.match import Match
 
 from rsc.abc import RSCMixIn
-from rsc.enums import MatchType, MatchFormat
+from rsc.enums import MatchType, MatchFormat, MatchTeamEnum
 from rsc.embeds import ErrorEmbed
 from rsc.teams import TeamMixIn
 
@@ -56,17 +56,18 @@ class MatchMixIn(RSCMixIn):
     async def matches(
         self,
         guild: discord.Guild,
-        date__lt: Optional[datetime]=None,
-        date__gt: Optional[datetime]=None,
-        season: Optional[str]=None,
-        season_number: Optional[str]=None,
-        home_team: Optional[str]=None,
-        away_team: Optional[str]=None,
-        day: Optional[str]=None,
-        match_type: Optional[MatchType]=None,
-        match_format: Optional[MatchFormat]=None,
-        limit: int=0,
-        offset: int=0,
+        date__lt: Optional[datetime] = None,
+        date__gt: Optional[datetime] = None,
+        season: Optional[int] = None,
+        season_number: Optional[int] = None,
+        match_team_type: MatchTeamEnum = MatchTeamEnum.ALL,
+        team_name: Optional[str] = None,
+        day: Optional[int] = None,
+        match_type: Optional[MatchType] = None,
+        match_format: Optional[MatchFormat] = None,
+        limit: int = 0,
+        offset: int = 0,
+        preseason: int = 0,
     ) -> List[MatchList]:
         async with ApiClient(self._api_conf[guild.id]) as client:
             api = MatchesApi(client)
@@ -75,22 +76,52 @@ class MatchMixIn(RSCMixIn):
                 date__gt=date__gt.isoformat() if date__gt else None,
                 season=season,
                 season_number=season_number,
-                home_team=home_team,
-                away_team=away_team,
+                match_team_type=match_team_type,
+                team_name=team_name,
                 day=day,
                 match_type=str(match_type) if match_type else None,
                 match_format=str(match_format) if match_format else None,
                 league=str(self._league[guild.id]),
                 limit=limit,
-                offset=offset
+                offset=offset,
+                preseason=preseason,
             )
             return matches.results
-        
-    async def match_by_id(
+
+    async def find_match(
         self,
         guild: discord.Guild,
-        id: int 
-    ) -> Match:
+        teams: str,
+        date__lt: Optional[datetime] = None,
+        date__gt: Optional[datetime] = None,
+        season: Optional[int] = None,
+        season_number: Optional[int] = None,
+        day: Optional[int] = None,
+        match_type: Optional[MatchType] = None,
+        match_format: Optional[MatchFormat] = None,
+        limit: int = 0,
+        offset: int = 0,
+        preseason: int = 0,
+    ) -> List[MatchList]:
+        async with ApiClient(self._api_conf[guild.id]) as client:
+            api = MatchesApi(client)
+            matches: MatchesList200Response = await api.matches_find_match(
+                teams=teams,
+                date__lt=date__lt.isoformat() if date__lt else None,
+                date__gt=date__gt.isoformat() if date__gt else None,
+                season=season,
+                season_number=season_number,
+                day=day,
+                match_type=str(match_type) if match_type else None,
+                match_format=str(match_format) if match_format else None,
+                league=str(self._league[guild.id]),
+                limit=limit,
+                offset=offset,
+                preseason=preseason,
+            )
+            return matches.results
+
+    async def match_by_id(self, guild: discord.Guild, id: int) -> Match:
         async with ApiClient(self._api_conf[guild.id]) as client:
             api = MatchesApi(client)
             return await api.matches_read(id)

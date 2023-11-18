@@ -74,11 +74,12 @@ async def get_franchise_role_from_name(
             return role
     return None
 
-async def get_tier_color_by_name(guild: discord.Guild, name: str) -> Optional[discord.Color]:
+async def get_tier_color_by_name(guild: discord.Guild, name: str) -> discord.Color:
+    """Return tier color from role (Defaults to blue if not found)"""
     tier_role = discord.utils.get(guild.roles, name=name)
     if tier_role:
         return tier_role.color
-    return None
+    return discord.Color.blue()
 
 
 async def is_guild_interaction(interaction: discord.Interaction) -> bool:

@@ -11,7 +11,7 @@ from rsc.abc import RSCMixIn
 from rsc.embeds import ErrorEmbed
 from rsc.franchises import FranchiseMixIn
 from rsc.tiers import TierMixIn
-from rsc.utils.utils import get_franchise_role_from_name, get_gm, is_gm
+from rsc.utils.utils import get_franchise_role_from_name, get_gm, is_gm, get_tier_color_by_name
 
 from typing import Optional, List, Dict, Tuple
 
@@ -53,10 +53,14 @@ class TeamMixIn(RSCMixIn):
     @app_commands.command(
         name="teams", description="Get a list of teams for a franchise"
     )
-    @app_commands.autocomplete(franchise=FranchiseMixIn.franchise_autocomplete)
-    @app_commands.autocomplete(tier=TierMixIn.tiers_autocomplete)
-    @app_commands.describe(franchise="Teams in a franchise")
-    @app_commands.describe(tier="Teams in a league tier")
+    @app_commands.autocomplete(
+        franchise=FranchiseMixIn.franchise_autocomplete,
+        tier=TierMixIn.tiers_autocomplete
+    )
+    @app_commands.describe(
+        franchise="Teams in a franchise",
+        tier="Teams in a league tier"
+    )
     @app_commands.guild_only()
     async def _teams(
         self,
@@ -141,12 +145,7 @@ class TeamMixIn(RSCMixIn):
         # Fetch roster information
         roster = await self.team_by_id(interaction.guild, teams[0].id)
 
-        tier_role = discord.utils.get(interaction.guild.roles, name=roster.tier)
-
-        if tier_role:
-            tier_color = tier_role.color
-        else:
-            tier_color = discord.Color.blue()
+        tier_color = await get_tier_color_by_name(interaction.guild, roster.tier)
 
         # Fetch franchise info
         franchise_info = await self.franchises(interaction.guild, name=roster.franchise)
