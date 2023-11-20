@@ -103,12 +103,18 @@ class FreeAgentMixIn(RSCMixIn):
     @app_commands.autocomplete(tier=TierMixIn.tiers_autocomplete)
     @app_commands.guild_only()
     async def _free_agents(self, interaction: discord.Interaction, tier: str):
+        if not await self.is_valid_tier(interaction.guild, tier):
+            await interaction.response.send_message(
+                embed=ErrorEmbed(description=f"**{tier}** is not a valid tier."),
+                ephemeral=True
+            )
+            return
         free_agents = await self.free_agents(interaction.guild, tier)
         free_agents.extend(await self.permanent_free_agents(interaction.guild, tier))
 
         data: List[str] = []
         for fa in free_agents:
-            log.debug(fa.player.to_json())
+            log.debug(fa.player)
             fmember = None
             if hasattr(fa.player, "discord_id"):
                 log.debug("Found discord_id for free agent")
@@ -164,7 +170,7 @@ class FreeAgentMixIn(RSCMixIn):
         )
 
         # Check if member exists in RSC
-        if not (players.count and players.results):
+        if not players:
             await interaction.response.send_message(
                 embed=ErrorEmbed(
                     title="Check In Error",
@@ -174,7 +180,7 @@ class FreeAgentMixIn(RSCMixIn):
             )
             return
 
-        player: LeaguePlayer = players.results[0]
+        player: LeaguePlayer = players[0]
 
         # Check if player is a Free Agent or PermFA
         if not (player.status == Status.FREE_AGENT or player.status == Status.PERM_FA):
@@ -360,19 +366,17 @@ class FreeAgentMixIn(RSCMixIn):
         self, guild: discord.Guild, tier_name: str
     ) -> List[LeaguePlayer]:
         """Fetch a list of Free Agents for specified tier"""
-        free_agents = await self.players(
+        return await self.players(
             guild, status=Status.FREE_AGENT, tier_name=tier_name
         )
-        return free_agents.results
 
     async def permanent_free_agents(
         self, guild: discord.Guild, tier_name: str
     ) -> List[LeaguePlayer]:
         """Fetch a list of Permanent Free Agents for specified tier"""
-        free_agents = await self.players(
+        return await self.players(
             guild, status=Status.PERM_FA, tier_name=tier_name
         )
-        return free_agents.results
 
     # Config
 

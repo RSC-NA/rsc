@@ -6,12 +6,13 @@ from redbot.core import app_commands
 
 from rscapi import ApiClient, LeaguesApi, SeasonsApi, LeaguePlayersApi, Configuration
 from rscapi.models.league import League
+from rscapi.models.league_player import LeaguePlayer
 from rscapi.models.league_players_list200_response import LeaguePlayersList200Response
 from rscapi.models.season import Season
 
 from rsc.abc import RSCMixIn
 from rsc.enums import Status
-from rsc.embeds import ErrorEmbed
+from rsc.embeds import ErrorEmbed, BlueEmbed
 
 from typing import List, Optional, Dict
 
@@ -19,13 +20,12 @@ log = logging.getLogger("red.rsc.leagues")
 
 
 class LeagueMixIn(RSCMixIn):
-
-    # def __init__(self):
-    #     self._match_days: Dict[discord.Guild, List[str]] = []
+    def __init__(self):
+        log.debug("Initializing LeagueMixIn")
+        super().__init__()
+        # self._match_days: Dict[discord.Guild, List[str]] = []
 
     # Setup
-
-
 
     # Commands
 
@@ -48,20 +48,25 @@ class LeagueMixIn(RSCMixIn):
             embed.set_thumbnail(url=interaction.guild.icon.url)
         await interaction.response.send_message(embed=embed)
 
-
-    @app_commands.command(name="leagueinfo", description="Show league and current season information")
+    @app_commands.command(
+        name="leagueinfo", description="Show league and current season information"
+    )
     @app_commands.guild_only()
     async def _leagues_info(self, interaction: discord.Interaction):
         league_data = await self.current_season()
 
         if not league_data:
-            await interaction.response.send_message(embed=ErrorEmbed(description="Unable to fetch league data. Is the league configured correctly?"))
+            await interaction.response.send_message(
+                embed=ErrorEmbed(
+                    description="Unable to fetch league data. Is the league configured correctly?"
+                )
+            )
             return
 
         embed = discord.Embed(
             title=f"{league_data.league.name} League Information",
         )
-        #TODO - Is this useful?
+        # TODO - Is this useful?
 
     @app_commands.command(
         name="season", description="Display current RSC season for league"
@@ -69,18 +74,22 @@ class LeagueMixIn(RSCMixIn):
     @app_commands.guild_only()
     async def _season(self, interaction: discord.Interaction):
         season = await self.current_season(interaction.guild)
-        log.debug(season)
-        # TODO
-        # embed = discord.Embed(
-        #     title="RSC Leagues",
-        #     color=discord.Color.blue()
-        # )
-        # embed.add_field(name="League", value="\n".join(l.name for l in leagues), inline=True)
-        # embed.add_field(name="Game Mode", value="\n".join(l.league_data.game_mode for l in leagues), inline=True)
-
-        # if interaction.guild.icon:
-        #     embed.set_thumbnail(url=interaction.guild.icon.url)
-        # await interaction.response.send_message(embed=embed)
+        if not season:
+            await interaction.response.send_message(
+                embed=ErrorEmbed(
+                    title="Current Season",
+                    description="Currently there is not an ongoing season in the league.",
+                ),
+                ephemeral=True,
+            )
+            return
+        embed = BlueEmbed(
+            title="Current Season",
+            description=f"The current season is **S{season.number}**",
+        )
+        if interaction.guild.icon:
+            embed.set_thumbnail(url=interaction.guild.icon.url)
+        await interaction.response.send_message(embed=embed)
 
     # Functionality
 
@@ -116,20 +125,20 @@ class LeagueMixIn(RSCMixIn):
     async def players(
         self,
         guild: discord.Guild,
-        status: Optional[Status]=None,
-        name: Optional[str]=None,
-        tier: Optional[int]=None,
-        tier_name: Optional[str]=None,
-        season: Optional[int]=None,
-        season_number: Optional[int]=None,
-        team_name: Optional[str]=None,
-        discord_id: Optional[int]=None,
-        limit: int=0,
-        offset: int=0,
-    ) -> LeaguePlayersList200Response:
+        status: Optional[Status] = None,
+        name: Optional[str] = None,
+        tier: Optional[int] = None,
+        tier_name: Optional[str] = None,
+        season: Optional[int] = None,
+        season_number: Optional[int] = None,
+        team_name: Optional[str] = None,
+        discord_id: Optional[int] = None,
+        limit: int = 0,
+        offset: int = 0,
+    ) -> List[LeaguePlayer]:
         async with ApiClient(self._api_conf[guild.id]) as client:
             api = LeaguePlayersApi(client)
-            return await api.league_players_list(
+            players = await api.league_players_list(
                 status=str(status) if status else None,
                 name=name,
                 tier=tier,
@@ -142,3 +151,4 @@ class LeagueMixIn(RSCMixIn):
                 limit=limit,
                 offset=offset,
             )
+            return players.results

@@ -10,7 +10,13 @@ from zoneinfo import ZoneInfo
 from rscapi.models.league import League
 from rscapi.models.members_list200_response import MembersList200Response
 from rscapi.models.season import Season
+from rscapi.models.member import Member
+from rscapi.models.match import Match
 from rscapi.models.franchise_list import FranchiseList
+from rscapi.models.team_list import TeamList
+from rscapi.models.league_player import LeaguePlayer
+
+from rsc.enums import Status
 
 from typing import Dict, List, Optional
 
@@ -64,7 +70,25 @@ class RSCMixIn(ABC):
     async def current_season(self, guild: discord.Guild) -> Optional[Season]:
         ...
 
+    @abstractmethod
+    async def players(
+        self,
+        guild: discord.Guild,
+        status: Optional[Status] = None,
+        name: Optional[str] = None,
+        tier: Optional[int] = None,
+        tier_name: Optional[str] = None,
+        season: Optional[int] = None,
+        season_number: Optional[int] = None,
+        team_name: Optional[str] = None,
+        discord_id: Optional[int] = None,
+        limit: int = 0,
+        offset: int = 0,
+    ) -> List[LeaguePlayer]:
+        ...
+
     # Members
+
     @abstractmethod
     async def members(
         self,
@@ -74,7 +98,42 @@ class RSCMixIn(ABC):
         discord_id: Optional[int] = None,
         limit: int = 0,
         offset: int = 0,
-    ) -> MembersList200Response:
+    ) -> List[Member]:
+        ...
+
+    # Teams
+
+    @abstractmethod
+    async def teams(
+        self,
+        guild: discord.Guild,
+        seasons: Optional[str] = None,
+        franchise: Optional[str] = None,
+        name: Optional[str] = None,
+        tier: Optional[str] = None,
+    ) -> List[TeamList]:
+        ...
+
+    @abstractmethod
+    async def season_matches(
+        self,
+        guild: discord.Guild,
+        id: int,
+        season: Optional[int] = None,
+        preseason: bool = True,
+    ) -> List[Match]:
+        ...
+
+    @abstractmethod
+    async def next_match(
+        self,
+        guild: discord.Guild,
+        id: int,
+    ) -> Optional[Match]:
+        ...
+
+    @abstractmethod
+    async def get_team_id_by_name(self, guild: discord.Guild, name: str) -> int:
         ...
 
 

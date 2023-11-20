@@ -124,7 +124,7 @@ class RSC(
         if url and key:
             self._api_conf[guild.id] = Configuration(
                 host=url,
-                api_key=key,
+                api_key={"Api-Key": key},
             )
         else:
             log.warning(f"[{guild}]RSC API key or url has not been configured!")

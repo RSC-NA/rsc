@@ -68,6 +68,13 @@ class TierMixIn(RSCMixIn):
     @app_commands.guild_only()
     async def _tier(self, interaction: discord.Interaction, tier: str):
         """Get a list of teams in a tier"""
+        if not await self.is_valid_tier(interaction.guild, tier):
+            await interaction.response.send_message(
+                embed=ErrorEmbed(description=f"**{tier}** is not a valid tier."),
+                ephemeral=True
+            )
+            return
+
         teams = await self.teams(interaction.guild, tier=tier)
         teams.sort(key=lambda t: t.name)
 
@@ -86,6 +93,17 @@ class TierMixIn(RSCMixIn):
         await interaction.response.send_message(embed=embed)
 
     # Functions
+
+    async def is_valid_tier(self, guild: discord.Guild, name: str) -> bool:
+        """Check if name is in the tier cache"""
+        if not self._tier_cache.get(guild.id):
+            return False
+
+        if name in self._tier_cache[guild.id]:
+            return True
+        return False
+
+    # API
 
     async def tiers(
         self, guild: discord.Guild, name: Optional[str] = None

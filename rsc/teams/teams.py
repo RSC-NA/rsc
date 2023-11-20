@@ -6,12 +6,18 @@ from redbot.core import app_commands, checks
 from rscapi import ApiClient, TeamsApi
 from rscapi.models.team import Team
 from rscapi.models.team_list import TeamList
+from rscapi.models.match import Match
 
 from rsc.abc import RSCMixIn
 from rsc.embeds import ErrorEmbed
 from rsc.franchises import FranchiseMixIn
 from rsc.tiers import TierMixIn
-from rsc.utils.utils import get_franchise_role_from_name, get_gm, is_gm, get_tier_color_by_name
+from rsc.utils.utils import (
+    get_franchise_role_from_name,
+    get_gm,
+    is_gm,
+    get_tier_color_by_name,
+)
 
 from typing import Optional, List, Dict, Tuple
 
@@ -55,11 +61,10 @@ class TeamMixIn(RSCMixIn):
     )
     @app_commands.autocomplete(
         franchise=FranchiseMixIn.franchise_autocomplete,
-        tier=TierMixIn.tiers_autocomplete
+        tier=TierMixIn.tiers_autocomplete,
     )
     @app_commands.describe(
-        franchise="Teams in a franchise",
-        tier="Teams in a league tier"
+        franchise="Teams in a franchise", tier="Teams in a league tier"
     )
     @app_commands.guild_only()
     async def _teams(
@@ -178,7 +183,7 @@ class TeamMixIn(RSCMixIn):
                 players.append(f"{name} (GM)")
             else:
                 players.append(name)
-        
+
         player_str = "\n".join(players)
 
         # Team API endpoint is currently missing IR status. Need to add eventually.
@@ -192,6 +197,14 @@ class TeamMixIn(RSCMixIn):
 
     # Functions
 
+    async def get_team_id_by_name(self, guild: discord.Guild, name: str) -> int:
+        """Return a teams ID in the API by name. (Zero indicates not found)"""
+        teams = await self.teams(guild, name=name)
+        if not teams:
+            return 0
+        if not teams[0].id:
+            return 0
+        return teams[0].id
 
     # API
 
@@ -233,3 +246,25 @@ class TeamMixIn(RSCMixIn):
         async with ApiClient(self._api_conf[guild.id]) as client:
             api = TeamsApi(client)
             return await api.teams_read(id)
+
+    async def next_match(
+        self,
+        guild: discord.Guild,
+        id: int,
+    ) -> Optional[Match]:
+        async with ApiClient(self._api_conf[guild.id]) as client:
+            api = TeamsApi(client)
+            return await api.teams_next_match(id)
+
+    async def season_matches(
+        self,
+        guild: discord.Guild,
+        id: int,
+        season: Optional[int] = None,
+        preseason: bool = False,
+    ) -> List[Match]:
+        async with ApiClient(self._api_conf[guild.id]) as client:
+            api = TeamsApi(client)
+            return await api.teams_season_matches(
+                id, preseason=preseason, season=season
+            )

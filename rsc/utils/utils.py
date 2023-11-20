@@ -81,7 +81,6 @@ async def get_tier_color_by_name(guild: discord.Guild, name: str) -> discord.Col
         return tier_role.color
     return discord.Color.blue()
 
-
 async def is_guild_interaction(interaction: discord.Interaction) -> bool:
     """Check if interaction was sent from guild. Mostly for type issues since guild_only() exists"""
     if interaction.guild:

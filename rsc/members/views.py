@@ -142,7 +142,6 @@ class SignupView(AuthorOnlyView):
     async def confirm(self, interaction: discord.Interaction):
         """User pressed Yes Button"""
         log.debug(f"[SIGNUP] User agreed to {self.state.name}")
-        log.debug(f"View finished?: {self.is_finished()}")
 
         if self.state == SignupState.TRACKERS:
             await self.send_trackers_modal(interaction)
@@ -162,7 +161,6 @@ class SignupView(AuthorOnlyView):
         await self.prompt()
 
     async def send_trackers_modal(self, interaction: discord.Interaction):
-        log.debug("Sending tracker modal")
         info_modal = PlayerInfoModal()
         await interaction.response.send_modal(info_modal)
         await info_modal.wait()
@@ -241,8 +239,8 @@ class SignupView(AuthorOnlyView):
 
         embed = discord.Embed(
             title="RSC Rules",
-            description="We play our games on **Monday** and **Wednesday** at **10PM EST**.\n\n"
-            "By selecting **Yes**, you are agreeing that you are available to play on those days and time.",
+            description="In RSC we maintain a non negotiable set of rules in regards to player behavior. For more information, see the link below.\n\n"
+            "By selecting **Agree**, you are agreeing to any RSC rules in our discord, website, and RSC related games.",
             color=discord.Color.blue(),
         )
         await self.interaction.edit_original_response(embed=embed, view=self)
