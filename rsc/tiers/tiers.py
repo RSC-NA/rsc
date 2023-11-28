@@ -24,7 +24,7 @@ class TierMixIn(RSCMixIn):
 
     # Autocomplete
 
-    async def tiers_autocomplete(
+    async def tier_autocomplete(
         self, interaction: discord.Interaction, current: str
     ) -> List[app_commands.Choice[str]]:
         if not interaction.guild_id:
@@ -38,6 +38,8 @@ class TierMixIn(RSCMixIn):
         for t in self._tier_cache[interaction.guild_id]:
             if current.lower() in t.lower():
                 choices.append(app_commands.Choice(name=t, value=t))
+            if len(choices) == 25:
+                return choices
         return choices
 
     # Commands
@@ -64,14 +66,14 @@ class TierMixIn(RSCMixIn):
         await interaction.response.send_message(embed=embed)
 
     @app_commands.command(name="tier", description="Get a list of teams in a tier")
-    @app_commands.autocomplete(tier=tiers_autocomplete)
+    @app_commands.autocomplete(tier=tier_autocomplete)
     @app_commands.guild_only()
     async def _tier(self, interaction: discord.Interaction, tier: str):
         """Get a list of teams in a tier"""
         if not await self.is_valid_tier(interaction.guild, tier):
             await interaction.response.send_message(
                 embed=ErrorEmbed(description=f"**{tier}** is not a valid tier."),
-                ephemeral=True
+                ephemeral=True,
             )
             return
 

@@ -21,6 +21,7 @@ class TradeInfo(discord.ui.TextInput):
     async def callback(self, interaction: discord.Interaction):
         self.view.announcement = self.value
 
+
 class TradeAnnouncementView(discord.ui.View):
     def __init__(self, timeout: float = 30.0):
         self.announcement: Optional[str] = None

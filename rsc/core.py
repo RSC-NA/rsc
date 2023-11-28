@@ -1,10 +1,11 @@
 import discord
 import logging
+import asyncio
 import validators
 from aiohttp import ClientConnectionError
 
 import pytz
-from zoneinfo import ZoneInfo 
+from zoneinfo import ZoneInfo
 
 from redbot.core import Config, app_commands, commands, checks
 
@@ -79,7 +80,7 @@ class RSC(
     async def cog_load(self):
         """Perform initial bot setup on Cog reload"""
         log.debug("In cog_load()")
-        await self.setup()
+        await asyncio.create_task(self.setup())
 
     @commands.Cog.listener()
     async def on_ready(self):
@@ -89,7 +90,7 @@ class RSC(
         Does NOT trigger on Cog reload.
         """
         log.debug("In on_ready()")
-        await self.setup()
+        await asyncio.create_task(self.setup())
 
     async def setup(self):
         """Prepare the bot API and caches. Requires API configuration"""
@@ -102,11 +103,11 @@ class RSC(
             if self._api_conf.get(guild.id):
                 log.debug(f"[{guild}] Preparing caches")
                 try:
-                    await self.franchises(guild)
                     await self.tiers(guild)
+                    await self.franchises(guild)
+                    await self.teams(guild)
                     await self._populate_combines_cache(guild)
                     await self._populate_free_agent_cache(guild)
-                    await self._populate_teams_cache(guild)
                 except ClientConnectionError:
                     # Pass so that the package loads successfully with invalid url/key
                     pass
@@ -125,6 +126,7 @@ class RSC(
             self._api_conf[guild.id] = Configuration(
                 host=url,
                 api_key={"Api-Key": key},
+                api_key_prefix={"Api-Key": "Api-Key"},
             )
         else:
             log.warning(f"[{guild}]RSC API key or url has not been configured!")
@@ -134,6 +136,12 @@ class RSC(
     async def timezone_autocomplete(
         self, interaction: discord.Interaction, current: str
     ) -> List[app_commands.Choice[str]]:
+        if not current:
+            return [
+                app_commands.Choice(name=tz, value=tz)
+                for tz in pytz.common_timezones[:25]
+            ]
+
         return [
             app_commands.Choice(name=tz, value=tz)
             for tz in pytz.common_timezones
@@ -239,22 +247,24 @@ class RSC(
                 ephemeral=True,
             )
             return
-        
+
         # Validate URL
         if not validators.url(setup_modal.url.value):
-            await interaction.followup.send(embed=
-                ErrorEmbed(description=f"The URL provided is invalid: **{setup_modal.url.value}**\n\nDid you remember to include **\"https://\"**?"),
-                ephemeral=True
+            await interaction.followup.send(
+                embed=ErrorEmbed(
+                    description=f'The URL provided is invalid: **{setup_modal.url.value}**\n\nDid you remember to include **"https://"**?'
+                ),
+                ephemeral=True,
             )
             return
 
         await self._set_api_url(interaction.guild, setup_modal.url.value)
         await self._set_api_key(interaction.guild, setup_modal.key.value)
-        await interaction.followup.send(embed=SuccessEmbed(
-            description="Successfully configured RSC API key and url"
-        ))
-        
-
+        await interaction.followup.send(
+            embed=SuccessEmbed(
+                description="Successfully configured RSC API key and url"
+            )
+        )
 
     @rsc_settings.command(
         name="timezone", description="Set the desired time zone for the guild"
@@ -280,9 +290,7 @@ class RSC(
 
     # Functions
 
-    async def timezone(
-        self, guild: discord.Guild
-    ) -> ZoneInfo:
+    async def timezone(self, guild: discord.Guild) -> ZoneInfo:
         """Returns server timezone as ZoneInfo object for use in datetime objects"""
         return ZoneInfo(await self._get_timezone(guild))
 

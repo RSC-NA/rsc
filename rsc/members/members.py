@@ -69,6 +69,12 @@ class MemberMixIn(RSCMixIn):
     async def _member_intent_to_play(self, interaction: discord.Interaction):
         pass
 
+    @app_commands.command(
+        name="playerinfo", description="Display league information about a player"
+    )
+    async def _playerinfo(self, interaction: discord.Interaction, player: discord.Member):
+        pass
+
     # API
 
     async def members(

@@ -55,18 +55,16 @@ class SignupState(IntEnum):
     FINISHED = 6
     CANCELLED = 7
 
+
 class PlayerInfoModal(discord.ui.Modal, title="Rocket League Trackers"):
-    rsc_name = discord.ui.TextInput(
-        label="In-game Name",
-        style=discord.TextStyle.short
-    )
+    rsc_name = discord.ui.TextInput(label="In-game Name", style=discord.TextStyle.short)
     links = discord.ui.TextInput(
-        label="Tracker Links",
-        style=discord.TextStyle.paragraph
+        label="Tracker Links", style=discord.TextStyle.paragraph
     )
 
     async def on_submit(self, interaction: discord.Interaction):
         await interaction.response.defer()
+
 
 class ReferrerSelect(discord.ui.Select):
     def __init__(self):
@@ -89,6 +87,7 @@ class PlatformSelect(discord.ui.Select):
         self.view.platform = Platform(self.values[0])
         await self.view.confirm(interaction)
 
+
 class PlayerTypeSelect(discord.ui.Select):
     def __init__(self):
         super().__init__(placeholder="New or former...")
@@ -98,6 +97,7 @@ class PlayerTypeSelect(discord.ui.Select):
     async def callback(self, interaction: discord.Interaction):
         self.view.player_type = PlayerType(self.values[0])
         await self.view.confirm(interaction)
+
 
 class SignupView(AuthorOnlyView):
     def __init__(self, interaction: discord.Interaction, timeout: float = 600.0):
@@ -151,7 +151,6 @@ class SignupView(AuthorOnlyView):
         # Move to next step
         self.state = SignupState(self.state + 1)
         await self.prompt()
-
 
     async def decline(self, interaction: discord.Interaction):
         """User pressed No Button"""
@@ -208,7 +207,6 @@ class SignupView(AuthorOnlyView):
         )
         await self.interaction.edit_original_response(embed=embed, view=self)
 
-
     async def send_platform(self):
         self.clear_items()
         self.add_item(PlatformSelect())
@@ -256,6 +254,6 @@ class SignupView(AuthorOnlyView):
             color=discord.Color.blue(),
         )
         # First form, so we respond to the interaction instead of followup
-        await self.interaction.response.send_message(embed=embed, view=self, ephemeral=True)
-
-
+        await self.interaction.response.send_message(
+            embed=embed, view=self, ephemeral=True
+        )

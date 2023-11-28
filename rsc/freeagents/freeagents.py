@@ -34,6 +34,7 @@ log = logging.getLogger("red.rsc.freeagents")
 # Have to use UTC for loop. TZ aware object causes issues with clock drift calculations
 FA_LOOP_TIME = time(hour=17)
 
+
 class CheckIn(TypedDict):
     """
     Free Agent Check In
@@ -80,10 +81,12 @@ class FreeAgentMixIn(RSCMixIn):
         log.debug("Expire FA Loop is running")
         for k, v in self._check_ins.items():
             guild = self.bot.get_guild(k)
-            
+
             # Validate the guild exists
             if not guild:
-                log.error(f"Unable to resolve guild during expire FA check in loop: {k}")
+                log.error(
+                    f"Unable to resolve guild during expire FA check in loop: {k}"
+                )
                 continue
 
             log.info(f"[{guild.name}] Removing expired free agents.")
@@ -96,17 +99,19 @@ class FreeAgentMixIn(RSCMixIn):
                 if checkin_date.date() <= yesterday.date():
                     log.debug(f"[{guild.name} Expiring FA check in: {player['player']}")
                     await self.remove_checkin(guild, player)
-    
+
     # Commands
 
-    @app_commands.command(name="freeagents", description="List free agents in a specified tier")
-    @app_commands.autocomplete(tier=TierMixIn.tiers_autocomplete)
+    @app_commands.command(
+        name="freeagents", description="List free agents in a specified tier"
+    )
+    @app_commands.autocomplete(tier=TierMixIn.tier_autocomplete)
     @app_commands.guild_only()
     async def _free_agents(self, interaction: discord.Interaction, tier: str):
         if not await self.is_valid_tier(interaction.guild, tier):
             await interaction.response.send_message(
                 embed=ErrorEmbed(description=f"**{tier}** is not a valid tier."),
-                ephemeral=True
+                ephemeral=True,
             )
             return
         free_agents = await self.free_agents(interaction.guild, tier)
@@ -240,13 +245,14 @@ class FreeAgentMixIn(RSCMixIn):
         name="availability",
         description="Get list of available free agents for specified tier",
     )
-    @app_commands.autocomplete(tier=TierMixIn.tiers_autocomplete)
+    @app_commands.autocomplete(tier=TierMixIn.tier_autocomplete)
     @app_commands.guild_only()
     async def _fa_availability(self, interaction: discord.Interaction, tier: str):
         checkins = await self.checkins_by_tier(interaction.guild, tier)
 
         tier_color = (
-            await get_tier_color_by_name(interaction.guild, tier) or discord.Color.blue()
+            await get_tier_color_by_name(interaction.guild, tier)
+            or discord.Color.blue()
         )
 
         # Filter out anyone who isn't in the guild
@@ -275,7 +281,7 @@ class FreeAgentMixIn(RSCMixIn):
         name="clearavailability",
         description="Clear free agent availability for a specified tier",
     )
-    @app_commands.autocomplete(tier=TierMixIn.tiers_autocomplete)
+    @app_commands.autocomplete(tier=TierMixIn.tier_autocomplete)
     @app_commands.checks.has_permissions(manage_guild=True)
     @app_commands.guild_only()
     async def _clear_fa_availability(self, interaction: discord.Interaction, tier: str):
@@ -366,17 +372,13 @@ class FreeAgentMixIn(RSCMixIn):
         self, guild: discord.Guild, tier_name: str
     ) -> List[LeaguePlayer]:
         """Fetch a list of Free Agents for specified tier"""
-        return await self.players(
-            guild, status=Status.FREE_AGENT, tier_name=tier_name
-        )
+        return await self.players(guild, status=Status.FREE_AGENT, tier_name=tier_name, limit=1000)
 
     async def permanent_free_agents(
         self, guild: discord.Guild, tier_name: str
     ) -> List[LeaguePlayer]:
         """Fetch a list of Permanent Free Agents for specified tier"""
-        return await self.players(
-            guild, status=Status.PERM_FA, tier_name=tier_name
-        )
+        return await self.players(guild, status=Status.PERM_FA, tier_name=tier_name, limit=1000)
 
     # Config
 

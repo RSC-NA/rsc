@@ -3,10 +3,19 @@ import logging
 
 from redbot.core import Config, app_commands, commands, checks
 
+from rscapi import ApiClient, TransactionsApi, LeaguePlayersApi
+from rscapi.exceptions import ApiException
+from rscapi.models.cut_a_player_from_a_league import CutAPlayerFromALeague
+from rscapi.models.league_player import LeaguePlayer
+
 from rsc.abc import RSCMixIn
-from rsc.embeds import ErrorEmbed
+from rsc.enums import Status
+from rsc.const import CAPTAIN_ROLE
+from rsc.embeds import ErrorEmbed, SuccessEmbed, BlueEmbed, ExceptionErrorEmbed
+from rsc.exceptions import PastTransactionsEndDate
 from rsc.teams import TeamMixIn
 from rsc.transactions.views import TradeAnnouncementModal, TradeAnnouncementView
+from rsc.utils.utils import get_captain_role, is_gm
 
 from typing import Optional
 
@@ -29,19 +38,22 @@ class TransactionMixIn(RSCMixIn):
         self.config.register_custom("Transactions", **defaults)
         super().__init__()
 
-    # Settings
+    # Group
 
     _transactions = app_commands.Group(
         name="transactions",
         description="Transactions Configuration",
         guild_only=True,
-        default_permissions=discord.Permissions(manage_guild=True),
+        default_permissions=discord.Permissions(manage_roles=True),
     )
+
+    # Settings
 
     @_transactions.command(
         name="settings", description="Display settings for transactions"
     )
-    async def _show_transactions_settings(self, interaction: discord.Interaction):
+    @app_commands.checks.has_permissions(manage_guild=True)
+    async def _transactions_settings(self, interaction: discord.Interaction):
         """Show transactions settings"""
         log_channel = await self._trans_log_channel(interaction.guild)
         trans_channel = await self._trans_channel(interaction.guild)
@@ -100,7 +112,8 @@ class TransactionMixIn(RSCMixIn):
     @_transactions.command(
         name="notifications", description="Toggle channel notifications on or off"
     )
-    async def _toggle_notifications(self, interaction: discord.Interaction):
+    @app_commands.checks.has_permissions(manage_guild=True)
+    async def transactions_notifications(self, interaction: discord.Interaction):
         """Toggle channel notifications on or off"""
         status = await self._notifications_enabled(interaction.guild)
         log.debug(f"Current Notifications: {status}")
@@ -118,7 +131,8 @@ class TransactionMixIn(RSCMixIn):
         )
 
     @_transactions.command(name="channel")
-    async def _set_transactions_channel(
+    @app_commands.checks.has_permissions(manage_guild=True)
+    async def _transactions_channel(
         self, interaction: discord.Interaction, trans_channel: discord.TextChannel
     ):
         """Set transaction channel"""
@@ -135,7 +149,8 @@ class TransactionMixIn(RSCMixIn):
     @_transactions.command(
         name="log", description="Set the transactions committee log channel"
     )
-    async def _set_transactions_logchannel(
+    @app_commands.checks.has_permissions(manage_guild=True)
+    async def _transactions_log(
         self, interaction: discord.Interaction, log_channel: discord.TextChannel
     ):
         """Set transactions log channel"""
@@ -153,7 +168,7 @@ class TransactionMixIn(RSCMixIn):
         name="role", description="Set the transaction committee role"
     )
     @app_commands.checks.has_permissions(manage_guild=True)
-    async def _set_transactions_role(
+    async def _transactions_role(
         self, interaction: discord.Interaction, trans_role: discord.Role
     ):
         """Set transactions log channel"""
@@ -169,7 +184,7 @@ class TransactionMixIn(RSCMixIn):
 
     @_transactions.command(name="cutmsg", description="Set the cut message")
     @app_commands.checks.has_permissions(manage_guild=True)
-    async def _set_cut_msg(self, interaction: discord.Interaction, *, msg: str):
+    async def _transactions_cutmsg(self, interaction: discord.Interaction, *, msg: str):
         """Set cut message (4096 characters max)"""
         if len(msg) > 4096:
             await interaction.response.send_message(
@@ -186,39 +201,92 @@ class TransactionMixIn(RSCMixIn):
         cut_embed.set_footer(text="Successfully configured new cut message.")
         await interaction.response.send_message(embed=cut_embed, ephemeral=True)
 
-    # Commands
+    # Committee Commands
 
-    @app_commands.command(name="cut", description="Release a player from their team")
-    @app_commands.checks.has_permissions(manage_roles=True)
-    @app_commands.guild_only()
-    async def _cut(self, interaction: discord.Interaction, player: discord.Member):
-        pass
+    @_transactions.command(name="cut", description="Release a player from their team")
+    @app_commands.describe(player="Player to cut", override="Admin only override")
+    async def _transactions_cut(
+        self,
+        interaction: discord.Interaction,
+        player: discord.Member,
+        override: bool = False,
+    ):
+        if override and not interaction.user.guild_permissions.manage_guild:
+            await interaction.response.send_message(
+                embed=ErrorEmbed(description="Only Admins can turn on override.")
+            )
+            return
 
-    @app_commands.command(
+        try:
+            cut = await self.cut(
+                interaction.guild,
+                player=player,
+                executor=interaction.user,
+                override=override,
+            )
+            log.debug(cut)
+        except PastTransactionsEndDate as exc:
+            await interaction.response.send_message(
+                embed=ExceptionErrorEmbed(exc_message=exc.reason), ephemeral=True
+            )
+            return
+
+        # Handle not in the league
+        # Handle not on a team
+
+        # Query new data on tier/player from leagueplayers
+        # remove prefix from user name
+        # Handle if GM
+        # Handle if AGM
+        # Remove franchise role
+        # Give tier FA role, Give Free Agent Role
+        # Change prefix to FA
+
+        await interaction.response.send_message(
+            embed=SuccessEmbed(
+                description=f"{player.display_name} has been released to the Free Agent pool."
+            ),
+            ephemeral=True,
+        )
+
+    # Cut player
+    # Send user the cut message
+
+    @_transactions.command(
         name="sign", description="Sign a player to the specified team"
     )
+    @app_commands.describe(
+        player="Player to cut",
+        team="Team the player is being sign on",
+        override="Admin only override",
+    )
     @app_commands.autocomplete(team=TeamMixIn.teams_autocomplete)
-    @app_commands.checks.has_permissions(manage_roles=True)
-    @app_commands.guild_only()
-    async def _sign(
+    async def _transactions_sign(
+        self,
+        interaction: discord.Interaction,
+        player: discord.Member,
+        team: str,
+        override: bool = False,
+    ):
+        pass
+
+    @_transactions.command(name="resign", description="Re-sign a player to their team.")
+    @app_commands.autocomplete(team=TeamMixIn.teams_autocomplete)
+    async def _transactions_resign(
         self, interaction: discord.Interaction, player: discord.Member, team: str
     ):
         pass
 
-    @app_commands.command(name="sub", description="Substitute a player on a team")
-    @app_commands.checks.has_permissions(manage_roles=True)
-    @app_commands.guild_only()
-    async def _substitute(self, interaction: discord.Interaction):
+    @_transactions.command(name="sub", description="Substitute a player on a team")
+    async def _transactions_substitute(self, interaction: discord.Interaction):
         # Automate this?
         pass
 
-    @app_commands.command(
+    @_transactions.command(
         name="announce",
         description="Perform a generic announcement to the transactions channel.",
     )
-    @app_commands.checks.has_permissions(manage_roles=True)
-    @app_commands.guild_only()
-    async def _transaction_announce(
+    async def _transactions_announce(
         self, interaction: discord.Interaction, message: str
     ):
         trans_channel = await self._trans_channel(interaction.guild)
@@ -229,18 +297,16 @@ class TransactionMixIn(RSCMixIn):
             )
             return
 
-        await trans_channel.send(message, allowed_mentions=discord.AllowedMentions(users=True))
+        await trans_channel.send(
+            message, allowed_mentions=discord.AllowedMentions(users=True)
+        )
         await interaction.response.send_message(content="Done", ephemeral=True)
 
-    @app_commands.command(
+    @_transactions.command(
         name="announcetrade",
         description="Announce a trade between two franchises to the transaction chanenl",
     )
-    @app_commands.checks.has_permissions(manage_roles=True)
-    @app_commands.guild_only()
-    async def _transaction_announcetrade(
-        self, interaction: discord.Interaction
-    ):
+    async def _transactions_announcetrade(self, interaction: discord.Interaction):
         trans_channel = await self._trans_channel(interaction.guild)
         if not trans_channel:
             await interaction.response.send_message(
@@ -249,13 +315,9 @@ class TransactionMixIn(RSCMixIn):
             )
             return
 
-        embed = discord.Embed(
-            title="Trade Announcement",
-            color=discord.Color.blue()
-        )
+        embed = discord.Embed(title="Trade Announcement", color=discord.Color.blue())
         trade_view = TradeAnnouncementView()
         await interaction.response.send_message(embed=embed, view=trade_view)
-
 
         # if not trade.trade:
         #     await interaction.followup.send_message(content="No trade announcement provided.", ephemeral=True)
@@ -263,9 +325,119 @@ class TransactionMixIn(RSCMixIn):
 
         # log.debug(f"Trade Announcement: {trade.trade}")
         # await trans_channel.send(content=trade.trade, allowed_mentions=discord.AllowedMentions(users=True))
-        #TODO - modal not working for this because mentions
+        # TODO - modal not working for this because mentions
+
+    @_transactions.command(
+        name="captain",
+        description="Promote a player to captain of their team",
+    )
+    async def _transactions_captain(
+        self, interaction: discord.Interaction, player: discord.Member
+    ):
+        # Get team of player being made captain
+        player_list = await self.players(
+            interaction.guild, discord_id=player.id, limit=1
+        )
+
+        if not player_list:
+            await interaction.response.send_message(
+                embed=ErrorEmbed(
+                    description=f"{player.mention} is  not a league player."
+                ),
+                ephemeral=True,
+            )
+            return
+
+        player_data = player_list.pop()
+
+        if player_data.status != Status.ROSTERED:
+            await interaction.response.send_message(
+                embed=ErrorEmbed(
+                    description=f"{player.mention} is  not currently rostered."
+                ),
+                ephemeral=True,
+            )
+            return
+
+        # Get team data
+        team_players = await self.team_players(interaction.guild, player_data.team.id)
+
+        # Get Captain Role
+        cpt_role = await get_captain_role(interaction.guild)
+        if not cpt_role:
+            await interaction.response.send_message(
+                embed=ErrorEmbed(description="Captain role does not exist in guild.")
+            )
+            return
+
+        # Find current captain and remove role. Iterate all just in case
+        notFound = []
+        for p in team_players:
+            if not p.captain:
+                continue
+            m = interaction.guild.get_member(p.discord_id)
+
+            if not m:
+                log.error(
+                    f"[{interaction.guild.name}] Unable to find rostered player in guild: {p.discord_id}"
+                )
+                notFound.append(str(p.discord_id))
+                continue
+            log.debug(f"Removing captain role from: {m.display_name}")
+            await m.remove_roles(cpt_role)
+
+        # Promote new player to captain
+        await self.set_captain(interaction.guild, player_data.id)
+        await player.add_roles(cpt_role)
+
+        embed = SuccessEmbed(
+            title="Captain Designated",
+            description=f"{player.mention} has been promoted to **captain**",
+        )
+        if notFound:
+            embed.add_field(
+                name="Warning: Members not in guild", value="\n".join(notFound)
+            )
+
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+    # Non-Group Commands
 
     # API
+
+    async def cut(
+        self,
+        guild: discord.Guild,
+        player: discord.Member,
+        executor: discord.Member,
+        override: bool = False,
+    ) -> CutAPlayerFromALeague:
+        """Cut a player from their team"""
+        async with ApiClient(self._api_conf[guild.id]) as client:
+            api = TransactionsApi(client)
+            data = CutAPlayerFromALeague(
+                player=player.id,
+                league=self._league[guild.id],
+                executor=executor.id,
+                admin_override=1 if override else 0,
+            )
+            log.debug(f"[{guild.name}] Cut Parameters: {data}")
+            try:
+                return await api.transactions_cut_create(data)
+            except ApiException as exc:
+                log.debug(f"EXC BODY TYPE: {type(exc.body)}")
+                log.debug(f"EXC BODY: {exc.body}")
+                reason = exc.body.get("detail", None)
+                if not reason:
+                    raise exc
+                elif reason.startswith("Cannot cut a player past the transactions"):
+                    raise PastTransactionsEndDate(response=exc)
+
+    async def set_captain(self, guild: discord.Guild, id: int) -> LeaguePlayer:
+        """Set a player as captain using their discord ID"""
+        async with ApiClient(self._api_conf[guild.id]) as client:
+            api = LeaguePlayersApi(client)
+            return await api.league_players_set_captain(id)
 
     # Config
 
@@ -289,7 +461,9 @@ class TransactionMixIn(RSCMixIn):
     async def _save_trans_channel(
         self, guild: discord.Guild, trans_channel: Optional[int]
     ):
-        await self.config.custom("Transactions", guild.id).TransChannel.set(trans_channel)
+        await self.config.custom("Transactions", guild.id).TransChannel.set(
+            trans_channel
+        )
 
     async def _trans_log_channel(
         self, guild: discord.Guild
@@ -316,4 +490,6 @@ class TransactionMixIn(RSCMixIn):
         return await self.config.custom("Transactions", guild.id).TransNotifications()
 
     async def _set_notifications(self, guild: discord.Guild, enabled: bool):
-        await self.config.custom("Transactions", guild.id).TransNotifications.set(enabled)
+        await self.config.custom("Transactions", guild.id).TransNotifications.set(
+            enabled
+        )

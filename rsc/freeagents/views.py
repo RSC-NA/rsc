@@ -56,6 +56,7 @@ class CheckInView(AuthorOnlyView):
         )
         self.stop()
 
+
 class CheckOutView(AuthorOnlyView):
     def __init__(
         self,

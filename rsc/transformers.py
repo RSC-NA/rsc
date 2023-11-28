@@ -27,12 +27,11 @@ class MemberTransformer(Transformer):
             members.append(member)
         return members
 
+
 class DateTransformer(Transformer):
     """Transform a string into a datetime object (ISO 8601 format)"""
 
-    async def transform(
-        self, interaction: discord.Interaction, value: str
-    ) -> datetime:
+    async def transform(self, interaction: discord.Interaction, value: str) -> datetime:
         try:
             return datetime.fromisoformat(value)
         except:

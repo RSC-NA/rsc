@@ -16,6 +16,7 @@ class ErrorEmbed(discord.Embed):
         title = kwargs.pop("title", "Error")
         super().__init__(title=title, color=discord.Color.red(), **kwargs)
 
+
 class BlueEmbed(discord.Embed):
     """Generic Blue Embed"""
 

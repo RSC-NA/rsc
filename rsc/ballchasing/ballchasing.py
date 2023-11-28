@@ -197,8 +197,7 @@ class BallchasingMixIn(RSCMixIn):
         description="Report a specific match on ballchasing",
     )
     @app_commands.autocomplete(
-        home=TeamMixIn.teams_autocomplete,
-        away=TeamMixIn.teams_autocomplete
+        home=TeamMixIn.teams_autocomplete, away=TeamMixIn.teams_autocomplete
     )
     @app_commands.describe(
         home="Home team name",

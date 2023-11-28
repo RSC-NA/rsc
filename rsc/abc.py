@@ -10,8 +10,11 @@ from zoneinfo import ZoneInfo
 from rscapi.models.league import League
 from rscapi.models.members_list200_response import MembersList200Response
 from rscapi.models.season import Season
+from rscapi.models.franchise import Franchise
 from rscapi.models.member import Member
 from rscapi.models.match import Match
+from rscapi.models.player import Player
+from rscapi.models.team import Team
 from rscapi.models.franchise_list import FranchiseList
 from rscapi.models.team_list import TeamList
 from rscapi.models.league_player import LeaguePlayer
@@ -52,6 +55,14 @@ class RSCMixIn(ABC):
     ) -> List[FranchiseList]:
         ...
 
+    @abstractmethod
+    async def franchise_by_id(
+        self,
+        guild: discord.Guild,
+        id: int
+    ) -> Optional[Franchise]:
+        ...
+
     # League
 
     @abstractmethod
@@ -81,6 +92,7 @@ class RSCMixIn(ABC):
         season: Optional[int] = None,
         season_number: Optional[int] = None,
         team_name: Optional[str] = None,
+        franchise: Optional[str] = None,
         discord_id: Optional[int] = None,
         limit: int = 0,
         offset: int = 0,
@@ -133,7 +145,23 @@ class RSCMixIn(ABC):
         ...
 
     @abstractmethod
-    async def get_team_id_by_name(self, guild: discord.Guild, name: str) -> int:
+    async def team_id_by_name(self, guild: discord.Guild, name: str) -> int:
+        ...
+
+    @abstractmethod
+    async def team_by_id(
+        self,
+        guild: discord.Guild,
+        id: int,
+    ) -> Team:
+        ...
+
+    @abstractmethod
+    async def team_players(
+        self,
+        guild: discord.Guild,
+        id: int,
+    ) -> List[Player]:
         ...
 
 

@@ -10,7 +10,7 @@ from redbot.core import app_commands, checks
 from typing import Optional, List
 
 from rsc.transformers import MemberTransformer
-from rsc.const import GM_ROLE
+from rsc.const import GM_ROLE, CAPTAIN_ROLE
 from rsc.abc import RSCMixIn
 from rsc.embeds import ErrorEmbed, SuccessEmbed, ExceptionErrorEmbed
 
@@ -18,6 +18,8 @@ log = logging.getLogger("red.rsc.utils")
 
 # FRANCHISE_ROLE_REGEX = re.compile(r"^[\w\s]+\(\w+\)$")
 
+async def get_captain_role(guild: discord.Guild) -> Optional[discord.Role]:
+    return discord.utils.get(guild.roles, name=CAPTAIN_ROLE)
 
 async def remove_prefix(member: discord.Member) -> str:
     """Remove team prefix from guild members display name"""
@@ -74,6 +76,7 @@ async def get_franchise_role_from_name(
             return role
     return None
 
+
 async def get_tier_color_by_name(guild: discord.Guild, name: str) -> discord.Color:
     """Return tier color from role (Defaults to blue if not found)"""
     tier_role = discord.utils.get(guild.roles, name=name)
@@ -81,11 +84,13 @@ async def get_tier_color_by_name(guild: discord.Guild, name: str) -> discord.Col
         return tier_role.color
     return discord.Color.blue()
 
+
 async def is_guild_interaction(interaction: discord.Interaction) -> bool:
     """Check if interaction was sent from guild. Mostly for type issues since guild_only() exists"""
     if interaction.guild:
         return True
     return False
+
 
 class UtilsMixIn(RSCMixIn):
     @app_commands.command(
