@@ -105,7 +105,7 @@ class TeamMixIn(RSCMixIn):
                 name="Team", value="\n".join([t.name for t in teams]), inline=True
             )
             embed.add_field(
-                name="Tier", value="\n".join([t.tier for t in teams]), inline=True
+                name="Tier", value="\n".join([t.tier.name for t in teams]), inline=True
             )
             await interaction.response.send_message(embed=embed)
         elif tier:
@@ -261,11 +261,11 @@ class TeamMixIn(RSCMixIn):
             m = interaction.guild.get_member(c.player.discord_id)
             cpt_fmt.append(m.mention if m else c.player.name)
 
-        embed.add_field(name="Captain", value="\n".join(cpt_fmt), inline=False)
+        embed.add_field(name="Captain", value="\n".join(cpt_fmt), inline=True)
         embed.add_field(
             name="Team", value="\n".join([c.team.name for c in captains]), inline=True
         )
-        embed.add_field(name="Franchise", value="FixMeMonty", inline=True)
+        embed.add_field(name="Franchise", value="\n".join([c.team.franchise.name for c in captains]), inline=True)
         await interaction.response.send_message(embed=embed)
 
     @_captains.command(
@@ -348,8 +348,7 @@ class TeamMixIn(RSCMixIn):
         if not players:
             return []
 
-        # captains = [x for x in players if x.captain]
-        captains = [x for x in players if x.team.name == "Onions"]
+        captains = [x for x in players if x.captain]
         log.debug(captains)
         captains.sort(key=lambda x: x.team.name)
         return captains

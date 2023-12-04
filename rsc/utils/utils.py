@@ -7,6 +7,8 @@ from discord import AppCommandOptionType
 import re
 from redbot.core import app_commands, checks
 
+from rscapi.models.league_player import LeaguePlayer
+
 from typing import Optional, List
 
 from rsc.transformers import MemberTransformer
@@ -18,15 +20,21 @@ log = logging.getLogger("red.rsc.utils")
 
 # FRANCHISE_ROLE_REGEX = re.compile(r"^[\w\s]+\(\w+\)$")
 
+
 async def get_captain_role(guild: discord.Guild) -> Optional[discord.Role]:
     return discord.utils.get(guild.roles, name=CAPTAIN_ROLE)
+
 
 async def remove_prefix(member: discord.Member) -> str:
     """Remove team prefix from guild members display name"""
     result = member.display_name.split(" | ")
-    if len(result) != 2:
-        raise ValueError(f"Unable to remove prefix from {member.display_name}")
-    return result[1]
+
+    if len(result) == 2:
+        return result[1]
+    elif len(result) == 1:
+        return result[0]  # Assume no prefix for some reason
+
+    raise ValueError(f"Unable to remove prefix from {member.display_name}")
 
 
 async def is_gm(member: discord.Member) -> bool:
@@ -77,6 +85,16 @@ async def get_franchise_role_from_name(
     return None
 
 
+async def franchise_role_from_league_player(
+    guild: discord.Guild, player: LeaguePlayer
+) -> Optional[discord.Role]:
+    """Return a franchise discord.Role from `LeaguePlayer` object"""
+    return discord.utils.get(
+        guild.roles,
+        name=f"{player.team.franchise.name} ({player.team.franchise.gm.rsc_name})",
+    )
+
+
 async def get_tier_color_by_name(guild: discord.Guild, name: str) -> discord.Color:
     """Return tier color from role (Defaults to blue if not found)"""
     tier_role = discord.utils.get(guild.roles, name=name)
@@ -91,6 +109,11 @@ async def is_guild_interaction(interaction: discord.Interaction) -> bool:
         return True
     return False
 
+async def update_prefix_for_role(role: discord.Role, prefix: str):
+    """Update the prefix for all role members"""
+    for m in role.members:
+        name = await remove_prefix(m)
+        await m.edit(nick=f"{prefix} | {name}")
 
 class UtilsMixIn(RSCMixIn):
     @app_commands.command(

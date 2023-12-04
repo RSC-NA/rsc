@@ -221,4 +221,4 @@ class RSCSetupModal(discord.ui.Modal, title="RSC Setup"):
     )
 
     async def on_submit(self, interaction: discord.Interaction):
-        await interaction.response.defer()
+        await interaction.response.defer(ephemeral=True)

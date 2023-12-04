@@ -158,8 +158,7 @@ class CombineMixIn(RSCMixIn):
         await interaction.followup.send(
             embed=SuccessEmbed(
                 description="Combines have been **started** and all channels created."
-            ),
-            ephemeral=True,
+            )
         )
 
     @_combines.command(name="stop", description="End RSC combines and delete channels")
@@ -175,8 +174,7 @@ class CombineMixIn(RSCMixIn):
         await interaction.followup.send(
             embed=SuccessEmbed(
                 description="Combines have been **ended** and all channels removed."
-            ),
-            ephemeral=True,
+            )
         )
 
     @_combines.command(

@@ -12,7 +12,7 @@ from rscapi.models.match_list import MatchList
 from rscapi.models.match import Match
 
 from rsc.abc import RSCMixIn
-from rsc.enums import MatchType, MatchFormat, MatchTeamEnum
+from rsc.enums import MatchType, MatchFormat, MatchTeamEnum, Status
 from rsc.embeds import ErrorEmbed, BlueEmbed
 from rsc.teams import TeamMixIn
 from rsc.utils.utils import get_tier_color_by_name
@@ -39,7 +39,7 @@ class MatchMixIn(RSCMixIn):
         preseason="Include preseason matches (Default: False)",
     )
     @app_commands.guild_only()
-    async def _schedule(
+    async def _schedule_args(
         self,
         interaction: discord.Interaction,
         team: Optional[str] = None,
@@ -64,7 +64,7 @@ class MatchMixIn(RSCMixIn):
                     ephemeral=True,
                 )
                 return
-            if not (player[0].team and player[0].team.name):
+            if player[0].status != Status.ROSTERED:
                 await interaction.response.send_message(
                     embed=ErrorEmbed(
                         description=f"You are not currently rostered on a team."
@@ -73,8 +73,8 @@ class MatchMixIn(RSCMixIn):
                 )
                 return
             team = player[0].team.name
-            tier = player[0].team.tier
-            team_id = await self.team_id_by_name(interaction.guild, name=team)
+            tier = player[0].tier.name
+            team_id = player[0].team.id
 
         if not team_id:
             await interaction.response.send_message(
@@ -89,10 +89,8 @@ class MatchMixIn(RSCMixIn):
             interaction.guild, team_id, preseason=preseason
         )
 
-        # Get tier color if easily available
-        tier_color = None
-        if tier:
-            tier_color = await get_tier_color_by_name(interaction.guild, tier)
+        # Get tier color
+        tier_color = await get_tier_color_by_name(interaction.guild, tier)
 
         if not schedule:
             await interaction.response.send_message(
@@ -141,7 +139,7 @@ class MatchMixIn(RSCMixIn):
     )
     @app_commands.guild_only()
     async def _match_cmd(self, interaction: discord.Interaction):
-        await interaction.response.defer()
+        await interaction.response.defer(ephemeral=True)
         # Find the team ID of interaction user
         player = await self.players(
             interaction.guild, discord_id=interaction.user.id, limit=1
@@ -187,7 +185,8 @@ class MatchMixIn(RSCMixIn):
         embed = await self.build_match_embed(
             interaction.guild, match, user_team=user_team
         )
-        await interaction.user.send(embed=embed)
+        # await interaction.user.send(embed=embed)
+        await interaction.followup.send(embed=embed, ephemeral=True)
 
     # Functions
 
@@ -243,7 +242,7 @@ class MatchMixIn(RSCMixIn):
         date_str = match.var_date.strftime("%B %-m, %Y")
 
         # Description
-        desc = f"**{match.home_team}**\n\tversus\n**{match.away_team}**"
+        desc = f"**{match.home_team.name}**\nversus\n**{match.away_team.name}**"
 
         # Lobby Info
         lobby_info = f"Name: **{match.game_name}**\nPass: **{match.game_pass}**"
@@ -294,12 +293,12 @@ class MatchMixIn(RSCMixIn):
                 away_players.append(name)
 
         home_fmt = "```\n"
-        home_fmt = f"{match.home_team.name} - {match.home_team.franchise} - {match.home_team.tier}\n"
+        home_fmt += f"{match.home_team.name} - {match.home_team.franchise} - {match.home_team.tier}\n"
         home_fmt += "\n".join([f"\t{p}" for p in home_players])
         home_fmt += "\n```"
 
         away_fmt = "```\n"
-        away_fmt = f"{match.away_team.name} - {match.away_team.franchise} - {match.away_team.tier}\n"
+        away_fmt += f"{match.away_team.name} - {match.away_team.franchise} - {match.away_team.tier}\n"
         away_fmt += "\n".join([f"\t{p}" for p in away_players])
         away_fmt += "\n```"
 

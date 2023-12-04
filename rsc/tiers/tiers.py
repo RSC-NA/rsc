@@ -105,6 +105,17 @@ class TierMixIn(RSCMixIn):
             return True
         return False
 
+    async def tier_fa_roles(self, guild: discord.Guild) -> List[discord.Role]:
+        """Return a list of tier free agent roles (Ex: ProspectFA)"""
+        tiers = await self.tiers(guild)
+        roles = []
+        for t in tiers:
+            r = discord.utils.get(guild.roles, name=f"{t.name}FA")
+            if r:
+                roles.append(r)
+        return r
+        
+
     # API
 
     async def tiers(

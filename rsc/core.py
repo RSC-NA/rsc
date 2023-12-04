@@ -13,6 +13,7 @@ from rscapi import Configuration
 
 # Types
 from rsc.abc import CompositeMetaClass
+from rsc.enums import LogLevel
 
 # Mix Ins
 from rsc.ballchasing import BallchasingMixIn
@@ -271,7 +272,6 @@ class RSC(
     )
     @app_commands.describe(timezone="Common time zone string (Ex: America/New_York)")
     @app_commands.autocomplete(timezone=timezone_autocomplete)
-    @app_commands.checks.has_permissions(manage_guild=True)
     async def _rsc_timezone(self, interaction: discord.Interaction, timezone: str):
         if timezone not in pytz.common_timezones:
             await interaction.response.send_message(
@@ -286,6 +286,18 @@ class RSC(
         await interaction.response.send_message(
             embed=SuccessEmbed(description=f"Time zone set to **{timezone}**"),
             ephemeral=True,
+        )
+
+    @rsc_settings.command(
+        name="loglevel",
+        description="Modify the log level of the bot (Development Feature)",
+    )
+    async def _rsc_dev_loglevel(
+        self, interaction: discord.Interaction, level: LogLevel
+    ):
+        logging.getLogger("red.rsc").setLevel(level)
+        await interaction.response.send_message(
+            f"Logging level is now **{level}**", ephemeral=True
         )
 
     # Functions

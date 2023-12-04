@@ -63,7 +63,7 @@ class PlayerInfoModal(discord.ui.Modal, title="Rocket League Trackers"):
     )
 
     async def on_submit(self, interaction: discord.Interaction):
-        await interaction.response.defer()
+        await interaction.response.defer(ephemeral=True)
 
 
 class ReferrerSelect(discord.ui.Select):
@@ -146,7 +146,7 @@ class SignupView(AuthorOnlyView):
         if self.state == SignupState.TRACKERS:
             await self.send_trackers_modal(interaction)
         else:
-            await interaction.response.defer()
+            await interaction.response.defer(ephemeral=True)
 
         # Move to next step
         self.state = SignupState(self.state + 1)
@@ -156,7 +156,7 @@ class SignupView(AuthorOnlyView):
         """User pressed No Button"""
         log.debug(f"[SIGNUP] User cancelled on {self.state.name}")
         self.state = SignupState.CANCELLED
-        await interaction.response.defer()
+        await interaction.response.defer(ephemeral=True)
         await self.prompt()
 
     async def send_trackers_modal(self, interaction: discord.Interaction):

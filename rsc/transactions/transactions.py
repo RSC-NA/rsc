@@ -6,16 +6,33 @@ from redbot.core import Config, app_commands, commands, checks
 from rscapi import ApiClient, TransactionsApi, LeaguePlayersApi
 from rscapi.exceptions import ApiException
 from rscapi.models.cut_a_player_from_a_league import CutAPlayerFromALeague
+from rscapi.models.re_sign_player import ReSignPlayer
+from rscapi.models.sign_a_player_to_a_team_in_a_league import (
+    SignAPlayerToATeamInALeague,
+)
+from rscapi.models.transaction_response import TransactionResponse
 from rscapi.models.league_player import LeaguePlayer
 
 from rsc.abc import RSCMixIn
 from rsc.enums import Status
-from rsc.const import CAPTAIN_ROLE
-from rsc.embeds import ErrorEmbed, SuccessEmbed, BlueEmbed, ExceptionErrorEmbed
-from rsc.exceptions import PastTransactionsEndDate
+from rsc.const import CAPTAIN_ROLE, DEV_LEAGUE_ROLE, FREE_AGENT_ROLE
+from rsc.embeds import (
+    ErrorEmbed,
+    SuccessEmbed,
+    BlueEmbed,
+    ExceptionErrorEmbed,
+    ApiExceptionErrorEmbed,
+)
+from rsc.exceptions import RscException, translate_api_error
 from rsc.teams import TeamMixIn
 from rsc.transactions.views import TradeAnnouncementModal, TradeAnnouncementView
-from rsc.utils.utils import get_captain_role, is_gm
+from rsc.utils.utils import (
+    get_captain_role,
+    is_gm,
+    remove_prefix,
+    get_franchise_role_from_name,
+    franchise_role_from_league_player,
+)
 
 from typing import Optional
 
@@ -213,9 +230,14 @@ class TransactionMixIn(RSCMixIn):
     ):
         if override and not interaction.user.guild_permissions.manage_guild:
             await interaction.response.send_message(
-                embed=ErrorEmbed(description="Only Admins can turn on override.")
+                embed=ErrorEmbed(
+                    description="Only admins can turn process an override."
+                )
             )
             return
+
+        # Defer
+        await interaction.response.defer(ephemeral=True)
 
         try:
             cut = await self.cut(
@@ -225,38 +247,86 @@ class TransactionMixIn(RSCMixIn):
                 override=override,
             )
             log.debug(cut)
-        except PastTransactionsEndDate as exc:
-            await interaction.response.send_message(
-                embed=ExceptionErrorEmbed(exc_message=exc.reason), ephemeral=True
+        except RscException as exc:
+            log.warning(
+                f"[{interaction.guild.name}] Transaction Exception: {exc.reason}"
+            )
+            await interaction.followup.send(
+                embed=ApiExceptionErrorEmbed(exc), ephemeral=True
             )
             return
 
-        # Handle not in the league
-        # Handle not on a team
-
         # Query new data on tier/player from leagueplayers
-        # remove prefix from user name
-        # Handle if GM
-        # Handle if AGM
-        # Remove franchise role
-        # Give tier FA role, Give Free Agent Role
-        # Change prefix to FA
+        pl = await self.players(
+            interaction.guild, status=Status.WAIVERS, discord_id=player.id, limit=1
+        )
+        player_data = pl.pop()
 
-        await interaction.response.send_message(
+        if player_data.status != Status.WAIVERS:
+            await interaction.response.send_message(
+                embed=ErrorEmbed(
+                    description="The cut went through but the player is not listed on waivers.\n\nSomething went wrong, please reach out to an admin."
+                ),
+                ephemeral=True,
+            )
+            return
+
+        tier_role = discord.utils.get(
+            interaction.guild.roles, name=player_data.tier.name
+        )
+        fa_role = discord.utils.get(interaction.guild.roles, name=FREE_AGENT_ROLE)
+        tier_fa_role = discord.utils.get(
+            interaction.guild.roles, name=f"{player_data.tier.name}FA"
+        )
+        dev_league_role = discord.utils.get(
+            interaction.guild.roles, name=DEV_LEAGUE_ROLE
+        )
+        franchise_role = await get_franchise_role_from_name(
+            interaction.guild, player_data.team.franchise.name
+        )
+
+        if player_data.team.franchise.gm.discord_id != player.id:
+            new_nickname = f"FA | {await remove_prefix(player.display_name)}"
+            log.debug(f"Changing cut players nickname to: {new_nickname}")
+            await player.edit(nick=new_nickname)
+            await player.remove_roles(franchise_role)
+            await player.add_roles(fa_role, tier_fa_role)
+
+        # Add Dev League Interest if it exists
+        if dev_league_role:
+            await player.add_roles(dev_league_role)
+
+        # Announce to transaction channel
+        trans_channel = await self._trans_channel(interaction.guild)
+        if trans_channel:
+            await trans_channel.send(
+                f"{player.mention} was cut by {player_data.team.name} (<@{player_data.team.franchise.gm.discord_id}> - {player_data.tier.name})",
+                allowed_mentions=discord.AllowedMentions(users=True),
+            )
+
+        # Send cut message to user directly
+        cutmsg = await self._get_cut_message(interaction.guild)
+        if cutmsg:
+            embed = BlueEmbed(
+                title=f"Message from {interaction.guild.name}", description=cutmsg
+            )
+            if interaction.guild.icon:
+                embed.set_thumbnail(url=interaction.guild.icon.url)
+            await player.send(embed=embed)
+
+        # Send result
+        await interaction.followup.send(
             embed=SuccessEmbed(
                 description=f"{player.display_name} has been released to the Free Agent pool."
             ),
             ephemeral=True,
         )
 
-    # Cut player
-    # Send user the cut message
-
     @_transactions.command(
         name="sign", description="Sign a player to the specified team"
     )
     @app_commands.describe(
-        player="Player to cut",
+        player="Player to sign",
         team="Team the player is being sign on",
         override="Admin only override",
     )
@@ -268,14 +338,157 @@ class TransactionMixIn(RSCMixIn):
         team: str,
         override: bool = False,
     ):
-        pass
+        if override and not interaction.user.guild_permissions.manage_guild:
+            await interaction.response.send_message(
+                embed=ErrorEmbed(
+                    description="Only admins can turn process an override."
+                )
+            )
+            return
+
+        await interaction.response.defer(ephemeral=True)
+        # Process sign
+        try:
+            result = await self.sign(
+                interaction.guild,
+                player=player,
+                team=team,
+                executor=interaction.user,
+                override=override,
+            )
+            log.debug(f"[{interaction.guild.name}] Sign Result: {result}]")
+        except RscException as exc:
+            log.warning(
+                f"[{interaction.guild.name}] Transaction Exception: {exc.reason}"
+            )
+            await interaction.followup.send(
+                embed=ApiExceptionErrorEmbed(exc), ephemeral=True
+            )
+            return
+
+        pl = await self.players(
+            interaction.guild, status=Status.ROSTERED, discord_id=player.id, limit=1
+        )
+        if not pl:
+            await interaction.followup.send(
+                embed=ErrorEmbed(
+                    description="Player was signed but not marked as rostered. Roles and prefix have not been added.\n\nPlease contact an admin."
+                )
+            )
+            return
+
+        pdata = pl.pop()
+
+        # Remove FA roles
+        fa_role = discord.utils.get(interaction.guild.roles, name=FREE_AGENT_ROLE)
+        tier_fa_role = discord.utils.get(
+            interaction.guild.roles, name=f"{pdata.tier.name}FA"
+        )
+        log.debug(f"[{interaction.guild.name}] Removing FA roles from {player.id}")
+        await player.remove_roles(fa_role, tier_fa_role)
+
+        # Add franchise role
+        frole = await franchise_role_from_league_player(interaction.guild, pdata)
+        if not frole:
+            embed = ErrorEmbed(description="Franchise role does not exist.")
+            embed.add_field(
+                name="Franchise", value=pdata.team.franchise.name, inline=True
+            )
+            embed.add_field(
+                name="General Manager",
+                value=pdata.team.franchise.gm.rsc_name,
+                inline=True,
+            )
+            await interaction.followup.send(embed=embed)
+            return
+        log.debug(f"[{interaction.guild.name}] Adding franchise role to {player.id}")
+
+        # Verify player has tier role
+        tier_role = discord.utils.get(interaction.guild.roles, name=pdata.tier.name)
+        await player.add_roles(frole, tier_role)
+
+        # Change prefix TODO
+
+        # Announce to transaction channel
+        trans_channel = await self._trans_channel(interaction.guild)
+        if trans_channel:
+            await trans_channel.send(
+                f"{player.mention} was signed by {pdata.team.name} (<@{pdata.team.franchise.gm.discord_id}> - {pdata.tier.name})",
+                allowed_mentions=discord.AllowedMentions(users=True),
+            )
+
+        # Send result
+        await interaction.followup.send(
+            embed=SuccessEmbed(
+                description=f"{player.display_name} has been signed to {pdata.team.name}"
+            ),
+            ephemeral=True,
+        )
 
     @_transactions.command(name="resign", description="Re-sign a player to their team.")
     @app_commands.autocomplete(team=TeamMixIn.teams_autocomplete)
     async def _transactions_resign(
-        self, interaction: discord.Interaction, player: discord.Member, team: str
+        self,
+        interaction: discord.Interaction,
+        player: discord.Member,
+        team: str,
+        override: bool = False,
     ):
-        pass
+        if override and not interaction.user.guild_permissions.manage_guild:
+            await interaction.response.send_message(
+                embed=ErrorEmbed(
+                    description="Only admins can turn process an override."
+                )
+            )
+            return
+
+        await interaction.response.defer(ephemeral=True)
+        # Process sign
+        try:
+            result = await self.resign(
+                interaction.guild,
+                player=player,
+                team=team,
+                executor=interaction.user,
+                override=override,
+            )
+            log.debug(f"[{interaction.guild.name}] Sign Result: {result}]")
+        except RscException as exc:
+            log.warning(
+                f"[{interaction.guild.name}] Transaction Exception: {exc.reason}"
+            )
+            await interaction.followup.send(
+                embed=ApiExceptionErrorEmbed(exc), ephemeral=True
+            )
+            return
+
+        pl = await self.players(
+            interaction.guild, status=Status.ROSTERED, discord_id=player.id, limit=1
+        )
+        if not pl:
+            await interaction.followup.send(
+                embed=ErrorEmbed(
+                    description="Player was re-signed but not marked as rostered. Roles and prefix have not been added.\n\nPlease contact an admin."
+                )
+            )
+            return
+        pdata = pl.pop()
+
+        # Announce to transaction channel
+        trans_channel = await self._trans_channel(interaction.guild)
+        if trans_channel:
+            await trans_channel.send(
+                f"{player.mention} was re-signed by {pdata.team.name} (<@{pdata.team.franchise.gm.discord_id}> - {pdata.tier.name})",
+                allowed_mentions=discord.AllowedMentions(users=True),
+            )
+
+        # Send result
+        await interaction.followup.send(
+            embed=SuccessEmbed(
+                description=f"{player.display_name} has been re-signed to {pdata.team.name}"
+            ),
+            ephemeral=True,
+        )
 
     @_transactions.command(name="sub", description="Substitute a player on a team")
     async def _transactions_substitute(self, interaction: discord.Interaction):
@@ -334,15 +547,16 @@ class TransactionMixIn(RSCMixIn):
     async def _transactions_captain(
         self, interaction: discord.Interaction, player: discord.Member
     ):
+        await interaction.response.defer(ephemeral=True)
         # Get team of player being made captain
         player_list = await self.players(
             interaction.guild, discord_id=player.id, limit=1
         )
 
         if not player_list:
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 embed=ErrorEmbed(
-                    description=f"{player.mention} is  not a league player."
+                    description=f"{player.mention} is not a league player."
                 ),
                 ephemeral=True,
             )
@@ -351,9 +565,9 @@ class TransactionMixIn(RSCMixIn):
         player_data = player_list.pop()
 
         if player_data.status != Status.ROSTERED:
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 embed=ErrorEmbed(
-                    description=f"{player.mention} is  not currently rostered."
+                    description=f"{player.mention} is not currently rostered."
                 ),
                 ephemeral=True,
             )
@@ -365,16 +579,14 @@ class TransactionMixIn(RSCMixIn):
         # Get Captain Role
         cpt_role = await get_captain_role(interaction.guild)
         if not cpt_role:
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 embed=ErrorEmbed(description="Captain role does not exist in guild.")
             )
             return
 
-        # Find current captain and remove role. Iterate all just in case
+        # Remove captain role from anyone on the team that has it just in case
         notFound = []
         for p in team_players:
-            if not p.captain:
-                continue
             m = interaction.guild.get_member(p.discord_id)
 
             if not m:
@@ -390,20 +602,53 @@ class TransactionMixIn(RSCMixIn):
         await self.set_captain(interaction.guild, player_data.id)
         await player.add_roles(cpt_role)
 
+        # Announce to transaction channel
+        trans_channel = await self._trans_channel(interaction.guild)
+        if trans_channel:
+            await trans_channel.send(
+                f"{player.mention} was elected captain of {player_data.team.name} (<@{player_data.team.franchise.gm.discord_id}> - {player_data.tier.name})",
+                allowed_mentions=discord.AllowedMentions(users=True),
+            )
+
+        # Send Result
         embed = SuccessEmbed(
             title="Captain Designated",
             description=f"{player.mention} has been promoted to **captain**",
         )
         if notFound:
             embed.add_field(
-                name="Warning: Members not in guild", value="\n".join(notFound)
+                name="Players Not Found", value="\n".join(notFound)
             )
 
-        await interaction.response.send_message(embed=embed, ephemeral=True)
+        await interaction.followup.send(embed=embed, ephemeral=True)
 
     # Non-Group Commands
 
     # API
+
+    async def sign(
+        self,
+        guild: discord.Guild,
+        player: discord.Member,
+        team: str,
+        executor: discord.Member,
+        override: bool = False,
+    ) -> TransactionResponse:
+        """Sign player to a team"""
+        async with ApiClient(self._api_conf[guild.id]) as client:
+            api = TransactionsApi(client)
+            data = SignAPlayerToATeamInALeague(
+                player=player.id,
+                league=self._league[guild.id],
+                team=team,
+                executor=executor.id,
+                admin_override=override,
+            )
+            log.debug(f"[{guild.name}] Sign Parameters: {data}")
+            try:
+                return await api.transactions_sign_create(data)
+            except ApiException as exc:
+                await translate_api_error(exc)
 
     async def cut(
         self,
@@ -411,7 +656,7 @@ class TransactionMixIn(RSCMixIn):
         player: discord.Member,
         executor: discord.Member,
         override: bool = False,
-    ) -> CutAPlayerFromALeague:
+    ) -> TransactionResponse:
         """Cut a player from their team"""
         async with ApiClient(self._api_conf[guild.id]) as client:
             api = TransactionsApi(client)
@@ -419,19 +664,37 @@ class TransactionMixIn(RSCMixIn):
                 player=player.id,
                 league=self._league[guild.id],
                 executor=executor.id,
-                admin_override=1 if override else 0,
+                admin_override=override,
             )
             log.debug(f"[{guild.name}] Cut Parameters: {data}")
             try:
                 return await api.transactions_cut_create(data)
             except ApiException as exc:
-                log.debug(f"EXC BODY TYPE: {type(exc.body)}")
-                log.debug(f"EXC BODY: {exc.body}")
-                reason = exc.body.get("detail", None)
-                if not reason:
-                    raise exc
-                elif reason.startswith("Cannot cut a player past the transactions"):
-                    raise PastTransactionsEndDate(response=exc)
+                await translate_api_error(exc)
+
+    async def resign(
+        self,
+        guild: discord.Guild,
+        player: discord.Member,
+        team: str,
+        executor: discord.Member,
+        override: bool = False,
+    ) -> TransactionResponse:
+        """Resign player to a team"""
+        async with ApiClient(self._api_conf[guild.id]) as client:
+            api = TransactionsApi(client)
+            data = ReSignPlayer(
+                player=player.id,
+                league=self._league[guild.id],
+                team=team,
+                executor=executor.id,
+                admin_override=override,
+            )
+            log.debug(f"[{guild.name}] Resign Parameters: {data}")
+            try:
+                return await api.transactions_resign_create(data)
+            except ApiException as exc:
+                await translate_api_error(exc)
 
     async def set_captain(self, guild: discord.Guild, id: int) -> LeaguePlayer:
         """Set a player as captain using their discord ID"""

@@ -1,5 +1,11 @@
 from enum import StrEnum, IntEnum
 
+class LogLevel(StrEnum):
+    CRITICAL = 'CRITICAL'
+    ERROR = 'ERROR'
+    WARNING = 'WARNING'
+    INFO = 'INFO'
+    DEBUG = 'DEBUG'
 
 class StatsType(StrEnum):
     REGULAR = "REG"  # Regular Season Stats
