@@ -137,12 +137,13 @@ class DeleteFranchiseView(AuthorOnlyView):
 
     async def prompt(self):
         """Confirm franchise deletion"""
-        embed = BlueEmbed(
+        embed = discord.Embed(
             title="Delete Franchise",
             description="Are you sure you want to delete the following franchise?",
+            color=discord.Color.orange()
         )
         embed.add_field(name="Name", value=self.name, inline=True)
-        await self.interaction.response.send_message(
+        await self.interaction.followup.send(
             embed=embed,
             view=self,
             ephemeral=True,

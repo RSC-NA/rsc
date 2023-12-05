@@ -27,6 +27,7 @@ from rsc.teams import TeamMixIn
 from rsc.tiers import TierMixIn
 from rsc.transactions import TransactionMixIn
 from rsc.utils import UtilsMixIn
+from rsc.welcome import WelcomeMixIn
 
 # Views
 from rsc.views import LeagueSelectView, RSCSetupModal
@@ -58,6 +59,7 @@ class RSC(
     TierMixIn,
     TransactionMixIn,
     UtilsMixIn,
+    WelcomeMixIn,
     commands.Cog,
     metaclass=CompositeMetaClass,
 ):
@@ -81,16 +83,6 @@ class RSC(
     async def cog_load(self):
         """Perform initial bot setup on Cog reload"""
         log.debug("In cog_load()")
-        await asyncio.create_task(self.setup())
-
-    @commands.Cog.listener()
-    async def on_ready(self):
-        """
-        Perform initial bot setup on ready. This event ensures we are connected to guilds first.
-
-        Does NOT trigger on Cog reload.
-        """
-        log.debug("In on_ready()")
         await asyncio.create_task(self.setup())
 
     async def setup(self):
@@ -131,6 +123,18 @@ class RSC(
             )
         else:
             log.warning(f"[{guild}]RSC API key or url has not been configured!")
+
+    # Listeners
+
+    @commands.Cog.listener()
+    async def on_ready(self):
+        """
+        Perform initial bot setup on ready. This event ensures we are connected to guilds first.
+
+        Does NOT trigger on Cog reload.
+        """
+        log.debug("In on_ready()")
+        await asyncio.create_task(self.setup())
 
     # Autocomplete
 
@@ -188,7 +192,6 @@ class RSC(
             else "Not Configured"
         )
         url = await self._get_api_url(interaction.guild) or "Not Configured"
-        league_int = await self._get_league(interaction.guild)
         tz = await self._get_timezone(interaction.guild)
 
         # Find league name if it is configured/exists
@@ -300,6 +303,9 @@ class RSC(
             f"Logging level is now **{level}**", ephemeral=True
         )
 
+
+
+
     # Functions
 
     async def timezone(self, guild: discord.Guild) -> ZoneInfo:
@@ -337,3 +343,4 @@ class RSC(
     async def _get_timezone(self, guild: discord.Guild) -> str:
         """Default: UTC"""
         return await self.config.guild(guild).TimeZone()
+

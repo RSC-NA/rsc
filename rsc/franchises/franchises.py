@@ -25,7 +25,7 @@ from rsc.franchises.views import (
     RebrandFranchiseView,
 )
 from rsc.views import LinkButton
-from rsc.utils.utils import get_franchise_role_from_name, update_prefix_for_role
+from rsc.utils.utils import get_franchise_role_from_name, update_prefix_for_role, remove_prefix
 
 from typing import List, Dict, Optional, Union
 
@@ -104,6 +104,10 @@ class FranchiseMixIn(RSCMixIn):
 
         await gm.add_roles(frole, gm_role)
 
+        # Update GM Prefix
+        gm_name = await remove_prefix(gm)
+        await gm.edit(nick=f"{prefix} | {gm_name}")
+
         embed = SuccessEmbed(description=f"Franchise has been created.")
         embed.add_field(name="Name", value=name, inline=True)
         embed.add_field(name="GM", value=gm.mention, inline=True)
@@ -116,17 +120,20 @@ class FranchiseMixIn(RSCMixIn):
         interaction: discord.Interaction,
         franchise: str,
     ):
+        await interaction.response.defer(ephemeral=True)
         fl = await self.franchises(interaction.guild, name=franchise)
         if not fl:
-            await interaction.response.send_message(
-                ErrorEmbed(description="No franchise found with that name.")
+            await interaction.followup.send(
+                embed=ErrorEmbed(description="No franchise found with that name."),
+                ephemeral=True
             )
             return
         if len(fl) > 1:
-            await interaction.response.send_message(
-                ErrorEmbed(
+            await interaction.followup.send(
+                embed=ErrorEmbed(
                     description="Found multiple franchises matching that name... Please be more specific."
-                )
+                ),
+                ephemeral=True
             )
             return
 
@@ -193,14 +200,16 @@ class FranchiseMixIn(RSCMixIn):
         # Validate original franchise exists
         if not fl:
             await rebrand_modal.interaction.response.send_message(
-                ErrorEmbed(description="No franchise found with that name.")
+                embed=ErrorEmbed(description="No franchise found with that name."),
+                ephemeral=True
             )
             return
         if len(fl) > 1:
             await rebrand_modal.interaction.response.send_message(
-                ErrorEmbed(
+                embed=ErrorEmbed(
                     description="Found multiple franchises matching that name... Please be more specific."
-                )
+                ),
+                ephemeral=True
             )
             return
 

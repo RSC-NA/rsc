@@ -81,6 +81,31 @@ class Status(StrEnum):
     UNSIGNED_GM = "UG"  # GM (Unsigned)
     PERM_FA = "PF"  # Permanent Free Agent
 
+    def full_name(self) -> str:
+        match self:
+            case Status.DRAFT_ELIGIBLE:
+                return "Draft Eligible"
+            case Status.FREE_AGENT:
+                return "Free Agent"
+            case Status.ROSTERED:
+                return "Rostered"
+            case Status.IR:
+                return "Inactive Reserve"
+            case Status.WAIVERS:
+                return "Waivers"
+            case Status.AGMIR:
+                return "AGM IR"
+            case Status.FORMER:
+                return "Former Player"
+            case Status.BANNED:
+                return "Banned"
+            case Status.UNSIGNED_GM:
+                return "Unsigned GM"
+            case Status.PERM_FA:
+                return "Permanent FA"
+            case _:
+                return "Unknown"
+
 
 class TransactionWeek(StrEnum):
     OFFSEASON = "OFF"  # Offseason

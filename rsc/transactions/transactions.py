@@ -11,6 +11,7 @@ from rscapi.models.sign_a_player_to_a_team_in_a_league import (
     SignAPlayerToATeamInALeague,
 )
 from rscapi.models.transaction_response import TransactionResponse
+from rscapi.models.temporary_fa_sub import TemporaryFASub
 from rscapi.models.league_player import LeaguePlayer
 
 from rsc.abc import RSCMixIn
@@ -230,9 +231,7 @@ class TransactionMixIn(RSCMixIn):
     ):
         if override and not interaction.user.guild_permissions.manage_guild:
             await interaction.response.send_message(
-                embed=ErrorEmbed(
-                    description="Only admins can turn process an override."
-                )
+                embed=ErrorEmbed(description="Only admins can process an override.")
             )
             return
 
@@ -340,9 +339,7 @@ class TransactionMixIn(RSCMixIn):
     ):
         if override and not interaction.user.guild_permissions.manage_guild:
             await interaction.response.send_message(
-                embed=ErrorEmbed(
-                    description="Only admins can turn process an override."
-                )
+                embed=ErrorEmbed(description="Only admins can process an override.")
             )
             return
 
@@ -436,9 +433,7 @@ class TransactionMixIn(RSCMixIn):
     ):
         if override and not interaction.user.guild_permissions.manage_guild:
             await interaction.response.send_message(
-                embed=ErrorEmbed(
-                    description="Only admins can turn process an override."
-                )
+                embed=ErrorEmbed(description="Only admins can process an override.")
             )
             return
 
@@ -491,9 +486,46 @@ class TransactionMixIn(RSCMixIn):
         )
 
     @_transactions.command(name="sub", description="Substitute a player on a team")
-    async def _transactions_substitute(self, interaction: discord.Interaction):
-        # Automate this?
-        pass
+    @app_commands.describe(
+        player_in="Player being subbed in on the team",
+        player_out="Player being subbed out on the team",
+        notes="Substitation notes (Optional)",
+        override="Admin only override",
+    )
+    async def _transactions_substitute(
+        self,
+        interaction: discord.Interaction,
+        player_in: discord.Member,
+        player_out: discord.Member,
+        notes: Optional[str] = None,
+        override: bool = False,
+    ):
+        if override and not interaction.user.guild_permissions.manage_guild:
+            await interaction.response.send_message(
+                embed=ErrorEmbed(description="Only admins can process an override.")
+            )
+            return
+
+        try:
+            result = await self.substitution(
+                interaction.guild,
+                player_in=player_in,
+                player_out=player_out,
+                notes=notes,
+                override=override,
+            )
+            log.debug(result)
+        except RscException as exc:
+            await interaction.response.send_message(
+                embed=ApiExceptionErrorEmbed(exc), ephemeral=True
+            )
+
+        await interaction.response.send_message(
+            embed=SuccessEmbed(
+                description=f"{player_out.mention} has been subbed out for {player_in.mention}"
+            ),
+            ephemeral=True,
+        )
 
     @_transactions.command(
         name="announce",
@@ -616,9 +648,7 @@ class TransactionMixIn(RSCMixIn):
             description=f"{player.mention} has been promoted to **captain**",
         )
         if notFound:
-            embed.add_field(
-                name="Players Not Found", value="\n".join(notFound)
-            )
+            embed.add_field(name="Players Not Found", value="\n".join(notFound))
 
         await interaction.followup.send(embed=embed, ephemeral=True)
 
@@ -701,6 +731,31 @@ class TransactionMixIn(RSCMixIn):
         async with ApiClient(self._api_conf[guild.id]) as client:
             api = LeaguePlayersApi(client)
             return await api.league_players_set_captain(id)
+
+    async def substitution(
+        self,
+        guild: discord.Guild,
+        player_in: discord.Member,
+        player_out: discord.Member,
+        executor: discord.Member,
+        notes: Optional[str] = None,
+        override: bool = False,
+    ) -> TransactionResponse:
+        """Sub a player in for another player"""
+        async with ApiClient(self._api_conf[guild.id]) as client:
+            api = TransactionsApi(client)
+            data = TemporaryFASub(
+                league=self._league[guild.id],
+                player_in=player_in.id,
+                player_out=player_out.id,
+                executor=executor.id,
+                notes=notes,
+                admin_override=override,
+            )
+            try:
+                return await api.transactions_substitution_create(data)
+            except ApiException as exc:
+                raise RscException(exc)
 
     # Config
 
