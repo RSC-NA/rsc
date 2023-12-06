@@ -1,0 +1,294 @@
+{
+    "player_updates": [
+      {
+        "player": {
+          "id": 669,
+          "league": {
+            "id": 1,
+            "name": "RSC 3v3",
+            "guild_id": 395806681994493950,
+            "league_data": {
+              "max_num_players": 4,
+              "game_mode": "3v3",
+              "match_format": null
+            }
+          },
+          "status": "RO",
+          "season": 18,
+          "captain": false,
+          "base_mmr": 1605,
+          "current_mmr": 1605,
+          "contract_length": 2,
+          "team": {
+            "name": "Onions",
+            "franchise": {
+              "name": "The Garden",
+              "id": 23,
+              "gm": {
+                "rsc_name": "nickm",
+                "discord_id": 138778232802508800
+              },
+              "prefix": "TG"
+            },
+            "id": 142
+          },
+          "last_updated": "2023-12-06T18:20:14.732544-05:00",
+          "previous_teams": [
+            {
+              "team": {
+                "id": 33,
+                "name": "Suris"
+              },
+              "sign_date": "2023-09-01T00:00:00-04:00",
+              "release_date": "2023-12-06T16:07:19.855881-05:00"
+            },
+            {
+              "team": {
+                "id": 142,
+                "name": "Onions"
+              },
+              "sign_date": "2023-09-01T00:00:00-04:00",
+              "release_date": "2023-12-06T16:12:33.675440-05:00"
+            },
+            {
+              "team": {
+                "id": 142,
+                "name": "Onions"
+              },
+              "sign_date": "2023-09-01T00:00:00-04:00",
+              "release_date": "2023-12-06T17:51:23.079941-05:00"
+            },
+            {
+              "team": {
+                "id": 142,
+                "name": "Onions"
+              },
+              "sign_date": "2023-09-01T00:00:00-04:00",
+              "release_date": "2023-12-06T18:13:05.013847-05:00"
+            },
+            {
+              "team": {
+                "id": 142,
+                "name": "Onions"
+              },
+              "sign_date": "2023-09-01T00:00:00-04:00",
+              "release_date": "2023-12-06T18:16:36.120280-05:00"
+            },
+            {
+              "team": {
+                "id": 142,
+                "name": "Onions"
+              },
+              "sign_date": "2023-09-01T00:00:00-04:00",
+              "release_date": "2023-12-06T18:18:34.985565-05:00"
+            }
+          ],
+          "player": {
+            "name": "Naro",
+            "rsc_id": "RSC005768",
+            "discord_id": 186600667094188030
+          },
+          "tier": {
+            "id": 3,
+            "name": "Elite",
+            "color": null,
+            "position": 7
+          },
+          "sub_status": 0
+        },
+        "old_team": {
+          "id": 142,
+          "name": "Onions",
+          "tier": "Elite"
+        },
+        "new_team": null
+      }
+    ],
+    "date": "2023-12-06T18:20:14.770557-05:00",
+    "week": "REG",
+    "week_no": 8,
+    "match_day": 16,
+    "type": "PKU",
+    "notes": "Signing player for length 2. Regular Sign.\ntest",
+    "first_gm": {
+      "username": "nickm",
+      "rsc_id": "RSC002892",
+      "elevated_roles": [
+        {
+          "league": {
+            "id": 1,
+            "name": "RSC 3v3",
+            "guild_id": 395806681994493950,
+            "league_data": {
+              "max_num_players": 4,
+              "game_mode": "3v3",
+              "match_format": null
+            }
+          },
+          "position": null,
+          "gm": true,
+          "agm": false,
+          "arbiter": false,
+          "project_role": ""
+        },
+        {
+          "league": {
+            "id": 1,
+            "name": "RSC 3v3",
+            "guild_id": 395806681994493950,
+            "league_data": {
+              "max_num_players": 4,
+              "game_mode": "3v3",
+              "match_format": null
+            }
+          },
+          "position": "Admin",
+          "gm": false,
+          "agm": false,
+          "arbiter": false,
+          "project_role": ""
+        }
+      ],
+      "player_leagues": [
+        {
+          "id": 268,
+          "league": {
+            "id": 1,
+            "name": "RSC 3v3",
+            "guild_id": 395806681994493950,
+            "league_data": {
+              "max_num_players": 4,
+              "game_mode": "3v3",
+              "match_format": null
+            }
+          },
+          "status": "RO",
+          "season": 18,
+          "captain": false,
+          "base_mmr": 1510,
+          "current_mmr": 1510,
+          "contract_length": 1,
+          "team": {
+            "name": "Onions",
+            "franchise": {
+              "name": "The Garden",
+              "id": 23,
+              "gm": {
+                "rsc_name": "nickm",
+                "discord_id": 138778232802508800
+              },
+              "prefix": "TG"
+            },
+            "id": 142
+          },
+          "last_updated": "2023-12-06T16:53:05.144608-05:00",
+          "previous_teams": [],
+          "player": {
+            "name": "nickm",
+            "rsc_id": "RSC002892",
+            "discord_id": 138778232802508800
+          },
+          "tier": {
+            "id": 3,
+            "name": "Elite",
+            "color": null,
+            "position": 7
+          },
+          "sub_status": 0
+        }
+      ],
+      "rsc_name": "nickm",
+      "discord_id": 138778232802508800
+    },
+    "second_gm": null,
+    "executor": {
+      "username": "nickm",
+      "rsc_id": "RSC002892",
+      "elevated_roles": [
+        {
+          "league": {
+            "id": 1,
+            "name": "RSC 3v3",
+            "guild_id": 395806681994493950,
+            "league_data": {
+              "max_num_players": 4,
+              "game_mode": "3v3",
+              "match_format": null
+            }
+          },
+          "position": null,
+          "gm": true,
+          "agm": false,
+          "arbiter": false,
+          "project_role": ""
+        },
+        {
+          "league": {
+            "id": 1,
+            "name": "RSC 3v3",
+            "guild_id": 395806681994493950,
+            "league_data": {
+              "max_num_players": 4,
+              "game_mode": "3v3",
+              "match_format": null
+            }
+          },
+          "position": "Admin",
+          "gm": false,
+          "agm": false,
+          "arbiter": false,
+          "project_role": ""
+        }
+      ],
+      "player_leagues": [
+        {
+          "id": 268,
+          "league": {
+            "id": 1,
+            "name": "RSC 3v3",
+            "guild_id": 395806681994493950,
+            "league_data": {
+              "max_num_players": 4,
+              "game_mode": "3v3",
+              "match_format": null
+            }
+          },
+          "status": "RO",
+          "season": 18,
+          "captain": false,
+          "base_mmr": 1510,
+          "current_mmr": 1510,
+          "contract_length": 1,
+          "team": {
+            "name": "Onions",
+            "franchise": {
+              "name": "The Garden",
+              "id": 23,
+              "gm": {
+                "rsc_name": "nickm",
+                "discord_id": 138778232802508800
+              },
+              "prefix": "TG"
+            },
+            "id": 142
+          },
+          "last_updated": "2023-12-06T16:53:05.144608-05:00",
+          "previous_teams": [],
+          "player": {
+            "name": "nickm",
+            "rsc_id": "RSC002892",
+            "discord_id": 138778232802508800
+          },
+          "tier": {
+            "id": 3,
+            "name": "Elite",
+            "color": null,
+            "position": 7
+          },
+          "sub_status": 0
+        }
+      ],
+      "rsc_name": "nickm",
+      "discord_id": 138778232802508800
+    }
+  }

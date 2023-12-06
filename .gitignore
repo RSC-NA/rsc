@@ -8,4 +8,3 @@ Scripts/
 pyvenv.cfg
 Tracker*.json
 *.swp
-json_examples/

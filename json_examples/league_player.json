@@ -1,0 +1,54 @@
+{
+    "count": 1,
+    "next": null,
+    "previous": null,
+    "results": [
+      {
+        "id": 268,
+        "league": {
+          "id": 1,
+          "name": "RSC 3v3",
+          "guild_id": 395806681994493950,
+          "league_data": {
+            "max_num_players": 4,
+            "game_mode": "3v3",
+            "match_format": null
+          }
+        },
+        "status": "RO",
+        "season": 18,
+        "captain": false,
+        "base_mmr": 1510,
+        "current_mmr": 1510,
+        "contract_length": 1,
+        "team": {
+          "name": "Onions",
+          "franchise": {
+            "name": "The Garden",
+            "id": 23,
+            "gm": {
+              "rsc_name": "nickm",
+              "discord_id": 138778232802508800
+            },
+            "prefix": "TG"
+          },
+          "id": 142
+        },
+        "last_updated": "2023-12-06T13:35:17.920958-05:00",
+        "previous_teams": [],
+        "player": {
+          "name": "nickm",
+          "rsc_id": "RSC002892",
+          "discord_id": 138778232802508800
+        },
+        "tier": {
+          "id": 3,
+          "name": "Elite",
+          "color": null,
+          "position": 7
+        },
+        "subbing": false,
+        "subbed_out": false
+      }
+    ]
+  }

@@ -1,0 +1,245 @@
+{
+    "player_updates": [
+      {
+        "player": {
+          "id": 329,
+          "league": {
+            "id": 1,
+            "name": "RSC 3v3",
+            "guild_id": 395806681994493950,
+            "league_data": {
+              "max_num_players": 4,
+              "game_mode": "3v3",
+              "match_format": null
+            }
+          },
+          "status": "WV",
+          "season": 18,
+          "captain": false,
+          "base_mmr": 1485,
+          "current_mmr": 1510,
+          "contract_length": 0,
+          "team": null,
+          "last_updated": "2023-12-06T13:33:51.527187-05:00",
+          "previous_teams": [
+            {
+              "team": {
+                "id": 142,
+                "name": "Onions"
+              },
+              "sign_date": "2023-09-01T00:00:00-04:00",
+              "release_date": "2023-12-06T13:33:51.499811-05:00"
+            }
+          ],
+          "player": {
+            "name": "(P|F)ineapple",
+            "rsc_id": "RSC003427",
+            "discord_id": 181204305993400320
+          },
+          "tier": {
+            "id": 3,
+            "name": "Elite",
+            "color": null,
+            "position": 7
+          },
+          "subbing": false,
+          "subbed_out": false
+        },
+        "old_team": {
+          "id": 142,
+          "name": "Onions",
+          "tier": "Elite"
+        },
+        "new_team": null
+      }
+    ],
+    "date": "2023-12-06T13:33:51.589994-05:00",
+    "week": "REG",
+    "week_no": 8,
+    "match_day": 16,
+    "type": "CUT",
+    "notes": "Cutting player via API.\nnope",
+    "first_gm": {
+      "username": "nickm",
+      "rsc_id": "RSC002892",
+      "elevated_roles": [
+        {
+          "league": {
+            "id": 1,
+            "name": "RSC 3v3",
+            "guild_id": 395806681994493950,
+            "league_data": {
+              "max_num_players": 4,
+              "game_mode": "3v3",
+              "match_format": null
+            }
+          },
+          "position": null,
+          "gm": true,
+          "agm": false,
+          "arbiter": false,
+          "project_role": ""
+        },
+        {
+          "league": {
+            "id": 1,
+            "name": "RSC 3v3",
+            "guild_id": 395806681994493950,
+            "league_data": {
+              "max_num_players": 4,
+              "game_mode": "3v3",
+              "match_format": null
+            }
+          },
+          "position": "Admin",
+          "gm": false,
+          "agm": false,
+          "arbiter": false,
+          "project_role": ""
+        }
+      ],
+      "player_leagues": [
+        {
+          "id": 268,
+          "league": {
+            "id": 1,
+            "name": "RSC 3v3",
+            "guild_id": 395806681994493950,
+            "league_data": {
+              "max_num_players": 4,
+              "game_mode": "3v3",
+              "match_format": null
+            }
+          },
+          "status": "RO",
+          "season": 18,
+          "captain": false,
+          "base_mmr": 1510,
+          "current_mmr": 1510,
+          "contract_length": 1,
+          "team": {
+            "name": "Onions",
+            "franchise": {
+              "name": "The Garden",
+              "id": 23,
+              "gm": {
+                "rsc_name": "nickm",
+                "discord_id": 138778232802508800
+              },
+              "prefix": "TG"
+            },
+            "id": 142
+          },
+          "last_updated": "2023-11-02T23:05:28.746905-04:00",
+          "previous_teams": [],
+          "player": {
+            "name": "nickm",
+            "rsc_id": "RSC002892",
+            "discord_id": 138778232802508800
+          },
+          "tier": {
+            "id": 3,
+            "name": "Elite",
+            "color": null,
+            "position": 7
+          },
+          "subbing": false,
+          "subbed_out": true
+        }
+      ],
+      "rsc_name": "nickm",
+      "discord_id": 138778232802508800
+    },
+    "second_gm": null,
+    "executor": {
+      "username": "nickm",
+      "rsc_id": "RSC002892",
+      "elevated_roles": [
+        {
+          "league": {
+            "id": 1,
+            "name": "RSC 3v3",
+            "guild_id": 395806681994493950,
+            "league_data": {
+              "max_num_players": 4,
+              "game_mode": "3v3",
+              "match_format": null
+            }
+          },
+          "position": null,
+          "gm": true,
+          "agm": false,
+          "arbiter": false,
+          "project_role": ""
+        },
+        {
+          "league": {
+            "id": 1,
+            "name": "RSC 3v3",
+            "guild_id": 395806681994493950,
+            "league_data": {
+              "max_num_players": 4,
+              "game_mode": "3v3",
+              "match_format": null
+            }
+          },
+          "position": "Admin",
+          "gm": false,
+          "agm": false,
+          "arbiter": false,
+          "project_role": ""
+        }
+      ],
+      "player_leagues": [
+        {
+          "id": 268,
+          "league": {
+            "id": 1,
+            "name": "RSC 3v3",
+            "guild_id": 395806681994493950,
+            "league_data": {
+              "max_num_players": 4,
+              "game_mode": "3v3",
+              "match_format": null
+            }
+          },
+          "status": "RO",
+          "season": 18,
+          "captain": false,
+          "base_mmr": 1510,
+          "current_mmr": 1510,
+          "contract_length": 1,
+          "team": {
+            "name": "Onions",
+            "franchise": {
+              "name": "The Garden",
+              "id": 23,
+              "gm": {
+                "rsc_name": "nickm",
+                "discord_id": 138778232802508800
+              },
+              "prefix": "TG"
+            },
+            "id": 142
+          },
+          "last_updated": "2023-11-02T23:05:28.746905-04:00",
+          "previous_teams": [],
+          "player": {
+            "name": "nickm",
+            "rsc_id": "RSC002892",
+            "discord_id": 138778232802508800
+          },
+          "tier": {
+            "id": 3,
+            "name": "Elite",
+            "color": null,
+            "position": 7
+          },
+          "subbing": false,
+          "subbed_out": true
+        }
+      ],
+      "rsc_name": "nickm",
+      "discord_id": 138778232802508800
+    }
+  }
