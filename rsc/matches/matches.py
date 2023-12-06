@@ -15,7 +15,7 @@ from rsc.abc import RSCMixIn
 from rsc.enums import MatchType, MatchFormat, MatchTeamEnum, Status
 from rsc.embeds import ErrorEmbed, BlueEmbed
 from rsc.teams import TeamMixIn
-from rsc.utils.utils import get_tier_color_by_name
+from rsc.utils.utils import tier_color_by_name
 
 from typing import List, Optional, Tuple
 
@@ -90,7 +90,7 @@ class MatchMixIn(RSCMixIn):
         )
 
         # Get tier color
-        tier_color = await get_tier_color_by_name(interaction.guild, tier)
+        tier_color = await tier_color_by_name(interaction.guild, tier)
 
         if not schedule:
             await interaction.response.send_message(
@@ -228,7 +228,7 @@ class MatchMixIn(RSCMixIn):
         """Build the match information embed"""
         # Get embed color by tier
         tier = match.home_team.tier
-        tier_color = await get_tier_color_by_name(guild, tier)
+        tier_color = await tier_color_by_name(guild, tier)
 
         # Format match day
         if match.match_type == MatchType.PRESEASON:

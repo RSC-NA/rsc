@@ -16,10 +16,10 @@ from rsc.embeds import ErrorEmbed, BlueEmbed
 from rsc.franchises import FranchiseMixIn
 from rsc.tiers import TierMixIn
 from rsc.utils.utils import (
-    get_franchise_role_from_name,
-    get_gm,
-    is_gm,
-    get_tier_color_by_name,
+    franchise_role_from_name,
+    get_gm_by_role,
+    has_gm_role,
+    tier_color_by_name,
 )
 
 from typing import Optional, List, Dict, Tuple
@@ -149,7 +149,7 @@ class TeamMixIn(RSCMixIn):
         # Fetch roster information
         roster = await self.team_by_id(interaction.guild, teams[0].id)
 
-        tier_color = await get_tier_color_by_name(interaction.guild, roster.tier)
+        tier_color = await tier_color_by_name(interaction.guild, roster.tier)
 
         # Fetch franchise info
         franchise_info = await self.franchises(interaction.guild, name=roster.franchise)
@@ -218,14 +218,14 @@ class TeamMixIn(RSCMixIn):
             )
             return
 
-        tier_color = await get_tier_color_by_name(interaction.guild, captain.tier.name)
+        tier_color = await tier_color_by_name(interaction.guild, captain.tier.name)
 
         # fetch discord.Member from id
         m = interaction.guild.get_member(captain.player.discord_id)
         cpt_fmt = m.mention if m else captain.player.name
 
         # fetch franchise role
-        frole = await get_franchise_role_from_name(
+        frole = await franchise_role_from_name(
             interaction.guild, captain.team.franchise.name
         )
         franchise_fmt = frole.mention if frole else captain.team.franchise.name
@@ -251,7 +251,7 @@ class TeamMixIn(RSCMixIn):
             )
             return
 
-        tier_color = await get_tier_color_by_name(interaction.guild, tier)
+        tier_color = await tier_color_by_name(interaction.guild, tier)
 
         embed = discord.Embed(title=f"{tier} Captains", color=tier_color)
 
@@ -294,7 +294,7 @@ class TeamMixIn(RSCMixIn):
             m = interaction.guild.get_member(c.player.discord_id)
             cpt_fmt.append(m.mention if m else c.player.name)
 
-        frole = await get_franchise_role_from_name(
+        frole = await franchise_role_from_name(
             interaction.guild, captains[0].team.franchise.name
         )
 

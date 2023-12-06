@@ -16,6 +16,7 @@ from rsc.abc import CompositeMetaClass
 from rsc.enums import LogLevel
 
 # Mix Ins
+from rsc.admin import AdminMixIn
 from rsc.ballchasing import BallchasingMixIn
 from rsc.combines import CombineMixIn
 from rsc.freeagents import FreeAgentMixIn
@@ -48,6 +49,7 @@ defaults_guild = {
 
 
 class RSC(
+    AdminMixIn,
     BallchasingMixIn,
     CombineMixIn,
     FranchiseMixIn,

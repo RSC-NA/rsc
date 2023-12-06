@@ -25,7 +25,7 @@ from rsc.franchises.views import (
     RebrandFranchiseView,
 )
 from rsc.views import LinkButton
-from rsc.utils.utils import get_franchise_role_from_name, update_prefix_for_role, remove_prefix
+from rsc.utils.utils import franchise_role_from_name, update_prefix_for_role, remove_prefix
 
 from typing import List, Dict, Optional, Union
 
@@ -146,7 +146,7 @@ class FranchiseMixIn(RSCMixIn):
             return
 
         # Get franchise role
-        frole = await get_franchise_role_from_name(
+        frole = await franchise_role_from_name(
             interaction.guild, franchise_name=franchise
         )
         if not frole:
@@ -250,7 +250,7 @@ class FranchiseMixIn(RSCMixIn):
         log.debug("Rebranding franchise.")
 
         # Update franchise role
-        frole = await get_franchise_role_from_name(interaction.guild, franchise)
+        frole = await franchise_role_from_name(interaction.guild, franchise)
         if not frole:
             log.error(
                 f"[{interaction.guild}] Unable to find franchise role for rebrand: {franchise}"

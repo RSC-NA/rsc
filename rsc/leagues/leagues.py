@@ -91,7 +91,7 @@ class LeagueMixIn(RSCMixIn):
             embed.set_thumbnail(url=interaction.guild.icon.url)
         await interaction.response.send_message(embed=embed)
 
-    # Functionality
+    # API
 
     async def leagues(self, guild: discord.Guild) -> List[League]:
         """Get a list of leagues from the API"""

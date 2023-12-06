@@ -9,20 +9,56 @@ from redbot.core import app_commands, checks
 
 from rscapi.models.league_player import LeaguePlayer
 
-from typing import Optional, List
-
 from rsc.transformers import MemberTransformer
-from rsc.const import GM_ROLE, CAPTAIN_ROLE
+from rsc.const import GM_ROLE, CAPTAIN_ROLE, FREE_AGENT_ROLE, SUBBED_OUT_ROLE
 from rsc.abc import RSCMixIn
 from rsc.embeds import ErrorEmbed, SuccessEmbed, ExceptionErrorEmbed
+
+from typing import Optional, List, overload
+
 
 log = logging.getLogger("red.rsc.utils")
 
 # FRANCHISE_ROLE_REGEX = re.compile(r"^[\w\s]+\(\w+\)$")
 
+async def not_implemented(interaction: discord.Interaction):
+    await interaction.response.send_message("**Not Implemented**", ephemeral=True)
 
-async def get_captain_role(guild: discord.Guild) -> Optional[discord.Role]:
-    return discord.utils.get(guild.roles, name=CAPTAIN_ROLE)
+
+async def get_captain_role(guild: discord.Guild) -> discord.Role:
+    r = discord.utils.get(guild.roles, name=CAPTAIN_ROLE)
+    if not r:
+        log.error(f"[{guild.name}] Expected role does not exist: {CAPTAIN_ROLE}")
+        raise ValueError(f"[{guild.name}] Expected role does not exist: {CAPTAIN_ROLE}")
+    return r
+
+
+async def get_free_agent_role(guild: discord.Guild) -> discord.Role:
+    r = discord.utils.get(guild.roles, name=FREE_AGENT_ROLE)
+    if not r:
+        log.error(f"[{guild.name}] Expected role does not exist: {FREE_AGENT_ROLE}")
+        raise ValueError(
+            f"[{guild.name}] Expected role does not exist: {FREE_AGENT_ROLE}"
+        )
+    return r
+
+
+async def get_gm_role(guild: discord.Guild) -> discord.Role:
+    r = discord.utils.get(guild.roles, name=GM_ROLE)
+    if not r:
+        log.error(f"[{guild.name}] Expected role does not exist: {GM_ROLE}")
+        raise ValueError(f"[{guild.name}] Expected role does not exist: {GM_ROLE}")
+    return r
+
+
+async def get_subbed_out_role(guild: discord.Guild) -> discord.Role:
+    r = discord.utils.get(guild.roles, name=SUBBED_OUT_ROLE)
+    if not r:
+        log.error(f"[{guild.name}] Expected role does not exist: {SUBBED_OUT_ROLE}")
+        raise ValueError(
+            f"[{guild.name}] Expected role does not exist: {SUBBED_OUT_ROLE}"
+        )
+    return r
 
 
 async def remove_prefix(member: discord.Member) -> str:
@@ -37,7 +73,7 @@ async def remove_prefix(member: discord.Member) -> str:
     raise ValueError(f"Unable to remove prefix from {member.display_name}")
 
 
-async def is_gm(member: discord.Member) -> bool:
+async def has_gm_role(member: discord.Member) -> bool:
     """Check if user has General Manager role in guild"""
     for role in member.roles:
         if role.name == GM_ROLE:
@@ -45,7 +81,7 @@ async def is_gm(member: discord.Member) -> bool:
     return False
 
 
-async def get_member_from_rsc_name(
+async def member_from_rsc_name(
     guild: discord.Guild, name: str
 ) -> Optional[discord.Member]:
     """Get guild member by rsc name ("nickm"). Not recommended."""
@@ -62,20 +98,20 @@ async def get_member_from_rsc_name(
     return None
 
 
-async def get_gm(franchise_role: discord.Role) -> Optional[discord.Member]:
+async def get_gm_by_role(franchise_role: discord.Role) -> Optional[discord.Member]:
     """Get GM from guild franchise role"""
     for member in franchise_role.members:
-        if is_gm(member):
+        if has_gm_role(member):
             return member
     return None
 
 
-async def get_role_by_name(guild: discord.Guild, name: str) -> Optional[discord.Role]:
+async def role_by_name(guild: discord.Guild, name: str) -> Optional[discord.Role]:
     """Get a guild discord role by name"""
     return discord.utils.get(guild.roles, name=name)
 
 
-async def get_franchise_role_from_name(
+async def franchise_role_from_name(
     guild: discord.Guild, franchise_name: str
 ) -> Optional[discord.Role]:
     """Get guild franchise role from franchise name (Ex: "The Garden")"""
@@ -87,15 +123,19 @@ async def get_franchise_role_from_name(
 
 async def franchise_role_from_league_player(
     guild: discord.Guild, player: LeaguePlayer
-) -> Optional[discord.Role]:
+) -> discord.Role:
     """Return a franchise discord.Role from `LeaguePlayer` object"""
-    return discord.utils.get(
-        guild.roles,
-        name=f"{player.team.franchise.name} ({player.team.franchise.gm.rsc_name})",
-    )
+    rname = f"{player.team.franchise.name} ({player.team.franchise.gm.rsc_name})"
+    r = discord.utils.get(guild.roles, name=rname)
+    if not r:
+        log.error(f"[{guild.name}] Expected franchise role does not exist: {rname}")
+        raise ValueError(
+            f"[{guild.name}] Expected franchise role does not exist: {rname}"
+        )
+    return r
 
 
-async def get_tier_color_by_name(guild: discord.Guild, name: str) -> discord.Color:
+async def tier_color_by_name(guild: discord.Guild, name: str) -> discord.Color:
     """Return tier color from role (Defaults to blue if not found)"""
     tier_role = discord.utils.get(guild.roles, name=name)
     if tier_role:
@@ -109,11 +149,33 @@ async def is_guild_interaction(interaction: discord.Interaction) -> bool:
         return True
     return False
 
+
 async def update_prefix_for_role(role: discord.Role, prefix: str):
     """Update the prefix for all role members"""
     for m in role.members:
         name = await remove_prefix(m)
         await m.edit(nick=f"{prefix} | {name}")
+
+
+async def get_tier_role(guild: discord.Guild, name: str) -> discord.Role:
+    """Return discord.Role for a tier"""
+    r = discord.utils.get(guild.roles, name=name)
+    if not r:
+        log.error(f"[{guild.name}] Expected tier role does not exist: {name}")
+        raise ValueError(f"[{guild.name}] Expected tier role does not exist: {name}")
+    return r
+
+
+async def get_tier_fa_role(guild: discord.Guild, name: str) -> discord.Role:
+    """Return FA discord.Role for a tier"""
+    r = discord.utils.get(guild.roles, name=f"{name}FA")
+    if not r:
+        log.error(f"[{guild.name}] Expected tier FA role does not exist: {name}FA")
+        raise ValueError(
+            f"[{guild.name}] Expected tier FA role does not exist: {name}FA"
+        )
+    return r
+
 
 class UtilsMixIn(RSCMixIn):
     @app_commands.command(

@@ -9,7 +9,7 @@ from rscapi.models.tier import Tier
 
 from rsc.abc import RSCMixIn
 from rsc.embeds import ErrorEmbed
-from rsc.utils.utils import get_role_by_name
+from rsc.utils.utils import role_by_name
 
 from typing import List, Dict, Optional
 

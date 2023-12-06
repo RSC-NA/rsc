@@ -19,7 +19,7 @@ from rsc.const import LEAGUE_ROLE, MUTED_ROLE
 from rsc.embeds import ErrorEmbed, SuccessEmbed, ApiExceptionErrorEmbed, BlueEmbed
 from rsc.enums import Status
 from rsc.members.views import SignupView, SignupState, PlayerType, Platform, Referrer
-from rsc.utils.utils import get_tier_color_by_name, get_franchise_role_from_name
+from rsc.utils.utils import tier_color_by_name, franchise_role_from_name
 
 from typing import List, Dict, Tuple, TypedDict, Optional
 
@@ -46,133 +46,6 @@ class MemberMixIn(RSCMixIn):
             m = ml.pop()
             log.debug(f"{member} already exists. Changing nickname to {m.rsc_name}")
             await member.edit(nick=m.rsc_name)
-
-
-    # Privileged Commands
-
-    _members = app_commands.Group(
-        name="members",
-        description="Manage RSC members",
-        guild_only=True,
-        default_permissions=discord.Permissions(manage_guild=True),
-    )
-
-    @_members.command(name="create", description="Create an RSC member in the API")
-    @app_commands.describe(
-        member="Discord member being added",
-        rsc_name="RSC player name (Defaults to members display name)",
-    )
-    async def _member_create(
-        self,
-        interaction: discord.Interaction,
-        member: discord.Member,
-        rsc_name: Optional[str] = None,
-    ):
-        try:
-            lp = await self.create_member(
-                interaction.guild,
-                member=member,
-                rsc_name=rsc_name or member.display_name,
-            )
-        except RscException as exc:
-            await interaction.response.send_message(
-                embed=ApiExceptionErrorEmbed(exc), ephemeral=True
-            )
-            return
-
-        # Change nickname if specified
-        if rsc_name:
-            await member.edit(nick=rsc_name)
-
-        await interaction.response.send_message(
-            embed=SuccessEmbed(
-                description=f"{member.mention} has been created in the RSC API."
-            ),
-            ephemeral=True,
-        )
-
-    @_members.command(name="delete", description="Delete an RSC member in the API")
-    async def _member_delete(
-        self, interaction: discord.Interaction, member: discord.Member
-    ):
-        try:
-            await self.delete_member(interaction.guild, member=member)
-        except RscException as exc:
-            await interaction.response.send_message(
-                embed=ApiExceptionErrorEmbed(exc), ephemeral=True
-            )
-            return
-        await interaction.response.send_message(
-            embed=SuccessEmbed(
-                description=f"{member.mention} has been deleted from the RSC API."
-            ),
-            ephemeral=True,
-        )
-
-    @_members.command(
-        name="list", description="Fetch a list of members based on specified criteria."
-    )
-    @app_commands.describe(
-        rsc_name="RSC in-game player name (Do not include prefix)",
-        discord_username="Player discord username without discriminator",
-        discord_id="Player discord ID",
-        limit="Number of results to return (Default: 10, Max: 64)",
-        offset="Return results starting at specified offset (Default: 0)",
-    )
-    async def _member_list(
-        self,
-        interaction: discord.Interaction,
-        rsc_name: Optional[str] = None,
-        discord_username: Optional[str] = None,
-        discord_id: Optional[int] = None,
-        limit: app_commands.Range[int, 1, 64] = 10,
-        offset: app_commands.Range[int, 0, 64] = 0,
-    ):
-        if not (rsc_name or discord_username or discord_id):
-            await interaction.response.send_message(
-                "You must specify at least one search option.", ephemeral=True
-            )
-            return
-        await interaction.response.defer(ephemeral=True)
-        ml = await self.members(
-            interaction.guild,
-            rsc_name=rsc_name,
-            discord_username=discord_username,
-            discord_id=discord_id,
-            limit=limit,
-            offset=offset,
-        )
-
-        league_id = self._league[interaction.guild.id]
-        m_fmt = []
-        for m in ml:
-            x = interaction.guild.get_member(m.discord_id)
-            l: LeaguePlayer = next(
-                (i for i in m.player_leagues if i.league.id == league_id), None
-            )
-            m_fmt.append(
-                (
-                    x.mention if x else m.rsc_name,
-                    m.discord_id,
-                    Status(l.status).full_name() if l else "Spectator",
-                )
-            )
-
-        embed = BlueEmbed(
-            title="RSC Member Results",
-            description="The following members matched the specified criteria",
-        )
-        embed.add_field(
-            name="Member", value="\n".join([x[0] for x in m_fmt]), inline=True
-        )
-        embed.add_field(
-            name="ID", value="\n".join([str(x[1]) for x in m_fmt]), inline=True
-        )
-        embed.add_field(
-            name="Status", value="\n".join([x[2] for x in m_fmt]), inline=True
-        )
-
-        await interaction.followup.send(embed=embed, ephemeral=True)
 
     # App Commands
 
@@ -243,7 +116,7 @@ class MemberMixIn(RSCMixIn):
             return
 
         p = players[0]
-        tier_color = await get_tier_color_by_name(interaction.guild, p.tier.name)
+        tier_color = await tier_color_by_name(interaction.guild, p.tier.name)
 
         embed = discord.Embed(
             title="Player Info",
@@ -258,7 +131,7 @@ class MemberMixIn(RSCMixIn):
             await interaction.response.send_message(embed=embed, ephemeral=True)
             return
 
-        frole = await get_franchise_role_from_name(
+        frole = await franchise_role_from_name(
             interaction.guild, p.team.franchise.name
         )
         f_fmt = frole.mention if frole else p.team.franchise.name
@@ -267,6 +140,16 @@ class MemberMixIn(RSCMixIn):
         embed.add_field(name="Team", value=p.team.name, inline=True)
         embed.add_field(name="Franchise", value=f_fmt, inline=True)
         await interaction.response.send_message(embed=embed, ephemeral=True)
+
+    # Helper Functions
+
+    async def league_player_from_member(self, guild: discord.Guild, member: Member) -> Optional[LeaguePlayer]:
+        """Return `LeaguePlayer` object for the guilds league from `Member`"""
+        for lp in member.player_leagues:
+            if lp.league.id == self._league[guild.id]:
+                return lp
+        return None
+
 
     # API
 

@@ -18,9 +18,9 @@ from rsc.const import LEAGUE_ROLE, MUTED_ROLE
 from rsc.embeds import ErrorEmbed, SuccessEmbed
 from rsc.enums import Status
 from rsc.utils.utils import (
-    get_role_by_name,
-    get_member_from_rsc_name,
-    get_tier_color_by_name,
+    role_by_name,
+    member_from_rsc_name,
+    tier_color_by_name,
 )
 
 from rsc.freeagents.views import CheckInView, CheckOutView
@@ -130,7 +130,7 @@ class FreeAgentMixIn(RSCMixIn):
             data.append(fstr)
         data = "\n".join(data)
 
-        tier_role = await get_role_by_name(interaction.guild, tier)
+        tier_role = await role_by_name(interaction.guild, tier)
 
         embed = discord.Embed(
             title=f"{tier} Free Agents",
@@ -199,7 +199,7 @@ class FreeAgentMixIn(RSCMixIn):
             return
 
         # Tier
-        tier_role = await get_role_by_name(interaction.guild, player.tier.name)
+        tier_role = await role_by_name(interaction.guild, player.tier.name)
         tier_color = None
         if tier_role:
             tier_color = tier_role.color
@@ -251,7 +251,7 @@ class FreeAgentMixIn(RSCMixIn):
         checkins = await self.checkins_by_tier(interaction.guild, tier)
 
         tier_color = (
-            await get_tier_color_by_name(interaction.guild, tier)
+            await tier_color_by_name(interaction.guild, tier)
             or discord.Color.blue()
         )
 

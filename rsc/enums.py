@@ -1,11 +1,13 @@
 from enum import StrEnum, IntEnum
 
+
 class LogLevel(StrEnum):
-    CRITICAL = 'CRITICAL'
-    ERROR = 'ERROR'
-    WARNING = 'WARNING'
-    INFO = 'INFO'
-    DEBUG = 'DEBUG'
+    CRITICAL = "CRITICAL"
+    ERROR = "ERROR"
+    WARNING = "WARNING"
+    INFO = "INFO"
+    DEBUG = "DEBUG"
+
 
 class StatsType(StrEnum):
     REGULAR = "REG"  # Regular Season Stats
@@ -80,6 +82,7 @@ class Status(StrEnum):
     BANNED = "BN"  # Banned
     UNSIGNED_GM = "UG"  # GM (Unsigned)
     PERM_FA = "PF"  # Permanent Free Agent
+    WAIVER_CLAIM = ("WC",)  # Waiver Claim
 
     def full_name(self) -> str:
         match self:
@@ -103,6 +106,8 @@ class Status(StrEnum):
                 return "Unsigned GM"
             case Status.PERM_FA:
                 return "Permanent FA"
+            case Status.WAIVER_CLAIM:
+                return "Waiver Claim"
             case _:
                 return "Unknown"
 
@@ -146,3 +151,15 @@ class MatchTeamEnum(StrEnum):
     HOME = "HME"  # Home
     AWAY = "AWY"  # Away
     ALL = "ALL"  # All Games
+
+
+class SubStatus(IntEnum):
+    NOT = 0  # Not subbed
+    OUT = 1  # Subbed Out
+    IN = 2  # Subbed In
+
+
+class RegionPreference(StrEnum):
+    EAST = ("EST",)  # US East
+    WEST = ("WST",)  # US West
+    EU = ("EU",)  # Europe
