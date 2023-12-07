@@ -17,6 +17,7 @@ from rsc.tiers import TierMixIn
 from rsc.const import LEAGUE_ROLE, MUTED_ROLE
 from rsc.embeds import ErrorEmbed, SuccessEmbed
 from rsc.enums import Status
+from rsc.types import CheckIn
 from rsc.utils.utils import (
     role_by_name,
     member_from_rsc_name,
@@ -33,20 +34,6 @@ log = logging.getLogger("red.rsc.freeagents")
 # Noon - Eastern (-5) - Not DST aware
 # Have to use UTC for loop. TZ aware object causes issues with clock drift calculations
 FA_LOOP_TIME = time(hour=17)
-
-
-class CheckIn(TypedDict):
-    """
-    Free Agent Check In
-
-    date: String of datetime() indicating when the player checked in
-    tier: Tier name
-    player: Discord ID of the player
-    """
-
-    date: str
-    player: int
-    tier: str
 
 
 defaults_guild: Dict[str, List[CheckIn]] = {"CheckIns": []}

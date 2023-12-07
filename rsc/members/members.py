@@ -9,6 +9,7 @@ from rscapi.exceptions import ApiException
 from rscapi.models.tier import Tier
 from rscapi.models.members_list200_response import MembersList200Response
 from rscapi.models.member import Member
+from rscapi.models.update_member_rsc_name import UpdateMemberRSCName
 from rscapi.models.elevated_role import ElevatedRole
 from rscapi.models.league_player import LeaguePlayer
 
@@ -131,9 +132,7 @@ class MemberMixIn(RSCMixIn):
             await interaction.response.send_message(embed=embed, ephemeral=True)
             return
 
-        frole = await franchise_role_from_name(
-            interaction.guild, p.team.franchise.name
-        )
+        frole = await franchise_role_from_name(interaction.guild, p.team.franchise.name)
         f_fmt = frole.mention if frole else p.team.franchise.name
 
         # embed.add_field(name="\u200B", value="\u200B") # Line Break
@@ -141,15 +140,54 @@ class MemberMixIn(RSCMixIn):
         embed.add_field(name="Franchise", value=f_fmt, inline=True)
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
+    @app_commands.command(
+        name="waivers", description="Display players currently on waivers"
+    )
+    @app_commands.autocomplete(tier=TierMixIn.tier_autocomplete)
+    async def _waivers(self, interaction: discord.Interaction, tier: str):
+        players = await self.players(
+            interaction.guild, status=Status.WAIVERS, tier_name=tier
+        )
+
+        tier_color = await tier_color_by_name(interaction.guild, tier)
+        embed = discord.Embed(
+            title="Waiver List",
+            description="Players on waivers in **{tier}**",
+            color=tier_color,
+        )
+
+        if not players:
+            embed.description = f"No players on waiver list for **{tier}**"
+            await interaction.response.send_message(embed=embed)
+            return
+
+        players.sort(key=lambda x: x.player.name)
+
+        members = []
+        for p in players:
+            m = interaction.guild.get_member(p.player.discord_id)
+            pstr = m.mention if m else p.player.name
+            members.append(pstr)
+
+        embed.add_field(name="Player", value="\n".join(members), inline=True)
+        embed.add_field(
+            name="Current MMR",
+            value="\n".join([str(p.current_mmr for p in players)]),
+            inline=True,
+        )
+
+        await interaction.response.send_message(embed=embed)
+
     # Helper Functions
 
-    async def league_player_from_member(self, guild: discord.Guild, member: Member) -> Optional[LeaguePlayer]:
+    async def league_player_from_member(
+        self, guild: discord.Guild, member: Member
+    ) -> Optional[LeaguePlayer]:
         """Return `LeaguePlayer` object for the guilds league from `Member`"""
         for lp in member.player_leagues:
             if lp.league.id == self._league[guild.id]:
                 return lp
         return None
-
 
     # API
 
@@ -228,5 +266,21 @@ class MemberMixIn(RSCMixIn):
             api = MembersApi(client)
             try:
                 await api.members_delete(member.id)
+            except ApiException as exc:
+                raise RscException(response=exc)
+
+
+    async def change_member_name(
+        self,
+        guild: discord.Guild,
+        id: int,
+        name: str,
+    ) -> Member:
+        async with ApiClient(self._api_conf[guild.id]) as client:
+            api = MembersApi(client)
+            try:
+                data = UpdateMemberRSCName(name=name)
+                log.debug(f"Name Change Data: {data}")
+                return await api.members_name_change(id, data)
             except ApiException as exc:
                 raise RscException(response=exc)

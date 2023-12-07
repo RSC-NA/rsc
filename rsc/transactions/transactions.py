@@ -18,6 +18,7 @@ from rscapi.models.transaction_response import TransactionResponse
 from rscapi.models.player_transaction_updates import PlayerTransactionUpdates
 from rscapi.models.temporary_fa_sub import TemporaryFASub
 from rscapi.models.player_transaction_updates import PlayerTransactionUpdates
+from rscapi.models.expire_a_player_sub import ExpireAPlayerSub
 from rscapi.models.league_player import LeaguePlayer
 
 from rsc.abc import RSCMixIn
@@ -33,6 +34,7 @@ from rsc.embeds import (
 from rsc.exceptions import RscException, translate_api_error
 from rsc.teams import TeamMixIn
 from rsc.transactions.views import TradeAnnouncementModal, TradeAnnouncementView
+from rsc.types import Substitute
 from rsc.utils import utils
 
 
@@ -42,6 +44,7 @@ log = logging.getLogger("red.rsc.transactions")
 
 defaults = {
     "TransChannel": None,
+    "TransDMs": False,
     "TransLogChannel": None,
     "TransNotifications": False,
     "TransRole": None,
@@ -53,15 +56,6 @@ defaults = {
 # Noon - Eastern (-5) - Not DST aware
 # Have to use UTC for loop. TZ aware object causes issues with clock drift calculations
 SUB_LOOP_TIME = time(hour=17)
-
-
-class Substitute(TypedDict):
-    date: str
-    gm: int
-    player_in: int
-    player_out: int
-    team: str
-    tier: str
 
 
 class TransactionMixIn(RSCMixIn):
@@ -130,41 +124,42 @@ class TransactionMixIn(RSCMixIn):
         log_channel = await self._trans_log_channel(interaction.guild)
         trans_channel = await self._trans_channel(interaction.guild)
         trans_role = await self._trans_role(interaction.guild)
-        cut_msg = await self._get_cut_message(interaction.guild) or "None"
         notifications = await self._notifications_enabled(interaction.guild)
+        dms = await self._trans_dms_enabled(interaction.guild)
+        cut_msg = await self._get_cut_message(interaction.guild) or "None"
+
         settings_embed = discord.Embed(
             title="Transactions Settings",
             description="Current configuration for Transactions",
             color=discord.Color.blue(),
         )
 
-        # Check channel values before mention to avoid exception
         settings_embed.add_field(
             name="Notifications Enabled", value=notifications, inline=False
         )
 
-        if trans_channel:
-            settings_embed.add_field(
-                name="Transaction Channel", value=trans_channel.mention, inline=False
-            )
-        else:
-            settings_embed.add_field(
-                name="Transaction Channel", value="None", inline=False
-            )
+        settings_embed.add_field(
+            name="Direct Messages Enabled", value=dms, inline=False
+        )
 
-        if log_channel:
-            settings_embed.add_field(
-                name="Log Channel", value=log_channel.mention, inline=False
-            )
-        else:
-            settings_embed.add_field(name="Log Channel", value="None", inline=False)
+        # Check channel values before mention to avoid exception
+        settings_embed.add_field(
+            name="Transaction Channel",
+            value=trans_channel.mention if trans_channel else "None",
+            inline=False,
+        )
 
-        if trans_role:
-            settings_embed.add_field(
-                name="Committee Role", value=trans_role.mention, inline=False
-            )
-        else:
-            settings_embed.add_field(name="Committee Role", value="None", inline=False)
+        settings_embed.add_field(
+            name="Log Channel",
+            value=log_channel.mention if log_channel else "None",
+            inline=False,
+        )
+
+        settings_embed.add_field(
+            name="Committee Role",
+            value=trans_role.mention if trans_role else "None",
+            inline=False,
+        )
 
         # Discord embed field max length is 1024. Send a seperate embed for cut message if greater.
         if len(cut_msg) <= 1024:
@@ -197,6 +192,27 @@ class TransactionMixIn(RSCMixIn):
             embed=discord.Embed(
                 title="Successs",
                 description=f"Transaction committee and GM notifications are now {result}.",
+                color=discord.Color.green(),
+            ),
+            ephemeral=True,
+        )
+
+    @_transactions.command(
+        name="dm", description="Toggle player direct messages on or off"
+    )
+    @app_commands.checks.has_permissions(manage_guild=True)
+    async def transactions_dms_toggle(self, interaction: discord.Interaction):
+        """Toggle channel notifications on or off"""
+        status = await self._trans_dms_enabled(interaction.guild)
+        log.debug(f"Current DM Status: {status}")
+        status ^= True  # Flip boolean with xor
+        log.debug(f"New Transaction DMs Status: {status}")
+        await self._set_trans_dm(interaction.guild, status)
+        result = "**enabled**" if status else "**disabled**"
+        await interaction.response.send_message(
+            embed=discord.Embed(
+                title="Successs",
+                description=f"Player transaction direct messages are now {result}.",
                 color=discord.Color.green(),
             ),
             ephemeral=True,
@@ -313,12 +329,14 @@ class TransactionMixIn(RSCMixIn):
 
         # Update tier role, handle promotion case
         log.debug(f"[{interaction.guild.name}] Updating tier roles for {player.id}")
-        old_tier_role = await utils.get_tier_role(
-            interaction.guild, ptu.old_team.tier
-        )
+        old_tier_role = await utils.get_tier_role(interaction.guild, ptu.old_team.tier)
         tier_role = await utils.get_tier_role(interaction.guild, ptu.player.tier.name)
         if old_tier_role != tier_role:
             await player.remove_roles(old_tier_role)
+            await player.add_roles(tier_role)
+
+        # Apply tier role if they never had it
+        if tier_role not in player.roles:
             await player.add_roles(tier_role)
 
         # Free agent roles
@@ -328,14 +346,23 @@ class TransactionMixIn(RSCMixIn):
         )
 
         # Franchise Role
-        gm_lp: LeaguePlayer = await self.league_player_from_member(interaction.guild, result.first_gm)
-        if not gm_lp:
-            log.error(f"[{interaction.guild.name}] Unable to find GMs league player object during cut.")
-        log.debug(f"GM LeaguePlayer: {gm_lp}")
-        franchise_role = await utils.franchise_role_from_name(interaction.guild, gm_lp.team.franchise.name)
+        franchise_role = await utils.franchise_role_from_name(
+            interaction.guild, result.first_franchise.name
+        )
+        if not franchise_role:
+            log.error(
+                f"[{interaction.guild.name}] Unable to find franchise name during cut: {result.first_franchise.name}"
+            )
+            await interaction.followup.send(
+                embed=ErrorEmbed(
+                    description=f"Unable to find franchise role for **{result.first_franchise.name}**"
+                ),
+                ephemeral=True,
+            )
+            return
 
         # Make changes for Non-GM player
-        if result.first_gm.discord_id != player.id:
+        if result.first_franchise.gm.discord_id != player.id:
             new_nick = f"FA | {await utils.remove_prefix(player)}"
             log.debug(f"Changing cut players nickname to: {new_nick}")
             await player.edit(nick=new_nick)
@@ -353,13 +380,14 @@ class TransactionMixIn(RSCMixIn):
         trans_channel = await self._trans_channel(interaction.guild)
         if trans_channel:
             await trans_channel.send(
-                f"{player.mention} was cut by {ptu.old_team.name} (<@{result.first_gm.discord_id}> - {ptu.old_team.tier})",
+                f"{player.mention} was cut by {ptu.old_team.name} (<@{result.first_franchise.gm.discord_id}> - {ptu.old_team.tier})",
                 allowed_mentions=discord.AllowedMentions(users=True),
             )
 
         # Send cut message to user directly
+        dm_status = await self._trans_dms_enabled(interaction.guild)
         cutmsg = await self._get_cut_message(interaction.guild)
-        if cutmsg:
+        if dm_status and cutmsg:
             embed = BlueEmbed(
                 title=f"Message from {interaction.guild.name}", description=cutmsg
             )
@@ -437,7 +465,7 @@ class TransactionMixIn(RSCMixIn):
 
         # Verify player has tier role
         log.debug(f"[{interaction.guild.name}] Adding tier role to {player.id}")
-        tier_role = await utils.get_tier_role(interaction.guild.roles, name=ptu.new_team.tier)
+        tier_role = await utils.get_tier_role(interaction.guild, name=ptu.new_team.tier)
         await player.add_roles(frole, tier_role)
 
         # Change member prefix
@@ -453,7 +481,7 @@ class TransactionMixIn(RSCMixIn):
         trans_channel = await self._trans_channel(interaction.guild)
         if trans_channel:
             await trans_channel.send(
-                f"{player.mention} was signed by {ptu.new_team.name} (<@{result.first_gm.discord_id}> - {ptu.new_team.name})",
+                f"{player.mention} was signed by {ptu.new_team.name} (<@{result.second_franchise.gm.discord_id}> - {ptu.new_team.tier})",
                 allowed_mentions=discord.AllowedMentions(users=True),
             )
 
@@ -521,7 +549,9 @@ class TransactionMixIn(RSCMixIn):
 
         # Verify player has tier role
         log.debug(f"[{interaction.guild.name}] Adding tier role to {player.id}")
-        tier_role = await utils.get_tier_role(interaction.guild.roles, name=ptu.new_team.tier)
+        tier_role = await utils.get_tier_role(
+            interaction.guild.roles, name=ptu.new_team.tier
+        )
         await player.add_roles(frole, tier_role)
 
         # Change member prefix
@@ -537,7 +567,7 @@ class TransactionMixIn(RSCMixIn):
         trans_channel = await self._trans_channel(interaction.guild)
         if trans_channel:
             await trans_channel.send(
-                f"{player.mention} was re-signed by {ptu.new_team.name} (<@{result.first_gm.discord_id}> - {ptu.new_team.tier})",
+                f"{player.mention} was re-signed by {ptu.new_team.name} (<@{result.first_franchise.gm.discord_id}> - {ptu.new_team.tier})",
                 allowed_mentions=discord.AllowedMentions(users=True),
             )
 
@@ -594,13 +624,11 @@ class TransactionMixIn(RSCMixIn):
             result, player_out
         )
 
-        gm_id = result.first_gm.discord_id
+        gm_id = result.second_franchise.gm.discord_id
 
         # Send to transaction channel
         tchan = await self._trans_channel(interaction.guild)
         if tchan:
-            team = None
-            # team = result.player_updates[0].new_team
             await tchan.send(
                 f"{player_in.mention} was signed to a temporary contract by {ptu_in.new_team.name}, subbing for {player_out.mention} (<@{gm_id}> - {ptu_in.new_team.tier})",
                 allowed_mentions=discord.AllowedMentions(users=True),
@@ -613,14 +641,14 @@ class TransactionMixIn(RSCMixIn):
             player_in=player_in.id,
             player_out=player_out.id,
             team=ptu_in.new_team.name,
-            gm=result.first_gm.discord_id,
+            gm=result.second_franchise.gm.discord_id,
             tier=ptu_in.new_team.tier,
         )
         await self._add_substitute(interaction.guild, sub_obj)
 
         # Subbed out role
         subbed_out_role = await utils.get_subbed_out_role(interaction.guild)
-        player_out.add_roles(subbed_out_role)
+        await player_out.add_roles(subbed_out_role)
 
         embed = SuccessEmbed(
             description=f"{player_out.mention} has been subbed out for {player_in.mention}"
@@ -766,7 +794,45 @@ class TransactionMixIn(RSCMixIn):
     async def _transactions_expire(
         self, interaction: discord.Interaction, player: discord.Member
     ):
-        await utils.not_implemented(interaction)
+        await interaction.response.defer(ephemeral=True)
+        try:
+            result = await self.expire_sub(
+                interaction.guild,
+                player=player,
+                executor=interaction.user,
+            )
+            log.debug(f"Expire Sub Result: {result}")
+        except RscException as exc:
+            await interaction.followup.send(
+                embed=ApiExceptionErrorEmbed(exc), ephemeral=True
+            )
+            return
+
+        # Get sub object and remove it from saved list
+        sub_obj = await self.get_sub(player)
+        if sub_obj:
+            await self._rm_substitute(interaction.guild, sub_obj)
+
+            # Remove subbed out role from subbed player
+            subbed_out_role = await utils.get_subbed_out_role(interaction.guild)
+            p_out = interaction.guild.get_member(sub_obj["player_out"])
+            if subbed_out_role and p_out:
+                await p_out.remove_roles(subbed_out_role)
+
+            # Post to transactions
+            tchan = await self._trans_channel(interaction.guild)
+            if tchan:
+                await tchan.send(
+                    content=f"{player.mention} has finished their time as a substitute for {sub_obj['team']} (<@{sub_obj['gm']}> - {sub_obj['tier']})",
+                    allowed_mentions=discord.AllowedMentions(users=True),
+                )
+
+        await interaction.followup.send(
+            embed=SuccessEmbed(
+                description=f"The temporary FA contract for {player.mention} has been expired."
+            ),
+            ephemeral=True,
+        )
 
     @_transactions.command(
         name="sublist",
@@ -796,9 +862,19 @@ class TransactionMixIn(RSCMixIn):
         self, transaction: TransactionResponse, player=discord.Member
     ) -> PlayerTransactionUpdates:
         lp = next(
-            (x for x in transaction.player_updates if x.player.player.discord_id == player.id)
+            (
+                x
+                for x in transaction.player_updates
+                if x.player.player.discord_id == player.id
+            )
         )
         return lp
+
+    async def get_sub(self, member: discord.Member) -> Optional[Substitute]:
+        """Get sub from saved subsitute list"""
+        subs = await self._get_substitutes(member.guild)
+        s = next((x for x in subs if x["player_in"] == member.id), None)
+        return s
 
     # API
 
@@ -904,6 +980,24 @@ class TransactionMixIn(RSCMixIn):
             except ApiException as exc:
                 raise RscException(response=exc)
 
+    async def expire_sub(
+        self,
+        guild: discord.Guild,
+        player: discord.Member,
+        executor: discord.Member,
+    ) -> LeaguePlayer:
+        """Sub a player in for another player"""
+        async with ApiClient(self._api_conf[guild.id]) as client:
+            api = TransactionsApi(client)
+            data = ExpireAPlayerSub(
+                league=self._league[guild.id], player=player.id, executor=executor.id
+            )
+            log.debug(f"Expire Sub Data: {data}")
+            try:
+                return await api.transactions_expire_create(data)
+            except ApiException as exc:
+                raise RscException(response=exc)
+
     # Config
 
     async def _trans_role(self, guild: discord.Guild) -> Optional[discord.Role]:
@@ -959,6 +1053,12 @@ class TransactionMixIn(RSCMixIn):
             enabled
         )
 
+    async def _trans_dms_enabled(self, guild: discord.Guild) -> bool:
+        return await self.config.custom("Transactions", guild.id).TransDMs()
+
+    async def _set_trans_dm(self, guild: discord.Guild, enabled: bool):
+        await self.config.custom("Transactions", guild.id).TransDMs.set(enabled)
+
     async def _get_substitutes(self, guild: discord.Guild) -> List[Substitute]:
         return await self.config.custom("Transactions", guild.id).Substitutes()
 
@@ -966,7 +1066,11 @@ class TransactionMixIn(RSCMixIn):
         await self.config.custom("Transactions", guild.id).Substitutes.set(subs)
 
     async def _add_substitute(self, guild: discord.Guild, sub: Substitute):
-        await self.config.custom("Transactions", guild.id).Substitutes().append(sub)
+        s = await self.config.custom("Transactions", guild.id).Substitutes()
+        s.append(sub)
+        await self._set_substitutes(guild, s)
 
     async def _rm_substitute(self, guild: discord.Guild, sub: Substitute):
-        await self.config.custom("Transactions", guild.id).Substitutes().remove(sub)
+        s = await self.config.custom("Transactions", guild.id).Substitutes()
+        s.remove(sub)
+        await self._set_substitutes(guild, s)

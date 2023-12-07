@@ -11,7 +11,7 @@ from rscapi.models.player import Player
 from rscapi.models.match import Match
 
 from rsc.abc import RSCMixIn
-from rsc.enums import Status
+from rsc.enums import Status, SubStatus
 from rsc.embeds import ErrorEmbed, BlueEmbed
 from rsc.franchises import FranchiseMixIn
 from rsc.tiers import TierMixIn
@@ -22,7 +22,7 @@ from rsc.utils.utils import (
     tier_color_by_name,
 )
 
-from typing import Optional, List, Dict, Tuple
+from typing import Optional, List, Dict, Tuple, Set
 
 log = logging.getLogger("red.rsc.teams")
 
@@ -85,18 +85,17 @@ class TeamMixIn(RSCMixIn):
             )
             return
 
+        await interaction.response.defer()
         log.debug(f"Fetching teams for {franchise}")
         teams = await self.teams(interaction.guild, tier=tier, franchise=franchise)
 
         if not teams:
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 content="No results found.", ephemeral=True
             )
             return
 
         embed = BlueEmbed()
-        if interaction.guild.icon:
-            embed.set_thumbnail(url=interaction.guild.icon.url)
 
         if franchise:
             # Include tier data when API is fixed
@@ -107,7 +106,14 @@ class TeamMixIn(RSCMixIn):
             embed.add_field(
                 name="Tier", value="\n".join([t.tier.name for t in teams]), inline=True
             )
-            await interaction.response.send_message(embed=embed)
+
+            flogo = await self.franchise_logo(interaction.guild, teams[0].franchise.id)
+            if flogo:
+                embed.set_thumbnail(url=flogo)
+            elif interaction.guild.icon:
+                embed.set_thumbnail(url=interaction.guild.icon.url)
+
+            await interaction.followup.send(embed=embed)
         elif tier:
             # Sort by Team Name
             embed.title = f"{tier} Teams"
@@ -119,7 +125,10 @@ class TeamMixIn(RSCMixIn):
                 value="\n".join([t.franchise for t in teams]),
                 inline=True,
             )
-            await interaction.response.send_message(embed=embed)
+
+            if interaction.guild.icon:
+                embed.set_thumbnail(url=interaction.guild.icon.url)
+            await interaction.followup.send(embed=embed)
 
     @app_commands.command(name="roster", description="Get roster for a team")
     @app_commands.autocomplete(team=teams_autocomplete)
@@ -131,68 +140,80 @@ class TeamMixIn(RSCMixIn):
         team: str,
     ):
         """Get a roster for a team"""
+        await interaction.response.defer()
+        players = await self.players(interaction.guild, team_name=team)
+
         # Verify team exists and get data
-        teams: List[TeamList] = await self.teams(interaction.guild, name=team)
-        if not teams:
-            await interaction.response.send_message(
+        if not players:
+            await interaction.followup.send(
                 content=f"No results found for **{team}**.", ephemeral=True
             )
             return
-        elif len(teams) > 1:
-            names = ", ".join([t.name for t in teams])
-            await interaction.response.send_message(
-                content=f"Found multiple results for team name: **{names}**",
-                ephemeral=True,
-            )
-            return
 
-        # Fetch roster information
-        roster = await self.team_by_id(interaction.guild, teams[0].id)
+        # Check if we got results for other teams
+        for p in players:
+            if p.team.name != team:
+                teams_found: Set[str] = {p.team.name for p in players}
+                names = ", ".join(list(teams_found))
+                await interaction.followup.send(
+                    content=f"Found multiple results for team name.\n\n **{names}**",
+                    ephemeral=True,
+                )
+                return
 
-        tier_color = await tier_color_by_name(interaction.guild, roster.tier)
+        gm_id = players[0].team.franchise.gm.discord_id
+        gm_name = players[0].team.franchise.gm.rsc_name
+        franchise = players[0].team.franchise.name
 
-        # Fetch franchise info
-        franchise_info = await self.franchises(interaction.guild, name=roster.franchise)
-
-        # API has some malformed data
-        if not franchise_info:
-            log.error(f"Unable to fetch franchise info for **{roster.franchise}**")
-            await interaction.response.send_message(
-                embed=ErrorEmbed(
-                    description="Unable to fetch franchise info for **{roster.franchise}**"
-                ),
-                ephemeral=True,
-            )
-            return
-
-        # Get GM discord id
-        gm_id = None
-        if franchise_info[0].gm:
-            gm_id = franchise_info[0].gm.discord_id
-
-        players = []
-        for p in roster.players:
-            m = interaction.guild.get_member(p.discord_id)
-            name = m.display_name if m else p.name
-            if p.captain and p.discord_id == gm_id:
-                players.append(f"{name} (GM|C)")
+        roster = []
+        subbed = []
+        ir = []
+        for p in players:
+            m = interaction.guild.get_member(p.player.discord_id)
+            name = m.display_name if m else p.player.name
+            if p.status == Status.IR:
+                ir.append(f"{name}")
+            elif p.sub_status == SubStatus.OUT:
+                subbed.append(f"{name}")
+            elif p.captain and p.player.discord_id == gm_id:
+                roster.insert(0, f"{name} (GM|C)")
             elif p.captain:
-                players.append(f"{name} (C)")
-            elif p.discord_id == gm_id:
-                players.append(f"{name} (GM)")
+                roster.insert(0, f"{name} (C)")
+            elif p.player.discord_id == gm_id:
+                roster.insert(0, f"{name} (GM)")
+            elif p.sub_status == SubStatus.IN:
+                roster.append(f"{name} (Sub)")
             else:
-                players.append(name)
+                roster.append(name)
 
-        player_str = "\n".join(players)
-
-        # Team API endpoint is currently missing IR status. Need to add eventually.
+        roster_str = "\n".join(roster)
+        tier_color = await tier_color_by_name(interaction.guild, players[0].tier.name)
 
         embed = discord.Embed(
-            title=f"{team} ({roster.franchise} - {roster.tier})",
-            description=f"```\n{player_str}\n```",
+            title=f"{team} - {franchise} ({gm_name}) - {players[0].tier.name}",
+            description=f"```\n{roster_str}\n```",
             color=tier_color,
         )
-        await interaction.response.send_message(embed=embed)
+
+        if subbed:
+            sub_str = "\n".join(subbed)
+            embed.add_field(
+                name="Subbed Out", value=f"```\n{sub_str}\n```", inline=True
+            )
+
+        if ir:
+            ir_str = "\n".join(ir)
+            embed.add_field(name="IR Out", value=f"```\n{ir_str}\n```", inline=True)
+
+        # Get Logo
+        flogo = await self.franchise_logo(
+            interaction.guild, players[0].team.franchise.id
+        )
+        if flogo:
+            embed.set_thumbnail(url=flogo)
+        elif interaction.guild.icon:
+            embed.set_thumbnail(url=interaction.guild.icon.url)
+        await interaction.followup.send(embed=embed)
 
     # Captains Group
 
@@ -208,9 +229,10 @@ class TeamMixIn(RSCMixIn):
         team: str,
     ):
         """Get a list of captains by search criteria"""
+        await interaction.response.defer()
         captain = await self.team_captain(interaction.guild, team)
         if not captain:
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 embed=ErrorEmbed(
                     description=f"**{team}** does not exist or a captain has not been elected."
                 ),
@@ -232,8 +254,8 @@ class TeamMixIn(RSCMixIn):
 
         desc = f"**Captain:** {cpt_fmt}\n" f"**Franchise:** {franchise_fmt}"
 
-        embed = discord.Embed(title=f"{team}", description=desc, color=tier_color)
-        await interaction.response.send_message(embed=embed)
+        embed = discord.Embed(title=f"{team} Team Captain", description=desc, color=tier_color)
+        await interaction.followup.send(embed=embed)
 
     @_captains.command(
         name="tier", description="Display captains of all teams in a tier"
@@ -241,32 +263,46 @@ class TeamMixIn(RSCMixIn):
     @app_commands.autocomplete(tier=TierMixIn.tier_autocomplete)
     async def _captains_tier(self, interaction: discord.Interaction, tier: str):
         """Get a list of captains by search criteria"""
+        await interaction.response.defer()
         captains = await self.tier_captains(interaction.guild, tier)
-        if not captains:
-            await interaction.response.send_message(
+
+        fteams = await self.teams(interaction.guild, tier=tier)
+        fteams.sort(key=lambda x: x.name)
+
+        if not fteams:
+            await interaction.followup.send(
                 embed=ErrorEmbed(
-                    description=f"**{tier}** is not a valid tier or no captains have been elected."
+                    description=f"**{tier}** is not a valid tier or no exist in it."
                 ),
                 ephemeral=True,
             )
             return
 
+        cpt_fmt: List[Tuple[str, str, str]] = []
+        for t in fteams:
+            # Match captain to team
+            captain = next((c for c in captains if c.team.name == t.name), None)
+            if captain:
+                # Fetch discord.Member
+                m = interaction.guild.get_member(captain.player.discord_id)
+                pname = m.mention if m else captain.player.name
+            else:
+                pname = "None"
+            cpt_fmt.append((pname, t.name, t.franchise.name))
+
         tier_color = await tier_color_by_name(interaction.guild, tier)
 
         embed = discord.Embed(title=f"{tier} Captains", color=tier_color)
-
-        # Convert Discord IDs to `discord.Member`
-        cpt_fmt = []
-        for c in captains:
-            m = interaction.guild.get_member(c.player.discord_id)
-            cpt_fmt.append(m.mention if m else c.player.name)
-
-        embed.add_field(name="Captain", value="\n".join(cpt_fmt), inline=True)
+        embed.add_field(name="Captain", value="\n".join([x[0] for x in cpt_fmt]), inline=True)
         embed.add_field(
-            name="Team", value="\n".join([c.team.name for c in captains]), inline=True
+            name="Team", value="\n".join([c[1] for c in cpt_fmt]), inline=True
         )
-        embed.add_field(name="Franchise", value="\n".join([c.team.franchise.name for c in captains]), inline=True)
-        await interaction.response.send_message(embed=embed)
+        embed.add_field(
+            name="Franchise",
+            value="\n".join([c[2] for c in cpt_fmt]),
+            inline=True,
+        )
+        await interaction.followup.send(embed=embed)
 
     @_captains.command(
         name="franchise", description="Display captains of all teams in a franchise"
@@ -278,9 +314,10 @@ class TeamMixIn(RSCMixIn):
         franchise: str,
     ):
         """Get a list of captains by search criteria"""
+        await interaction.response.defer()
         captains = await self.franchise_captains(interaction.guild, franchise)
         if not captains:
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 embed=ErrorEmbed(
                     description=f"**{franchise}** is not a valid franchise or no captains have been elected."
                 ),
@@ -288,11 +325,20 @@ class TeamMixIn(RSCMixIn):
             )
             return
 
-        # Convert Discord IDs to `discord.Member`
-        cpt_fmt = []
-        for c in captains:
-            m = interaction.guild.get_member(c.player.discord_id)
-            cpt_fmt.append(m.mention if m else c.player.name)
+        # Get Franchise Team names
+        fteams = await self.teams(interaction.guild, franchise=captains[0].team.franchise.name)
+
+        cpt_fmt: List[Tuple[str, str, str]] = []
+        for t in fteams:
+            # Match captain to team
+            captain = next((c for c in captains if c.tier.id == t.tier.id), None)
+            if captain:
+                # Fetch discord.Member
+                m = interaction.guild.get_member(captain.player.discord_id)
+                pname = m.mention if m else captain.player.name
+            else:
+                pname = "None"
+            cpt_fmt.append((pname, t.name, t.tier.name))
 
         frole = await franchise_role_from_name(
             interaction.guild, captains[0].team.franchise.name
@@ -307,14 +353,14 @@ class TeamMixIn(RSCMixIn):
                 f"General Manager: {gm.mention}\nFranchise: {frole.mention}"
             )
 
-        embed.add_field(name="Captain", value="\n".join(cpt_fmt), inline=True)
+        embed.add_field(name="Captain", value="\n".join([x[0] for x in cpt_fmt]), inline=True)
         embed.add_field(
-            name="Team", value="\n".join([x.team.name for x in captains]), inline=True
+            name="Team", value="\n".join([x[1] for x in cpt_fmt]), inline=True
         )
         embed.add_field(
-            name="Tier", value="\n".join([x.tier.name for x in captains]), inline=True
+            name="Tier", value="\n".join([x[2] for x in cpt_fmt]), inline=True
         )
-        await interaction.response.send_message(embed=embed)
+        await interaction.followup.send(embed=embed)
 
     # Functions
 
@@ -387,7 +433,6 @@ class TeamMixIn(RSCMixIn):
                 tier=tier,
                 league=self._league[guild.id],
             )
-
             # Populate cache
             if teams:
                 if self._team_cache.get(guild.id):

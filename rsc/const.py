@@ -12,6 +12,7 @@ PERM_FA_ROLE = "PermFA"
 FREE_AGENT_ROLE = "Free Agent"
 DEV_LEAGUE_ROLE = "Dev League Interest"
 SUBBED_OUT_ROLE = "Subbed Out"
+FORMER_GM_ROLE = "Former GM"
 
 # Emoji
 TROPHY_EMOJI = "\U0001F3C6"  # :trophy:

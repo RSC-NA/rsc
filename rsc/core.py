@@ -77,6 +77,7 @@ class RSC(
         self._api_conf: Dict[int, Configuration] = {}
         # Cache the league associated with each guild
         self._league: Dict[int, int] = {}
+
         super().__init__()
         log.info("RSC Bot has been started.")
 

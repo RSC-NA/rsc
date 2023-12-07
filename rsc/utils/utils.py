@@ -10,7 +10,15 @@ from redbot.core import app_commands, checks
 from rscapi.models.league_player import LeaguePlayer
 
 from rsc.transformers import MemberTransformer
-from rsc.const import GM_ROLE, CAPTAIN_ROLE, FREE_AGENT_ROLE, SUBBED_OUT_ROLE
+from rsc.const import (
+    GM_ROLE,
+    CAPTAIN_ROLE,
+    FREE_AGENT_ROLE,
+    SUBBED_OUT_ROLE,
+    FORMER_GM_ROLE,
+    TROPHY_EMOJI,
+    STAR_EMOJI,
+)
 from rsc.abc import RSCMixIn
 from rsc.embeds import ErrorEmbed, SuccessEmbed, ExceptionErrorEmbed
 
@@ -19,7 +27,8 @@ from typing import Optional, List, overload
 
 log = logging.getLogger("red.rsc.utils")
 
-# FRANCHISE_ROLE_REGEX = re.compile(r"^[\w\s]+\(\w+\)$")
+FRANCHISE_ROLE_REGEX = re.compile(r"^\w[\w\s]+?\(\w[\w\s]+?\)$")
+
 
 async def not_implemented(interaction: discord.Interaction):
     await interaction.response.send_message("**Not Implemented**", ephemeral=True)
@@ -61,6 +70,16 @@ async def get_subbed_out_role(guild: discord.Guild) -> discord.Role:
     return r
 
 
+async def get_former_gm_role(guild: discord.Guild) -> discord.Role:
+    r = discord.utils.get(guild.roles, name=FORMER_GM_ROLE)
+    if not r:
+        log.error(f"[{guild.name}] Expected role does not exist: {FORMER_GM_ROLE}")
+        raise ValueError(
+            f"[{guild.name}] Expected role does not exist: {FORMER_GM_ROLE}"
+        )
+    return r
+
+
 async def remove_prefix(member: discord.Member) -> str:
     """Remove team prefix from guild members display name"""
     result = member.display_name.split(" | ")
@@ -72,6 +91,9 @@ async def remove_prefix(member: discord.Member) -> str:
 
     raise ValueError(f"Unable to remove prefix from {member.display_name}")
 
+async def give_fa_prefix(member: discord.Member): 
+    new_nick = f"FA | {await remove_prefix(member)}"
+    await member.edit(nick=new_nick)
 
 async def has_gm_role(member: discord.Member) -> bool:
     """Check if user has General Manager role in guild"""
@@ -150,7 +172,7 @@ async def is_guild_interaction(interaction: discord.Interaction) -> bool:
     return False
 
 
-async def update_prefix_for_role(role: discord.Role, prefix: str):
+async def update_prefix_for_franchise_role(role: discord.Role, prefix: str):
     """Update the prefix for all role members"""
     for m in role.members:
         name = await remove_prefix(m)
@@ -175,6 +197,21 @@ async def get_tier_fa_role(guild: discord.Guild, name: str) -> discord.Role:
             f"[{guild.name}] Expected tier FA role does not exist: {name}FA"
         )
     return r
+
+async def franchise_role_from_disord_member(member: discord.Member) -> Optional[discord.Role]:
+    for r in member.roles:
+        if FRANCHISE_ROLE_REGEX.match(r.name):
+            return r
+    return None
+
+async def emoji_from_prefix(guild: discord.Guild, prefix: str) -> Optional[discord.Emoji]:
+    return discord.utils.get(guild.emojis, name=prefix)
+
+async def trophy_count(member: discord.Member) -> int:
+    return member.display_name.count(TROPHY_EMOJI)
+
+async def star_count(member: discord.Member) -> int:
+    return member.display_name.count(STAR_EMOJI)
 
 
 class UtilsMixIn(RSCMixIn):
