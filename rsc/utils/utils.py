@@ -1,5 +1,6 @@
 import discord
 import logging
+from pathlib import Path
 from discord.ext.commands import Greedy
 from discord.app_commands import Transformer, Transform, TransformerError
 from discord.ext.commands import MemberConverter
@@ -18,9 +19,13 @@ from rsc.const import (
     FORMER_GM_ROLE,
     TROPHY_EMOJI,
     STAR_EMOJI,
+    DEV_LEAGUE_EMOJI,
 )
 from rsc.abc import RSCMixIn
 from rsc.embeds import ErrorEmbed, SuccessEmbed, ExceptionErrorEmbed
+from rsc.enums import BulkRoleAction
+from rsc.types import Accolades
+from rsc.utils.views import BulkRoleConfirmView
 
 from typing import Optional, List, overload
 
@@ -83,17 +88,28 @@ async def get_former_gm_role(guild: discord.Guild) -> discord.Role:
 async def remove_prefix(member: discord.Member) -> str:
     """Remove team prefix from guild members display name"""
     result = member.display_name.split(" | ")
-
     if len(result) == 2:
-        return result[1]
+        return result[1].strip()
     elif len(result) == 1:
-        return result[0]  # Assume no prefix for some reason
-
+        return result[0].strip()  # No prefix found 
     raise ValueError(f"Unable to remove prefix from {member.display_name}")
 
-async def give_fa_prefix(member: discord.Member): 
+
+async def get_prefix(member: discord.Member) -> Optional[str]:
+    """Get team prefix from guild members display name"""
+    result = member.display_name.split(" | ")
+
+    if len(result) == 2:
+        return result[0].strip()
+    elif len(result) == 1:
+        return None # No prefix found
+    raise ValueError(f"Error parsing prefix from {member.display_name}")
+
+
+async def give_fa_prefix(member: discord.Member):
     new_nick = f"FA | {await remove_prefix(member)}"
     await member.edit(nick=new_nick)
+
 
 async def has_gm_role(member: discord.Member) -> bool:
     """Check if user has General Manager role in guild"""
@@ -140,6 +156,18 @@ async def franchise_role_from_name(
     for role in guild.roles:
         if role.name.lower().startswith(franchise_name.lower()):
             return role
+    return None
+
+
+async def fa_img_from_tier(tier: str, tiny: bool = False) -> Optional[Path]:
+    root = Path(__file__).parent.parent
+    if tiny:
+        img_path = root / f"resources/FA/64x64/{tier}FA_64x64.png"
+    else:
+        img_path = root / f"resources/FA/{tier}FA.png"
+
+    if img_path.is_file():
+        return img_path
     return None
 
 
@@ -198,20 +226,40 @@ async def get_tier_fa_role(guild: discord.Guild, name: str) -> discord.Role:
         )
     return r
 
-async def franchise_role_from_disord_member(member: discord.Member) -> Optional[discord.Role]:
+
+async def franchise_role_from_disord_member(
+    member: discord.Member,
+) -> Optional[discord.Role]:
     for r in member.roles:
         if FRANCHISE_ROLE_REGEX.match(r.name):
             return r
     return None
 
-async def emoji_from_prefix(guild: discord.Guild, prefix: str) -> Optional[discord.Emoji]:
+
+async def emoji_from_prefix(
+    guild: discord.Guild, prefix: str
+) -> Optional[discord.Emoji]:
     return discord.utils.get(guild.emojis, name=prefix)
+
 
 async def trophy_count(member: discord.Member) -> int:
     return member.display_name.count(TROPHY_EMOJI)
 
+
 async def star_count(member: discord.Member) -> int:
     return member.display_name.count(STAR_EMOJI)
+
+
+async def devleague_count(member: discord.Member) -> int:
+    return member.display_name.count(DEV_LEAGUE_EMOJI)
+
+
+async def member_accolades(member: discord.Member) -> Accolades:
+    return Accolades(
+        trophy=await trophy_count(member),
+        star=await star_count(member),
+        devleague=await devleague_count(member),
+    )
 
 
 class UtilsMixIn(RSCMixIn):
@@ -219,6 +267,7 @@ class UtilsMixIn(RSCMixIn):
         name="getid",
         description='Get the discord ID of a user. (Return: "name:username:id")',
     )
+    @app_commands.describe(member="Player discord name")
     @app_commands.guild_only()
     async def _getid(self, interaction: discord.Interaction, member: discord.Member):
         """Get the discord ID of a user"""
@@ -268,7 +317,7 @@ class UtilsMixIn(RSCMixIn):
                 await interaction.response.send_message(f"```msg```")
         else:
             embed = discord.Embed(
-                title="Matching Players",
+                title="Matching Members",
                 description=desc,
                 color=discord.Color.blue(),
             )
@@ -288,6 +337,7 @@ class UtilsMixIn(RSCMixIn):
     @app_commands.command(
         name="addrole", description="Add a role to the specified user"
     )
+    @app_commands.describe(role="Discord role to add", member="Player discord name")
     @app_commands.checks.has_permissions(manage_roles=True)
     @app_commands.checks.bot_has_permissions(manage_roles=True)
     @app_commands.guild_only()
@@ -315,10 +365,12 @@ class UtilsMixIn(RSCMixIn):
             )
 
     @app_commands.command(
-        name="bulkaddrole", description="Add a role a list of user(s)"
+        name="bulkaddrole", description="Add a role a list of user(s) or another role"
     )
     @app_commands.describe(
-        members='Space delimited discord IDs to apply role. (Example: "138778232802508801 352600418062303244 207266416355835904")'
+        role="Discord role to add",
+        members='Space delimited discord IDs to apply role. (Example: "138778232802508801 352600418062303244 207266416355835904")',
+        to_role="Add the role to everyone in this role.",
     )
     @app_commands.checks.has_permissions(manage_roles=True)
     @app_commands.checks.bot_has_permissions(manage_roles=True)
@@ -327,46 +379,49 @@ class UtilsMixIn(RSCMixIn):
         self,
         interaction: discord.Interaction,
         role: discord.Role,
-        members: Transform[List[discord.Member], MemberTransformer],
+        members: Optional[Transform[List[discord.Member], MemberTransformer]],
+        to_role: Optional[discord.Role],
     ):
-        log.debug(members)
-
-        # Avoid discord field limits (1024 max)
-        if len(members) >= 1024:
+        if not (members or to_role):
             await interaction.response.send_message(
-                content=f"Unable to process more than 1024 users at a time. (Total: {len(members)})",
+                "You must specify one either members or destination role.",
                 ephemeral=True,
             )
             return
 
-        success: List[discord.Member] = []
-        failed: List[discord.Member] = []
-        for m in members:
+        mlist = members if members else to_role.members
+        count = len(mlist)
+        bulk_view = BulkRoleConfirmView(
+            interaction, action=BulkRoleAction.ADD, role=role, count=count
+        )
+        await bulk_view.prompt()
+        await bulk_view.wait()
+
+        if not bulk_view.result:
+            return
+
+        failed = []
+        for m in mlist:
             try:
                 await m.add_roles(role)
-                success.append(m)
-            except:
+            except discord.Forbidden as exc:
                 failed.append(m)
 
-        embed = discord.Embed(
-            title="Bulk Role Add",
-            description=f"Added {role.mention} to the following user(s).",
-            color=discord.Color.green(),
+        embed = SuccessEmbed(
+            description=f"Applied {role.mention} to **{count-len(failed)}/{count}** users(s)."
         )
-        embed.add_field(
-            name="Succeeded",
-            value="\n".join(f"{s.mention}" for s in success),
-            inline=True,
-        )
-        embed.add_field(
-            name="Failed", value="\n".join(f"{f.mention}" for f in failed), inline=True
-        )
-        embed.set_footer(text=f"Applied role to {len(success)}/{len(members)} members.")
-        await interaction.response.send_message(embed=embed, ephemeral=True)
+        if failed:
+            embed.add_field(
+                name="Failed",
+                value="\n".join([f.mention for f in failed]),
+                inline=False,
+            )
+        await interaction.edit_original_response(embed=embed, view=None)
 
     @app_commands.command(
         name="removerole", description="Remove a role to the specified user"
     )
+    @app_commands.describe(role="Discord role to remove", member="Player discord name")
     @app_commands.checks.has_permissions(manage_roles=True)
     @app_commands.checks.bot_has_permissions(manage_roles=True)
     @app_commands.guild_only()
@@ -397,7 +452,8 @@ class UtilsMixIn(RSCMixIn):
         name="bulkremoverole", description="Remove a role a list of user(s)"
     )
     @app_commands.describe(
-        members='Space delimited discord IDs to remove role. (Example: "138778232802508801 352600418062303244 207266416355835904")'
+        role="Discord role to remove",
+        members='Space delimited discord IDs to remove role. (Example: "138778232802508801 352600418062303244 207266416355835904")',
     )
     @app_commands.checks.has_permissions(manage_roles=True)
     @app_commands.checks.bot_has_permissions(manage_roles=True)
@@ -406,39 +462,35 @@ class UtilsMixIn(RSCMixIn):
         self,
         interaction: discord.Interaction,
         role: discord.Role,
-        members: Transform[List[discord.Member], MemberTransformer],
+        members: Optional[Transform[List[discord.Member], MemberTransformer]],
     ):
-        # Avoid discord field limits (1024 max)
-        if len(members) >= 1024:
-            await interaction.response.send_message(
-                content=f"Unable to process more than 1024 users at a time. (Total: {len(members)})",
-                ephemeral=True,
-            )
+        count = len(members) if members else len(role.members)
+
+        bulk_view = BulkRoleConfirmView(
+            interaction, action=BulkRoleAction.REMOVE, role=role, count=count
+        )
+        await bulk_view.prompt()
+        await bulk_view.wait()
+
+        if not bulk_view.result:
             return
 
-        success: List[discord.Member] = []
-        failed: List[discord.Member] = []
-        for m in members:
+        mlist = members if members else role.members
+
+        failed = []
+        for m in mlist:
             try:
                 await m.remove_roles(role)
-                success.append(m)
-            except:
+            except discord.Forbidden as exc:
                 failed.append(m)
 
-        embed = discord.Embed(
-            title="Bulk Role Removal",
-            description=f"Removed {role.mention} to the following user(s).",
-            color=discord.Color.green(),
+        embed = SuccessEmbed(
+            description=f"Removed {role.mention} from **{count-len(failed)}/{count}** users(s)."
         )
-        embed.add_field(
-            name="Succeeded",
-            value="\n".join(f"{s.mention}" for s in success),
-            inline=True,
-        )
-        embed.add_field(
-            name="Failed", value="\n".join(f"{f.mention}" for f in failed), inline=True
-        )
-        embed.set_footer(
-            text=f"Removed role from {len(success)}/{len(members)} members."
-        )
-        await interaction.response.send_message(embed=embed, ephemeral=True)
+        if failed:
+            embed.add_field(
+                name="Failed",
+                value="\n".join([f.mention for f in failed]),
+                inline=False,
+            )
+        await interaction.edit_original_response(embed=embed, view=None)

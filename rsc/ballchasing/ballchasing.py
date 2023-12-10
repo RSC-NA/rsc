@@ -60,7 +60,7 @@ class BallchasingMixIn(RSCMixIn):
     # Settings
     _ballchasing: app_commands.Group = app_commands.Group(
         name="ballchasing",
-        description="Ballchasing Configuration",
+        description="Ballchasing commands and configuration",
         guild_only=True,
     )
 

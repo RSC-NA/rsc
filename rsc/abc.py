@@ -63,6 +63,10 @@ class RSCMixIn(ABC):
     ) -> Optional[Franchise]:
         ...
 
+    @abstractmethod
+    async def franchise_logo(self, guild: discord.Guild, id: int) -> Optional[str]:
+        ...
+
     # League
 
     @abstractmethod

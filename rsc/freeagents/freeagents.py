@@ -92,13 +92,14 @@ class FreeAgentMixIn(RSCMixIn):
     @app_commands.command(
         name="freeagents", description="List free agents in a specified tier"
     )
+    @app_commands.describe(tier="Free agent tier (Ex: \"Elite\")")
     @app_commands.autocomplete(tier=TierMixIn.tier_autocomplete)
     @app_commands.guild_only()
     async def _free_agents(self, interaction: discord.Interaction, tier: str):
+        await interaction.response.defer()
         if not await self.is_valid_tier(interaction.guild, tier):
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 embed=ErrorEmbed(description=f"**{tier}** is not a valid tier."),
-                ephemeral=True,
             )
             return
         free_agents = await self.free_agents(interaction.guild, tier)
@@ -125,7 +126,7 @@ class FreeAgentMixIn(RSCMixIn):
             color=tier_role.color if tier_role else discord.Color.blue(),
         )
 
-        await interaction.response.send_message(embed=embed)
+        await interaction.followup.send(embed=embed)
 
     @app_commands.command(
         name="checkin",
@@ -232,6 +233,7 @@ class FreeAgentMixIn(RSCMixIn):
         name="availability",
         description="Get list of available free agents for specified tier",
     )
+    @app_commands.describe(tier="Free agent tier (Ex: \"Elite\")")
     @app_commands.autocomplete(tier=TierMixIn.tier_autocomplete)
     @app_commands.guild_only()
     async def _fa_availability(self, interaction: discord.Interaction, tier: str):
@@ -268,6 +270,7 @@ class FreeAgentMixIn(RSCMixIn):
         name="clearavailability",
         description="Clear free agent availability for a specified tier",
     )
+    @app_commands.describe(tier="Free agent tier (Ex: \"Elite\")")
     @app_commands.autocomplete(tier=TierMixIn.tier_autocomplete)
     @app_commands.checks.has_permissions(manage_guild=True)
     @app_commands.guild_only()

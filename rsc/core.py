@@ -2,6 +2,7 @@ import discord
 import logging
 import asyncio
 import validators
+import itertools
 from aiohttp import ClientConnectionError
 
 import pytz
@@ -23,9 +24,11 @@ from rsc.freeagents import FreeAgentMixIn
 from rsc.franchises import FranchiseMixIn
 from rsc.matches import MatchMixIn
 from rsc.members import MemberMixIn
+from rsc.moderator import ModeratorMixIn, ThreadMixIn
 from rsc.leagues import LeagueMixIn
 from rsc.teams import TeamMixIn
 from rsc.tiers import TierMixIn
+from rsc.trackers import TrackerMixIn
 from rsc.transactions import TransactionMixIn
 from rsc.utils import UtilsMixIn
 from rsc.welcome import WelcomeMixIn
@@ -34,9 +37,9 @@ from rsc.welcome import WelcomeMixIn
 from rsc.views import LeagueSelectView, RSCSetupModal
 
 # Util
-from rsc.embeds import SuccessEmbed, ErrorEmbed
+from rsc.embeds import SuccessEmbed, ErrorEmbed, BlueEmbed
 
-from typing import Optional, Dict, List
+from typing import Optional, Dict, List, Union
 
 log = logging.getLogger("red.rsc.core")
 
@@ -57,8 +60,11 @@ class RSC(
     FreeAgentMixIn,
     MemberMixIn,
     MatchMixIn,
+    ModeratorMixIn,
     TeamMixIn,
     TierMixIn,
+    ThreadMixIn,
+    TrackerMixIn,
     TransactionMixIn,
     UtilsMixIn,
     WelcomeMixIn,
@@ -140,6 +146,32 @@ class RSC(
         await asyncio.create_task(self.setup())
 
     # Autocomplete
+
+    async def command_autocomplete(
+        self, interaction: discord.Interaction, current: str
+    ) -> List[app_commands.Choice[str]]:
+        cmds = self.walk_app_commands()
+        if not cmds:
+            return []
+
+        if not current:
+            return [app_commands.Choice(name=c.qualified_name, value=c.qualified_name) for c in itertools.islice(cmds, 25)]
+
+        choices = []
+        for c in cmds:
+            if (
+                c.default_permissions
+                and (interaction.user.guild_permissions & c.default_permissions).value
+                == 0
+            ):
+                continue
+            elif current.lower() in c.qualified_name.lower():
+                choices.append(
+                    app_commands.Choice(name=c.qualified_name, value=c.qualified_name)
+                )
+            if len(choices) == 25:
+                return choices
+        return choices
 
     async def timezone_autocomplete(
         self, interaction: discord.Interaction, current: str
@@ -306,8 +338,104 @@ class RSC(
             f"Logging level is now **{level}**", ephemeral=True
         )
 
+    # Non-Group Commands
 
+    @app_commands.command(
+        name="help", description="Display a help for RSC Bot or a specific command."
+    )
+    @app_commands.describe(command="Display help for a specific command.")
+    @app_commands.autocomplete(command=command_autocomplete)
+    @app_commands.guild_only()
+    async def _help_cmd(self, interaction: discord.Interaction, command: Optional[str]):
+        cmds = self.get_app_commands()
+        if not command:
+            embeds = []
+            groups: List[discord.app_commands.Group] = []
+            cmd_list: List[discord.app_commands.Command] = []
+            for cmd in cmds:
+                if (
+                    cmd.default_permissions
+                    and (
+                        interaction.user.guild_permissions & cmd.default_permissions
+                    ).value
+                    == 0
+                ):
+                    log.debug(f"Insufficient Perms for help: {cmd.name}")
+                    continue
 
+                # Custom role permission validation
+                if cmd.name == "ballchasing":
+                    stats_role = await self._get_bc_manager_role(interaction.guild)
+                    if (
+                        stats_role and stats_role in interaction.user.roles
+                    ) or interaction.user.guild_permissions.manage_guild:
+                        groups.append(cmd)
+                    continue
+
+                if isinstance(cmd, discord.app_commands.Group):
+                    groups.append(cmd)
+                else:
+                    cmd_list.append(cmd)
+
+            groups.sort(key=lambda x: x.name)
+            cmd_list.sort(key=lambda x: x.name)
+
+            # Build Group Embeds
+            group_desc = "List of group commands available to you.\n\n"
+            gembed = BlueEmbed(title=f"RSC Command Groups")
+            for g in groups:
+                group_desc += f"**/{g.name}** - {g.description}\n"
+            gembed.description = group_desc
+            embeds.append(gembed)
+
+            # Build Non-Group Command Embeds
+            cmd_desc = "List of individual commands available to you.\n\n"
+            cmdembed = BlueEmbed(title="RSC Non-Group Commands")
+            for c in cmd_list:
+                cmd_desc += f"**/{c.name}** - {c.description}\n"
+            cmdembed.description = cmd_desc
+
+            if interaction.guild.icon:
+                gembed.set_thumbnail(url=interaction.guild.icon.url)
+                cmdembed.set_thumbnail(url=interaction.guild.icon.url)
+            embeds.append(cmdembed)
+
+            await interaction.response.send_message(embeds=embeds, ephemeral=True)
+        else:
+            cmd = None
+            for c in self.walk_app_commands():
+                if c.qualified_name == command:
+                    log.debug(f"Qualified Name: {c.qualified_name}")
+                    cmd = c
+
+            if not cmd:
+                await interaction.response.send_message(
+                    f"**{command}** is not a valid command name.", ephemeral=True
+                )
+                return
+
+            desc = ""
+            embed = BlueEmbed()
+            if isinstance(cmd, discord.app_commands.Group):
+                embed.title = f"{cmd.qualified_name.title()} Command Group Help"
+                for c in cmd.walk_commands():
+                    desc += f"**/{c.qualified_name}** - {c.description}\n"
+            else:
+                embed.title = f"{cmd.qualified_name.title()} Command Help"
+                desc = (
+                    f"**Command:** /{cmd.qualified_name}\n"
+                    f"**Description:** {cmd.description}\n"
+                )
+                if cmd.parameters:
+                    desc += "\n__**Parameters**__\n\n"
+                    for p in cmd.parameters:
+                        desc += f"**{p.name}** - {p.description}\n"
+            embed.description = desc
+
+            if interaction.guild.icon:
+                embed.set_thumbnail(url=interaction.guild.icon.url)
+
+            await interaction.response.send_message(embed=embed)
 
     # Functions
 
@@ -346,4 +474,3 @@ class RSC(
     async def _get_timezone(self, guild: discord.Guild) -> str:
         """Default: UTC"""
         return await self.config.guild(guild).TimeZone()
-

@@ -101,6 +101,7 @@ class MemberMixIn(RSCMixIn):
     @app_commands.command(
         name="playerinfo", description="Display league information about a player"
     )
+    @app_commands.describe(player="Player discord name to query")
     async def _playerinfo(
         self, interaction: discord.Interaction, player: discord.Member
     ):
@@ -135,7 +136,7 @@ class MemberMixIn(RSCMixIn):
         frole = await franchise_role_from_name(interaction.guild, p.team.franchise.name)
         f_fmt = frole.mention if frole else p.team.franchise.name
 
-        # embed.add_field(name="\u200B", value="\u200B") # Line Break
+        embed.add_field(name="", value="", inline=False) # Line Break
         embed.add_field(name="Team", value=p.team.name, inline=True)
         embed.add_field(name="Franchise", value=f_fmt, inline=True)
         await interaction.response.send_message(embed=embed, ephemeral=True)
@@ -143,8 +144,10 @@ class MemberMixIn(RSCMixIn):
     @app_commands.command(
         name="waivers", description="Display players currently on waivers"
     )
+    @app_commands.describe(tier="Waiver tier name (Ex: \"Elite\")")
     @app_commands.autocomplete(tier=TierMixIn.tier_autocomplete)
     async def _waivers(self, interaction: discord.Interaction, tier: str):
+        await interaction.response.defer()
         players = await self.players(
             interaction.guild, status=Status.WAIVERS, tier_name=tier
         )
@@ -152,16 +155,16 @@ class MemberMixIn(RSCMixIn):
         tier_color = await tier_color_by_name(interaction.guild, tier)
         embed = discord.Embed(
             title="Waiver List",
-            description="Players on waivers in **{tier}**",
+            description=f"Players on waivers in **{tier}**",
             color=tier_color,
         )
 
         if not players:
             embed.description = f"No players on waiver list for **{tier}**"
-            await interaction.response.send_message(embed=embed)
+            await interaction.followup.send(embed=embed)
             return
 
-        players.sort(key=lambda x: x.player.name)
+        players.sort(key=lambda x: x.current_mmr, reverse=True)
 
         members = []
         for p in players:
@@ -172,11 +175,11 @@ class MemberMixIn(RSCMixIn):
         embed.add_field(name="Player", value="\n".join(members), inline=True)
         embed.add_field(
             name="Current MMR",
-            value="\n".join([str(p.current_mmr for p in players)]),
+            value="\n".join([str(p.current_mmr) for p in players]),
             inline=True,
         )
 
-        await interaction.response.send_message(embed=embed)
+        await interaction.followup.send(embed=embed)
 
     # Helper Functions
 

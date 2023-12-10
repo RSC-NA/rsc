@@ -71,12 +71,12 @@ class CombineMixIn(RSCMixIn):
 
     _combines = app_commands.Group(
         name="combines",
-        description="Combine Configuration",
+        description="Combine commands and configuration",
         guild_only=True,
         default_permissions=discord.Permissions(manage_guild=True),
     )
 
-    @_combines.command(name="settings", description="Display settings for combines")
+    @_combines.command(name="settings", description="Display combine settings")
     async def _combines_settings(self, interaction: discord.Interaction):
         active = await self._get_combines_active(interaction.guild)
         capacity = await self._get_room_capacity(interaction.guild)
@@ -111,8 +111,9 @@ class CombineMixIn(RSCMixIn):
 
     @_combines.command(
         name="capacity",
-        description="Define the combine room max capacity",
+        description="Define the combine room max capacity (Default: 10)",
     )
+    @app_commands.describe(capacity="Max number of players in combine channel")
     async def _combines_capacity(self, interaction: discord.Interaction, capacity: int):
         await self._save_room_capacity(interaction.guild, capacity)
         await interaction.response.send_message(

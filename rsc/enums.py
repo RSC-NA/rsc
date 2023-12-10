@@ -1,5 +1,13 @@
 from enum import StrEnum, IntEnum
 
+class ModActionType(StrEnum):
+     MUTE = "MUTE"
+     KICK = "KICK"
+     BAN = "BAN"
+
+class BulkRoleAction(StrEnum):
+    ADD = "add"
+    REMOVE = "remove"
 
 class LogLevel(StrEnum):
     CRITICAL = "CRITICAL"
@@ -84,6 +92,7 @@ class Status(StrEnum):
     PERM_FA = "PF"  # Permanent Free Agent
     WAIVER_CLAIM = ("WC",)  # Waiver Claim
 
+    @property
     def full_name(self) -> str:
         match self:
             case Status.DRAFT_ELIGIBLE:
@@ -134,6 +143,10 @@ class TransactionType(StrEnum):
     AGM_IR = "AIR"  # AGM Inactive Reserve
     DRAFT = "DFT"  # Draft Player
 
+    @property
+    def full_name(self) -> str:
+        return self.name.replace("_", " ").title()
+
 
 class MMRPullType(StrEnum):
     SEASON = "SN"  # Season
@@ -146,12 +159,18 @@ class TrackerLinksStatus(StrEnum):
     PULLED = "PLD"  # Pulled
     FAILED = "FLD"  # Failed
 
+    @property
+    def full_name(self) -> str:
+        return self.name.capitalize()
 
 class MatchTeamEnum(StrEnum):
     HOME = "HME"  # Home
     AWAY = "AWY"  # Away
     ALL = "ALL"  # All Games
 
+    @property
+    def full_name(self) -> str:
+        return self.name.capitalize()
 
 class SubStatus(IntEnum):
     NOT = 0  # Not subbed
@@ -163,3 +182,7 @@ class RegionPreference(StrEnum):
     EAST = ("EST",)  # US East
     WEST = ("WST",)  # US West
     EU = ("EU",)  # Europe
+
+    @property
+    def full_name(self) -> str:
+        return self.name.capitalize()

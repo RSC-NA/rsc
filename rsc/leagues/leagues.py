@@ -5,14 +5,15 @@ from pydantic import parse_obj_as
 from redbot.core import app_commands
 
 from rscapi import ApiClient, LeaguesApi, SeasonsApi, LeaguePlayersApi, Configuration
+from rscapi.exceptions import ApiException
 from rscapi.models.league import League
 from rscapi.models.league_player import LeaguePlayer
-from rscapi.models.league_players_list200_response import LeaguePlayersList200Response
 from rscapi.models.season import Season
 
 from rsc.abc import RSCMixIn
 from rsc.enums import Status
 from rsc.embeds import ErrorEmbed, BlueEmbed
+from rsc.exceptions import RscException
 
 from typing import List, Optional, Dict
 
@@ -23,7 +24,6 @@ class LeagueMixIn(RSCMixIn):
     def __init__(self):
         log.debug("Initializing LeagueMixIn")
         super().__init__()
-        # self._match_days: Dict[discord.Guild, List[str]] = []
 
     # Setup
 
@@ -117,11 +117,6 @@ class LeagueMixIn(RSCMixIn):
             api = LeaguesApi(client)
             return await api.leagues_current_season(self._league[guild.id])
 
-    # async def season_by_number(self, guild: discord.Guild) -> List[Season]:
-    #     async with ApiClient(self._api_conf[guild.id]) as client:
-    #         api = SeasonsApi(client)
-    #         return await api.seasons_league_season(1)
-
     async def players(
         self,
         guild: discord.Guild,
@@ -154,3 +149,14 @@ class LeagueMixIn(RSCMixIn):
                 offset=offset,
             )
             return players.results
+
+    async def league_player_partial_update(self, guild: discord.Guild, id: int, lp: LeaguePlayer) -> LeaguePlayer:
+        """Partial update to league player in API"""
+        async with ApiClient(self._api_conf[guild.id]) as client:
+            api = LeaguePlayersApi(client)
+            log.debug(f"[ID={id}] League Player Partial Update: {lp}")
+            try:
+                return await api.league_players_partial_update(id, lp)
+            except ApiException as exc:
+                raise RscException(response=exc)
+

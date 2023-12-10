@@ -23,7 +23,6 @@ from rsc.const import FREE_AGENT_ROLE, GM_ROLE
 from rsc.embeds import ErrorEmbed, SuccessEmbed, BlueEmbed, ApiExceptionErrorEmbed
 from rsc.exceptions import RscException
 from rsc.enums import Status
-from rsc.views import LinkButton
 from rsc.utils.utils import (
     franchise_role_from_name,
     update_prefix_for_franchise_role,
@@ -52,6 +51,12 @@ class FranchiseMixIn(RSCMixIn):
         # Return nothing if cache does not exist.
         if not self._franchise_cache.get(interaction.guild_id):
             return []
+
+        if not current:
+            return [
+                app_commands.Choice(name=f, value=f)
+                for f in self._franchise_cache[interaction.guild_id][:25]
+            ]
 
         choices = []
         for f in self._franchise_cache[interaction.guild_id]:
@@ -128,7 +133,6 @@ class FranchiseMixIn(RSCMixIn):
             return None
         return urljoin(host, logo_url)
 
-
     # API
 
     async def franchises(
@@ -179,7 +183,7 @@ class FranchiseMixIn(RSCMixIn):
         self,
         guild: discord.Guild,
         id: int,
-        logo: Union[str, bytes, PathLike],
+        logo: str | bytes | PathLike,
     ) -> Franchise:
         async with ApiClient(self._api_conf[guild.id]) as client:
             api = FranchisesApi(client)
@@ -206,7 +210,7 @@ class FranchiseMixIn(RSCMixIn):
                 prefix=prefix,
                 gm=FranchiseGM(discord_id=gm.id),
             )
-
+            log.debug(f"Create Franchise Data: {data}")
             try:
                 result = await api.franchises_create(data)
             except ApiException as exc:
@@ -246,8 +250,7 @@ class FranchiseMixIn(RSCMixIn):
             api = FranchisesApi(client)
             try:
                 data = TransferFranchise(
-                    general_manager=gm.id,
-                    league=self._league[guild.id]
+                    general_manager=gm.id, league=self._league[guild.id]
                 )
                 log.debug(f"Transfer Params: {data}")
                 return await api.franchises_transfer_franchise(id, data)
@@ -266,6 +269,6 @@ class FranchiseMixIn(RSCMixIn):
                 log.debug(f"Franchise Logo: {l}")
                 if not (l and l.logo):
                     return None
-                return urljoin(host, l)
+                return urljoin(host, l.logo)
             except ApiException as exc:
                 raise RscException(response=exc)

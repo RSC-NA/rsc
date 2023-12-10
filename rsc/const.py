@@ -17,6 +17,7 @@ FORMER_GM_ROLE = "Former GM"
 # Emoji
 TROPHY_EMOJI = "\U0001F3C6"  # :trophy:
 STAR_EMOJI = "\U00002B50"  # :star:
+DEV_LEAGUE_EMOJI = "\U0001F451" # :crown:
 
 # Links
 
@@ -24,6 +25,11 @@ BEHAVIOR_RULES_URL = (
     "https://docs.google.com/document/d/1AR241UmyNos8xflYqrzmpHE6Cy6xDcCtfn-32gdtPdI/"
 )
 
+
+# Moderation
+
+DEFAULT_MUTE_LENGTH = 30 # Default 30 minute mute
+DEFAULT_BAN_LENGTH = 30 # Default 30 minute mute
 
 # Permissions
 

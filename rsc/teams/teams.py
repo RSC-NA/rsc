@@ -45,6 +45,12 @@ class TeamMixIn(RSCMixIn):
         if not self._team_cache.get(interaction.guild_id):
             return []
 
+        if not current:
+            return [
+                app_commands.Choice(name=t, value=t)
+                for t in self._team_cache[interaction.guild_id][:25]
+            ]
+
         choices = []
         for t in self._team_cache[interaction.guild_id]:
             if current.lower() in t.lower():
@@ -56,7 +62,7 @@ class TeamMixIn(RSCMixIn):
     # Commands
 
     @app_commands.command(
-        name="teams", description="Get a list of teams for a franchise"
+        name="teams", description="Get a list of teams for a franchise or tier"
     )
     @app_commands.autocomplete(
         franchise=FranchiseMixIn.franchise_autocomplete,
@@ -131,8 +137,8 @@ class TeamMixIn(RSCMixIn):
             await interaction.followup.send(embed=embed)
 
     @app_commands.command(name="roster", description="Get roster for a team")
-    @app_commands.autocomplete(team=teams_autocomplete)
     @app_commands.describe(team="Team name to search")
+    @app_commands.autocomplete(team=teams_autocomplete)
     @app_commands.guild_only()
     async def _roster(
         self,
@@ -168,23 +174,45 @@ class TeamMixIn(RSCMixIn):
         roster = []
         subbed = []
         ir = []
+        insertTop = False
         for p in players:
             m = interaction.guild.get_member(p.player.discord_id)
             name = m.display_name if m else p.player.name
-            if p.status == Status.IR:
-                ir.append(f"{name}")
-            elif p.sub_status == SubStatus.OUT:
-                subbed.append(f"{name}")
-            elif p.captain and p.player.discord_id == gm_id:
-                roster.insert(0, f"{name} (GM|C)")
-            elif p.captain:
-                roster.insert(0, f"{name} (C)")
+
+            # Check GM/Capatain
+            if p.captain and p.player.discord_id == gm_id:
+                name = f"{name} (GM|C)"
+                insertTop = True
             elif p.player.discord_id == gm_id:
-                roster.insert(0, f"{name} (GM)")
-            elif p.sub_status == SubStatus.IN:
-                roster.append(f"{name} (Sub)")
+                name = f"{name} (GM)"
+                insertTop = True
+            elif p.captain:
+                name = f"{name} (C)"
+                insertTop = True
             else:
-                roster.append(name)
+                insertTop = False
+
+            # Sub status 
+            match p.sub_status:
+                case SubStatus.OUT:
+                    subbed.append(name)
+                    continue
+                case SubStatus.IN:
+                    roster.append(f"{name} (Sub)")
+                    continue
+
+            match p.status:
+                case Status.IR:
+                    ir.append(f"{name} (IR)")
+                case Status.AGMIR:
+                    ir.append(f"{name} (AGM IR)")
+                case Status.ROSTERED:
+                    if insertTop:
+                        roster.insert(0, name)
+                    else:
+                        roster.append(name)
+                case _:
+                    roster.append(name)
 
         roster_str = "\n".join(roster)
         tier_color = await tier_color_by_name(interaction.guild, players[0].tier.name)
@@ -221,7 +249,7 @@ class TeamMixIn(RSCMixIn):
         name="captains", description="Get information on team captains", guild_only=True
     )
 
-    @_captains.command(name="team", description="Display captain of a specific team")
+    @_captains.command(name="team", description="Team to query")
     @app_commands.autocomplete(team=teams_autocomplete)
     async def _captains_team(
         self,
@@ -260,6 +288,7 @@ class TeamMixIn(RSCMixIn):
     @_captains.command(
         name="tier", description="Display captains of all teams in a tier"
     )
+    @app_commands.describe(tier="Tier to query")
     @app_commands.autocomplete(tier=TierMixIn.tier_autocomplete)
     async def _captains_tier(self, interaction: discord.Interaction, tier: str):
         """Get a list of captains by search criteria"""
@@ -307,6 +336,7 @@ class TeamMixIn(RSCMixIn):
     @_captains.command(
         name="franchise", description="Display captains of all teams in a franchise"
     )
+    @app_commands.describe(franchise="Franchise name")
     @app_commands.autocomplete(franchise=FranchiseMixIn.franchise_autocomplete)
     async def _captains_franchise(
         self,

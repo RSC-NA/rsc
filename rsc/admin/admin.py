@@ -2,19 +2,16 @@ import discord
 import logging
 import tempfile
 
-
 from redbot.core import app_commands, checks, commands
 
-from rscapi import ApiClient, MembersApi
-from rscapi.exceptions import ApiException
-from rscapi.models.tier import Tier
-from rscapi.models.rebrand_a_franchise import RebrandAFranchise
-from rscapi.models.member import Member
 from rscapi.models.elevated_role import ElevatedRole
 from rscapi.models.franchise import Franchise
 from rscapi.models.franchise_list import FranchiseList
 from rscapi.models.league_player import LeaguePlayer
+from rscapi.models.member import Member
+from rscapi.models.rebrand_a_franchise import RebrandAFranchise
 from rscapi.models.team_details import TeamDetails
+from rscapi.models.tier import Tier
 
 from rsc.abc import RSCMixIn
 from rsc.exceptions import RscException
@@ -43,7 +40,7 @@ from rsc.types import RebrandTeamDict
 from rsc.views import LinkButton
 from rsc.utils import utils
 
-from typing import List, Dict, Tuple, TypedDict, Optional
+from typing import List, Dict, Optional
 
 log = logging.getLogger("red.rsc.admin")
 
@@ -57,7 +54,7 @@ class AdminMixIn(RSCMixIn):
 
     _admin = app_commands.Group(
         name="admin",
-        description="Admin only commands for RSC",
+        description="Admin Only Commands",
         guild_only=True,
         default_permissions=discord.Permissions(manage_guild=True),
     )
@@ -89,6 +86,7 @@ class AdminMixIn(RSCMixIn):
     # Member Commands
 
     @_members.command(name="changename", description="Change RSC name for a member")
+    @app_commands.describe(member="RSC discord member", name="Desired player name")
     async def _member_create(
         self,
         interaction: discord.Interaction,
@@ -110,18 +108,13 @@ class AdminMixIn(RSCMixIn):
             return
 
         # Update nickname in RSC
-        trophies = await utils.trophy_count(member)
-        stars = await utils.star_count(member)
-        pfxsplit = member.display_name.split(" | ")
-
-        pfx = None
-        if len(pfxsplit) > 1:
-            pfx = pfxsplit[0]
+        accolades = await utils.member_accolades(member)
+        pfx = await utils.get_prefix(member)
 
         if pfx:
-            new_nick = f"{pfx} | {name} {TROPHY_EMOJI * trophies}{STAR_EMOJI * stars}"
+            new_nick = f"{pfx} | {name} {accolades}".strip()
         else:
-            new_nick = f"{name} {TROPHY_EMOJI * trophies}{STAR_EMOJI * stars}"
+            new_nick = f"{name} {accolades}".strip()
         
         await member.edit(nick=new_nick)
         await interaction.followup.send(embed=SuccessEmbed(description=f"Player RSC name has been updated to {member.mention}"))
@@ -163,6 +156,7 @@ class AdminMixIn(RSCMixIn):
         )
 
     @_members.command(name="delete", description="Delete an RSC member in the API")
+    @app_commands.describe(member="RSC discord member")
     async def _member_delete(
         self, interaction: discord.Interaction, member: discord.Member
     ):
@@ -225,7 +219,7 @@ class AdminMixIn(RSCMixIn):
                 (
                     x.mention if x else m.rsc_name,
                     m.discord_id,
-                    Status(l.status).full_name() if l else "Spectator",
+                    Status(l.status).full_name if l else "Spectator",
                 )
             )
 
@@ -319,6 +313,7 @@ class AdminMixIn(RSCMixIn):
     # Franchise
 
     @_franchise.command(name="logo", description="Upload a logo for the franchise")
+    @app_commands.describe(franchise="Franchise name", logo="Franchise logo file (PNG)")
     @app_commands.autocomplete(franchise=FranchiseMixIn.franchise_autocomplete)
     async def _franchise_logo(
         self, interaction: discord.Interaction, franchise: str, logo: discord.Attachment
@@ -516,6 +511,7 @@ class AdminMixIn(RSCMixIn):
         await rebrand_modal.interaction.edit_original_response(embed=embed, view=None)
 
     @_franchise.command(name="delete", description="Delete a franchise")
+    @app_commands.describe(franchise="Franchise name")
     @app_commands.autocomplete(franchise=FranchiseMixIn.franchise_autocomplete)
     async def _franchise_delete(
         self,
@@ -615,6 +611,7 @@ class AdminMixIn(RSCMixIn):
     @_franchise.command(
         name="create", description="Create a new franchise in the league"
     )
+    @app_commands.describe(name="Franchise name", prefix="Franchise prefix (Ex: \"TG\")", gm="General Manager")
     async def _franchise_create(
         self,
         interaction: discord.Interaction,
@@ -663,6 +660,7 @@ class AdminMixIn(RSCMixIn):
     @_franchise.command(
         name="transfer", description="Transfer ownership of a franchise"
     )
+    @app_commands.describe(franchise="Franchise name", gm="General Manager")
     @app_commands.autocomplete(franchise=FranchiseMixIn.franchise_autocomplete)
     async def _franchise_transfer(
         self,
