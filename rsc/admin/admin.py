@@ -24,7 +24,7 @@ from rsc.const import (
     FREE_AGENT_ROLE,
     GM_ROLE,
     TROPHY_EMOJI,
-    STAR_EMOJI
+    STAR_EMOJI,
 )
 from rsc.embeds import ErrorEmbed, SuccessEmbed, ApiExceptionErrorEmbed, BlueEmbed
 from rsc.enums import Status
@@ -35,7 +35,7 @@ from rsc.admin.views import (
     CreateFranchiseView,
     TransferFranchiseView,
 )
-from rsc.admin.modals import FranchiseRebrandModal
+from rsc.admin.modals import FranchiseRebrandModal, LeagueDatesModal
 from rsc.types import RebrandTeamDict
 from rsc.views import LinkButton
 from rsc.utils import utils
@@ -44,10 +44,15 @@ from typing import List, Dict, Optional
 
 log = logging.getLogger("red.rsc.admin")
 
+defaults_guild = {"Dates": None}
+
 
 class AdminMixIn(RSCMixIn):
     def __init__(self):
         log.debug("Initializing AdminMixIn")
+
+        self.config.init_custom("Admin", 1)
+        self.config.register_custom("Admin", **defaults_guild)
         super().__init__()
 
     # Top Level Group
@@ -97,9 +102,7 @@ class AdminMixIn(RSCMixIn):
 
         try:
             new_member = await self.change_member_name(
-                interaction.guild,
-                id=member.id,
-                name=name
+                interaction.guild, id=member.id, name=name
             )
         except RscException as exc:
             await interaction.followup.send(
@@ -115,11 +118,13 @@ class AdminMixIn(RSCMixIn):
             new_nick = f"{pfx} | {name} {accolades}".strip()
         else:
             new_nick = f"{name} {accolades}".strip()
-        
-        await member.edit(nick=new_nick)
-        await interaction.followup.send(embed=SuccessEmbed(description=f"Player RSC name has been updated to {member.mention}"))
 
-        
+        await member.edit(nick=new_nick)
+        await interaction.followup.send(
+            embed=SuccessEmbed(
+                description=f"Player RSC name has been updated to {member.mention}"
+            )
+        )
 
     @_members.command(name="create", description="Create an RSC member in the API")
     @app_commands.describe(
@@ -130,7 +135,7 @@ class AdminMixIn(RSCMixIn):
         self,
         interaction: discord.Interaction,
         member: discord.Member,
-        rsc_name: Optional[str] = None,
+        rsc_name: str | None = None,
     ):
         try:
             lp = await self.create_member(
@@ -187,9 +192,9 @@ class AdminMixIn(RSCMixIn):
     async def _member_list(
         self,
         interaction: discord.Interaction,
-        rsc_name: Optional[str] = None,
-        discord_username: Optional[str] = None,
-        discord_id: Optional[int] = None,
+        rsc_name: str | None = None,
+        discord_username: str | None = None,
+        discord_id: str | None = None,
         limit: app_commands.Range[int, 1, 64] = 10,
         offset: app_commands.Range[int, 0, 64] = 0,
     ):
@@ -198,6 +203,16 @@ class AdminMixIn(RSCMixIn):
                 "You must specify at least one search option.", ephemeral=True
             )
             return
+
+        if discord_id:
+            try:
+                discord_id = int(discord_id)
+            except ValueError:
+                await interaction.response.send_message(
+                    "Discord ID must be an integer.", ephemeral=True
+                )
+                return
+
         await interaction.response.defer(ephemeral=True)
         ml = await self.members(
             interaction.guild,
@@ -249,9 +264,9 @@ class AdminMixIn(RSCMixIn):
         self,
         interaction: discord.Interaction,
     ):
-        added: List[discord.Role] = []
-        existing: List[discord.Role] = []
-        fixed: List[discord.Role] = []
+        added: list[discord.Role] = []
+        existing: list[discord.Role] = []
+        fixed: list[discord.Role] = []
 
         sync_view = ConfirmSyncView(interaction)
         await sync_view.prompt()
@@ -464,7 +479,7 @@ class AdminMixIn(RSCMixIn):
             return
 
         # Populate TeamDetails list with new names and team IDs
-        tdetails: List[TeamDetails] = []
+        tdetails: list[TeamDetails] = []
         for t in rebrands:
             tdetails.append(TeamDetails(tier=t["tier_id"], name=t["name"]))
 
@@ -611,7 +626,11 @@ class AdminMixIn(RSCMixIn):
     @_franchise.command(
         name="create", description="Create a new franchise in the league"
     )
-    @app_commands.describe(name="Franchise name", prefix="Franchise prefix (Ex: \"TG\")", gm="General Manager")
+    @app_commands.describe(
+        name="Franchise name",
+        prefix='Franchise prefix (Ex: "TG")',
+        gm="General Manager",
+    )
     async def _franchise_create(
         self,
         interaction: discord.Interaction,
@@ -730,3 +749,18 @@ class AdminMixIn(RSCMixIn):
                 description=f"**{franchise}** has been transferred to {gm.mention}"
             )
         )
+
+    # Other Group Commands
+
+    @_franchise.command(name="dates", description="Configure the dates command output")
+    async def _admin_set_dates(self, interaction: discord.Interaction):
+        dates_modal = LeagueDatesModal()
+        await interaction.response.send_modal(dates_modal)
+
+    # Config
+
+    async def _set_dates(self, guild: discord.Guild, value: str):
+        await self.config.custom("Admin", guild.id).Dates.set(value)
+
+    async def _get_dates(self, guild: discord.Guild) -> str:
+        return await self.config.custom("Admin", guild.id).Dates()

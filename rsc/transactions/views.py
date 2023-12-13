@@ -24,7 +24,7 @@ class TradeInfo(discord.ui.TextInput):
 
 class TradeAnnouncementView(discord.ui.View):
     def __init__(self, timeout: float = 30.0):
-        self.announcement: Optional[str] = None
+        self.announcement: str | None = None
         super().__init__(timeout=30.0)
         self.add_item(TradeInfo())
         self.add_item(ConfirmButton())

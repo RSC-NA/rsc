@@ -37,14 +37,14 @@ log = logging.getLogger("red.rsc.franchises")
 class FranchiseMixIn(RSCMixIn):
     def __init__(self):
         log.debug("Initializing FranchiseMixIn")
-        self._franchise_cache: Dict[int, List[str]] = {}
+        self._franchise_cache: dict[int, list[str]] = {}
         super().__init__()
 
     # Autocomplete
 
     async def franchise_autocomplete(
         self, interaction: discord.Interaction, current: str
-    ) -> List[app_commands.Choice[str]]:
+    ) -> list[app_commands.Choice[str]]:
         if not interaction.guild_id:
             return []
 
@@ -126,7 +126,7 @@ class FranchiseMixIn(RSCMixIn):
         f = flist.pop()
         await self.delete_franchise(guild, f.id)
 
-    async def full_logo_url(self, guild: discord.Guild, logo_url: str) -> Optional[str]:
+    async def full_logo_url(self, guild: discord.Guild, logo_url: str) -> str | None:
         host = await self._get_api_url(guild)
         if not host:
             log.warning(f"[{guild.name}] RSC API host is not configured.")
@@ -138,12 +138,12 @@ class FranchiseMixIn(RSCMixIn):
     async def franchises(
         self,
         guild: discord.Guild,
-        prefix: Optional[str] = None,
-        gm_name: Optional[str] = None,
-        name: Optional[str] = None,
-        tier: Optional[str] = None,
-        tier_name: Optional[str] = None,
-    ) -> List[FranchiseList]:
+        prefix: str | None = None,
+        gm_name: str | None = None,
+        name: str | None = None,
+        tier: str | None = None,
+        tier_name: str | None = None,
+    ) -> list[FranchiseList]:
         async with ApiClient(self._api_conf[guild.id]) as client:
             api = FranchisesApi(client)
             franchises = await api.franchises_list(
@@ -174,7 +174,7 @@ class FranchiseMixIn(RSCMixIn):
 
     async def franchise_by_id(
         self, guild: discord.Guild, id: int
-    ) -> Optional[Franchise]:
+    ) -> Franchise | None:
         async with ApiClient(self._api_conf[guild.id]) as client:
             api = FranchisesApi(client)
             return await api.franchises_read(id)
@@ -257,7 +257,7 @@ class FranchiseMixIn(RSCMixIn):
             except ApiException as exc:
                 raise RscException(response=exc)
 
-    async def franchise_logo(self, guild: discord.Guild, id: int) -> Optional[str]:
+    async def franchise_logo(self, guild: discord.Guild, id: int) -> str | None:
         host = await self._get_api_url(guild)
         if not host:
             return None

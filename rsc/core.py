@@ -25,7 +25,10 @@ from rsc.franchises import FranchiseMixIn
 from rsc.matches import MatchMixIn
 from rsc.members import MemberMixIn
 from rsc.moderator import ModeratorMixIn, ThreadMixIn
+from rsc.numbers import NumberMixIn
 from rsc.leagues import LeagueMixIn
+from rsc.ranks import RankMixIn
+from rsc.ranks.api import RapidApi
 from rsc.teams import TeamMixIn
 from rsc.tiers import TierMixIn
 from rsc.trackers import TrackerMixIn
@@ -39,7 +42,7 @@ from rsc.views import LeagueSelectView, RSCSetupModal
 # Util
 from rsc.embeds import SuccessEmbed, ErrorEmbed, BlueEmbed
 
-from typing import Optional, Dict, List, Union
+from typing import Optional, Dict, List, Union, TYPE_CHECKING
 
 log = logging.getLogger("red.rsc.core")
 
@@ -47,6 +50,7 @@ defaults_guild = {
     "ApiKey": None,
     "ApiUrl": None,
     "League": None,
+    "RapidApi": None,
     "TimeZone": "UTC",
 }
 
@@ -61,6 +65,8 @@ class RSC(
     MemberMixIn,
     MatchMixIn,
     ModeratorMixIn,
+    NumberMixIn,
+    RankMixIn,
     TeamMixIn,
     TierMixIn,
     ThreadMixIn,
@@ -80,9 +86,10 @@ class RSC(
         self.config.register_guild(**defaults_guild)
 
         # Define state of API connection
-        self._api_conf: Dict[int, Configuration] = {}
+        self._api_conf: dict[int, Configuration] = {}
+        self.rapid_api: dict[int, RapidApi] = {}
         # Cache the league associated with each guild
-        self._league: Dict[int, int] = {}
+        self._league: dict[int, int] = {}
 
         super().__init__()
         log.info("RSC Bot has been started.")
@@ -98,13 +105,17 @@ class RSC(
         """Prepare the bot API and caches. Requires API configuration"""
         log.debug("In RSC setup()")
         for guild in self.bot.guilds:
-            log.debug(f"[{guild}] Preparing API configuration")
+            log.debug(f"[{guild}] Preparing RSC API configuration")
             await self.prepare_api(guild)
-            log.debug(f"[{guild}] Preparing league data")
-            await self.prepare_league(guild)
+
+            log.debug(f"[{guild}] Preparing RapidAPI connector")
+            await self.prepare_rapidapi(guild)
+
             if self._api_conf.get(guild.id):
-                log.debug(f"[{guild}] Preparing caches")
                 try:
+                    log.debug(f"[{guild}] Preparing league data")
+                    await self.prepare_league(guild)
+                    log.debug(f"[{guild}] Preparing caches")
                     await self.tiers(guild)
                     await self.franchises(guild)
                     await self.teams(guild)
@@ -113,6 +124,11 @@ class RSC(
                 except ClientConnectionError:
                     # Pass so that the package loads successfully with invalid url/key
                     pass
+
+    async def prepare_rapidapi(self, guild: discord.Guild):
+        token = await self._get_rapidapi_key(guild)
+        if token:
+            self.rapid_api[guild.id] = RapidApi(token=token)
 
     async def prepare_league(self, guild: discord.Guild):
         league = await self._get_league(guild)
@@ -149,13 +165,16 @@ class RSC(
 
     async def command_autocomplete(
         self, interaction: discord.Interaction, current: str
-    ) -> List[app_commands.Choice[str]]:
+    ) -> list[app_commands.Choice[str]]:
         cmds = self.walk_app_commands()
         if not cmds:
             return []
 
         if not current:
-            return [app_commands.Choice(name=c.qualified_name, value=c.qualified_name) for c in itertools.islice(cmds, 25)]
+            return [
+                app_commands.Choice(name=c.qualified_name, value=c.qualified_name)
+                for c in itertools.islice(cmds, 25)
+            ]
 
         choices = []
         for c in cmds:
@@ -175,7 +194,7 @@ class RSC(
 
     async def timezone_autocomplete(
         self, interaction: discord.Interaction, current: str
-    ) -> List[app_commands.Choice[str]]:
+    ) -> list[app_commands.Choice[str]]:
         if not current:
             return [
                 app_commands.Choice(name=tz, value=tz)
@@ -228,6 +247,11 @@ class RSC(
         )
         url = await self._get_api_url(interaction.guild) or "Not Configured"
         tz = await self._get_timezone(interaction.guild)
+        rapid_api_key = (
+            "Configured"
+            if await self._get_rapidapi_key(interaction.guild)
+            else "Not Configured"
+        )
 
         # Find league name if it is configured/exists
         league = None
@@ -247,6 +271,7 @@ class RSC(
         settings_embed.add_field(name="API URL", value=url, inline=False)
         settings_embed.add_field(name="League", value=league_str, inline=False)
         settings_embed.add_field(name="Time Zone", value=tz, inline=False)
+        settings_embed.add_field(name="RapidAPI Key", value=rapid_api_key, inline=False)
         await interaction.response.send_message(embed=settings_embed, ephemeral=True)
 
     @rsc_settings.command(
@@ -338,6 +363,20 @@ class RSC(
             f"Logging level is now **{level}**", ephemeral=True
         )
 
+
+    @rsc_settings.command(
+        name="rapidapikey",
+        description="Configure the guild RapidAPI key",
+    )
+    async def _rsc_set_rapidapi(
+        self, interaction: discord.Interaction, key: str
+    ):
+        await self._set_rapidapi_key(interaction.guild, key)
+        await interaction.response.send_message(
+            embed=SuccessEmbed(description=f"RapidAPI key has been configured."),
+            ephemeral=True
+        )
+
     # Non-Group Commands
 
     @app_commands.command(
@@ -346,12 +385,12 @@ class RSC(
     @app_commands.describe(command="Display help for a specific command.")
     @app_commands.autocomplete(command=command_autocomplete)
     @app_commands.guild_only()
-    async def _help_cmd(self, interaction: discord.Interaction, command: Optional[str]):
+    async def _help_cmd(self, interaction: discord.Interaction, command: str | None):
         cmds = self.get_app_commands()
         if not command:
             embeds = []
-            groups: List[discord.app_commands.Group] = []
-            cmd_list: List[discord.app_commands.Command] = []
+            groups: list[discord.app_commands.Group] = []
+            cmd_list: list[discord.app_commands.Command] = []
             for cmd in cmds:
                 if (
                     cmd.default_permissions
@@ -443,6 +482,10 @@ class RSC(
         """Returns server timezone as ZoneInfo object for use in datetime objects"""
         return ZoneInfo(await self._get_timezone(guild))
 
+    async def rapid_connector(self, guild: discord.Guild) -> Optional[RapidApi]:
+        """Returns server timezone as ZoneInfo object for use in datetime objects"""
+        return self.rapid_api.get(guild.id, None)
+
     # Config
 
     async def _set_api_key(self, guild: discord.Guild, key: str):
@@ -450,7 +493,7 @@ class RSC(
         if await self._get_api_url(guild):
             await self.prepare_api(guild)
 
-    async def _get_api_key(self, guild: discord.Guild) -> Optional[str]:
+    async def _get_api_key(self, guild: discord.Guild) -> str | None:
         return await self.config.guild(guild).ApiKey()
 
     async def _set_api_url(self, guild: discord.Guild, url: str):
@@ -458,14 +501,14 @@ class RSC(
         if await self._get_api_key(guild):
             await self.prepare_api(guild)
 
-    async def _get_api_url(self, guild: discord.Guild) -> Optional[str]:
+    async def _get_api_url(self, guild: discord.Guild) -> str | None:
         return await self.config.guild(guild).ApiUrl()
 
     async def _set_league(self, guild: discord.Guild, league: int):
         await self.config.guild(guild).League.set(league)
         self._league[guild.id] = league
 
-    async def _get_league(self, guild: discord.Guild) -> Optional[int]:
+    async def _get_league(self, guild: discord.Guild) -> int | None:
         return await self.config.guild(guild).League()
 
     async def _set_timezone(self, guild: discord.Guild, tz: str):
@@ -474,3 +517,10 @@ class RSC(
     async def _get_timezone(self, guild: discord.Guild) -> str:
         """Default: UTC"""
         return await self.config.guild(guild).TimeZone()
+
+    async def _set_rapidapi_key(self, guild: discord.Guild, key: str):
+        self.rapid_api[guild.id] = RapidApi(token=key)
+        await self.config.guild(guild).RapidApi.set(key)
+
+    async def _get_rapidapi_key(self, guild: discord.Guild) -> str | None:
+        return await self.config.guild(guild).RapidApi()

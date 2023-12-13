@@ -22,7 +22,6 @@ from typing import List, Dict, Tuple, Optional
 log = logging.getLogger("red.rsc.ballchasing")
 
 defaults_guild = {
-    "ReplayDumpChannel": None,
     "AuthToken": None,
     "TopLevelGroup": None,
     "LogChannel": None,
@@ -36,8 +35,8 @@ BALLCHASING_URL = "https://ballchasing.com"
 DONE = "Done"
 WHITE_X_REACT = "\U0000274E"  # :negative_squared_cross_mark:
 WHITE_CHECK_REACT = "\U00002705"  # :white_check_mark:
-RSC_STEAM_ID = 76561199096013422  # RSC Steam ID
-# RSC_STEAM_ID = 76561197960409023 # REMOVEME - my steam id for development
+# RSC_STEAM_ID = 76561199096013422  # RSC Steam ID
+RSC_STEAM_ID = 76561197960409023 # REMOVEME - my steam id for development
 
 
 class BallchasingMixIn(RSCMixIn):

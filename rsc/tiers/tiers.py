@@ -21,14 +21,14 @@ log = logging.getLogger("red.rsc.tiers")
 class TierMixIn(RSCMixIn):
     def __init__(self):
         log.debug("Initializing TierMixIn")
-        self._tier_cache: Dict[int, List[str]] = {}
+        self._tier_cache: dict[int, list[str]] = {}
         super().__init__()
 
     # Autocomplete
 
     async def tier_autocomplete(
         self, interaction: discord.Interaction, current: str
-    ) -> List[app_commands.Choice[str]]:
+    ) -> list[app_commands.Choice[str]]:
         if not interaction.guild_id:
             return []
 
@@ -78,7 +78,7 @@ class TierMixIn(RSCMixIn):
             return True
         return False
 
-    async def tier_fa_roles(self, guild: discord.Guild) -> List[discord.Role]:
+    async def tier_fa_roles(self, guild: discord.Guild) -> list[discord.Role]:
         """Return a list of tier free agent roles (Ex: ProspectFA)"""
         tiers = await self.tiers(guild)
         roles = []
@@ -92,8 +92,8 @@ class TierMixIn(RSCMixIn):
     # API
 
     async def tiers(
-        self, guild: discord.Guild, name: Optional[str] = None
-    ) -> List[Tier]:
+        self, guild: discord.Guild, name: str | None = None
+    ) -> list[Tier]:
         """Fetch a list of tiers"""
         async with ApiClient(self._api_conf[guild.id]) as client:
             api = TiersApi(client)
@@ -117,8 +117,8 @@ class TierMixIn(RSCMixIn):
             return tier
 
     async def tiers(
-        self, guild: discord.Guild, name: Optional[str] = None
-    ) -> List[Tier]:
+        self, guild: discord.Guild, name: str | None = None
+    ) -> list[Tier]:
         """Fetch a list of tiers"""
         async with ApiClient(self._api_conf[guild.id]) as client:
             api = TiersApi(client)

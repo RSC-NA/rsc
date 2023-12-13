@@ -142,11 +142,11 @@ class LinkButton(discord.ui.Button):
 
 
 class LeagueSelect(discord.ui.Select):
-    def __init__(self, leagues: List[League]):
+    def __init__(self, leagues: list[League]):
         super().__init__(placeholder="Select a league...")
         self.build(leagues)
 
-    def build(self, leagues: List[League]):
+    def build(self, leagues: list[League]):
         for league in leagues:
             self.add_option(label=league.name, value=str(league.id))
 
@@ -158,10 +158,10 @@ class LeagueSelectView(discord.ui.View):
     def __init__(
         self,
         interaction: discord.Interaction,
-        leagues: List[League],
+        leagues: list[League],
         timeout: float = DEFAULT_TIMEOUT,
     ):
-        self.result: Optional[int] = None
+        self.result: int | None = None
         self.interaction = interaction
         self.leagues = leagues
         super().__init__(timeout=timeout)
@@ -187,7 +187,7 @@ class LeagueSelectView(discord.ui.View):
         )
 
     async def save_selection(
-        self, interaction: discord.Interaction, league_id: List[str]
+        self, interaction: discord.Interaction, league_id: list[str]
     ):
         log.debug(f"League Selection: {league_id}")
         self.result = int(league_id[0])

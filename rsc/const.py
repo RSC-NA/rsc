@@ -1,4 +1,5 @@
 import discord
+import re
 
 # Views
 DEFAULT_TIMEOUT = 30.0
@@ -13,6 +14,8 @@ FREE_AGENT_ROLE = "Free Agent"
 DEV_LEAGUE_ROLE = "Dev League Interest"
 SUBBED_OUT_ROLE = "Subbed Out"
 FORMER_GM_ROLE = "Former GM"
+SPECTATOR_ROLE = "Spectator"
+IR_ROLE = "IR"
 
 # Emoji
 TROPHY_EMOJI = "\U0001F3C6"  # :trophy:
@@ -21,10 +24,12 @@ DEV_LEAGUE_EMOJI = "\U0001F451" # :crown:
 
 # Links
 
+BALLCHASING_URL = "https://ballchasing.com"
 BEHAVIOR_RULES_URL = (
     "https://docs.google.com/document/d/1AR241UmyNos8xflYqrzmpHE6Cy6xDcCtfn-32gdtPdI/"
 )
-
+RAPIDAPI_URL = "https://rocket-league1.p.rapidapi.com"
+RSC_TRACKER_URL = ""
 
 # Moderation
 
@@ -47,3 +52,7 @@ FRANCHISE_ROLE_PERMS = discord.Permissions(
     stream=True,
     use_embedded_activities=True,
 )
+
+# Regex
+
+SEASON_TITLE_REGEX = re.compile(r"^S\d+")

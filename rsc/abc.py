@@ -18,11 +18,15 @@ from rscapi.models.team import Team
 from rscapi.models.franchise_list import FranchiseList
 from rscapi.models.team_list import TeamList
 from rscapi.models.league_player import LeaguePlayer
+from rscapi.models.tracker_link_stats import TrackerLinkStats
+from rscapi.models.tracker_link import TrackerLink
 
-from rsc.enums import Status
+from rsc.enums import Status, TrackerLinksStatus
 
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, TYPE_CHECKING
 
+if TYPE_CHECKING:
+    from rsc.ranks.api import RapidApi
 
 class RSCMixIn(ABC):
     """ABC class used for type hinting RSC Mix In modules"""
@@ -30,15 +34,21 @@ class RSCMixIn(ABC):
     bot: Red
     config: RedConfig
 
-    _league: Dict[int, int]
-    _api_conf: Dict[int, ApiConfig]
+    rapid_api: dict[int, "RapidApi"]
 
-    _franchise_cache: Dict[int, List[str]]
+    _league: dict[int, int]
+    _api_conf: dict[int, ApiConfig]
+
+    _franchise_cache: dict[int, list[str]]
 
     # Core
 
     @abstractmethod
     async def timezone(self, guild: discord.Guild) -> ZoneInfo:
+        ...
+
+    @abstractmethod
+    async def rapid_connector(self, guild: discord.Guild) -> Optional["RapidApi"]:
         ...
 
     # Franchises
@@ -47,12 +57,12 @@ class RSCMixIn(ABC):
     async def franchises(
         self,
         guild: discord.Guild,
-        prefix: Optional[str] = None,
-        gm_name: Optional[str] = None,
-        name: Optional[str] = None,
-        tier: Optional[str] = None,
-        tier_name: Optional[str] = None,
-    ) -> List[FranchiseList]:
+        prefix: str | None = None,
+        gm_name: str | None = None,
+        name: str | None = None,
+        tier: str | None = None,
+        tier_name: str | None = None,
+    ) -> list[FranchiseList]:
         ...
 
     @abstractmethod
@@ -60,25 +70,25 @@ class RSCMixIn(ABC):
         self,
         guild: discord.Guild,
         id: int
-    ) -> Optional[Franchise]:
+    ) -> Franchise | None:
         ...
 
     @abstractmethod
-    async def franchise_logo(self, guild: discord.Guild, id: int) -> Optional[str]:
+    async def franchise_logo(self, guild: discord.Guild, id: int) -> str | None:
         ...
 
     # League
 
     @abstractmethod
-    async def leagues(self, guild: discord.Guild) -> List[League]:
+    async def leagues(self, guild: discord.Guild) -> list[League]:
         ...
 
     @abstractmethod
-    async def league(self, guild: discord.Guild) -> Optional[League]:
+    async def league(self, guild: discord.Guild) -> League | None:
         ...
 
     @abstractmethod
-    async def league_by_id(self, guild: discord.Guild) -> Optional[League]:
+    async def league_by_id(self, guild: discord.Guild) -> League | None:
         ...
 
     @abstractmethod
@@ -90,17 +100,17 @@ class RSCMixIn(ABC):
         self,
         guild: discord.Guild,
         status: Optional[Status] = None,
-        name: Optional[str] = None,
-        tier: Optional[int] = None,
-        tier_name: Optional[str] = None,
-        season: Optional[int] = None,
-        season_number: Optional[int] = None,
-        team_name: Optional[str] = None,
-        franchise: Optional[str] = None,
-        discord_id: Optional[int] = None,
+        name: str | None = None,
+        tier: int | None = None,
+        tier_name: str | None = None,
+        season: int | None = None,
+        season_number: int | None = None,
+        team_name: str | None = None,
+        franchise: str | None = None,
+        discord_id: int | None = None,
         limit: int = 0,
         offset: int = 0,
-    ) -> List[LeaguePlayer]:
+    ) -> list[LeaguePlayer]:
         ...
 
     # Members
@@ -109,12 +119,12 @@ class RSCMixIn(ABC):
     async def members(
         self,
         guild: discord.Guild,
-        rsc_name: Optional[str] = None,
-        discord_username: Optional[str] = None,
-        discord_id: Optional[int] = None,
+        rsc_name: str | None = None,
+        discord_username: str | None = None,
+        discord_id: int | None = None,
         limit: int = 0,
         offset: int = 0,
-    ) -> List[Member]:
+    ) -> list[Member]:
         ...
 
     # Teams
@@ -123,11 +133,11 @@ class RSCMixIn(ABC):
     async def teams(
         self,
         guild: discord.Guild,
-        seasons: Optional[str] = None,
-        franchise: Optional[str] = None,
-        name: Optional[str] = None,
-        tier: Optional[str] = None,
-    ) -> List[TeamList]:
+        seasons: str | None = None,
+        franchise: str | None = None,
+        name: str | None = None,
+        tier: str | None = None,
+    ) -> list[TeamList]:
         ...
 
     @abstractmethod
@@ -135,9 +145,9 @@ class RSCMixIn(ABC):
         self,
         guild: discord.Guild,
         id: int,
-        season: Optional[int] = None,
+        season: int | None = None,
         preseason: bool = True,
-    ) -> List[Match]:
+    ) -> list[Match]:
         ...
 
     @abstractmethod
@@ -165,7 +175,19 @@ class RSCMixIn(ABC):
         self,
         guild: discord.Guild,
         id: int,
-    ) -> List[Player]:
+    ) -> list[Player]:
+        ...
+
+    # Trackers
+
+    @abstractmethod
+    async def trackers(
+        self,
+        guild: discord.Guild,
+        status: Optional[TrackerLinksStatus] = None,
+        player: discord.Member | None = None,
+        name: str | None = None,
+    ) -> list[TrackerLink]:
         ...
 
 

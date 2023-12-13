@@ -12,7 +12,7 @@ from rscapi.models.season import Season
 
 from rsc.abc import RSCMixIn
 from rsc.enums import Status
-from rsc.embeds import ErrorEmbed, BlueEmbed
+from rsc.embeds import ErrorEmbed, BlueEmbed, YellowEmbed
 from rsc.exceptions import RscException
 
 from typing import List, Optional, Dict
@@ -91,21 +91,41 @@ class LeagueMixIn(RSCMixIn):
             embed.set_thumbnail(url=interaction.guild.icon.url)
         await interaction.response.send_message(embed=embed)
 
+
+    @app_commands.command(
+        name="dates", description="Display important RSC dates"
+    )
+    @app_commands.guild_only()
+    async def _dates_cmd(self, interaction: discord.Interaction):
+        dates = await self._get_dates(interaction.guild)
+        if not dates:
+            await interaction.response.send_message(embed=YellowEmbed(description="No league dates have been posted."))
+            return
+
+        embed = BlueEmbed(
+            title="Important League Dates",
+            description=dates
+        )
+
+        if interaction.guild.icon:
+            embed.set_thumbnail(url=interaction.guild.icon.url)
+        await interaction.response.send_message(embed=embed)
+
     # API
 
-    async def leagues(self, guild: discord.Guild) -> List[League]:
+    async def leagues(self, guild: discord.Guild) -> list[League]:
         """Get a list of leagues from the API"""
         async with ApiClient(self._api_conf[guild.id]) as client:
             api = LeaguesApi(client)
             return await api.leagues_list()
 
-    async def league(self, guild: discord.Guild) -> Optional[League]:
+    async def league(self, guild: discord.Guild) -> League | None:
         """Get data for the guilds configured league"""
         async with ApiClient(self._api_conf[guild.id]) as client:
             api = LeaguesApi(client)
             return await api.leagues_read(self._league[guild.id])
 
-    async def league_by_id(self, guild: discord.Guild, id: int) -> Optional[League]:
+    async def league_by_id(self, guild: discord.Guild, id: int) -> League | None:
         """Fetch a league from the API by ID"""
         async with ApiClient(self._api_conf[guild.id]) as client:
             api = LeaguesApi(client)
@@ -121,17 +141,17 @@ class LeagueMixIn(RSCMixIn):
         self,
         guild: discord.Guild,
         status: Optional[Status] = None,
-        name: Optional[str] = None,
-        tier: Optional[int] = None,
-        tier_name: Optional[str] = None,
-        season: Optional[int] = None,
-        season_number: Optional[int] = None,
-        team_name: Optional[str] = None,
-        franchise: Optional[str] = None,
-        discord_id: Optional[int] = None,
+        name: str | None = None,
+        tier: int | None = None,
+        tier_name: str | None = None,
+        season: int | None = None,
+        season_number: int | None = None,
+        team_name: str | None = None,
+        franchise: str | None = None,
+        discord_id: int | None = None,
         limit: int = 0,
         offset: int = 0,
-    ) -> List[LeaguePlayer]:
+    ) -> list[LeaguePlayer]:
         async with ApiClient(self._api_conf[guild.id]) as client:
             api = LeaguePlayersApi(client)
             players = await api.league_players_list(

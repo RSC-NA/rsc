@@ -42,7 +42,7 @@ class MatchMixIn(RSCMixIn):
     async def _schedule_args(
         self,
         interaction: discord.Interaction,
-        team: Optional[str] = None,
+        team: str | None = None,
         preseason: bool = False,
     ):
         team_id = 0
@@ -203,7 +203,7 @@ class MatchMixIn(RSCMixIn):
             return True
         return False
 
-    async def matches_from_match_list(self, match_list: List[MatchList]):
+    async def matches_from_match_list(self, match_list: list[MatchList]):
         pass
 
     async def match_team_by_user(
@@ -271,8 +271,8 @@ class MatchMixIn(RSCMixIn):
         self, guild: discord.Guild, match: Match
     ) -> Tuple[str, str]:
         """Return formatted roster string from Match"""
-        home_players: List[str] = []
-        away_players: List[str] = []
+        home_players: list[str] = []
+        away_players: list[str] = []
 
         # Home
         for p in match.home_team.players:
@@ -309,19 +309,19 @@ class MatchMixIn(RSCMixIn):
     async def matches(
         self,
         guild: discord.Guild,
-        date__lt: Optional[datetime] = None,
-        date__gt: Optional[datetime] = None,
-        season: Optional[int] = None,
-        season_number: Optional[int] = None,
+        date__lt: datetime | None = None,
+        date__gt: datetime | None = None,
+        season: int | None = None,
+        season_number: int | None = None,
         match_team_type: MatchTeamEnum = MatchTeamEnum.ALL,
-        team_name: Optional[str] = None,
-        day: Optional[int] = None,
+        team_name: str | None = None,
+        day: int | None = None,
         match_type: Optional[MatchType] = None,
         match_format: Optional[MatchFormat] = None,
         limit: int = 0,
         offset: int = 0,
         preseason: int = 0,
-    ) -> List[MatchList]:
+    ) -> list[MatchList]:
         async with ApiClient(self._api_conf[guild.id]) as client:
             api = MatchesApi(client)
             matches: MatchesList200Response = await api.matches_list(
@@ -345,17 +345,17 @@ class MatchMixIn(RSCMixIn):
         self,
         guild: discord.Guild,
         teams: str,
-        date__lt: Optional[datetime] = None,
-        date__gt: Optional[datetime] = None,
-        season: Optional[int] = None,
-        season_number: Optional[int] = None,
-        day: Optional[int] = None,
+        date__lt: datetime | None = None,
+        date__gt: datetime | None = None,
+        season: int | None = None,
+        season_number: int | None = None,
+        day: int | None = None,
         match_type: Optional[MatchType] = None,
         match_format: Optional[MatchFormat] = None,
         limit: int = 0,
         offset: int = 0,
         preseason: int = 0,
-    ) -> List[MatchList]:
+    ) -> list[MatchList]:
         async with ApiClient(self._api_conf[guild.id]) as client:
             api = MatchesApi(client)
             matches: MatchesList200Response = await api.matches_find_match(

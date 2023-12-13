@@ -1,6 +1,7 @@
 import discord
 import logging
 
+from datetime import date
 
 from redbot.core import app_commands, checks, commands
 
@@ -12,6 +13,7 @@ from rscapi.models.member import Member
 from rscapi.models.update_member_rsc_name import UpdateMemberRSCName
 from rscapi.models.elevated_role import ElevatedRole
 from rscapi.models.league_player import LeaguePlayer
+from rscapi.models.player_season_stats import PlayerSeasonStats
 
 from rsc.abc import RSCMixIn
 from rsc.exceptions import RscException
@@ -20,7 +22,7 @@ from rsc.const import LEAGUE_ROLE, MUTED_ROLE
 from rsc.embeds import ErrorEmbed, SuccessEmbed, ApiExceptionErrorEmbed, BlueEmbed
 from rsc.enums import Status
 from rsc.members.views import SignupView, SignupState, PlayerType, Platform, Referrer
-from rsc.utils.utils import tier_color_by_name, franchise_role_from_name
+from rsc.utils import utils
 
 from typing import List, Dict, Tuple, TypedDict, Optional
 
@@ -118,7 +120,7 @@ class MemberMixIn(RSCMixIn):
             return
 
         p = players[0]
-        tier_color = await tier_color_by_name(interaction.guild, p.tier.name)
+        tier_color = await utils.tier_color_by_name(interaction.guild, p.tier.name)
 
         embed = discord.Embed(
             title="Player Info",
@@ -133,7 +135,7 @@ class MemberMixIn(RSCMixIn):
             await interaction.response.send_message(embed=embed, ephemeral=True)
             return
 
-        frole = await franchise_role_from_name(interaction.guild, p.team.franchise.name)
+        frole = await utils.franchise_role_from_name(interaction.guild, p.team.franchise.name)
         f_fmt = frole.mention if frole else p.team.franchise.name
 
         embed.add_field(name="", value="", inline=False) # Line Break
@@ -152,7 +154,7 @@ class MemberMixIn(RSCMixIn):
             interaction.guild, status=Status.WAIVERS, tier_name=tier
         )
 
-        tier_color = await tier_color_by_name(interaction.guild, tier)
+        tier_color = await utils.tier_color_by_name(interaction.guild, tier)
         embed = discord.Embed(
             title="Waiver List",
             description=f"Players on waivers in **{tier}**",
@@ -166,20 +168,42 @@ class MemberMixIn(RSCMixIn):
 
         players.sort(key=lambda x: x.current_mmr, reverse=True)
 
+        waiver_dates = []
         members = []
         for p in players:
             m = interaction.guild.get_member(p.player.discord_id)
             pstr = m.mention if m else p.player.name
             members.append(pstr)
+            if p.waiver_period_end_date:
+                waiver_dates.append(str(p.waiver_period_end_date.date()))
+            else:
+                waiver_dates.append("Unknown")
+
 
         embed.add_field(name="Player", value="\n".join(members), inline=True)
         embed.add_field(
-            name="Current MMR",
+            name="MMR",
             value="\n".join([str(p.current_mmr) for p in players]),
             inline=True,
         )
+        embed.add_field(name="End Date", value="\n".join([d for d in waiver_dates]), inline=True)
 
         await interaction.followup.send(embed=embed)
+
+
+    @app_commands.command(
+        name="playerstats", description="Display RSC stats for a player"
+    )
+    @app_commands.describe(player="RSC Discord Member")
+    async def _player_stats(self, interaction: discord.Interaction, player: discord.Member):
+        await utils.not_implemented(interaction)
+    
+    @app_commands.command(
+        name="staff", description="Display RSC Committees and Staff"
+    )
+    async def _staff_cmd(self, interaction: discord.Interaction):
+        await utils.not_implemented(interaction)
+    
 
     # Helper Functions
 
@@ -197,12 +221,12 @@ class MemberMixIn(RSCMixIn):
     async def members(
         self,
         guild: discord.Guild,
-        rsc_name: Optional[str] = None,
-        discord_username: Optional[str] = None,
-        discord_id: Optional[int] = None,
+        rsc_name: str | None = None,
+        discord_username: str | None = None,
+        discord_id: int | None = None,
         limit: int = 0,
         offset: int = 0,
-    ) -> List[Member]:
+    ) -> list[Member]:
         async with ApiClient(self._api_conf[guild.id]) as client:
             api = MembersApi(client)
             members = await api.members_list(
@@ -219,7 +243,7 @@ class MemberMixIn(RSCMixIn):
         guild: discord.Guild,
         member: discord.Member,
         rsc_name: str,
-        trackers: List[str],
+        trackers: list[str],
         player_type: Optional[PlayerType] = None,
         platform: Optional[Platform] = None,
         referrer: Optional[Referrer] = None,
@@ -245,7 +269,7 @@ class MemberMixIn(RSCMixIn):
         self,
         guild: discord.Guild,
         member: discord.Member,
-        rsc_name: Optional[str] = None,
+        rsc_name: str | None = None,
     ) -> Member:
         async with ApiClient(self._api_conf[guild.id]) as client:
             api = MembersApi(client)
@@ -285,5 +309,19 @@ class MemberMixIn(RSCMixIn):
                 data = UpdateMemberRSCName(name=name)
                 log.debug(f"Name Change Data: {data}")
                 return await api.members_name_change(id, data)
+            except ApiException as exc:
+                raise RscException(response=exc)
+
+
+    async def player_stats(
+        self,
+        guild: discord.Guild,
+        id: int,
+        season: int | None,
+    ) -> PlayerSeasonStats:
+        async with ApiClient(self._api_conf[guild.id]) as client:
+            api = MembersApi(client)
+            try:
+                return await api.members_stats(id, self._league[guild.id], season=season)
             except ApiException as exc:
                 raise RscException(response=exc)

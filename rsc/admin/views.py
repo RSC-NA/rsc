@@ -70,7 +70,7 @@ class RebrandFranchiseView(AuthorOnlyView):
         old_name: str,
         name: str,
         prefix: str,
-        teams: List[RebrandTeamDict],
+        teams: list[RebrandTeamDict],
         timeout: float = 30.0,
     ):
         super().__init__(interaction=interaction, timeout=timeout)

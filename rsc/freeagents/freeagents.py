@@ -36,14 +36,14 @@ log = logging.getLogger("red.rsc.freeagents")
 FA_LOOP_TIME = time(hour=17)
 
 
-defaults_guild: Dict[str, List[CheckIn]] = {"CheckIns": []}
+defaults_guild: dict[str, list[CheckIn]] = {"CheckIns": []}
 
 
 class FreeAgentMixIn(RSCMixIn):
     def __init__(self):
         log.debug("Initializing FreeAgentMixIn")
 
-        self._check_ins: Dict[int, List[CheckIn]] = {}
+        self._check_ins: dict[int, list[CheckIn]] = {}
 
         self.config: Config
         self.config.init_custom("FreeAgents", 1)
@@ -105,7 +105,7 @@ class FreeAgentMixIn(RSCMixIn):
         free_agents = await self.free_agents(interaction.guild, tier)
         free_agents.extend(await self.permanent_free_agents(interaction.guild, tier))
 
-        data: List[str] = []
+        data: list[str] = []
         for fa in free_agents:
             log.debug(fa.player)
             fmember = None
@@ -296,14 +296,14 @@ class FreeAgentMixIn(RSCMixIn):
 
     # Functions
 
-    async def checkins_by_tier(self, guild: discord.Guild, tier: str) -> List[CheckIn]:
+    async def checkins_by_tier(self, guild: discord.Guild, tier: str) -> list[CheckIn]:
         """Return cached list of FA check ins for a guild's tier"""
         if not self._check_ins.get(guild.id):
             return []
 
         return [x for x in self._check_ins[guild.id] if x["tier"] == tier]
 
-    async def checkins(self, guild: discord.Guild) -> List[CheckIn]:
+    async def checkins(self, guild: discord.Guild) -> list[CheckIn]:
         """Return cached list of FA check ins for guild"""
         return self._check_ins.get(guild.id, [])
 
@@ -360,20 +360,20 @@ class FreeAgentMixIn(RSCMixIn):
 
     async def free_agents(
         self, guild: discord.Guild, tier_name: str
-    ) -> List[LeaguePlayer]:
+    ) -> list[LeaguePlayer]:
         """Fetch a list of Free Agents for specified tier"""
         return await self.players(guild, status=Status.FREE_AGENT, tier_name=tier_name, limit=1000)
 
     async def permanent_free_agents(
         self, guild: discord.Guild, tier_name: str
-    ) -> List[LeaguePlayer]:
+    ) -> list[LeaguePlayer]:
         """Fetch a list of Permanent Free Agents for specified tier"""
         return await self.players(guild, status=Status.PERM_FA, tier_name=tier_name, limit=1000)
 
     # Config
 
-    async def _get_check_ins(self, guild: discord.Guild) -> List[CheckIn]:
+    async def _get_check_ins(self, guild: discord.Guild) -> list[CheckIn]:
         return await self.config.custom("FreeAgents", guild.id).CheckIns()
 
-    async def _save_check_ins(self, guild: discord.Guild, check_ins: List[CheckIn]):
+    async def _save_check_ins(self, guild: discord.Guild, check_ins: list[CheckIn]):
         await self.config.custom("FreeAgents", guild.id).CheckIns.set(check_ins)

@@ -126,3 +126,17 @@ class PastOffseasonDeadline(TransactionException):
 
 class NotEnoughMatchDays(TransactionException):
     """Not enough match days have passed"""
+
+
+# RapidAPI
+
+class RapidApiException(Exception):
+    """Generic RapidAPI Exception Base Type"""
+
+
+class RapidQuotaExceeded(RapidApiException):
+    """Exceeded RapidAPI request quota"""
+
+
+class RapidApiTimeOut(RapidApiException):
+    """Request to RapidAPI timed out"""

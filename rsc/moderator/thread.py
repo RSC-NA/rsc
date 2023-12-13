@@ -50,7 +50,7 @@ class ThreadMixIn(RSCMixIn):
 
     async def thread_autocomplete(
         self, interaction: discord.Interaction, current: str
-    ) -> List[app_commands.Choice[str]]:
+    ) -> list[app_commands.Choice[str]]:
         if not interaction.guild:
             return []
 
@@ -119,8 +119,8 @@ class ThreadMixIn(RSCMixIn):
         groups = await self._get_groups(interaction.guild)
 
         name_fmt = "\n".join(groups.keys())
-        role_fmt: List[str] = []
-        category_fmt: List[str] = []
+        role_fmt: list[str] = []
+        category_fmt: list[str] = []
         for g in groups.values():
             r = interaction.guild.get_role(g["role"])
             c = interaction.guild.get_channel(g["category"])
@@ -365,7 +365,7 @@ class ThreadMixIn(RSCMixIn):
 
     async def _get_management_role(
         self, guild: discord.Guild
-    ) -> Optional[discord.Role]:
+    ) -> discord.Role | None:
         return guild.get_role(
             await self.config.custom("Thread", guild.id).ManagementRole()
         )
@@ -378,7 +378,7 @@ class ThreadMixIn(RSCMixIn):
     async def _set_management_role(self, guild: discord.Guild, role: discord.Role):
         await self.config.custom("Thread", guild.id).ManagementRole.set(role.id)
 
-    async def _get_groups(self, guild: discord.Guild) -> Dict[str, ThreadGroup]:
+    async def _get_groups(self, guild: discord.Guild) -> dict[str, ThreadGroup]:
         return await self.config.custom("Thread", guild.id).Groups()
 
 

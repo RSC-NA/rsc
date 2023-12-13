@@ -144,9 +144,9 @@ class WelcomeMixIn(RSCMixIn):
         self,
         interaction: discord.Interaction,
         role1: discord.Role,
-        role2: Optional[discord.Role] = None,
-        role3: Optional[discord.Role] = None,
-        role4: Optional[discord.Role] = None,
+        role2: discord.Role | None = None,
+        role3: discord.Role | None = None,
+        role4: discord.Role | None = None,
     ):
         roles = [role1]
         if role2:
@@ -177,7 +177,7 @@ class WelcomeMixIn(RSCMixIn):
     ):
         await self.config.custom("Welcome", guild.id).WelcomeChannel.set(channel.id)
 
-    async def _get_welcome_roles(self, guild: discord.Guild) -> List[discord.Role]:
+    async def _get_welcome_roles(self, guild: discord.Guild) -> list[discord.Role]:
         roles = []
         notFound = False
         r_ids = await self.config.custom("Welcome", guild.id).WelcomeRoles()
@@ -192,12 +192,12 @@ class WelcomeMixIn(RSCMixIn):
             await self._set_welcome_roles(guild, roles)
         return roles
 
-    async def _set_welcome_roles(self, guild: discord.Guild, roles: List[discord.Role]):
+    async def _set_welcome_roles(self, guild: discord.Guild, roles: list[discord.Role]):
         await self.config.custom("Welcome", guild.id).WelcomeRoles.set(
             [x.id for x in roles]
         )
 
-    async def _get_welcome_msg(self, guild: discord.Guild) -> Optional[str]:
+    async def _get_welcome_msg(self, guild: discord.Guild) -> str | None:
         return await self.config.custom("Welcome", guild.id).WelcomeMsg()
 
     async def _set_welcome_msg(self, guild: discord.Guild, msg: str):

@@ -20,10 +20,13 @@ from rsc.const import (
     TROPHY_EMOJI,
     STAR_EMOJI,
     DEV_LEAGUE_EMOJI,
+    SPECTATOR_ROLE,
+    LEAGUE_ROLE,
+    IR_ROLE
 )
 from rsc.abc import RSCMixIn
-from rsc.embeds import ErrorEmbed, SuccessEmbed, ExceptionErrorEmbed
-from rsc.enums import BulkRoleAction
+from rsc.embeds import ErrorEmbed, SuccessEmbed, ExceptionErrorEmbed, NotImplementedEmbed
+from rsc.enums import BulkRoleAction, TransactionType
 from rsc.types import Accolades
 from rsc.utils.views import BulkRoleConfirmView
 
@@ -36,8 +39,15 @@ FRANCHISE_ROLE_REGEX = re.compile(r"^\w[\w\s]+?\(\w[\w\s]+?\)$")
 
 
 async def not_implemented(interaction: discord.Interaction):
-    await interaction.response.send_message("**Not Implemented**", ephemeral=True)
+    await interaction.response.send_message(embed=NotImplementedEmbed(), ephemeral=True)
 
+
+async def get_ir_role(guild: discord.Guild) -> discord.Role:
+    r = discord.utils.get(guild.roles, name=IR_ROLE)
+    if not r:
+        log.error(f"[{guild.name}] Expected role does not exist: {IR_ROLE}")
+        raise ValueError(f"[{guild.name}] Expected role does not exist: {IR_ROLE}")
+    return r
 
 async def get_captain_role(guild: discord.Guild) -> discord.Role:
     r = discord.utils.get(guild.roles, name=CAPTAIN_ROLE)
@@ -46,6 +56,20 @@ async def get_captain_role(guild: discord.Guild) -> discord.Role:
         raise ValueError(f"[{guild.name}] Expected role does not exist: {CAPTAIN_ROLE}")
     return r
 
+
+async def get_spectator_role(guild: discord.Guild) -> discord.Role:
+    r = discord.utils.get(guild.roles, name=SPECTATOR_ROLE)
+    if not r:
+        log.error(f"[{guild.name}] Expected role does not exist: {SPECTATOR_ROLE}")
+        raise ValueError(f"[{guild.name}] Expected role does not exist: {SPECTATOR_ROLE}")
+    return r
+
+async def get_league_role(guild: discord.Guild) -> discord.Role:
+    r = discord.utils.get(guild.roles, name=LEAGUE_ROLE)
+    if not r:
+        log.error(f"[{guild.name}] Expected role does not exist: {LEAGUE_ROLE}")
+        raise ValueError(f"[{guild.name}] Expected role does not exist: {LEAGUE_ROLE}")
+    return r
 
 async def get_free_agent_role(guild: discord.Guild) -> discord.Role:
     r = discord.utils.get(guild.roles, name=FREE_AGENT_ROLE)
@@ -95,7 +119,7 @@ async def remove_prefix(member: discord.Member) -> str:
     raise ValueError(f"Unable to remove prefix from {member.display_name}")
 
 
-async def get_prefix(member: discord.Member) -> Optional[str]:
+async def get_prefix(member: discord.Member) -> str | None:
     """Get team prefix from guild members display name"""
     result = member.display_name.split(" | ")
 
@@ -144,14 +168,14 @@ async def get_gm_by_role(franchise_role: discord.Role) -> Optional[discord.Membe
     return None
 
 
-async def role_by_name(guild: discord.Guild, name: str) -> Optional[discord.Role]:
+async def role_by_name(guild: discord.Guild, name: str) -> discord.Role | None:
     """Get a guild discord role by name"""
     return discord.utils.get(guild.roles, name=name)
 
 
 async def franchise_role_from_name(
     guild: discord.Guild, franchise_name: str
-) -> Optional[discord.Role]:
+) -> discord.Role | None:
     """Get guild franchise role from franchise name (Ex: "The Garden")"""
     for role in guild.roles:
         if role.name.lower().startswith(franchise_name.lower()):
@@ -159,7 +183,7 @@ async def franchise_role_from_name(
     return None
 
 
-async def fa_img_from_tier(tier: str, tiny: bool = False) -> Optional[Path]:
+async def fa_img_from_tier(tier: str, tiny: bool = False) -> Optional[discord.File]:
     root = Path(__file__).parent.parent
     if tiny:
         img_path = root / f"resources/FA/64x64/{tier}FA_64x64.png"
@@ -167,8 +191,33 @@ async def fa_img_from_tier(tier: str, tiny: bool = False) -> Optional[Path]:
         img_path = root / f"resources/FA/{tier}FA.png"
 
     if img_path.is_file():
-        return img_path
+        return discord.File(img_path)
+
     return None
+
+async def transaction_image_from_type(action: TransactionType) -> discord.File:
+    root = Path(__file__).parent.parent
+    match action:
+        case TransactionType.CUT:
+            return discord.File(root / "resources/transactions/Released.png")
+        case TransactionType.PICKUP:
+            return discord.File(root / "resources/transactions/Signed.png")
+        case TransactionType.RESIGN:
+            return discord.File(root / "resources/transactions/Resigned.png")
+        case TransactionType.SUBSTITUTION:
+            return discord.File(root / "resources/transactions/Subbed.png")
+        case TransactionType.TEMP_FA:
+            return discord.File(root / "resources/transactions/Subbed.png")
+        case TransactionType.TRADE:
+            return discord.File(root / "resources/transactions/Traded.png")
+        case TransactionType.RETIRE:
+            return discord.File(root / "resources/transactions/Released.png")
+        case TransactionType.INACTIVE_RESERVE:
+            return discord.File(root / "resources/transactions/InactiveReserve.png")
+        case TransactionType.IR_RETURN:
+            return discord.File(root / "resources/transactions/InactiveReserve.png")
+        case _:
+            raise NotImplemented
 
 
 async def franchise_role_from_league_player(
@@ -229,7 +278,7 @@ async def get_tier_fa_role(guild: discord.Guild, name: str) -> discord.Role:
 
 async def franchise_role_from_disord_member(
     member: discord.Member,
-) -> Optional[discord.Role]:
+) -> discord.Role | None:
     for r in member.roles:
         if FRANCHISE_ROLE_REGEX.match(r.name):
             return r
@@ -261,6 +310,14 @@ async def member_accolades(member: discord.Member) -> Accolades:
         devleague=await devleague_count(member),
     )
 
+async def fix_tracker_url(url: str) -> str:
+    if "tracker.network/profile" in url:
+        url = url.replace(
+            "tracker.network/profile", "tracker.network/rocket-league/profile"
+        )
+        url = url.replace("profile/ps/", "profile/psn/")
+        url = url.replace("profile/xbox/", "profile/xbl/")
+    return url
 
 class UtilsMixIn(RSCMixIn):
     @app_commands.command(
@@ -285,8 +342,8 @@ class UtilsMixIn(RSCMixIn):
         self,
         interaction: discord.Interaction,
         role: discord.Role,
-        role2: Optional[discord.Role],
-        role3: Optional[discord.Role],
+        role2: discord.Role | None,
+        role3: discord.Role | None,
     ):
         desc = f"Role(s): {role.mention}"
         if not (role2 or role3):
@@ -379,8 +436,8 @@ class UtilsMixIn(RSCMixIn):
         self,
         interaction: discord.Interaction,
         role: discord.Role,
-        members: Optional[Transform[List[discord.Member], MemberTransformer]],
-        to_role: Optional[discord.Role],
+        members: Optional[Transform[list[discord.Member], MemberTransformer]],
+        to_role: discord.Role | None,
     ):
         if not (members or to_role):
             await interaction.response.send_message(
@@ -462,7 +519,7 @@ class UtilsMixIn(RSCMixIn):
         self,
         interaction: discord.Interaction,
         role: discord.Role,
-        members: Optional[Transform[List[discord.Member], MemberTransformer]],
+        members: Optional[Transform[list[discord.Member], MemberTransformer]],
     ):
         count = len(members) if members else len(role.members)
 

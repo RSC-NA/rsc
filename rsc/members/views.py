@@ -107,7 +107,7 @@ class SignupView(AuthorOnlyView):
         self.platform = Platform.EPIC
         self.referrer = Referrer.OTHER
         self.rsc_name: str = ""
-        self.trackers: List[TrackerLink] = []
+        self.trackers: list[TrackerLink] = []
 
     async def prompt(self):
         """Prompt user according to view state"""

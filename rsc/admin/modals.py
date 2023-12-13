@@ -2,15 +2,31 @@ import discord
 import logging
 
 from discord.ui import TextInput
+from rsc.embeds import SuccessEmbed, GreenEmbed
 
 from typing import List, Dict
 
 log = logging.getLogger("red.rsc.franchises.modals")
 
 
+class LeagueDatesModal(discord.ui.Modal, title="Import League Dates"):
+    date_input: TextInput = TextInput(
+        label="Date String",
+        style=discord.TextStyle.paragraph,
+        placeholder="Enter dates here with formatting...",
+        required=True,
+    )
+
+    async def on_submit(self, interaction: discord.Interaction):
+        embed = SuccessEmbed(description="Dates command has been configured.")
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+
 class FranchiseRebrandModal(discord.ui.Modal, title="Franchise Rebrand"):
     name_input: TextInput = TextInput(
-        label="Name", style=discord.TextStyle.short, required=True
+        label="Name",
+        style=discord.TextStyle.short,
+        required=True,
     )
     prefix_input: TextInput = TextInput(
         label="Prefix", style=discord.TextStyle.short, required=True
@@ -25,7 +41,7 @@ class FranchiseRebrandModal(discord.ui.Modal, title="Franchise Rebrand"):
         super().__init__()
         self.name: str = ""
         self.prefix: str = ""
-        self.teams: List[str] = []
+        self.teams: list[str] = []
 
     async def on_submit(self, interaction: discord.Interaction):
         await self.parse_data()

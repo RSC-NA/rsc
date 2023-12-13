@@ -28,7 +28,7 @@ class CombineMixIn(RSCMixIn):
     def __init__(self):
         log.debug("Initializing CombineMixIn")
 
-        self._combine_cache: Dict[discord.Guild, List[int]] = {}
+        self._combine_cache: dict[discord.Guild, list[int]] = {}
 
         self.config.init_custom("Combines", 1)
         self.config.register_custom("Combines", **defaults_guild)
@@ -138,7 +138,7 @@ class CombineMixIn(RSCMixIn):
             )
             return
         # Get tiers for league
-        tiers: List[Tier] = await self.tiers(interaction.guild)
+        tiers: list[Tier] = await self.tiers(interaction.guild)
         log.debug(tiers)
 
         # Exit if no Tiers exist
@@ -199,7 +199,7 @@ class CombineMixIn(RSCMixIn):
             )
             return
 
-        overview: List[Tuple[discord.CategoryChannel, int, int]] = []
+        overview: list[Tuple[discord.CategoryChannel, int, int]] = []
         for c in categories:
             data = (
                 c,
@@ -230,7 +230,7 @@ class CombineMixIn(RSCMixIn):
 
     # Functions
 
-    async def create_combines(self, guild: discord.Guild, tiers: List[Tier]):
+    async def create_combines(self, guild: discord.Guild, tiers: list[Tier]):
         """Create all combine categories and channels for specified tier(s)"""
         public = await self._get_publicity(guild)
         for t in tiers:
@@ -287,7 +287,7 @@ class CombineMixIn(RSCMixIn):
 
     async def get_combine_categories(
         self, guild: discord.Guild
-    ) -> List[discord.CategoryChannel]:
+    ) -> list[discord.CategoryChannel]:
         """Get a list of combine categories in the guild"""
         categories = []
         for x in guild.categories:

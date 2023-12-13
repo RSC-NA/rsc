@@ -12,7 +12,7 @@ class CheckInView(AuthorOnlyView):
         self,
         interaction: discord.Interaction,
         tier: str,
-        color: Optional[discord.Color] = None,
+        color: discord.Color | None = None,
         timeout: float = DEFAULT_TIMEOUT,
     ):
         super().__init__(interaction=interaction, timeout=timeout)
@@ -62,7 +62,7 @@ class CheckOutView(AuthorOnlyView):
         self,
         interaction: discord.Interaction,
         tier: str,
-        color: Optional[discord.Color] = None,
+        color: discord.Color | None = None,
         timeout: float = DEFAULT_TIMEOUT,
     ):
         super().__init__(interaction=interaction, timeout=timeout)

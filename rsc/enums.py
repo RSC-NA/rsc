@@ -1,13 +1,20 @@
+import logging
+import math
 from enum import StrEnum, IntEnum
 
+log = logging.getLogger("red.rsc.enums")
+
+
 class ModActionType(StrEnum):
-     MUTE = "MUTE"
-     KICK = "KICK"
-     BAN = "BAN"
+    MUTE = "MUTE"
+    KICK = "KICK"
+    BAN = "BAN"
+
 
 class BulkRoleAction(StrEnum):
     ADD = "add"
     REMOVE = "remove"
+
 
 class LogLevel(StrEnum):
     CRITICAL = "CRITICAL"
@@ -141,6 +148,7 @@ class TransactionType(StrEnum):
     RETIRE = "RET"  # Retire
     WAIVER_RELEASE = "WVR"  # Waiver Release
     AGM_IR = "AIR"  # AGM Inactive Reserve
+    IR_RETURN = "IRT"  # IR Return
     DRAFT = "DFT"  # Draft Player
 
     @property
@@ -163,6 +171,7 @@ class TrackerLinksStatus(StrEnum):
     def full_name(self) -> str:
         return self.name.capitalize()
 
+
 class MatchTeamEnum(StrEnum):
     HOME = "HME"  # Home
     AWAY = "AWY"  # Away
@@ -171,6 +180,7 @@ class MatchTeamEnum(StrEnum):
     @property
     def full_name(self) -> str:
         return self.name.capitalize()
+
 
 class SubStatus(IntEnum):
     NOT = 0  # Not subbed
@@ -186,3 +196,189 @@ class RegionPreference(StrEnum):
     @property
     def full_name(self) -> str:
         return self.name.capitalize()
+
+
+# RapidAPI
+
+
+class RLStatType(StrEnum):
+    ASSISTS = "Assists"
+    GOALS = "Goals"
+    MVPS = "MVPs"
+    SAVES = "Saves"
+    SHOTS = "Shots"
+    WINS = "Wins"
+
+
+class RLChallengeType(StrEnum):
+    WEEKLY = "weekly"
+    SEASON = "season"
+
+
+class RLRegion(StrEnum):
+    AE = "asia-east"
+    AMAIN = "asia-se-mainland"
+    AMARITIME = "asia-se-maritime"
+    EU = "europe"
+    INDIA = "india"
+    MENA = "middle-east"
+    OCE = "oceania"
+    SAFRICA = "south-africa"
+    SAMERICA = "south-america"
+    USEAST = "us-east"
+    USWEST = "us-west"
+
+
+class RankedPlaylist(StrEnum):
+    DUEL = "Duel (Ranked)"
+    DOUBLES = "Doubles (Ranked)"
+    STANDARD = "Standard (Ranked)"
+    HOOPS = "Hoops"
+    RUMBLE = "Rumble"
+    DROPSHOT = "Dropshot"
+    SNOWDAY = "Snow Day"
+
+
+class RewardLevel(StrEnum):
+    BRONZE = "Bronze"
+    SILVER = "Silver"
+    GOLD = "Gold"
+    PLATINUM = "Platinum"
+    DIAMOND = "Diamond"
+    CHAMP = "Champion"
+    GC = "Grand Champion"
+    SSL = "Supersonic Legend"
+    NONE = "None"
+
+
+# Moderation
+
+
+class StrikeType(IntEnum):
+    MINOR = 0
+    NORMAL = 1
+    SERIOUS = 2
+    OTHER = 3
+
+
+class StrikePunishment(IntEnum):
+    WARNING = 0  # "Warning"
+    SHORT = 1  # "Short Timeout"
+    TIMEOUT = 2  # "Standard timeout"
+    LONG = 3  # "Long Timeout and 1 match suspension"
+    EXTENDED = 4  # "Extended Timeout and 2 match suspension"
+    SEVERE = 5  # "Severe timeout and 3 match suspension"
+    SEASON = 6  # "7 day timeout and season suspension",
+    ENFORCED = 7  # "14 day timeout"
+    TRADE = 8  # "Banned from trade channel indefinitely"
+    EVENT = 9  # "Indefinite ban from all RSC events"
+    REMOVAL = 10  # "Removed from the relevant event and the next instance of it"
+    BAN = 11  # Ban
+
+
+# Other
+
+
+class AnsiColor(IntEnum):
+    BLACK = 30
+    BLUE = 94
+    CYAN = 96
+    DARK_CYAN = 36
+    GREEN = 32
+    PUPLE = 95
+    RED = 31
+    YELLOW = 93
+
+    def colored_text(self, content: str) -> str:
+        return f"\u001b[0;{self.value}m{content}\u001b[0m"
+
+    def bold_colored_text(self, content: str) -> str:
+        return f"\u001b[1;{self.value}m{content}\u001b[0m"
+
+    def underlined_colored_text(self, content: str) -> str:
+        return f"\u001b[4;{self.value}m{content}\u001b[0m"
+
+    @staticmethod
+    def rgb_to_ansii256(hex: str) -> int:
+        b = bytearray.fromhex(hex.lstrip("#"))
+        if len(b) != 3:
+            raise ValueError("Invalid RGB hex string")
+
+        red = b[0]
+        green = b[1]
+        blue = b[2]
+        log.debug(f"Red: {red} Green: {green} Blue: {blue}")
+
+        if red == green and green == blue:
+            if red < 8:
+                log.debug(f"red < 8")
+                return 16
+
+            if red > 248:
+                log.debug(f"red > 248")
+                return 231
+
+            log.debug(f"Other Red")
+            return round((((red - 8) / 247) * 24) + 232)
+
+        return (
+            16
+            + (36 * round(red / 255 * 5))
+            + (6 * round(green / 255 * 5))
+            + round(blue / 255 * 5)
+        )
+
+    @staticmethod
+    def ansi256_to_ansi(code: int) -> int:
+        log.debug(f"Code: {code}")
+        if code < 8:
+            return 30 + code
+
+        if code < 16:
+            return 90 + (code - 8)
+
+        red: float = 0
+        green: float = 0
+        blue: float = 0
+
+        if code >= 232:
+            red = (((code - 232) * 10) + 8) / 255
+            green = red
+            blue = red
+        else:
+            code -= 16
+
+            remainder = code % 36
+
+            red = math.floor(code / 36) / 5
+            green = math.floor(remainder / 6) / 5
+            blue = (remainder % 6) / 5
+
+        value = max(red, green, blue) * 2
+
+        if value == 0:
+            return 30
+
+        result = 30 + ((round(blue) << 2) | (round(green) << 1) | round(red))
+
+        if value == 2:
+            result += 60
+
+        return result
+
+    @staticmethod
+    def from_rgb_hex(hex: str, bold=False, underline=False) -> str:
+        """Example input: #FFFFFF (Not functional TODO)"""
+        aformat = 0
+
+        a256code = AnsiColor.rgb_to_ansii256(hex)
+        acode = AnsiColor.ansi256_to_ansi(a256code)
+
+        log.debug(f"RGB -> Ansi Code: {acode}")
+
+        if bold:
+            aformat = 1
+        elif underline:
+            aformat = 4
+
+        return f"\u001b[{aformat};{acode}m"

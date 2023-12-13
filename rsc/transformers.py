@@ -8,11 +8,11 @@ from typing import List
 
 
 class MemberTransformer(Transformer):
-    """Transform space delimited string of Discord IDs into List[discord.Member] (Guild Only)"""
+    """Transform space delimited string of Discord IDs into list[discord.Member] (Guild Only)"""
 
     async def transform(
         self, interaction: discord.Interaction, value: str
-    ) -> List[discord.Member]:
+    ) -> list[discord.Member]:
         members = []
         mlist = value.split(" ")
 
