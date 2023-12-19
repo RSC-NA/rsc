@@ -1,5 +1,7 @@
 import discord
 import logging
+import random
+import string
 import asyncio
 import pytz
 
@@ -23,7 +25,7 @@ from rsc.const import LEAGUE_ROLE, MUTED_ROLE
 from rsc.embeds import ErrorEmbed, SuccessEmbed, RedEmbed, YellowEmbed
 from rsc.enums import TrackerLinksStatus, MatchFormat, MatchType
 from rsc.teams import TeamMixIn
-from rsc.types import BallchasingResult
+from rsc.types import BallchasingResult, BallchasingCollisions
 from rsc.transformers import DateTransformer
 from rsc.utils import utils
 
@@ -368,9 +370,14 @@ class BallchasingMixIn(RSCMixIn):
         else:
             match_group = await self.rsc_match_bc_group(interaction.guild, match)
             if match_group:
-                await self.upload_replays(guild=interaction.guild, group=match_group, match=match, result=result)
+                await self.upload_replays(
+                    guild=interaction.guild,
+                    group=match_group,
+                    match=match,
+                    result=result,
+                )
             else:
-                log.error("Failed to create ")
+                log.error("Failed to retrieve or create a ballchasing group for match.")
 
         if announce:
             await self.announce_to_score_reporting(
@@ -381,15 +388,102 @@ class BallchasingMixIn(RSCMixIn):
 
     # Functions
 
-    async def check_replay_collision(self):
-        pass
+    async def group_replay_collisions(
+        self, guild: discord.Guild, group: str, result: BallchasingResult
+    ) -> BallchasingCollisions:
+        collisions = set()
+        unknown = set()
+        total_replays = 0
+        bapi = self._ballchasing_api.get(guild.id)
 
-    async def upload_replays(self, guild: discord.Guild, group: str, match: Match, result: BallchasingResult):
-        pass
+        if not bapi:
+            raise RuntimeError("Ballchasing API is not configured.")
 
-    async def season_bc_group(
-        self, guild: discord.Guild, match: Match
-    ) -> str | None:
+        async for replay in bapi.get_group_replays(
+            group_id=group, deep=True, recurse=False
+        ):
+            total_replays += 1
+            if replay in result["replays"]:
+                collisions.add(replay)
+            else:
+                unknown.add(replay)
+
+        return BallchasingCollisions(
+            total_replays=total_replays,
+            unknown=unknown,
+            collisions=collisions,
+        )
+
+    async def upload_replays(
+        self, guild: discord.Guild, group: str, match: Match, result: BallchasingResult
+    ) -> list[str]:
+        bapi = self._ballchasing_api.get(guild.id)
+        if not bapi:
+            raise RuntimeError("Ballchasing API is not configured.")
+
+        if not result["replays"]:
+            return None
+
+        collisions = await self.group_replay_collisions(guild, group, result)
+        if not collisions:
+            return None
+
+        # To save on complexity, we should purge the group if an unknown match_guid is found
+        if len(collisions["unknown"]) > 0:
+            log.warning("Unknown group replay found. Purging group...")
+            await self.purge_ballchasing_group(guild, group)
+        elif len(collisions["collisions"]) > 0:
+            # Remove collisions from upload list
+            for replay in collisions["collisions"]:
+                log.debug("Removing replay collisions: {}")
+                result["replays"].remove(replay)
+
+        replay_content = []
+        for replay in result["replays"]:
+            data = await bapi.download_replay_content(replay.id)
+            if data:
+                replay_content.append(data)
+
+        replay_ids = []
+        for rbytes in replay_content:
+            rname = f"{''.join(random.choices(string.ascii_letters + string.digits, k=64))}.replay"
+            try:
+                resp = await bapi.upload_replay_from_bytes(
+                    name=rname,
+                    replay_data=rbytes,
+                    visibility=ballchasing.Visibility.PUBLIC,
+                    group=group,
+                )
+                if resp:
+                    replay_ids.append(resp.id)
+            except ValueError as exc:
+                resp = exc.args[0]
+                if resp.status == 409:
+                    # duplicate replay. patch it under the BC group
+                    err_info = await resp.json()
+                    log.debug(f"Error uploading replay. {resp.status} -- {err_info}")
+                    r_id = err_info.get("id")
+                    if r_id:
+                        log.debug("Patching replay under correct group")
+                        await bapi.patch_replay(r_id, group=group)
+                        replay_ids.append(r_id)
+        return replay_ids
+
+    async def purge_ballchasing_group(self, guild: discord.Guild, group: str):
+        bapi = self._ballchasing_api.get(guild.id)
+        if not bapi:
+            raise RuntimeError("Ballchasing API is not configured.")
+        try:
+            async with asyncio.TaskGroup() as tg:
+                async for replay in bapi.get_group_replays(
+                    group_id=group, deep=False, recurse=False
+                ):
+                    tg.create_task(bapi.delete_replay(replay.id))
+        except ExceptionGroup as eg:
+            for err in eg.exceptions:
+                raise err
+
+    async def season_bc_group(self, guild: discord.Guild, match: Match) -> str | None:
         tlg = await self._get_top_level_group(guild)
         if not tlg:
             return None
@@ -421,9 +515,7 @@ class BallchasingMixIn(RSCMixIn):
             season_group = result.id
         return season_group
 
-    async def tier_bc_group(
-        self, guild: discord.Guild, match: Match
-    ) -> str | None:
+    async def tier_bc_group(self, guild: discord.Guild, match: Match) -> str | None:
         tlg = await self._get_top_level_group(guild)
         if not tlg:
             return None

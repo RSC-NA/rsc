@@ -107,3 +107,8 @@ class BallchasingResult(TypedDict):
     home_wins: int
     away_wins: int
     replays: set[ballchasing.models.Replay]
+
+class BallchasingCollisions(TypedDict):
+    total_replays: int
+    unknown: set[ballchasing.models.Replay]
+    collisions: set[ballchasing.models.Replay]
