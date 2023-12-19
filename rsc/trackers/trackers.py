@@ -197,6 +197,7 @@ class TrackerMixIn(RSCMixIn):
         description="Display rocket league accounts associated with a player",
     )
     @app_commands.describe(player="RSC Discord Member")
+    @app_commands.guild_only
     async def _accounts(self, interaction: discord.Interaction, player: discord.Member):
         await interaction.response.defer()
 
@@ -240,20 +241,31 @@ class TrackerMixIn(RSCMixIn):
         self,
         guild: discord.Guild,
         status: TrackerLinksStatus | None = None,
-        player: discord.Member | None = None,
+        player: discord.Member | int | None = None,
         name: str | None = None,
+        limit: int=0,
+        offset: int=0
     ) -> list[TrackerLink]:
         """Fetch RSC tracker data"""
+        player_id = None
+        if isinstance(player, discord.Member):
+            player_id = str(player.id)
+        elif isinstance(player, int):
+            player_id = str(player)
+
         async with ApiClient(self._api_conf[guild.id]) as client:
             api = TrackerLinksApi(client)
             try:
-                return await api.tracker_links_list(
+                trackers = await api.tracker_links_list(
                     status=str(status) if status else None,
-                    discord_id=player.id if player else None,
+                    discord_id=player_id,
                     member_name=name,
+                    limit=limit,
+                    offset=offset
                 )
+                return trackers.results
             except ApiException as exc:
-                raise RscException(repsonse=exc)
+                raise RscException(response=exc)
 
     async def tracker_stats(
         self,
@@ -265,7 +277,7 @@ class TrackerMixIn(RSCMixIn):
             try:
                 return await api.tracker_links_links_stats()
             except ApiException as exc:
-                raise RscException(repsonse=exc)
+                raise RscException(response=exc)
 
     async def next_tracker(
         self,
@@ -278,4 +290,4 @@ class TrackerMixIn(RSCMixIn):
             try:
                 return await api.tracker_links_next(limit=limit)
             except ApiException as exc:
-                raise RscException(repsonse=exc)
+                raise RscException(response=exc)

@@ -1,5 +1,9 @@
+import discord
 from rsc.const import TROPHY_EMOJI, DEV_LEAGUE_EMOJI, STAR_EMOJI
 from dataclasses import dataclass
+import ballchasing
+
+from rscapi.models.match import Match
 
 
 from typing import TypedDict, NewType
@@ -86,3 +90,20 @@ class Accolades:
         if isinstance(other, Accolades):
             return self.total <= other.total
         return NotImplemented
+
+
+class TransactionSettings(TypedDict):
+    TransChannel: discord.TextChannel | None
+    TransDMs: bool
+    TransLogChannel: discord.TextChannel | None
+    TransNotifications: bool
+    TransRole: discord.Role | None
+    CutMessage: str | None
+    ContractExpirationMessage: str | None
+    Substitutes: list[Substitute]
+
+
+class BallchasingResult(TypedDict):
+    home_wins: int
+    away_wins: int
+    replays: set[ballchasing.models.Replay]

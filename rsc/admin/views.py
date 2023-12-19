@@ -36,7 +36,7 @@ class ConfirmSyncView(AuthorOnlyView):
     async def prompt(self):
         """Note: The prompt does not all wait()"""
         prompt = OrangeEmbed(
-            title="Sync Roles",
+            title="API Sync",
             description="You are about to sync data from the API directly into the discord server.\n\n**Are you sure you want to do this?**",
         )
         await self.interaction.response.send_message(

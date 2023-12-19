@@ -71,7 +71,7 @@ class FranchiseMixIn(RSCMixIn):
     @app_commands.command(
         name="franchises", description="Get a list of all RSC franchises"
     )
-    @app_commands.guild_only()
+    @app_commands.guild_only
     async def _franchises(self, interaction: discord.Interaction):
         """Get a list of all RSC franchises"""
         await interaction.response.defer()
@@ -159,7 +159,6 @@ class FranchiseMixIn(RSCMixIn):
             if franchises:
                 franchises.sort(key=lambda f: f.name)
                 if self._franchise_cache.get(guild.id):
-                    log.debug(f"[{guild.name}] Adding new franchises to cache")
                     cached = set(self._franchise_cache[guild.id])
                     different = set([f.name for f in franchises]) - cached
                     log.debug(

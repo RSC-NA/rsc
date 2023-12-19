@@ -42,7 +42,6 @@ class MatchFormat(StrEnum):
     BEST_OF_FIVE = "BO5"  # Best of Five
     BEST_OF_SEVEN = "BO7"  # Best of Seven
 
-
 class Division(StrEnum):
     OCEAN = "O"  # Ocean
     MOUNTAIN = "M"  # Mountain
@@ -97,7 +96,7 @@ class Status(StrEnum):
     BANNED = "BN"  # Banned
     UNSIGNED_GM = "UG"  # GM (Unsigned)
     PERM_FA = "PF"  # Permanent Free Agent
-    WAIVER_CLAIM = ("WC",)  # Waiver Claim
+    WAIVER_CLAIM = "WC"  # Waiver Claim
 
     @property
     def full_name(self) -> str:
@@ -181,6 +180,9 @@ class MatchTeamEnum(StrEnum):
     def full_name(self) -> str:
         return self.name.capitalize()
 
+class IntentResponse:
+    RETURN = ""
+    NOT = ""
 
 class SubStatus(IntEnum):
     NOT = 0  # Not subbed
@@ -189,13 +191,42 @@ class SubStatus(IntEnum):
 
 
 class RegionPreference(StrEnum):
-    EAST = ("EST",)  # US East
-    WEST = ("WST",)  # US West
-    EU = ("EU",)  # Europe
+    EAST = "EST"  # US East
+    WEST = "WST"  # US West
+    EU = "EU"  # Europe
 
     @property
     def full_name(self) -> str:
-        return self.name.capitalize()
+        match self:
+            case RegionPreference.EAST:
+                return "US East"
+            case RegionPreference.WEST:
+                return "US West"
+            case RegionPreference.EU:
+                return "Europe"
+            case _:
+                raise ValueError(f"Unknown Region: {self}")
+
+class PlayerType(StrEnum):
+    NEW = "NEW"
+    FORMER = "FORMER"
+
+
+class Platform(StrEnum):
+    STEAM = "STEAM"
+    PLAYSTATION = "PS"
+    XBOX = "XBOX"
+    EPIC = "EPIC"
+    SWITCH = "SWITCH"
+
+
+class Referrer(StrEnum):
+    REDDIT = "REDDIT"
+    TWITCH = "TWITCH"
+    FRIEND = "FRIEND"
+    MLE = "MLE"
+    BALLCHASING = "BALLCHASING"
+    OTHER = "OTHER"
 
 
 # RapidAPI

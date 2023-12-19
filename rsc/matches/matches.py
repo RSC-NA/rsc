@@ -38,13 +38,14 @@ class MatchMixIn(RSCMixIn):
         team="Get the schedule for a specific team (Optional)",
         preseason="Include preseason matches (Default: False)",
     )
-    @app_commands.guild_only()
+    @app_commands.guild_only
     async def _schedule_args(
         self,
         interaction: discord.Interaction,
         team: str | None = None,
         preseason: bool = False,
     ):
+        await interaction.response.defer()
         team_id = 0
         tier = None
         if team:
@@ -57,19 +58,17 @@ class MatchMixIn(RSCMixIn):
                 interaction.guild, discord_id=interaction.user.id, limit=1
             )
             if not player:
-                await interaction.response.send_message(
+                await interaction.followup.send(
                     embed=ErrorEmbed(
                         description=f"You are not currently signed up for the league."
                     ),
-                    ephemeral=True,
                 )
                 return
             if player[0].status != Status.ROSTERED:
-                await interaction.response.send_message(
+                await interaction.followup.send(
                     embed=ErrorEmbed(
                         description=f"You are not currently rostered on a team."
                     ),
-                    ephemeral=True,
                 )
                 return
             team = player[0].team.name
@@ -77,9 +76,8 @@ class MatchMixIn(RSCMixIn):
             team_id = player[0].team.id
 
         if not team_id:
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 embed=ErrorEmbed(description=f"**{team}** is not a valid team name."),
-                ephemeral=True,
             )
             return
 
@@ -93,7 +91,7 @@ class MatchMixIn(RSCMixIn):
         tier_color = await tier_color_by_name(interaction.guild, tier)
 
         if not schedule:
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 embed=discord.Embed(
                     title=f"{team} Schedule",
                     description=f"There are no matches currently scheduled for **{team}**",
@@ -102,10 +100,12 @@ class MatchMixIn(RSCMixIn):
             )
 
         # Sorting
-        matches = [s for s in schedule if s.match_type == MatchType.PRESEASON]
-        matches.extend([s for s in schedule if s.match_type == MatchType.REGULAR])
-        matches.extend([s for s in schedule if s.match_type == MatchType.POSTSEASON])
-        matches.extend([s for s in schedule if s.match_type == MatchType.FINALS])
+        if preseason:
+            matches = [s for s in schedule if s.match_type == MatchType.PRESEASON]
+        else:
+            matches = [s for s in schedule if s.match_type == MatchType.REGULAR]
+            matches.extend([s for s in schedule if s.match_type == MatchType.POSTSEASON])
+            matches.extend([s for s in schedule if s.match_type == MatchType.FINALS])
 
         embed = discord.Embed(
             title=f"{team} Schedule",
@@ -131,13 +131,13 @@ class MatchMixIn(RSCMixIn):
             inline=True,
         )
 
-        await interaction.response.send_message(embed=embed)
+        await interaction.followup.send(embed=embed)
 
     @app_commands.command(
         name="match",
         description="Get information about your upcoming match",
     )
-    @app_commands.guild_only()
+    @app_commands.guild_only
     async def _match_cmd(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
         # Find the team ID of interaction user
@@ -145,7 +145,7 @@ class MatchMixIn(RSCMixIn):
             interaction.guild, discord_id=interaction.user.id, limit=1
         )
         if not player:
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 embed=ErrorEmbed(
                     description=f"You are not currently signed up for the league."
                 ),
@@ -153,7 +153,7 @@ class MatchMixIn(RSCMixIn):
             )
             return
         if not (player[0].team and player[0].team.name):
-            await interaction.response.send_message(
+            await interaction.follwup.send(
                 embed=ErrorEmbed(
                     description=f"You are not currently rostered on a team."
                 ),
@@ -169,8 +169,9 @@ class MatchMixIn(RSCMixIn):
         # Get teams next match
         try:
             match = await self.next_match(interaction.guild, team_id)
-        except ApiException:
-            await interaction.response.send_message(
+        except ApiException as exc:
+            log.debug(f"Match Return Status: {exc.status}")
+            await interaction.followup.send(
                 embed=BlueEmbed(
                     title=f"Match Info",
                     description="You do not have any upcoming matches.",
@@ -334,7 +335,7 @@ class MatchMixIn(RSCMixIn):
                 day=day,
                 match_type=str(match_type) if match_type else None,
                 match_format=str(match_format) if match_format else None,
-                league=str(self._league[guild.id]),
+                league=self._league[guild.id],
                 limit=limit,
                 offset=offset,
                 preseason=preseason,
@@ -350,15 +351,15 @@ class MatchMixIn(RSCMixIn):
         season: int | None = None,
         season_number: int | None = None,
         day: int | None = None,
-        match_type: Optional[MatchType] = None,
-        match_format: Optional[MatchFormat] = None,
+        match_type: MatchType | None = None,
+        match_format: MatchFormat | None = None,
         limit: int = 0,
         offset: int = 0,
         preseason: int = 0,
-    ) -> list[MatchList]:
+    ) -> list[Match]:
         async with ApiClient(self._api_conf[guild.id]) as client:
             api = MatchesApi(client)
-            matches: MatchesList200Response = await api.matches_find_match(
+            return await api.matches_find_match(
                 teams=teams,
                 date__lt=date__lt.isoformat() if date__lt else None,
                 date__gt=date__gt.isoformat() if date__gt else None,
@@ -367,12 +368,11 @@ class MatchMixIn(RSCMixIn):
                 day=day,
                 match_type=str(match_type) if match_type else None,
                 match_format=str(match_format) if match_format else None,
-                league=str(self._league[guild.id]),
+                league=self._league[guild.id],
                 limit=limit,
                 offset=offset,
                 preseason=preseason,
             )
-            return matches.results
 
     async def match_by_id(self, guild: discord.Guild, id: int) -> Match:
         async with ApiClient(self._api_conf[guild.id]) as client:

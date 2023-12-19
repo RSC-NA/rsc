@@ -1,4 +1,5 @@
 import discord
+import datetime
 import logging
 from pathlib import Path
 from discord.ext.commands import Greedy
@@ -10,7 +11,7 @@ from redbot.core import app_commands, checks
 
 from rscapi.models.league_player import LeaguePlayer
 
-from rsc.transformers import MemberTransformer
+from rsc.transformers import MemberTransformer, GreedyMemberTransformer
 from rsc.const import (
     GM_ROLE,
     CAPTAIN_ROLE,
@@ -25,7 +26,7 @@ from rsc.const import (
     IR_ROLE
 )
 from rsc.abc import RSCMixIn
-from rsc.embeds import ErrorEmbed, SuccessEmbed, ExceptionErrorEmbed, NotImplementedEmbed
+from rsc.embeds import ErrorEmbed, SuccessEmbed, ExceptionErrorEmbed, NotImplementedEmbed, OrangeEmbed
 from rsc.enums import BulkRoleAction, TransactionType
 from rsc.types import Accolades
 from rsc.utils.views import BulkRoleConfirmView
@@ -37,6 +38,29 @@ log = logging.getLogger("red.rsc.utils")
 
 FRANCHISE_ROLE_REGEX = re.compile(r"^\w[\w\s]+?\(\w[\w\s]+?\)$")
 
+
+async def get_audit_log_reason(
+    guild: discord.Guild,
+    target: discord.abc.GuildChannel | discord.Member | discord.Role | int,
+    action: discord.AuditLogAction,
+) -> tuple[discord.abc.User | None, str | None]:
+    """Retrieve audit log reason for `discord.AuditLogAction`"""
+    perp = None
+    reason = None
+    if not isinstance(target, int):
+        target_id = target.id
+    else:
+        target_id = target
+    if guild.me.guild_permissions.view_audit_log:
+        async for log in guild.audit_logs(limit=5, action=action):
+            if not log.target:
+                continue
+            if log.target.id == target_id:
+                perp = log.user
+                if log.reason:
+                    reason = log.reason
+                break
+    return perp, reason
 
 async def not_implemented(interaction: discord.Interaction):
     await interaction.response.send_message(embed=NotImplementedEmbed(), ephemeral=True)
@@ -243,7 +267,7 @@ async def tier_color_by_name(guild: discord.Guild, name: str) -> discord.Color:
 
 
 async def is_guild_interaction(interaction: discord.Interaction) -> bool:
-    """Check if interaction was sent from guild. Mostly for type issues since guild_only() exists"""
+    """Check if interaction was sent from guild. Mostly for type issues since guild_only exists"""
     if interaction.guild:
         return True
     return False
@@ -319,13 +343,36 @@ async def fix_tracker_url(url: str) -> str:
         url = url.replace("profile/xbox/", "profile/xbl/")
     return url
 
+
+async def iter_gather(result):
+    """Gather async iterator into list and return"""
+    final = []
+    async for r in result:
+        final.append(r)
+    return final
+
 class UtilsMixIn(RSCMixIn):
     @app_commands.command(
-        name="getid",
-        description='Get the discord ID of a user. (Return: "name:username:id")',
+        name="getmassid",
+        description="Mass lookup version of /getid.",
     )
-    @app_commands.describe(member="Player discord name")
-    @app_commands.guild_only()
+    @app_commands.describe(members="Space delimited list of any string or ID that could identify a user.")
+    @app_commands.guild_only
+    async def _getmassid(self, interaction: discord.Interaction, members: Transform[list[discord.Member], GreedyMemberTransformer]):
+        """Get the discord ID of a user"""
+        desc = "```\n"
+        for m in members:
+            desc += f"{m.display_name}:{m.name}:{m.id}\n"
+        desc += "```"
+
+        await interaction.response.send_message(content=desc,ephemeral=True)
+
+    @app_commands.command(
+        name="getid",
+        description='Lookup discord member account identifiers',
+    )
+    @app_commands.describe(member="RSC Discord Member")
+    @app_commands.guild_only
     async def _getid(self, interaction: discord.Interaction, member: discord.Member):
         """Get the discord ID of a user"""
         await interaction.response.send_message(
@@ -334,10 +381,239 @@ class UtilsMixIn(RSCMixIn):
         )
 
     @app_commands.command(
+        name="userinfo",
+        description='Display discord user information for a user',
+    )
+    @app_commands.describe(member="RSC Discord Member")
+    @app_commands.guild_only
+    async def _userinfo(self, interaction: discord.Interaction, member: discord.Member):
+        pass
+
+    @app_commands.command(
+        name="serverinfo",
+        description='Display information about the discord server',
+    )
+    @app_commands.describe(details="Increase verbosity")
+    @app_commands.guild_only
+    async def _serverinfo(self, interaction: discord.Interaction, details: bool=False):
+        """
+        Show server information.
+
+        `details`: Shows more information when set to `True`.
+        Default to False.
+        """
+        if not interaction.guild:
+            return
+
+        guild = interaction.guild
+        created_at = "Created on {date_and_time}. That's {relative_time}!".format(
+            date_and_time=discord.utils.format_dt(guild.created_at),
+            relative_time=discord.utils.format_dt(guild.created_at, "R"),
+        )
+        online = str(
+            len([m.status for m in guild.members if m.status != discord.Status.offline])
+        )
+        total_users = guild.member_count and str(guild.member_count)
+        text_channels = str(len(guild.text_channels))
+        voice_channels = str(len(guild.voice_channels))
+        stage_channels = str(len(guild.stage_channels))
+        if not details:
+            data = OrangeEmbed(description=created_at)
+            data.add_field(
+                name="Users online",
+                value=f"{online}/{total_users}" if total_users else "Not available",
+            )
+            data.add_field(name="Text Channels", value=text_channels)
+            data.add_field(name="Voice Channels", value=voice_channels)
+            data.add_field(name="Roles", value=str(len(guild.roles)))
+            data.add_field(name="Owner", value=str(guild.owner))
+            data.set_footer(
+                text="Server ID: "
+                + str(guild.id)
+                + f"  •  Use /{interaction.command.name} details for more info on the server."
+                
+            )
+            if guild.icon:
+                data.set_author(name=guild.name, url=guild.icon)
+                data.set_thumbnail(url=guild.icon)
+            else:
+                data.set_author(name=guild.name)
+        else:
+
+            def _size(num: float):
+                for unit in ["B", "KB", "MB", "GB", "TB", "PB", "EB", "ZB"]:
+                    if abs(num) < 1024.0:
+                        return "{0:.1f}{1}".format(num, unit)
+                    num /= 1024.0
+                return "{0:.1f}{1}".format(num, "YB")
+
+            def _bitsize(num: float):
+                for unit in ["B", "KB", "MB", "GB", "TB", "PB", "EB", "ZB"]:
+                    if abs(num) < 1000.0:
+                        return "{0:.1f}{1}".format(num, unit)
+                    num /= 1000.0
+                return "{0:.1f}{1}".format(num, "YB")
+
+            shard_info = (
+                "\nShard ID: **{shard_id}/{shard_count}**".format(
+                    shard_id=str(guild.shard_id + 1),
+                    shard_count=str(self.bot.shard_count),
+                )
+                if self.bot.shard_count > 1
+                else ""
+            )
+            # Logic from: https://github.com/TrustyJAID/Trusty-cogs/blob/master/serverstats/serverstats.py#L159
+            online_stats = {
+                "Humans: ": lambda x: not x.bot,
+                " • Bots: ": lambda x: x.bot,
+                "\N{LARGE GREEN CIRCLE}": lambda x: x.status is discord.Status.online,
+                "\N{LARGE ORANGE CIRCLE}": lambda x: x.status is discord.Status.idle,
+                "\N{LARGE RED CIRCLE}": lambda x: x.status is discord.Status.do_not_disturb,
+                "\N{MEDIUM WHITE CIRCLE}\N{VARIATION SELECTOR-16}": lambda x: (
+                    x.status is discord.Status.offline
+                ),
+                "\N{LARGE PURPLE CIRCLE}": lambda x: any(
+                    a.type is discord.ActivityType.streaming for a in x.activities
+                ),
+                "\N{MOBILE PHONE}": lambda x: x.is_on_mobile(),
+            }
+            member_msg = f"Users online: **{online}/{total_users}**\n"
+            count = 1
+            for emoji, value in online_stats.items():
+                try:
+                    num = len([m for m in guild.members if value(m)])
+                except Exception as error:
+                    print(error)
+                    continue
+                else:
+                    member_msg += f"{emoji} **{num}** " + (
+                        "\n" if count % 2 == 0 else ""
+                    )
+                count += 1
+
+            verif = {
+                "none": "0 - None",
+                "low": "1 - Low",
+                "medium": "2 - Medium",
+                "high": "3 - High",
+                "highest": "4 - Highest",
+            }
+
+            joined_on = "{bot_name} joined this server on {bot_join}. That's over {since_join} days ago!".format(
+                bot_name=guild.me.display_name,
+                bot_join=guild.me.joined_at.strftime("%d %b %Y %H:%M:%S"),
+                since_join=str((interaction.created_at - guild.me.joined_at).days),
+            )
+
+            data = OrangeEmbed(
+                description=(f"{guild.description}\n\n" if guild.description else "") + created_at,
+            )
+            data.set_author(
+                name=guild.name,
+                icon_url="https://cdn.discordapp.com/emojis/457879292152381443.png"
+                if "VERIFIED" in guild.features
+                else "https://cdn.discordapp.com/emojis/508929941610430464.png"
+                if "PARTNERED" in guild.features
+                else None,
+            )
+            if guild.icon:
+                data.set_thumbnail(url=guild.icon)
+            data.add_field(name="Members:", value=member_msg)
+            data.add_field(
+                name="Channels:",
+                value=(
+                    "\N{SPEECH BALLOON} Text: {text}\n"
+                    "\N{SPEAKER WITH THREE SOUND WAVES} Voice: {voice}\n"
+                    "\N{STUDIO MICROPHONE} Stage: {stage}"
+                ).format(
+                    text=f"**{text_channels}**",
+                    voice=f"**{voice_channels}**",
+                    stage=f"**{stage_channels}**",
+                ),
+            )
+            data.add_field(
+                name="Utility:",
+                value=(
+                    "Owner: {owner}\nVerif. level: {verif}\nServer ID: {id}{shard_info}"
+                ).format(
+                    owner=f"**{guild.owner}**",
+                    verif=f"**{verif[str(guild.verification_level)]}**",
+                    id=f"**{guild.id}**",
+                    shard_info=shard_info,
+                ),
+                inline=False,
+            )
+            data.add_field(
+                name="Misc:",
+                value=(
+                    "AFK channel: {afk_chan}\nAFK timeout: **{afk_timeout}**\nCustom emojis: **{emoji_count}**\nRoles: **{role_count}**"
+                ).format(
+                    afk_chan=guild.afk_channel
+                    if guild.afk_channel
+                    else "**Not set**",
+                    afk_timeout=guild.afk_timeout,
+                    emoji_count=len(guild.emojis),
+                    role_count=len(guild.roles),
+                ),
+                inline=False,
+            )
+
+            excluded_features = {
+                # available to everyone since forum channels private beta
+                "THREE_DAY_THREAD_ARCHIVE",
+                "SEVEN_DAY_THREAD_ARCHIVE",
+                # rolled out to everyone already
+                "NEW_THREAD_PERMISSIONS",
+                "TEXT_IN_VOICE_ENABLED",
+                "THREADS_ENABLED",
+                # available to everyone sometime after forum channel release
+                "PRIVATE_THREADS",
+            }
+            custom_feature_names = {
+                "VANITY_URL": "Vanity URL",
+                "VIP_REGIONS": "VIP regions",
+            }
+            features = sorted(guild.features)
+            if "COMMUNITY" in features:
+                features.remove("NEWS")
+            feature_names = [
+                custom_feature_names.get(feature, " ".join(feature.split("_")).capitalize())
+                for feature in features
+                if feature not in excluded_features
+            ]
+            if guild.features:
+                data.add_field(
+                    name="Server features:",
+                    value="\n".join(
+                        f"\N{WHITE HEAVY CHECK MARK} {feature}" for feature in feature_names
+                    ),
+                )
+
+            if guild.premium_tier != 0:
+                nitro_boost = (
+                    "Tier {boostlevel} with {nitroboosters} boosts\n"
+                    "File size limit: **{filelimit}**\n"
+                    "Emoji limit: **{emojis_limit}**\n"
+                    "VCs max bitrate: **{bitrate}**"
+                ).format(
+                    boostlevel=guild.premium_tier,
+                    nitroboosters=guild.premium_subscription_count,
+                    filelimit=_size(guild.filesize_limit),
+                    emojis_limit=guild.emoji_limit,
+                    bitrate=_bitsize(guild.bitrate_limit),
+                )
+                data.add_field(name="Nitro Boost:", value=nitro_boost)
+            if guild.splash:
+                data.set_image(url=guild.splash.replace(format="png"))
+            data.set_footer(text=joined_on)
+
+        await interaction.response.send_message(embed=data)
+
+    @app_commands.command(
         name="getallwithrole",
         description="Get all users with the specified role(s). (Max 3 roles)",
     )
-    @app_commands.guild_only()
+    @app_commands.guild_only
     async def _getallwithrole(
         self,
         interaction: discord.Interaction,
@@ -397,7 +673,7 @@ class UtilsMixIn(RSCMixIn):
     @app_commands.describe(role="Discord role to add", member="Player discord name")
     @app_commands.checks.has_permissions(manage_roles=True)
     @app_commands.checks.bot_has_permissions(manage_roles=True)
-    @app_commands.guild_only()
+    @app_commands.guild_only
     async def _addrole(
         self,
         interaction: discord.Interaction,
@@ -431,12 +707,12 @@ class UtilsMixIn(RSCMixIn):
     )
     @app_commands.checks.has_permissions(manage_roles=True)
     @app_commands.checks.bot_has_permissions(manage_roles=True)
-    @app_commands.guild_only()
+    @app_commands.guild_only
     async def _bulkaddrole(
         self,
         interaction: discord.Interaction,
         role: discord.Role,
-        members: Optional[Transform[list[discord.Member], MemberTransformer]],
+        members: Optional[Transform[list[discord.Member], GreedyMemberTransformer]],
         to_role: discord.Role | None,
     ):
         if not (members or to_role):
@@ -481,7 +757,7 @@ class UtilsMixIn(RSCMixIn):
     @app_commands.describe(role="Discord role to remove", member="Player discord name")
     @app_commands.checks.has_permissions(manage_roles=True)
     @app_commands.checks.bot_has_permissions(manage_roles=True)
-    @app_commands.guild_only()
+    @app_commands.guild_only
     async def _removerole(
         self,
         interaction: discord.Interaction,
@@ -514,12 +790,12 @@ class UtilsMixIn(RSCMixIn):
     )
     @app_commands.checks.has_permissions(manage_roles=True)
     @app_commands.checks.bot_has_permissions(manage_roles=True)
-    @app_commands.guild_only()
+    @app_commands.guild_only
     async def _bulkremoverole(
         self,
         interaction: discord.Interaction,
         role: discord.Role,
-        members: Optional[Transform[list[discord.Member], MemberTransformer]],
+        members: Optional[Transform[list[discord.Member], GreedyMemberTransformer]],
     ):
         count = len(members) if members else len(role.members)
 

@@ -1,7 +1,11 @@
 import discord
 import logging
 
+from discord.ui import TextInput
+
 from rsc.const import DEFAULT_TIMEOUT, BEHAVIOR_RULES_URL
+from rsc.embeds import RedEmbed, BlueEmbed
+from rsc.enums import RegionPreference, Platform, PlayerType, Referrer
 from rsc.views import (
     AgreeButton,
     AuthorOnlyView,
@@ -23,43 +27,29 @@ log = logging.getLogger("red.rsc.members.views")
 TrackerLink = str
 
 
-class PlayerType(StrEnum):
-    NEW = "New Player"
-    FORMER = "Former Player"
-
-
-class Platform(StrEnum):
-    STEAM = "Steam"
-    PLAYSTATION = "Playstation"
-    XBOX = "Xbox"
-    EPIC = "Epic"
-    SWITCH = "Switch"
-
-
-class Referrer(StrEnum):
-    REDDIT = "Reddit"
-    TWITCH = "Twitch"
-    FRIEND = "Friend"
-    MLE = "MLE"
-    BALLCHASING = "Ballchasing"
-    OTHER = "Other"
-
-
 class SignupState(IntEnum):
     TIMES = 0
     RULES = 1
     PLAYER_TYPE = 2
-    PLATFORM = 3
-    REFERRER = 4
-    TRACKERS = 5
-    FINISHED = 6
-    CANCELLED = 7
+    REGION = 3
+    PLATFORM = 4
+    REFERRER = 5
+    TRACKERS = 6
+    FINISHED = 7
+    CANCELLED = 8
+
+
+class IntentState(IntEnum):
+    DECLARE = 0
+    CONFIRM = 1
+    FINISHED = 2
+    CANCELLED = 3
 
 
 class PlayerInfoModal(discord.ui.Modal, title="Rocket League Trackers"):
-    rsc_name = discord.ui.TextInput(label="In-game Name", style=discord.TextStyle.short)
-    links = discord.ui.TextInput(
-        label="Tracker Links", style=discord.TextStyle.paragraph
+    rsc_name: TextInput = TextInput(label="In-game Name", style=discord.TextStyle.short, required=True)
+    links: TextInput = TextInput(
+        label="Tracker Links", style=discord.TextStyle.paragraph, required=False
     )
 
     async def on_submit(self, interaction: discord.Interaction):
@@ -73,8 +63,8 @@ class ReferrerSelect(discord.ui.Select):
             self.add_option(label=p, value=p)
 
     async def callback(self, interaction: discord.Interaction):
-        self.view.referrer = Referrer(self.values[0])
-        await self.view.confirm(interaction)
+        self.view.referrer = Referrer(self.values[0])  # type: ignore
+        await self.view.confirm(interaction)  # type: ignore
 
 
 class PlatformSelect(discord.ui.Select):
@@ -84,19 +74,109 @@ class PlatformSelect(discord.ui.Select):
             self.add_option(label=p, value=p)
 
     async def callback(self, interaction: discord.Interaction):
-        self.view.platform = Platform(self.values[0])
-        await self.view.confirm(interaction)
+        self.view.platform = Platform(self.values[0])  # type: ignore
+        await self.view.confirm(interaction)  # type: ignore
+
+
+class RegionSelect(discord.ui.Select):
+    def __init__(self):
+        super().__init__(placeholder="Select your preferred region...")
+        for p in RegionPreference:
+            self.add_option(label=p.full_name.upper(), value=p)
+
+    async def callback(self, interaction: discord.Interaction):
+        self.view.region = RegionPreference(self.values[0])  # type: ignore
+        await self.view.confirm(interaction)  # type: ignore
 
 
 class PlayerTypeSelect(discord.ui.Select):
     def __init__(self):
-        super().__init__(placeholder="New or former...")
+        super().__init__(placeholder="New or former player...")
         for p in PlayerType:
-            self.add_option(label=p, value=p)
+            self.add_option(label=f"{p.value} PLAYER", value=p)
 
     async def callback(self, interaction: discord.Interaction):
-        self.view.player_type = PlayerType(self.values[0])
-        await self.view.confirm(interaction)
+        self.view.player_type = PlayerType(self.values[0])  # type: ignore
+        await self.view.confirm(interaction)  # type: ignore
+
+
+class IntentSelect(discord.ui.Select):
+    def __init__(self):
+        super().__init__(placeholder="What is your intent?")
+        self.add_option(label=f"Returning next season", value="yes")
+        self.add_option(label=f"Not returning next season", value="no")
+
+    async def callback(self, interaction: discord.Interaction):
+        self.view.result = True if self.values[0] == "yes" else False # type: ignore
+        await interaction.response.defer(ephemeral=True)
+
+
+class IntentToPlayView(AuthorOnlyView):
+    def __init__(
+        self, interaction: discord.Interaction, timeout: float = DEFAULT_TIMEOUT
+    ):
+        super().__init__(interaction=interaction, timeout=timeout)
+        self.state = IntentState.DECLARE
+        self.result = False
+        self.add_item(IntentSelect())
+        self.add_item(ConfirmButton())
+        self.add_item(CancelButton())
+
+    async def prompt(self):
+        """Prompt user for intent"""
+        match self.state:
+            case IntentState.DECLARE:
+                await self.send_declaration()
+            case IntentState.CONFIRM:
+                await self.send_confirmation()
+            case IntentState.CANCELLED:
+                await self.send_cancelled()
+                self.stop()
+            case IntentState.FINISHED:
+                self.stop()
+
+    async def send_confirmation(self):
+        self.clear_items()
+        self.add_item(ConfirmButton())
+        self.add_item(CancelButton())
+        status_fmt = (
+            "Returning Next Season" if self.result else "Not Returning Next Season"
+        )
+        embed = BlueEmbed(
+            title="Intent to Play",
+            description=f"Please verify the following is correct.\n\nIntent: **{status_fmt}**",
+        )
+        await self.interaction.edit_original_response(embed=embed, view=self)
+
+    async def send_declaration(self):
+        embed = BlueEmbed(
+            title="Intent to Play",
+            description="Please declare your intent for the next season of RSC below.",
+        )
+        await self.interaction.response.send_message(embed=embed, view=self, ephemeral=True)
+
+    async def confirm(self, interaction: discord.Interaction):
+        """User pressed Yes Button"""
+        log.debug(f"[INTENT] User agreed to {self.state.name}")
+        self.state = IntentState(self.state + 1)
+        await self.prompt()
+
+    async def decline(self, interaction: discord.Interaction):
+        """User pressed No Button"""
+        log.debug(f"[INTENT] User cancelled on {self.state.name}")
+        self.state = IntentState.CANCELLED
+        await interaction.response.defer(ephemeral=True)
+        await self.send_cancelled()
+        self.stop()
+
+    async def send_cancelled(self):
+        await self.interaction.edit_original_response(
+            embed=RedEmbed(
+                title="Intent Declaration Cancelled",
+                description="You have cancelled declaring your intent to play for next season. If this was an error, please run the command again.",
+            ),
+            view=None,
+        )
 
 
 class SignupView(AuthorOnlyView):
@@ -105,6 +185,7 @@ class SignupView(AuthorOnlyView):
         self.state = SignupState.TIMES
         self.player_type = PlayerType.NEW
         self.platform = Platform.EPIC
+        self.region = RegionPreference.EAST
         self.referrer = Referrer.OTHER
         self.rsc_name: str = ""
         self.trackers: list[TrackerLink] = []
@@ -119,6 +200,8 @@ class SignupView(AuthorOnlyView):
                 await self.send_rules()
             case SignupState.PLAYER_TYPE:
                 await self.send_player_type()
+            case SignupState.REGION:
+                await self.send_region_preference()
             case SignupState.PLATFORM:
                 await self.send_platform()
             case SignupState.REFERRER:
@@ -158,6 +241,17 @@ class SignupView(AuthorOnlyView):
         self.state = SignupState.CANCELLED
         await interaction.response.defer(ephemeral=True)
         await self.prompt()
+
+    async def send_region_preference(self):
+        self.clear_items()
+        self.add_item(RegionSelect())
+
+        embed = discord.Embed(
+            title="Region Preference",
+            description="What is your preferred region when playing Rocket League?",
+            color=discord.Color.blue(),
+        )
+        await self.interaction.edit_original_response(embed=embed, view=self)
 
     async def send_trackers_modal(self, interaction: discord.Interaction):
         info_modal = PlayerInfoModal()

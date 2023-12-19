@@ -30,7 +30,7 @@ class LeagueMixIn(RSCMixIn):
     # Commands
 
     @app_commands.command(name="leagues", description="Show all configured RSC leagues")
-    @app_commands.guild_only()
+    @app_commands.guild_only
     async def _leagues(self, interaction: discord.Interaction):
         leagues = await self.leagues(interaction.guild)
 
@@ -51,7 +51,7 @@ class LeagueMixIn(RSCMixIn):
     @app_commands.command(
         name="leagueinfo", description="Show league and current season information"
     )
-    @app_commands.guild_only()
+    @app_commands.guild_only
     async def _leagues_info(self, interaction: discord.Interaction):
         league_data = await self.current_season()
 
@@ -71,7 +71,7 @@ class LeagueMixIn(RSCMixIn):
     @app_commands.command(
         name="season", description="Display current RSC season for league"
     )
-    @app_commands.guild_only()
+    @app_commands.guild_only
     async def _season(self, interaction: discord.Interaction):
         season = await self.current_season(interaction.guild)
         if not season:
@@ -95,7 +95,7 @@ class LeagueMixIn(RSCMixIn):
     @app_commands.command(
         name="dates", description="Display important RSC dates"
     )
-    @app_commands.guild_only()
+    @app_commands.guild_only
     async def _dates_cmd(self, interaction: discord.Interaction):
         dates = await self._get_dates(interaction.guild)
         if not dates:

@@ -257,6 +257,117 @@ class AdminMixIn(RSCMixIn):
     # Validate Commands
 
     @_sync.command(
+        name="transactionchannels",
+        description="Check if all franchise transaction channels. If not, create them.",
+    )
+    @app_commands.describe(
+        category="Guild category that holds all franchise transaction channels",
+    )
+    async def _validate_transaction_channels(
+        self,
+        interaction: discord.Interaction,
+        category: discord.CategoryChannel,
+    ):
+        added: list[discord.TextChannel] = []
+        existing: list[discord.TextChannel] = []
+        removed: list[discord.TextChannel] = []
+
+        guild = interaction.guild
+        if not guild:
+            return
+
+        sync_view = ConfirmSyncView(interaction)
+        await sync_view.prompt()
+        franchises = await self.franchises(guild)
+        await sync_view.wait()
+
+        if not sync_view.result:
+            return
+
+        franchises = await self.franchises(guild)
+        for f in franchises:
+            channel_name = f"{f.name.lower().replace(' ', '-')}-transactions"
+            channel = discord.utils.get(guild.text_channels, name=channel_name)
+
+            if channel:
+                log.debug(f"[{guild.name}] Found transaction channel: {channel.name}")
+                existing.append(channel)
+            else:
+                log.info(
+                    f"[{guild.name}] Creating new transaction channel: {channel_name}"
+                )
+                content = None
+                gm = None
+
+                # Default Permissions
+                overwrites: dict[discord.Role | discord.Member, discord.PermissionOverwrite] = {
+                    guild.default_role: discord.PermissionOverwrite(view_channel=False)
+                }
+
+                # Add Transactions
+                trole = await self._trans_role(guild)
+                if trole:
+                        overwrites[trole] = discord.PermissionOverwrite(
+                            manage_channels=True,
+                            manage_permissions=True,
+                            view_channel=True,
+                            send_messages=True,
+                            embed_links=True,
+                            attach_files=True,
+                            read_messages=True,
+                            read_message_history=True,
+                            add_reactions=True,
+                        )
+
+                # Add GM
+                if f.gm:
+                    gm = guild.get_member(f.gm.discord_id)
+
+                if gm:
+                    content = f"Welcome to your new transaction channel {gm.mention}"
+                    overwrites[gm] = discord.PermissionOverwrite(
+                        view_channel=True,
+                        send_messages=True,
+                        attach_files=True,
+                        read_messages=True,
+                        embed_links=True,
+                        read_message_history=True,
+                        add_reactions=True,
+                    )
+
+                channel = await guild.create_text_channel(
+                    name=channel_name,
+                    category=category,
+                    overwrites=overwrites,
+                    reason="Syncing franchise transaction channels from API",
+                )
+
+                # Ping GM
+                if content:
+                    await channel.send(
+                        content=content,
+                        allowed_mentions=discord.AllowedMentions(users=True),
+                    )
+                added.append(channel)
+
+        added.sort(key=lambda x: x.name)
+        existing.sort(key=lambda x: x.name)
+        embed = BlueEmbed(
+            title="Franchise Transaction Channel Sync",
+            description=f"Successfully synced {len(franchises)} transaction channels to the RSC discord.",
+        )
+        if existing:
+            embed.add_field(
+                name="Found", value="\n".join([r.mention for r in existing]), inline=True
+            )
+        if added:
+            embed.add_field(
+                name="Created", value="\n".join([r.mention for r in added]), inline=True
+            )
+
+        await interaction.edit_original_response(embed=embed)
+
+    @_sync.command(
         name="franchiseroles",
         description="Check if all franchise roles exist. If not, create them.",
     )
@@ -265,39 +376,38 @@ class AdminMixIn(RSCMixIn):
         interaction: discord.Interaction,
     ):
         added: list[discord.Role] = []
+        notfound: list[str] = []
         existing: list[discord.Role] = []
         fixed: list[discord.Role] = []
 
+        guild = interaction.guild
+        if not guild:
+            return
+
         sync_view = ConfirmSyncView(interaction)
         await sync_view.prompt()
-        franchises = await self.franchises(interaction.guild)
+        franchises = await self.franchises(guild)
         await sync_view.wait()
 
         if not sync_view.result:
             return
 
-        log.debug(f"Guild Feature: {interaction.guild.features}")
-        icons_allowed = "ROLE_ICONS" in interaction.guild.features
+        log.debug(f"Guild Feature: {guild.features}")
+        icons_allowed = "ROLE_ICONS" in guild.features
         for f in franchises:
             fname = f"{f.name} ({f.gm.rsc_name})"
-            frole = await utils.franchise_role_from_name(interaction.guild, f.name)
+            frole = await utils.franchise_role_from_name(guild, f.name)
             if frole:
-                log.debug(
-                    f"[{interaction.guild.name}] Found franchise role: {frole.name}"
-                )
+                log.debug(f"[{guild.name}] Found franchise role: {frole.name}")
                 if frole.name != fname:
-                    log.info(
-                        f"[{interaction.guild.name}] Changing franchise role: {frole.name}"
-                    )
+                    log.info(f"[{guild.name}] Changing franchise role: {frole.name}")
                     await frole.edit(name=fname)
                     fixed.append(frole)
                 else:
                     existing.append(frole)
             else:
-                log.info(
-                    f"[{interaction.guild.name}] Creating new franchise role: {fname}"
-                )
-                nrole = await interaction.guild.create_role(
+                log.info(f"[{guild.name}] Creating new franchise role: {fname}")
+                nrole = await guild.create_role(
                     name=fname,
                     hoist=True,
                     display_icon=f.logo if icons_allowed else None,
@@ -313,15 +423,18 @@ class AdminMixIn(RSCMixIn):
             title="Franchise Role Sync",
             description=f"Successfully synced {len(franchises)} franchise roles to the RSC discord.",
         )
-        embed.add_field(
-            name="Found", value="\n".join([r.mention for r in existing]), inline=True
-        )
-        embed.add_field(
-            name="Fixed", value="\n".join([r.mention for r in fixed]), inline=True
-        )
-        embed.add_field(
-            name="Created", value="\n".join([r.mention for r in added]), inline=True
-        )
+        if existing:
+            embed.add_field(
+                name="Found", value="\n".join([r.mention for r in existing]), inline=True
+            )
+        if fixed:
+            embed.add_field(
+                name="Fixed", value="\n".join([r.mention for r in fixed]), inline=True
+            )
+        if added:
+            embed.add_field(
+                name="Created", value="\n".join([r.mention for r in added]), inline=True
+            )
 
         await interaction.edit_original_response(embed=embed)
 

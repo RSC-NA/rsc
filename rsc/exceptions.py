@@ -8,38 +8,38 @@ log = logging.getLogger("red.rsc.exceptions")
 async def translate_api_error(exc: RscApiException):
     log.debug(f"ApiException Status: {exc.status}")
     if exc.status == 500:
-        raise InternalServerError(response=exc)
+        return InternalServerError(response=exc)
 
     if not exc.body:
-        raise RscException(response=exc)
+        return RscException(response=exc)
 
     log.debug(f"ApiException Body: {exc.body}")
     body = json.loads(exc.body)
     reason = body.get("detail", None)
 
     if not reason:
-        raise RscException(response=exc)
+        return RscException(response=exc)
 
     # TransactionsExceptions
     if reason.startswith("Cannot cut a player past the transactions end date for"):
-        raise PastTransactionsEndDate(response=exc)
+        return PastTransactionsEndDate(response=exc)
     elif reason.startswith("Unable to find team name "):
-        raise TeamDoesNotExist(response=exc)
+        return TeamDoesNotExist(response=exc)
     elif reason.startswith("Cannot admin override transaction for league you are not an admin in"):
-        raise NotAdmin(response=exc)
+        return NotAdmin(response=exc)
     elif reason.startswith("Cannot cut a player during the offseason, reason was:"):
-        raise NotAllowedInOffseason(response=exc)
+        return NotAllowedInOffseason(response=exc)
     elif reason.startswith("Player cannot be cut as they are not finished their IR period yet."):
-        raise MustFinishIRPeriod(response=exc)
+        return MustFinishIRPeriod(response=exc)
     elif reason == "Cut is past the offseason cut deadline.":
-        raise PastOffseasonDeadline(response=exc)
+        return PastOffseasonDeadline(response=exc)
     elif reason.startswith("Player cannot be cut until"):
-        raise NotEnoughMatchDays(response=exc)
+        return NotEnoughMatchDays(response=exc)
     elif reason.endswith(" is not currently playing this season."):
-        raise NotLeaguePlayer(response=exc)
+        return NotLeaguePlayer(response=exc)
 
     # Default
-    raise RscException(response=exc)
+    return RscException(response=exc)
         
 
 

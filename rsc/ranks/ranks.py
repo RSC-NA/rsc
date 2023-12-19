@@ -87,6 +87,7 @@ class RankMixIn(RSCMixIn):
 
         try:
             for t in trackers:
+                log.debug(f"Tracker: {t}")
                 if t.platform != "EPIC":
                     continue
                 data = await api.ranks(t.name)

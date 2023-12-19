@@ -46,6 +46,8 @@ from typing import Optional, Dict, List, Union, TYPE_CHECKING
 
 log = logging.getLogger("red.rsc.core")
 
+HIDDEN_COMMANDS = ["feet"]
+
 defaults_guild = {
     "ApiKey": None,
     "ApiUrl": None,
@@ -99,11 +101,18 @@ class RSC(
     async def cog_load(self):
         """Perform initial bot setup on Cog reload"""
         log.debug("In cog_load()")
-        await asyncio.create_task(self.setup())
+        await self.setup()
+
+    async def cog_unload(self):
+        """Cancel task loops on unload to avoid multiple tasks"""
+        log.info("Cancelling task loops due to cog_unload()")
+        self.expire_sub_contract_loop.cancel()
+        self.expire_free_agent_checkins_loop.cancel()
+        await self.close_ballchasing_sessions()
 
     async def setup(self):
         """Prepare the bot API and caches. Requires API configuration"""
-        log.debug("In RSC setup()")
+        log.info("Preparing API connector and local caches")
         for guild in self.bot.guilds:
             log.debug(f"[{guild}] Preparing RSC API configuration")
             await self.prepare_api(guild)
@@ -112,18 +121,19 @@ class RSC(
             await self.prepare_rapidapi(guild)
 
             if self._api_conf.get(guild.id):
+                await self.prepare_league(guild)
+                log.debug(f"[{guild}] Preparing caches")
                 try:
-                    log.debug(f"[{guild}] Preparing league data")
-                    await self.prepare_league(guild)
-                    log.debug(f"[{guild}] Preparing caches")
-                    await self.tiers(guild)
-                    await self.franchises(guild)
-                    await self.teams(guild)
-                    await self._populate_combines_cache(guild)
-                    await self._populate_free_agent_cache(guild)
-                except ClientConnectionError:
-                    # Pass so that the package loads successfully with invalid url/key
-                    pass
+                    async with asyncio.TaskGroup() as tg:
+                        tg.create_task(self.tiers(guild))
+                        tg.create_task(self.franchises(guild))
+                        tg.create_task(self.teams(guild))
+                        tg.create_task(self._populate_combines_cache(guild))
+                        tg.create_task(self._populate_free_agent_cache(guild))
+                        tg.create_task(self.prepare_ballchasing(guild))
+                except ExceptionGroup as eg:
+                    for err in eg.exceptions:
+                        raise err
 
     async def prepare_rapidapi(self, guild: discord.Guild):
         token = await self._get_rapidapi_key(guild)
@@ -159,7 +169,7 @@ class RSC(
         Does NOT trigger on Cog reload.
         """
         log.debug("In on_ready()")
-        await asyncio.create_task(self.setup())
+        await self.setup()
 
     # Autocomplete
 
@@ -173,7 +183,7 @@ class RSC(
         if not current:
             return [
                 app_commands.Choice(name=c.qualified_name, value=c.qualified_name)
-                for c in itertools.islice(cmds, 25)
+                for c in itertools.islice(cmds, 25) if c not in HIDDEN_COMMANDS
             ]
 
         choices = []
@@ -184,7 +194,7 @@ class RSC(
                 == 0
             ):
                 continue
-            elif current.lower() in c.qualified_name.lower():
+            elif current.lower() in c.qualified_name.lower() and c.name not in HIDDEN_COMMANDS:
                 choices.append(
                     app_commands.Choice(name=c.qualified_name, value=c.qualified_name)
                 )
@@ -379,6 +389,17 @@ class RSC(
 
     # Non-Group Commands
 
+
+    @app_commands.command(
+        name="whatami", description="What am I?"
+    )
+    async def _whatami(self, interaction: discord.Interaction):
+        embed = BlueEmbed(
+            title="What Am I?",
+            description="I am a discord bot created to operate Rocket Soccar Confederation (RSC) discord servers.\n\nI was designed and written by **nickm**."
+        )
+        await interaction.response.send_message(embed=embed)
+
     @app_commands.command(
         name="help", description="Display a help for RSC Bot or a specific command."
     )
@@ -402,8 +423,12 @@ class RSC(
                     log.debug(f"Insufficient Perms for help: {cmd.name}")
                     continue
 
+                # super secret tech
+                if cmd.name.lower() == "feet":
+                    continue
+
                 # Custom role permission validation
-                if cmd.name == "ballchasing":
+                if cmd.name.lower() == "ballchasing":
                     stats_role = await self._get_bc_manager_role(interaction.guild)
                     if (
                         stats_role and stats_role in interaction.user.roles
@@ -443,6 +468,8 @@ class RSC(
         else:
             cmd = None
             for c in self.walk_app_commands():
+                if c.name == "feet":
+                    continue
                 if c.qualified_name == command:
                     log.debug(f"Qualified Name: {c.qualified_name}")
                     cmd = c

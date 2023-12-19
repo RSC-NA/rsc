@@ -47,7 +47,7 @@ class TierMixIn(RSCMixIn):
     # Commands
 
     @app_commands.command(name="tiers", description="Get a list of all league tiers")
-    @app_commands.guild_only()
+    @app_commands.guild_only
     async def _tiers(self, interaction: discord.Interaction):
         """Get a list of all league tiers"""
         tiers = await self.tiers(interaction.guild)
@@ -91,24 +91,6 @@ class TierMixIn(RSCMixIn):
 
     # API
 
-    async def tiers(
-        self, guild: discord.Guild, name: str | None = None
-    ) -> list[Tier]:
-        """Fetch a list of tiers"""
-        async with ApiClient(self._api_conf[guild.id]) as client:
-            api = TiersApi(client)
-            tiers = await api.tiers_list(name=name, league=self._league[guild.id])
-            tiers.sort(key=lambda t: t.position, reverse=True)
-
-            # Populate cache
-            if tiers:
-                if self._tier_cache.get(guild.id):
-                    cached = set(self._tier_cache[guild.id])
-                    different = set([t.name for t in tiers]) - cached
-                    self._tier_cache[guild.id] += list(different)
-                else:
-                    self._tier_cache[guild.id] = [t.name for t in tiers]
-            return tiers
 
     async def tier_by_id(self, guild: discord.Guild, id: int) -> Tier:
         async with ApiClient(self._api_conf[guild.id]) as client:

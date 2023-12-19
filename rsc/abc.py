@@ -184,9 +184,11 @@ class RSCMixIn(ABC):
     async def trackers(
         self,
         guild: discord.Guild,
-        status: Optional[TrackerLinksStatus] = None,
-        player: discord.Member | None = None,
+        status: TrackerLinksStatus | None = None,
+        player: discord.Member | int | None = None,
         name: str | None = None,
+        limit: int=0,
+        offset: int=0
     ) -> list[TrackerLink]:
         ...
 

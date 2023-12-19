@@ -94,7 +94,7 @@ class FreeAgentMixIn(RSCMixIn):
     )
     @app_commands.describe(tier="Free agent tier (Ex: \"Elite\")")
     @app_commands.autocomplete(tier=TierMixIn.tier_autocomplete)
-    @app_commands.guild_only()
+    @app_commands.guild_only
     async def _free_agents(self, interaction: discord.Interaction, tier: str):
         await interaction.response.defer()
         if not await self.is_valid_tier(interaction.guild, tier):
@@ -132,7 +132,7 @@ class FreeAgentMixIn(RSCMixIn):
         name="checkin",
         description="Check in as an available free agent for the current match day",
     )
-    @app_commands.guild_only()
+    @app_commands.guild_only
     async def _fa_checkin(self, interaction: discord.Interaction):
         # Check if this player already checked in
         if await self.is_checked_in(interaction.user):
@@ -209,7 +209,7 @@ class FreeAgentMixIn(RSCMixIn):
         name="checkout",
         description="Check out as an available free agent for the current match day",
     )
-    @app_commands.guild_only()
+    @app_commands.guild_only
     async def _fa_checkout(self, interaction: discord.Interaction):
         # Check if this player already checked in
         checkin = await self.get_checkin(interaction.user)
@@ -235,7 +235,7 @@ class FreeAgentMixIn(RSCMixIn):
     )
     @app_commands.describe(tier="Free agent tier (Ex: \"Elite\")")
     @app_commands.autocomplete(tier=TierMixIn.tier_autocomplete)
-    @app_commands.guild_only()
+    @app_commands.guild_only
     async def _fa_availability(self, interaction: discord.Interaction, tier: str):
         checkins = await self.checkins_by_tier(interaction.guild, tier)
 
@@ -273,7 +273,7 @@ class FreeAgentMixIn(RSCMixIn):
     @app_commands.describe(tier="Free agent tier (Ex: \"Elite\")")
     @app_commands.autocomplete(tier=TierMixIn.tier_autocomplete)
     @app_commands.checks.has_permissions(manage_guild=True)
-    @app_commands.guild_only()
+    @app_commands.guild_only
     async def _clear_fa_availability(self, interaction: discord.Interaction, tier: str):
         await self.clear_checkins_by_tier(interaction.guild, tier)
         await interaction.response.send_message(
@@ -287,7 +287,7 @@ class FreeAgentMixIn(RSCMixIn):
         description="Clear free agent availability for all tiers",
     )
     @app_commands.checks.has_permissions(manage_guild=True)
-    @app_commands.guild_only()
+    @app_commands.guild_only
     async def _clear_all_fa_availability(self, interaction: discord.Interaction):
         await self.clear_all_checkins(interaction.guild)
         await interaction.response.send_message(

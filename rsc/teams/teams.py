@@ -9,6 +9,7 @@ from rscapi.models.team_list import TeamList
 from rscapi.models.league_player import LeaguePlayer
 from rscapi.models.player import Player
 from rscapi.models.match import Match
+from rscapi.models.high_level_match import HighLevelMatch
 
 from rsc.abc import RSCMixIn
 from rsc.enums import Status, SubStatus
@@ -66,7 +67,7 @@ class TeamMixIn(RSCMixIn):
     @app_commands.describe(
         franchise="Teams in a franchise", tier="Teams in a league tier"
     )
-    @app_commands.guild_only()
+    @app_commands.guild_only
     async def _teams(
         self,
         interaction: discord.Interaction,
@@ -134,7 +135,7 @@ class TeamMixIn(RSCMixIn):
     @app_commands.command(name="roster", description="Get roster for a team")
     @app_commands.describe(team="Team name to search")
     @app_commands.autocomplete(team=teams_autocomplete)
-    @app_commands.guild_only()
+    @app_commands.guild_only
     async def _roster(
         self,
         interaction: discord.Interaction,
@@ -395,13 +396,13 @@ class TeamMixIn(RSCMixIn):
 
     @app_commands.command(name="teamstats", description="Display stats for an RSC team")
     @app_commands.autocomplete(team=teams_autocomplete)
-    @app_commands.guild_only()
+    @app_commands.guild_only
     async def _team_stats(self, interaction: discord.Interaction, team: str):
         await utils.not_implemented(interaction)
 
     @app_commands.command(name="standings", description="Display the team standings for a specific tier")
     @app_commands.autocomplete(tier=TierMixIn.tier_autocomplete)
-    @app_commands.guild_only()
+    @app_commands.guild_only
     async def _standings_cmd(self, interaction: discord.Interaction, tier: str):
         await utils.not_implemented(interaction)
 
@@ -525,9 +526,11 @@ class TeamMixIn(RSCMixIn):
         id: int,
         season: int | None = None,
         preseason: bool = False,
-    ) -> list[Match]:
+    ) -> list[HighLevelMatch]:
         async with ApiClient(self._api_conf[guild.id]) as client:
             api = TeamsApi(client)
-            return await api.teams_season_matches(
+            matches = await api.teams_season_matches(
                 id, preseason=preseason, season=season
             )
+            matches.sort(key=lambda x: x.day)
+            return matches

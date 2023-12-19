@@ -1,109 +1,109 @@
 {
-    "day": 1,
-    "date": "2023-09-01T00:00:00-04:00",
-    "game_name": "octane",
-    "game_pass": "trigon",
+    "day": 3,
+    "date": "2023-09-08T00:00:00-04:00",
+    "game_name": "mantis",
+    "game_pass": "equalizer",
     "num_games": 4,
     "match_format": "GMS",
     "match_type": "PRE",
     "home_team": {
-        "id": 44,
-        "name": "Ravioli Rangers",
-        "franchise": "Italian Battalion",
+        "id": 26,
+        "name": "Thunder",
+        "franchise": "Electric Mayhem",
         "tier": "Elite",
         "players": [
             {
-                "id": 76,
-                "name": "GekkoSolid",
+                "id": 104,
+                "name": "Earth",
                 "status": "Rostered",
                 "captain": false,
-                "base_mmr": 1475,
-                "current_mmr": 1510,
-                "last_updated": "2023-11-02T23:05:28.685132-04:00",
-                "discord_id": 285510822405341200
+                "base_mmr": 1620,
+                "current_mmr": 1620,
+                "last_updated": "2023-11-02T23:05:28.711273-04:00",
+                "discord_id": 374553815505960960
             },
             {
-                "id": 582,
-                "name": "Ay G.",
+                "id": 162,
+                "name": "Vengeance",
                 "status": "Rostered",
                 "captain": false,
-                "base_mmr": 1635,
-                "current_mmr": 1635,
-                "last_updated": "2023-11-02T23:05:28.816450-04:00",
-                "discord_id": 643295123207225300
+                "base_mmr": 1565,
+                "current_mmr": 1565,
+                "last_updated": "2023-11-02T23:05:28.716240-04:00",
+                "discord_id": 201872441339805700
             },
             {
-                "id": 584,
-                "name": "Girth",
+                "id": 166,
+                "name": "peeg :>, lol.",
                 "status": "Rostered",
                 "captain": false,
-                "base_mmr": 1555,
-                "current_mmr": 1555,
-                "last_updated": "2023-11-02T23:05:28.816595-04:00",
-                "discord_id": 276874973132619780
+                "base_mmr": 1530,
+                "current_mmr": 1530,
+                "last_updated": "2023-11-02T23:05:28.716566-04:00",
+                "discord_id": 201443624205025280
             },
             {
-                "id": 670,
-                "name": "Aqua3129",
+                "id": 882,
+                "name": "lillmac",
                 "status": "Rostered",
                 "captain": false,
-                "base_mmr": 1535,
-                "current_mmr": 1535,
-                "last_updated": "2023-11-02T23:05:28.839504-04:00",
-                "discord_id": 713952965274239100
+                "base_mmr": 1560,
+                "current_mmr": 1560,
+                "last_updated": "2023-11-02T23:05:28.890421-04:00",
+                "discord_id": 91316199811473400
             }
         ],
         "latest_season": 18
     },
     "away_team": {
-        "id": 142,
-        "name": "Onions",
-        "franchise": "The Garden",
+        "id": 98,
+        "name": "Cyclones",
+        "franchise": "Storm",
         "tier": "Elite",
         "players": [
             {
-                "id": 55,
-                "name": "Capn' Clutch",
+                "id": 190,
+                "name": "NoobZ",
                 "status": "Rostered",
                 "captain": false,
-                "base_mmr": 1535,
-                "current_mmr": 1535,
-                "last_updated": "2023-11-02T23:05:28.683807-04:00",
-                "discord_id": 224338979778986000
+                "base_mmr": 1550,
+                "current_mmr": 1550,
+                "last_updated": "2023-11-02T23:05:28.718344-04:00",
+                "discord_id": 235188530786205700
             },
             {
-                "id": 268,
-                "name": "nickm",
+                "id": 240,
+                "name": "CommanderBoy",
                 "status": "Rostered",
                 "captain": false,
                 "base_mmr": 1510,
                 "current_mmr": 1510,
-                "last_updated": "2023-11-02T23:05:28.746905-04:00",
-                "discord_id": 138778232802508800
+                "last_updated": "2023-11-02T23:05:28.744837-04:00",
+                "discord_id": 355233924806475800
             },
             {
-                "id": 329,
-                "name": "(P|F)ineapple",
-                "status": "Free Agent",
-                "captain": false,
-                "base_mmr": 1485,
-                "current_mmr": 1510,
-                "last_updated": "2023-11-02T23:05:28.767032-04:00",
-                "discord_id": 181204305993400320
-            },
-            {
-                "id": 888,
-                "name": "morgan",
+                "id": 839,
+                "name": "Daylon",
                 "status": "Rostered",
                 "captain": false,
-                "base_mmr": 1595,
-                "current_mmr": 1595,
-                "last_updated": "2023-11-02T23:05:28.890871-04:00",
-                "discord_id": 448349077227438100
+                "base_mmr": 1570,
+                "current_mmr": 1570,
+                "last_updated": "2023-11-02T23:05:28.887227-04:00",
+                "discord_id": 179747689548742660
+            },
+            {
+                "id": 892,
+                "name": "avatarmanz",
+                "status": "Rostered",
+                "captain": false,
+                "base_mmr": 1600,
+                "current_mmr": 1600,
+                "last_updated": "2023-11-02T23:05:28.891156-04:00",
+                "discord_id": 111308494279299070
             }
         ],
         "latest_season": 18
     },
-    "id": 259,
+    "id": 291,
     "results": null
-},
+}

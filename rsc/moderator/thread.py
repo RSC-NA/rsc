@@ -219,7 +219,7 @@ class ThreadMixIn(RSCMixIn):
     )
     @app_commands.describe(group="Assignable ModMail group name")
     @app_commands.autocomplete(group=thread_autocomplete)
-    @app_commands.guild_only()
+    @app_commands.guild_only
     async def _thread_assign(self, interaction: discord.Interaction, group: str):
         # Validate group exists
         tgroup = await self.get_thread_group(interaction.guild, group)
@@ -250,7 +250,7 @@ class ThreadMixIn(RSCMixIn):
     @app_commands.command(
         name="unassign", description="Move thread back to the primary ModMail category"
     )
-    @app_commands.guild_only()
+    @app_commands.guild_only
     async def _thread_unassign(self, interaction: discord.Interaction):
         if not await self.is_modmail_thread(interaction.channel):
             await interaction.response.send_message("Only allowed in a modmail thread.", ephemeral=True)
@@ -274,7 +274,7 @@ class ThreadMixIn(RSCMixIn):
     @app_commands.command(
         name="resolve", description="Send resolved message to a modmail thread"
     )
-    @app_commands.guild_only()
+    @app_commands.guild_only
     async def _thread_resolve(self, interaction: discord.Interaction):
         if not interaction.channel or isinstance(
             interaction.channel, (discord.DMChannel, discord.GroupChannel)
@@ -301,7 +301,6 @@ class ThreadMixIn(RSCMixIn):
 
     @app_commands.command(name="feet", description="Moar feet pics!!!")
     @app_commands.checks.has_permissions(manage_guild=True)
-    @app_commands.guild_only()
     async def _this_is_a_secret(self, interaction: discord.Interaction):
         """This is a secret. Nobody say anything... :shh:"""
         await interaction.response.send_message(
