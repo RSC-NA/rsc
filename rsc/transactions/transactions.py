@@ -1,50 +1,37 @@
-import discord
 import logging
-import itertools
-from copy import deepcopy
-from datetime import datetime
-
-from discord.ext import tasks
 from datetime import datetime, time, timedelta
 from pathlib import Path
 
-from redbot.core import Config, app_commands, commands, checks
-
-from rscapi import ApiClient, TransactionsApi, LeaguePlayersApi
+import discord
+from discord.ext import tasks
+from redbot.core import app_commands, commands
+from rscapi import ApiClient, LeaguePlayersApi, TransactionsApi
 from rscapi.exceptions import ApiException
 from rscapi.models.cut_a_player_from_a_league import CutAPlayerFromALeague
+from rscapi.models.expire_a_player_sub import ExpireAPlayerSub
+from rscapi.models.inactive_reserve import InactiveReserve
+from rscapi.models.league_player import LeaguePlayer
+from rscapi.models.player_transaction_updates import PlayerTransactionUpdates
 from rscapi.models.re_sign_player import ReSignPlayer
+from rscapi.models.retire_a_player import RetireAPlayer
 from rscapi.models.sign_a_player_to_a_team_in_a_league import (
     SignAPlayerToATeamInALeague,
 )
-from rscapi.models.transaction_response import TransactionResponse
-from rscapi.models.player_transaction_updates import PlayerTransactionUpdates
 from rscapi.models.temporary_fa_sub import TemporaryFASub
-from rscapi.models.league import League
-from rscapi.models.player_transaction_updates import PlayerTransactionUpdates
-from rscapi.models.expire_a_player_sub import ExpireAPlayerSub
-from rscapi.models.league_player import LeaguePlayer
-from rscapi.models.retire_a_player import RetireAPlayer
-from rscapi.models.inactive_reserve import InactiveReserve
+from rscapi.models.transaction_response import TransactionResponse
 
 from rsc.abc import RSCMixIn
+from rsc.embeds import ApiExceptionErrorEmbed, BlueEmbed, ErrorEmbed, SuccessEmbed
 from rsc.enums import Status, TransactionType
-from rsc.const import CAPTAIN_ROLE, DEV_LEAGUE_ROLE, FREE_AGENT_ROLE
-from rsc.embeds import (
-    ErrorEmbed,
-    SuccessEmbed,
-    BlueEmbed,
-    ExceptionErrorEmbed,
-    ApiExceptionErrorEmbed,
+from rsc.exceptions import (
+    MalformedTransactionResponse,
+    RscException,
+    translate_api_error,
 )
-from rsc.exceptions import RscException, translate_api_error
 from rsc.teams import TeamMixIn
-from rsc.transactions.views import TradeAnnouncementModal, TradeAnnouncementView
+from rsc.transactions.views import TradeAnnouncementView
 from rsc.types import Substitute, TransactionSettings
 from rsc.utils import utils
-
-
-from typing import Optional, TypedDict, List
 
 log = logging.getLogger("red.rsc.transactions")
 
@@ -82,20 +69,20 @@ class TransactionMixIn(RSCMixIn):
     @tasks.loop(time=SUB_LOOP_TIME)
     async def expire_sub_contract_loop(self):
         """Send contract expiration message to Transaction Channel"""
-        log.debug("Expire sub contracts loop started")
+        log.info("Expire sub contracts loop started")
         for guild in self.bot.guilds:
-            log.debug(f"[{guild.name}] Expire sub contract loop is running")
-            subs: list[Substitute] = deepcopy(await self._get_substitutes(guild))
+            log.info(f"[{guild.name}] Expire sub contract loop is running")
+            subs: list[Substitute] = await self._get_substitutes(guild)
             if not subs:
-                log.debug(f"No substitutes to expire in  {guild.name}")
+                log.debug(f"No substitutes to expire in {guild.name}")
                 continue
 
             tchan = await self._trans_channel(guild)
             if not tchan or not hasattr(tchan, "send"):
+                # Still need to remove player from sub list after.
                 log.warning(
                     f"Substitutes found but transaction channel not set in {guild.name}"
                 )
-                continue
 
             subbed_out_role = await utils.get_subbed_out_role(guild)
 
@@ -109,6 +96,7 @@ class TransactionMixIn(RSCMixIn):
             )
 
             # Loop through checkins.
+            log.debug(f"Total substitute count: {len(subs)}")
             for s in subs:
                 sub_date = datetime.fromisoformat(s["date"])
                 dFiles = [discord.File(img_path)]
@@ -123,8 +111,8 @@ class TransactionMixIn(RSCMixIn):
                     m_in = guild.get_member(s["player_in"])
                     m_out = guild.get_member(s["player_out"])
 
-                    m_in_fmt = m_in.display_name if m_in else f"<@{s['player_in']}>"
-                    m_out_fmt = m_out.display_name if m_out else f"<@{s['player_out']}>"
+                    m_in_fmt = m_in.mention if m_in else f"<@{s['player_in']}>"
+                    m_out_fmt = m_out.mention if m_out else f"<@{s['player_out']}>"
 
                     log.debug(f"[{guild.name} Expiring Sub Contract: {s['player_in']}")
                     embed = discord.Embed(color=tier_color)
@@ -140,24 +128,37 @@ class TransactionMixIn(RSCMixIn):
                             name=f"{m_in_fmt} has finished temporary contract for {s['team']}"
                         )
 
-                    embed.add_field(name="Player In", value=m_out.mention if m_out else f"<@{s['player_in']}>", inline=True)
-                    embed.add_field(name="Player Out", value=m_in.mention if m_in else f"<@{s['player_out']}>", inline=True)
+                    embed.add_field(
+                        name="Player In",
+                        value=m_out_fmt,
+                        inline=True,
+                    )
+                    embed.add_field(
+                        name="Player Out",
+                        value=m_in_fmt,
+                        inline=True,
+                    )
                     embed.add_field(name="Franchise", value=s["franchise"], inline=True)
 
                     # Send ping for player/GM then quickly remove it
-                    pingstr = f"<@{s['player_in']}> <@{s['gm']}>"
-                    tmsg = await tchan.send(
-                        content=pingstr,
-                        embed=embed,
-                        files=dFiles,
-                        allowed_mentions=discord.AllowedMentions(users=True),
-                    )
-                    await tmsg.edit(content=None, embed=embed)
+                    if tchan and hasattr(tchan, "send"):
+                        pingstr = f"<@{s['player_in']}> <@{s['gm']}>"
+                        tmsg = await tchan.send(
+                            content=pingstr,
+                            embed=embed,
+                            files=dFiles,
+                            allowed_mentions=discord.AllowedMentions(users=True),
+                        )
+                        await tmsg.edit(content=None, embed=embed)
 
                     await self._rm_substitute(guild, s)
-                    if subbed_out_role:
-                        if m_out:
-                            await m_out.remove_roles(subbed_out_role)
+                    if subbed_out_role and m_out:
+                        await m_out.remove_roles(subbed_out_role)
+                else:
+                    log.debug(
+                        f"{s['player_in']} is not ready to be expired. Sub Date: {s['date']}"
+                    )
+        log.info("Finished expire substitute daily loop.")
 
     # Listeners
 
@@ -173,7 +174,10 @@ class TransactionMixIn(RSCMixIn):
         if not players:
             # Member is not a league player, do nothing
             log.debug(
-                f"[{guild.name}] {member.display_name} ({member.id}) has left the server but is not on a team. No action taken."
+                (
+                    f"[{guild.name}] {member.display_name} ({member.id}) has left the server but is not on a team."
+                    " No action taken."
+                )
             )
             return
 
@@ -184,7 +188,10 @@ class TransactionMixIn(RSCMixIn):
 
         p = players.pop(0)
         log.info(
-            f"[{guild.name}] {member.display_name} ({member.id}) has left the server. Player is being retired. Reason: {reason}"
+            (
+                f"[{guild.name}] {member.display_name} ({member.id}) has left the server."
+                f" Player is being retired. Reason: {reason}"
+            )
         )
 
         # Retire player
@@ -212,13 +219,14 @@ class TransactionMixIn(RSCMixIn):
         tz = await self.timezone(guild)
         now = datetime.now(tz=tz)
 
+        fname = p.team.franchise.name
+        gm_id = (p.team.franchise.gm.discord_id,)
+
         match p.status:
             case Status.ROSTERED | Status.IR | Status.AGMIR:
-                desc = (
-                    f"Player left server while rostered on **{p.team.franchise.name}**"
-                )
+                desc = f"Player left server while rostered on **{fname}**"
             case Status.UNSIGNED_GM:
-                desc = f"A general manager has left the server."
+                desc = "A general manager has left the server."
             case _:
                 # We only notify for specific statuses
                 log.debug(
@@ -260,8 +268,8 @@ class TransactionMixIn(RSCMixIn):
 
         await self.announce_to_franchise_transactions(
             guild=guild,
-            franchise=p.team.franchise.name,
-            gm=p.team.franchise.gm.discord_id,
+            franchise=fname,
+            gm=gm_id,
             embed=log_embed,
         )
 
@@ -441,6 +449,8 @@ class TransactionMixIn(RSCMixIn):
     async def _transactions_role(
         self, interaction: discord.Interaction, role: discord.Role
     ):
+        if not interaction.guild:
+            return
         await self._save_trans_role(interaction.guild, role.id)
         await interaction.response.send_message(
             embed=discord.Embed(
@@ -458,6 +468,9 @@ class TransactionMixIn(RSCMixIn):
     @app_commands.checks.has_permissions(manage_guild=True)
     async def _transactions_cutmsg(self, interaction: discord.Interaction, *, msg: str):
         """Set cut message (4096 characters max)"""
+        if not interaction.guild:
+            return
+
         if len(msg) > 4096:
             await interaction.response.send_message(
                 embed=ErrorEmbed(
@@ -478,7 +491,7 @@ class TransactionMixIn(RSCMixIn):
     @_transactions.command(name="cut", description="Release a player from their team")
     @app_commands.describe(
         player="Player to cut",
-        notes="Transaction notes [Optional]",
+        notes="Transaction notes (Optional)",
         override="Admin only override",
     )
     async def _transactions_cut(
@@ -488,6 +501,10 @@ class TransactionMixIn(RSCMixIn):
         notes: str | None = None,
         override: bool = False,
     ):
+        guild = interaction.guild
+        if not guild or not isinstance(interaction.user, discord.Member):
+            return
+
         if override and not interaction.user.guild_permissions.manage_guild:
             await interaction.response.send_message(
                 embed=ErrorEmbed(description="Only admins can process an override.")
@@ -499,7 +516,7 @@ class TransactionMixIn(RSCMixIn):
 
         try:
             result = await self.cut(
-                interaction.guild,
+                guild,
                 player=player,
                 executor=interaction.user,
                 notes=notes,
@@ -507,9 +524,7 @@ class TransactionMixIn(RSCMixIn):
             )
             log.debug(f"Cut Result: {result}")
         except RscException as exc:
-            log.warning(
-                f"[{interaction.guild.name}] Transaction Exception: {exc.reason}"
-            )
+            log.warning(f"[{guild.name}] Transaction Exception: {exc.reason}")
             await interaction.followup.send(
                 embed=ApiExceptionErrorEmbed(exc), ephemeral=True
             )
@@ -518,9 +533,9 @@ class TransactionMixIn(RSCMixIn):
         ptu = await self.league_player_from_transaction(result, player=player)
 
         # Update tier role, handle promotion case
-        log.debug(f"[{interaction.guild.name}] Updating tier roles for {player.id}")
-        old_tier_role = await utils.get_tier_role(interaction.guild, ptu.old_team.tier)
-        tier_role = await utils.get_tier_role(interaction.guild, ptu.player.tier.name)
+        log.debug(f"[{guild.name}] Updating tier roles for {player.id}")
+        old_tier_role = await utils.get_tier_role(guild, ptu.old_team.tier)
+        tier_role = await utils.get_tier_role(guild, ptu.player.tier.name)
         if old_tier_role != tier_role:
             await player.remove_roles(old_tier_role)
             await player.add_roles(tier_role)
@@ -530,18 +545,16 @@ class TransactionMixIn(RSCMixIn):
             await player.add_roles(tier_role)
 
         # Free agent roles
-        fa_role = await utils.get_free_agent_role(interaction.guild)
-        tier_fa_role = await utils.get_tier_fa_role(
-            interaction.guild, ptu.player.tier.name
-        )
+        fa_role = await utils.get_free_agent_role(guild)
+        tier_fa_role = await utils.get_tier_fa_role(guild, ptu.player.tier.name)
 
         # Franchise Role
         franchise_role = await utils.franchise_role_from_name(
-            interaction.guild, result.first_franchise.name
+            guild, result.first_franchise.name
         )
         if not franchise_role:
             log.error(
-                f"[{interaction.guild.name}] Unable to find franchise name during cut: {result.first_franchise.name}"
+                f"[{guild.name}] Unable to find franchise name during cut: {result.first_franchise.name}"
             )
             await interaction.followup.send(
                 embed=ErrorEmbed(
@@ -567,14 +580,14 @@ class TransactionMixIn(RSCMixIn):
             #     await player.add_roles(dev_league_role)
 
         embed, files = await self.build_transaction_embed(
-            guild=interaction.guild,
+            guild=guild,
             response=result,
             player_in=player,
         )
 
         # Announce to transaction channel
         await self.announce_transaction(
-            interaction.guild,
+            guild,
             embed=embed,
             files=files,
             player=player,
@@ -582,7 +595,7 @@ class TransactionMixIn(RSCMixIn):
         )
 
         # Send cut message to user directly
-        await self.send_cut_msg(interaction.guild, player=player)
+        await self.send_cut_msg(guild, player=player)
 
         # Send result
         await interaction.followup.send(
@@ -598,7 +611,7 @@ class TransactionMixIn(RSCMixIn):
     @app_commands.describe(
         player="Player to sign",
         team="Team the player is being sign on",
-        notes="Transaction notes [Optional]",
+        notes="Transaction notes (Optional)",
         override="Admin only override",
     )
     @app_commands.autocomplete(team=TeamMixIn.teams_autocomplete)
@@ -610,6 +623,10 @@ class TransactionMixIn(RSCMixIn):
         notes: str | None = None,
         override: bool = False,
     ):
+        guild = interaction.guild
+        if not guild or not isinstance(interaction.user, discord.Member):
+            return
+
         if override and not interaction.user.guild_permissions.manage_guild:
             await interaction.response.send_message(
                 embed=ErrorEmbed(description="Only admins can process an override.")
@@ -620,18 +637,16 @@ class TransactionMixIn(RSCMixIn):
         await interaction.response.defer(ephemeral=True)
         try:
             result = await self.sign(
-                interaction.guild,
+                guild,
                 player=player,
                 team=team,
                 executor=interaction.user,
                 notes=notes,
                 override=override,
             )
-            log.debug(f"[{interaction.guild.name}] Sign Result: {result}]")
+            log.debug(f"[{guild.name}] Sign Result: {result}]")
         except RscException as exc:
-            log.warning(
-                f"[{interaction.guild.name}] Transaction Exception: {exc.reason}"
-            )
+            log.warning(f"[{guild.name}] Transaction Exception: {exc.reason}")
             await interaction.followup.send(
                 embed=ApiExceptionErrorEmbed(exc), ephemeral=True
             )
@@ -642,31 +657,25 @@ class TransactionMixIn(RSCMixIn):
         )
 
         # Remove FA roles
-        log.debug(f"[{interaction.guild.name}] Removing FA roles from {player.id}")
-        fa_role = await utils.get_free_agent_role(interaction.guild)
-        tier_fa_role = await utils.get_tier_fa_role(
-            interaction.guild, ptu.player.tier.name
-        )
+        log.debug(f"[{guild.name}] Removing FA roles from {player.id}")
+        fa_role = await utils.get_free_agent_role(guild)
+        tier_fa_role = await utils.get_tier_fa_role(guild, ptu.player.tier.name)
         await player.remove_roles(fa_role, tier_fa_role)
 
         # Add franchise role
-        log.debug(f"[{interaction.guild.name}] Adding franchise role to {player.id}")
-        frole = await utils.franchise_role_from_league_player(
-            interaction.guild, ptu.player
-        )
+        log.debug(f"[{guild.name}] Adding franchise role to {player.id}")
+        frole = await utils.franchise_role_from_league_player(guild, ptu.player)
 
         # Verify player has tier role
-        log.debug(f"[{interaction.guild.name}] Adding tier role to {player.id}")
-        tier_role = await utils.get_tier_role(interaction.guild, name=ptu.new_team.tier)
+        log.debug(f"[{guild.name}] Adding tier role to {player.id}")
+        tier_role = await utils.get_tier_role(guild, name=ptu.new_team.tier)
         await player.add_roles(frole, tier_role)
 
         # Change member prefix
         new_nick = (
             f"{ptu.player.team.franchise.prefix} | {await utils.remove_prefix(player)}"
         )
-        log.debug(
-            f"[{interaction.guild.name}] Changing signed player nick to {player.id}"
-        )
+        log.debug(f"[{guild.name}] Changing signed player nick to {player.id}")
         try:
             await player.edit(nick=new_nick)
         except discord.Forbidden:
@@ -674,11 +683,11 @@ class TransactionMixIn(RSCMixIn):
             pass
 
         embed, files = await self.build_transaction_embed(
-            guild=interaction.guild, response=result, player_in=player
+            guild=guild, response=result, player_in=player
         )
 
         await self.announce_transaction(
-            guild=interaction.guild,
+            guild=guild,
             embed=embed,
             files=files,
             player=player,
@@ -698,7 +707,7 @@ class TransactionMixIn(RSCMixIn):
     @app_commands.describe(
         player="RSC Discord Member",
         team="Name of team player resigning player",
-        notes="Transaction notes [Optional]",
+        notes="Transaction notes (Optional)",
         override="Admin only override",
     )
     async def _transactions_resign(
@@ -709,6 +718,10 @@ class TransactionMixIn(RSCMixIn):
         notes: str | None = None,
         override: bool = False,
     ):
+        guild = interaction.guild
+        if not guild or not isinstance(interaction.user, discord.Member):
+            return
+
         if override and not interaction.user.guild_permissions.manage_guild:
             await interaction.response.send_message(
                 embed=ErrorEmbed(description="Only admins can process an override.")
@@ -719,18 +732,16 @@ class TransactionMixIn(RSCMixIn):
         # Process sign
         try:
             result = await self.resign(
-                interaction.guild,
+                guild,
                 player=player,
                 team=team,
                 executor=interaction.user,
                 notes=notes,
                 override=override,
             )
-            log.debug(f"[{interaction.guild.name}] Re-sign Result: {result}]")
+            log.debug(f"[{guild.name}] Re-sign Result: {result}]")
         except RscException as exc:
-            log.warning(
-                f"[{interaction.guild.name}] Transaction Exception: {exc.reason}"
-            )
+            log.warning(f"[{guild.name}] Transaction Exception: {exc.reason}")
             await interaction.followup.send(
                 embed=ApiExceptionErrorEmbed(exc), ephemeral=True
             )
@@ -742,39 +753,33 @@ class TransactionMixIn(RSCMixIn):
 
         # We check roles and name here just in case.
         # Remove FA roles
-        log.debug(f"[{interaction.guild.name}] Removing FA roles from {player.id}")
-        fa_role = await utils.get_free_agent_role(interaction.guild)
-        tier_fa_role = await utils.get_tier_fa_role(
-            interaction.guild, ptu.player.tier.name
-        )
+        log.debug(f"[{guild.name}] Removing FA roles from {player.id}")
+        fa_role = await utils.get_free_agent_role(guild)
+        tier_fa_role = await utils.get_tier_fa_role(guild, ptu.player.tier.name)
         await player.remove_roles(fa_role, tier_fa_role)
 
         # Add franchise role
-        log.debug(f"[{interaction.guild.name}] Adding franchise role to {player.id}")
-        frole = await utils.franchise_role_from_league_player(
-            interaction.guild, ptu.player
-        )
+        log.debug(f"[{guild.name}] Adding franchise role to {player.id}")
+        frole = await utils.franchise_role_from_league_player(guild, ptu.player)
 
         # Verify player has tier role
-        log.debug(f"[{interaction.guild.name}] Adding tier role to {player.id}")
-        tier_role = await utils.get_tier_role(interaction.guild, name=ptu.new_team.tier)
+        log.debug(f"[{guild.name}] Adding tier role to {player.id}")
+        tier_role = await utils.get_tier_role(guild, name=ptu.new_team.tier)
         await player.add_roles(frole, tier_role)
 
         # Change member prefix
         new_nick = (
             f"{ptu.player.team.franchise.prefix} | {await utils.remove_prefix(player)}"
         )
-        log.debug(
-            f"[{interaction.guild.name}] Changing signed player nick to {player.id}"
-        )
+        log.debug(f"[{guild.name}] Changing signed player nick to {player.id}")
         await player.edit(nick=new_nick)
 
         embed, files = await self.build_transaction_embed(
-            guild=interaction.guild, response=result, player_in=player
+            guild=guild, response=result, player_in=player
         )
 
         await self.announce_transaction(
-            guild=interaction.guild, embed=embed, files=files, player=player
+            guild=guild, embed=embed, files=files, player=player
         )
 
         # Send result
@@ -800,6 +805,10 @@ class TransactionMixIn(RSCMixIn):
         notes: str | None = None,
         override: bool = False,
     ):
+        guild = interaction.guild
+        if not guild or not isinstance(interaction.user, discord.Member):
+            return
+
         if override and not interaction.user.guild_permissions.manage_guild:
             await interaction.response.send_message(
                 embed=ErrorEmbed(description="Only admins can process an override.")
@@ -809,7 +818,7 @@ class TransactionMixIn(RSCMixIn):
         await interaction.response.defer(ephemeral=True)
         try:
             result = await self.substitution(
-                interaction.guild,
+                guild,
                 player_in=player_in,
                 player_out=player_out,
                 executor=interaction.user,
@@ -826,19 +835,16 @@ class TransactionMixIn(RSCMixIn):
         ptu_in: PlayerTransactionUpdates = await self.league_player_from_transaction(
             result, player_in
         )
-        ptu_out: PlayerTransactionUpdates = await self.league_player_from_transaction(
-            result, player_out
-        )
 
         embed, files = await self.build_transaction_embed(
-            guild=interaction.guild,
+            guild=guild,
             response=result,
             player_in=player_in,
             player_out=player_out,
         )
 
         await self.announce_transaction(
-            guild=interaction.guild,
+            guild=guild,
             embed=embed,
             files=files,
             player=player_in,
@@ -846,7 +852,7 @@ class TransactionMixIn(RSCMixIn):
         )
 
         # Save sub for expiration later
-        tz = await self.timezone(interaction.guild)
+        tz = await self.timezone(guild)
         sub_obj = Substitute(
             date=str(datetime.now(tz)),
             player_in=player_in.id,
@@ -856,10 +862,10 @@ class TransactionMixIn(RSCMixIn):
             tier=ptu_in.new_team.tier,
             franchise=result.second_franchise.name,
         )
-        await self._add_substitute(interaction.guild, sub_obj)
+        await self._add_substitute(guild, sub_obj)
 
         # Subbed out role
-        subbed_out_role = await utils.get_subbed_out_role(interaction.guild)
+        subbed_out_role = await utils.get_subbed_out_role(guild)
         await player_out.add_roles(subbed_out_role)
 
         embed = SuccessEmbed(
@@ -884,6 +890,9 @@ class TransactionMixIn(RSCMixIn):
     async def _transactions_announce(
         self, interaction: discord.Interaction, message: str
     ):
+        if not interaction.guild:
+            return
+
         trans_channel = await self._trans_channel(interaction.guild)
         if not trans_channel:
             await interaction.response.send_message(
@@ -902,6 +911,9 @@ class TransactionMixIn(RSCMixIn):
         description="Announce a trade between two franchises to the transaction chanenl",
     )
     async def _transactions_announcetrade(self, interaction: discord.Interaction):
+        if not interaction.guild:
+            return
+
         trans_channel = await self._trans_channel(interaction.guild)
         if not trans_channel:
             await interaction.response.send_message(
@@ -930,11 +942,13 @@ class TransactionMixIn(RSCMixIn):
     async def _transactions_captain(
         self, interaction: discord.Interaction, player: discord.Member
     ):
+        guild = interaction.guild
+        if not guild:
+            return
+
         await interaction.response.defer(ephemeral=True)
         # Get team of player being made captain
-        player_list = await self.players(
-            interaction.guild, discord_id=player.id, limit=1
-        )
+        player_list = await self.players(guild, discord_id=player.id, limit=1)
 
         if not player_list:
             await interaction.followup.send(
@@ -957,10 +971,10 @@ class TransactionMixIn(RSCMixIn):
             return
 
         # Get team data
-        team_players = await self.team_players(interaction.guild, player_data.team.id)
+        team_players = await self.team_players(guild, player_data.team.id)
 
         # Get Captain Role
-        cpt_role = await utils.get_captain_role(interaction.guild)
+        cpt_role = await utils.get_captain_role(guild)
         if not cpt_role:
             await interaction.followup.send(
                 embed=ErrorEmbed(description="Captain role does not exist in guild.")
@@ -970,11 +984,11 @@ class TransactionMixIn(RSCMixIn):
         # Remove captain role from anyone on the team that has it just in case
         notFound = []
         for p in team_players:
-            m = interaction.guild.get_member(p.discord_id)
+            m = guild.get_member(p.discord_id)
 
             if not m:
                 log.error(
-                    f"[{interaction.guild.name}] Unable to find rostered player in guild: {p.discord_id}"
+                    f"[{guild.name}] Unable to find rostered player in guild: {p.discord_id}"
                 )
                 notFound.append(str(p.discord_id))
                 continue
@@ -982,14 +996,18 @@ class TransactionMixIn(RSCMixIn):
             await m.remove_roles(cpt_role)
 
         # Promote new player to captain
-        await self.set_captain(interaction.guild, player_data.id)
+        await self.set_captain(guild, player_data.id)
         await player.add_roles(cpt_role)
 
         # Announce to transaction channel
-        trans_channel = await self._trans_channel(interaction.guild)
+        trans_channel = await self._trans_channel(guild)
         if trans_channel:
+            str_fmt = (
+                f"{player.mention} was elected captain of {player_data.team.name}"
+                f" (<@{player_data.team.franchise.gm.discord_id}> - {player_data.tier.name})"
+            )
             await trans_channel.send(
-                f"{player.mention} was elected captain of {player_data.team.name} (<@{player_data.team.franchise.gm.discord_id}> - {player_data.tier.name})",
+                content=str_fmt,
                 allowed_mentions=discord.AllowedMentions(users=True),
             )
 
@@ -1011,10 +1029,14 @@ class TransactionMixIn(RSCMixIn):
     async def _transactions_expire(
         self, interaction: discord.Interaction, player: discord.Member
     ):
+        guild = interaction.guild
+        if not guild or not isinstance(interaction.user, discord.Member):
+            return
+
         await interaction.response.defer(ephemeral=True)
         try:
             result = await self.expire_sub(
-                interaction.guild,
+                guild,
                 player=player,
                 executor=interaction.user,
             )
@@ -1036,8 +1058,8 @@ class TransactionMixIn(RSCMixIn):
             fname = sub_obj["franchise"]
 
             # Remove subbed out role from subbed player
-            subbed_out_role = await utils.get_subbed_out_role(interaction.guild)
-            m_out = interaction.guild.get_member(p_out)
+            subbed_out_role = await utils.get_subbed_out_role(guild)
+            m_out = guild.get_member(p_out)
             if subbed_out_role and m_out:
                 await m_out.remove_roles(subbed_out_role)
 
@@ -1053,10 +1075,10 @@ class TransactionMixIn(RSCMixIn):
                 dFiles.append(fa_icon)
 
             # Tier color
-            tier_color = await utils.tier_color_by_name(interaction.guild, stier)
+            tier_color = await utils.tier_color_by_name(guild, stier)
 
             # Post to transactions
-            tchan = await self._trans_channel(interaction.guild)
+            tchan = await self._trans_channel(guild)
             if tchan:
                 embed = discord.Embed(color=tier_color)
                 embed.set_image(url="attachment://ContractExpired.png")
@@ -1077,7 +1099,7 @@ class TransactionMixIn(RSCMixIn):
                     allowed_mentions=discord.AllowedMentions(users=True),
                 )
                 await tmsg.edit(content=None, embed=embed)
-            await self._rm_substitute(interaction.guild, sub_obj)
+            await self._rm_substitute(guild, sub_obj)
 
         await interaction.followup.send(
             embed=SuccessEmbed(
@@ -1091,6 +1113,9 @@ class TransactionMixIn(RSCMixIn):
         description="Fetch a list of all players with a temporary FA contract",
     )
     async def _transactions_sublist(self, interaction: discord.Interaction):
+        if not interaction.guild:
+            return
+
         subs = await self._get_substitutes(interaction.guild)
         embed = BlueEmbed(
             title="Temporary FA Contracts",
@@ -1115,7 +1140,7 @@ class TransactionMixIn(RSCMixIn):
     @app_commands.describe(
         action="Inactive Reserve Action",
         player="RSC Discord Member",
-        notes="Transaction notes [Optional]",
+        notes="Transaction notes (Optional)",
         override="Admin only override",
     )
     @app_commands.choices(
@@ -1132,6 +1157,10 @@ class TransactionMixIn(RSCMixIn):
         notes: str | None = None,
         override: bool = False,
     ):
+        guild = interaction.guild
+        if not guild or not isinstance(interaction.user, discord.Member):
+            return
+
         if override and not interaction.user.guild_permissions.manage_guild:
             await interaction.response.send_message(
                 embed=ErrorEmbed(description="Only admins can process an override.")
@@ -1139,12 +1168,12 @@ class TransactionMixIn(RSCMixIn):
             return
         await interaction.response.defer(ephemeral=True)
 
-        remove = True if action.value else False
+        remove = bool(action.value)
         log.debug(f"Remove from IR: {remove}")
 
         try:
             result = await self.inactive_reserve(
-                interaction.guild,
+                guild,
                 player=player,
                 executor=interaction.user,
                 notes=notes,
@@ -1159,7 +1188,7 @@ class TransactionMixIn(RSCMixIn):
             return
 
         # IR Role
-        ir_role = await utils.get_ir_role(interaction.guild)
+        ir_role = await utils.get_ir_role(guild)
 
         if ir_role:
             if remove:
@@ -1168,11 +1197,11 @@ class TransactionMixIn(RSCMixIn):
                 await player.add_roles(ir_role)
 
         embed, files = await self.build_transaction_embed(
-            guild=interaction.guild, response=result, player_in=player
+            guild=guild, response=result, player_in=player
         )
 
         await self.announce_transaction(
-            guild=interaction.guild,
+            guild=guild,
             embed=embed,
             files=files,
             player=player,
@@ -1200,6 +1229,10 @@ class TransactionMixIn(RSCMixIn):
         notes: str | None = None,
         override: bool = False,
     ):
+        guild = interaction.guild
+        if not guild or not isinstance(interaction.user, discord.Member):
+            return
+
         if override and not interaction.user.guild_permissions.manage_guild:
             await interaction.response.send_message(
                 embed=ErrorEmbed(description="Only admins can process an override.")
@@ -1209,7 +1242,7 @@ class TransactionMixIn(RSCMixIn):
         await interaction.response.defer(ephemeral=True)
         try:
             result = await self.retire(
-                interaction.guild,
+                guild,
                 player=player,
                 executor=interaction.user,
                 notes=notes,
@@ -1223,28 +1256,18 @@ class TransactionMixIn(RSCMixIn):
             return
 
         ptu = await self.league_player_from_transaction(result, player=player)
-        gm_id = None
         fname = None
-        tier_color = discord.Color.blue()
         if result.first_franchise:
-            gm_id = result.first_franchise.gm.discord_id
             fname = result.first_franchise.name
 
         # Roles
         old_tier_role = None
         franchise_role = None
-        league_role = await utils.get_league_role(interaction.guild)
+        league_role = await utils.get_league_role(guild)
         if fname:
-            franchise_role = await utils.franchise_role_from_name(
-                interaction.guild, fname
-            )
+            franchise_role = await utils.franchise_role_from_name(guild, fname)
         if ptu.old_team:
-            tier_color = await utils.tier_color_by_name(
-                interaction.guild, ptu.old_team.tier
-            )
-            old_tier_role = await utils.get_tier_role(
-                interaction.guild, ptu.old_team.tier
-            )
+            old_tier_role = await utils.get_tier_role(guild, ptu.old_team.tier)
 
         roles_to_remove = []
 
@@ -1260,16 +1283,16 @@ class TransactionMixIn(RSCMixIn):
         if roles_to_remove:
             await player.remove_roles(*roles_to_remove)
 
-        spectator_role = await utils.get_spectator_role(interaction.guild)
+        spectator_role = await utils.get_spectator_role(guild)
         if spectator_role:
             await player.add_roles(spectator_role)
 
         embed, files = await self.build_transaction_embed(
-            guild=interactino.guild, response=result, player_in=player
+            guild=guild, response=result, player_in=player
         )
 
         await self.announce_transaction(
-            guild=interaction.guild, embed=embed, files=files, player=player
+            guild=guild, embed=embed, files=files, player=player
         )
 
         # Send result
@@ -1285,6 +1308,9 @@ class TransactionMixIn(RSCMixIn):
     )
     @app_commands.checks.has_permissions(manage_guild=True)
     async def _transactions_clear_sub_list(self, interaction: discord.Interaction):
+        if not interaction.guild:
+            return
+
         await self._set_substitutes(interaction.guild, subs=[])
         await interaction.response.send_message(
             "Locally cached substitute list has been cleared.", ephemeral=True
@@ -1296,10 +1322,12 @@ class TransactionMixIn(RSCMixIn):
         self,
         guild: discord.Guild,
         embed: discord.Embed,
-        files: list[discord.File] = [],
+        files: list[discord.File] | None = None,
         player: discord.Member | int | None = None,
         gm: discord.Member | int | None = None,
     ) -> discord.Message | None:
+        if files is None:
+            files = []
         tchan = await self._trans_channel(guild)
         if not tchan:
             return None
@@ -1339,13 +1367,10 @@ class TransactionMixIn(RSCMixIn):
 
         # LeaguePlayer Objects
         ptu_in = await self.league_player_from_transaction(response, player_in)
-        ptu_out = None
-        if player_out:
-            ptu_out = await self.league_player_from_transaction(response, player_out)
 
         # Locals
         author_fmt = "Generic Transaction"
-        author_icon: discord.File | str = ""
+        author_icon: discord.File | str | None = None
         embed = discord.Embed()
         files: list[discord.File] = []
         franchise = None
@@ -1361,6 +1386,8 @@ class TransactionMixIn(RSCMixIn):
 
         match action:
             case TransactionType.CUT:
+                if not (ptu_in.old_team and response.first_franchise):
+                    raise MalformedTransactionResponse
                 author_icon = await utils.fa_img_from_tier(
                     ptu_in.old_team.tier, tiny=True
                 )
@@ -1376,6 +1403,8 @@ class TransactionMixIn(RSCMixIn):
                 # player_fmt = player_in.mention
 
             case TransactionType.PICKUP:
+                if not (ptu_in.new_team and response.second_franchise):
+                    raise MalformedTransactionResponse
                 author_icon = await self.franchise_logo(
                     guild, response.second_franchise.id
                 )
@@ -1388,6 +1417,8 @@ class TransactionMixIn(RSCMixIn):
                 gm_id = response.second_franchise.gm.discord_id
 
             case TransactionType.RESIGN:
+                if not (ptu_in.new_team and response.second_franchise):
+                    raise MalformedTransactionResponse
                 author_icon = await self.franchise_logo(
                     guild, response.second_franchise.id
                 )
@@ -1400,13 +1431,17 @@ class TransactionMixIn(RSCMixIn):
                 gm_id = response.second_franchise.gm.discord_id
 
             case TransactionType.TEMP_FA | TransactionType.SUBSTITUTION:
+                if not (ptu_in.new_team and response.second_franchise):
+                    raise MalformedTransactionResponse
                 author_icon = await self.franchise_logo(
                     guild, response.second_franchise.id
                 )
 
                 tier = ptu_in.new_team.tier
+                pname = ptu_in.player.player.name
+                pteam = ptu_in.new_team.name
 
-                author_fmt = f"{ptu_in.player.player.name} has been signed to a temporary contract by {ptu_in.new_team.name} ({tier})"
+                author_fmt = f"{pname} has been signed to a temporary contract by {pteam} ({tier})"
 
                 franchise = response.second_franchise.name
 
@@ -1421,31 +1456,41 @@ class TransactionMixIn(RSCMixIn):
                     gm_id = response.first_franchise.gm.discord_id
 
             case TransactionType.INACTIVE_RESERVE:
+                if not (ptu_in.old_team and response.first_franchise):
+                    raise MalformedTransactionResponse
                 author_icon = await self.franchise_logo(
                     guild, response.first_franchise.id
                 )
 
                 tier = ptu_in.old_team.tier
+                pname = ptu_in.player.player.name
+                pteam = ptu_in.old_team.name
 
-                author_fmt = f"{ptu_in.player.player.name} has been moved to Inactive Reserve by {ptu_in.old_team.name} ({tier})"
+                author_fmt = (
+                    f"{pname} has been moved to Inactive Reserve by {pteam} ({tier})"
+                )
 
                 franchise = response.first_franchise.name
                 gm_id = response.first_franchise.gm.discord_id
 
             case TransactionType.IR_RETURN:
+                if not (ptu_in.old_team and response.first_franchise):
+                    raise MalformedTransactionResponse
                 author_icon = await self.franchise_logo(
                     guild, response.first_franchise.id
                 )
 
                 tier = ptu_in.old_team.tier
+                pname = ptu_in.player.player.name
+                pteam = ptu_in.old_team.name
 
-                author_fmt = f"{ptu_in.player.player.name} has been removed from Inactive Reserve by {ptu_in.old_team.name} ({tier})"
+                author_fmt = f"{pname} has been removed from Inactive Reserve by {pteam} ({tier})"
 
                 franchise = response.first_franchise.name
                 gm_id = response.first_franchise.gm.discord_id
 
             case _:
-                raise NotImplemented
+                raise NotImplementedError
 
         # Player Fields
         if player_out:
@@ -1478,7 +1523,7 @@ class TransactionMixIn(RSCMixIn):
         else:
             color = discord.Color.blue()
 
-        embed.color = color
+        embed.colour = color
         return embed, files
 
     async def send_cut_msg(
@@ -1510,7 +1555,7 @@ class TransactionMixIn(RSCMixIn):
         )
         return lp
 
-    async def get_sub(self, member: discord.Member) -> Optional[Substitute]:
+    async def get_sub(self, member: discord.Member) -> Substitute | None:
         """Get sub from saved subsitute list"""
         subs = await self._get_substitutes(member.guild)
         s = next((x for x in subs if x["player_in"] == member.id), None)
@@ -1751,15 +1796,14 @@ class TransactionMixIn(RSCMixIn):
     async def _save_trans_role(self, guild: discord.Guild, trans_role_id: int | None):
         await self.config.custom("Transactions", guild.id).TransRole.set(trans_role_id)
 
-    async def _trans_channel(
-        self, guild: discord.Guild
-    ) -> discord.abc.GuildChannel | None:
-        trans_channel_id = await self.config.custom(
-            "Transactions", guild.id
-        ).TransChannel()
-        if not trans_channel_id:
+    async def _trans_channel(self, guild: discord.Guild) -> discord.TextChannel | None:
+        channel_id = await self.config.custom("Transactions", guild.id).TransChannel()
+        if not channel_id:
             return None
-        return guild.get_channel(trans_channel_id)
+        c = guild.get_channel(channel_id)
+        if not c or not isinstance(c, discord.TextChannel):
+            return None
+        return c
 
     async def _save_trans_channel(
         self, guild: discord.Guild, trans_channel: int | None
@@ -1770,13 +1814,16 @@ class TransactionMixIn(RSCMixIn):
 
     async def _trans_log_channel(
         self, guild: discord.Guild
-    ) -> discord.abc.GuildChannel | None:
-        log_channel_id = await self.config.custom(
+    ) -> discord.TextChannel | None:
+        channel_id = await self.config.custom(
             "Transactions", guild.id
         ).TransLogChannel()
-        if not log_channel_id:
+        if not channel_id:
             return None
-        return guild.get_channel(log_channel_id)
+        c = guild.get_channel(channel_id)
+        if not c or not isinstance(c, discord.TextChannel):
+            return None
+        return c
 
     async def _save_trans_log_channel(
         self, guild: discord.Guild, trans_log_channel: int | None

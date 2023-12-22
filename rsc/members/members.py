@@ -1,33 +1,24 @@
-import discord
 import logging
 
-from datetime import date
-
-from redbot.core import app_commands, checks, commands
-
+import discord
+from redbot.core import app_commands, commands
 from rscapi import ApiClient, MembersApi
 from rscapi.exceptions import ApiException
-from rscapi.models.tier import Tier
-from rscapi.models.members_list200_response import MembersList200Response
-from rscapi.models.member import Member
-from rscapi.models.update_member_rsc_name import UpdateMemberRSCName
-from rscapi.models.elevated_role import ElevatedRole
-from rscapi.models.player_signup_schema import PlayerSignupSchema
-from rscapi.models.league_player import LeaguePlayer
-from rscapi.models.player_season_stats import PlayerSeasonStats
-from rscapi.models.intent_to_play_schema import IntentToPlaySchema
 from rscapi.models.deleted import Deleted
+from rscapi.models.intent_to_play_schema import IntentToPlaySchema
+from rscapi.models.league_player import LeaguePlayer
+from rscapi.models.member import Member
+from rscapi.models.player_season_stats import PlayerSeasonStats
+from rscapi.models.player_signup_schema import PlayerSignupSchema
+from rscapi.models.update_member_rsc_name import UpdateMemberRSCName
 
 from rsc.abc import RSCMixIn
+from rsc.embeds import ApiExceptionErrorEmbed, ErrorEmbed, SuccessEmbed, YellowEmbed
+from rsc.enums import Platform, PlayerType, Referrer, RegionPreference, Status
 from rsc.exceptions import RscException
+from rsc.members.views import IntentState, IntentToPlayView, SignupState, SignupView
 from rsc.tiers import TierMixIn
-from rsc.const import LEAGUE_ROLE, MUTED_ROLE
-from rsc.embeds import ErrorEmbed, SuccessEmbed, ApiExceptionErrorEmbed, BlueEmbed, YellowEmbed
-from rsc.enums import Status, RegionPreference, PlayerType, Platform, Referrer
-from rsc.members.views import SignupView, SignupState, IntentToPlayView, IntentState
 from rsc.utils import utils
-
-from typing import List, Dict, Tuple, TypedDict, Optional
 
 log = logging.getLogger("red.rsc.freeagents")
 
@@ -58,6 +49,10 @@ class MemberMixIn(RSCMixIn):
     @app_commands.command(name="signup", description="Sign up for the next RSC season")
     @app_commands.guild_only
     async def _member_signup(self, interaction: discord.Interaction):
+        guild = interaction.guild
+        if not guild or not isinstance(interaction.user, discord.Member):
+            return
+
         log.debug(f"{interaction.user} is signing up for the league")
         # Check if not a league player?
         # User prompts
@@ -75,19 +70,18 @@ class MemberMixIn(RSCMixIn):
         if signup_view.state != SignupState.FINISHED:
             embed = ErrorEmbed(
                 title="Signup Failed",
-                description="Signup failed for an unknown reason. Please try again, if the issue persists contact a staff member.",
+                description=(
+                    "Signup failed for an unknown reason."
+                    " Please try again, if the issue persists contact a staff member."
+                ),
             )
             await interaction.edit_original_response(embed=embed, view=None)
             return
 
-        embed: discord.Embed = SuccessEmbed(
-            title="Signup Submitted",
-            description="You have been successfully signed up for the next RSC season!",
-        )
         # Process signup if state is finished
         try:
             result = await self.signup(
-                guild=interaction.guild,
+                guild=guild,
                 member=interaction.user,
                 rsc_name=signup_view.rsc_name,
                 trackers=signup_view.trackers,
@@ -113,16 +107,23 @@ class MemberMixIn(RSCMixIn):
             )
             return
 
-        embed = SuccessEmbed(
-            description="You have successfully signed up for the next season of RSC!\n\nPlease keep up to date with league notices for information on the upcoming Draft and Combines."
+        success_embed = SuccessEmbed(
+            description=(
+                "You have successfully signed up for the next season of RSC!\n\n"
+                "Please keep up to date with league notices for information on the upcoming Draft and Combines."
+            )
         )
-        await interaction.edit_original_response(embed=embed, view=None)
+        await interaction.edit_original_response(embed=success_embed, view=None)
 
     @app_commands.command(
         name="intenttoplay", description="Declare your intent for the next RSC season"
     )
     @app_commands.guild_only
     async def _member_intent_to_play(self, interaction: discord.Interaction):
+        guild = interaction.guild
+        if not guild or not isinstance(interaction.user, discord.Member):
+            return
+
         log.debug(f"{interaction.user} is signing up for the league")
         # User prompts
         intent_view = IntentToPlayView(interaction)
@@ -133,21 +134,28 @@ class MemberMixIn(RSCMixIn):
             return
 
         if intent_view.state != IntentState.FINISHED:
-            await interaction.edit_original_response(embed=ErrorEmbed(description="Something went wrong declaring your intent to play. Please reach out to an admin."), view=None)
+            await interaction.edit_original_response(
+                embed=ErrorEmbed(
+                    description="Something went wrong declaring your intent to play. Please reach out to an admin."
+                ),
+                view=None,
+            )
             return
 
-  
         # Process intent if state is finished
         try:
             result = await self.declare_intent(
-                guild=interaction.guild,
+                guild=guild,
                 member=interaction.user,
-                returning=intent_view.result
+                returning=intent_view.result,
             )
             log.debug(f"Intent Result: {result}")
         except RscException as exc:
             if exc.status == 409:
-                await interaction.edit_original_response(embed=YellowEmbed(title="Intent to Play", description=exc.reason), view=None)
+                await interaction.edit_original_response(
+                    embed=YellowEmbed(title="Intent to Play", description=exc.reason),
+                    view=None,
+                )
                 return
 
             await interaction.edit_original_response(
@@ -157,13 +165,20 @@ class MemberMixIn(RSCMixIn):
             return
 
         if intent_view.result:
-            desc = "You have successfully declared your intent. We are excited to have you back next season!\n\nIf your situation changes before next season, please redeclare your intent."
+            desc = (
+                "You have successfully declared your intent."
+                " We are excited to have you back next season!\n\n"
+                "If your situation changes before next season, please redeclare your intent."
+            )
         else:
-            desc = "You have successfully declared your intent. We are sorry to see you go and hope you return to the league soon!\n\nIf you change your mind, please redeclare your intent."
+            desc = (
+                "You have successfully declared your intent."
+                " We are sorry to see you go and hope you return to the league soon!\n\n"
+                "If you change your mind, please redeclare your intent."
+            )
 
         embed: discord.Embed = SuccessEmbed(
-            title="Intent to Play Declared",
-            description=desc
+            title="Intent to Play Declared", description=desc
         )
         await interaction.edit_original_response(embed=embed, view=None)
 
@@ -175,7 +190,11 @@ class MemberMixIn(RSCMixIn):
     async def _playerinfo(
         self, interaction: discord.Interaction, player: discord.Member
     ):
-        players = await self.players(interaction.guild, discord_id=player.id, limit=1)
+        guild = interaction.guild
+        if not guild:
+            return
+
+        players = await self.players(guild, discord_id=player.id, limit=1)
         if not players:
             await interaction.response.send_message(
                 embed=discord.Embed(
@@ -188,7 +207,7 @@ class MemberMixIn(RSCMixIn):
             return
 
         p = players[0]
-        tier_color = await utils.tier_color_by_name(interaction.guild, p.tier.name)
+        tier_color = await utils.tier_color_by_name(guild, p.tier.name)
 
         embed = discord.Embed(
             title="Player Info",
@@ -203,9 +222,7 @@ class MemberMixIn(RSCMixIn):
             await interaction.response.send_message(embed=embed, ephemeral=True)
             return
 
-        frole = await utils.franchise_role_from_name(
-            interaction.guild, p.team.franchise.name
-        )
+        frole = await utils.franchise_role_from_name(guild, p.team.franchise.name)
         f_fmt = frole.mention if frole else p.team.franchise.name
 
         embed.add_field(name="", value="", inline=False)  # Line Break
@@ -220,12 +237,14 @@ class MemberMixIn(RSCMixIn):
     @app_commands.autocomplete(tier=TierMixIn.tier_autocomplete)
     @app_commands.guild_only
     async def _waivers(self, interaction: discord.Interaction, tier: str):
-        await interaction.response.defer()
-        players = await self.players(
-            interaction.guild, status=Status.WAIVERS, tier_name=tier
-        )
+        guild = interaction.guild
+        if not guild:
+            return
 
-        tier_color = await utils.tier_color_by_name(interaction.guild, tier)
+        await interaction.response.defer()
+        players = await self.players(guild, status=Status.WAIVERS, tier_name=tier)
+
+        tier_color = await utils.tier_color_by_name(guild, tier)
         embed = discord.Embed(
             title="Waiver List",
             description=f"Players on waivers in **{tier}**",
@@ -242,7 +261,7 @@ class MemberMixIn(RSCMixIn):
         waiver_dates = []
         members = []
         for p in players:
-            m = interaction.guild.get_member(p.player.discord_id)
+            m = guild.get_member(p.player.discord_id)
             pstr = m.mention if m else p.player.name
             members.append(pstr)
             if p.waiver_period_end_date:
@@ -256,9 +275,7 @@ class MemberMixIn(RSCMixIn):
             value="\n".join([str(p.current_mmr) for p in players]),
             inline=True,
         )
-        embed.add_field(
-            name="End Date", value="\n".join([d for d in waiver_dates]), inline=True
-        )
+        embed.add_field(name="End Date", value="\n".join(waiver_dates), inline=True)
 
         await interaction.followup.send(embed=embed)
 
@@ -281,8 +298,10 @@ class MemberMixIn(RSCMixIn):
 
     async def league_player_from_member(
         self, guild: discord.Guild, member: Member
-    ) -> Optional[LeaguePlayer]:
+    ) -> LeaguePlayer | None:
         """Return `LeaguePlayer` object for the guilds league from `Member`"""
+        if not member.player_leagues:
+            return None
         for lp in member.player_leagues:
             if lp.league.id == self._league[guild.id]:
                 return lp
@@ -408,12 +427,12 @@ class MemberMixIn(RSCMixIn):
                 raise RscException(response=exc)
 
     async def declare_intent(
-            self,
-            guild: discord.Guild,
-            member: discord.Member,
-            returning: bool,
-            executor: discord.Member | None=None,
-            admin_overrride: bool=False,
+        self,
+        guild: discord.Guild,
+        member: discord.Member,
+        returning: bool,
+        executor: discord.Member | None = None,
+        admin_overrride: bool = False,
     ) -> Deleted:
         async with ApiClient(self._api_conf[guild.id]) as client:
             api = MembersApi(client)
@@ -421,12 +440,10 @@ class MemberMixIn(RSCMixIn):
                 league=self._league[guild.id],
                 returning=returning,
                 executor=executor.id if executor else None,
-                admin_override=admin_overrride
+                admin_override=admin_overrride,
             )
             try:
                 log.debug(f"Intent Data: {data}")
                 return await api.members_intent_to_play(member.id, data)
             except ApiException as exc:
                 raise RscException(response=exc)
-
-

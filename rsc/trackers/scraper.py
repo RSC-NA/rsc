@@ -1,14 +1,12 @@
-import aiohttp
+# import aiohttp
 import asyncio
-import aiofiles
 import logging
 import random
 from datetime import datetime
 from pathlib import Path
 
+import aiofiles
 from rscapi.models.tracker_link import TrackerLink
-
-from typing import List, Optional
 
 log = logging.getLogger("red.trackers.scraper")
 
@@ -38,14 +36,14 @@ class TrackerScraper:
         if tracker not in self.trackers:
             self.trackers.append(tracker)
 
-    async def next(self) -> Optional[TrackerLink]:
+    async def next(self) -> TrackerLink | None:
         try:
             return self.trackers.pop(0)
         except IndexError:
             return None
 
     async def start(self, count: int = 10):
-        for idx in range(0, count):
+        for _ in range(0, count):
             tracker = await self.next()
             if not tracker:
                 return

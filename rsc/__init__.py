@@ -1,6 +1,6 @@
-from rsc.core import RSC
-
 import logging
+
+from rsc.core import RSC
 
 logging.basicConfig()
 log = logging.getLogger("red.rsc.__init__")

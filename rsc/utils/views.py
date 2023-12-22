@@ -1,16 +1,14 @@
-import discord
 import logging
 
-from enum import IntEnum
+import discord
 
 from rsc.const import DEFAULT_TIMEOUT
-from rsc.embeds import ErrorEmbed, SuccessEmbed, LoadingEmbed, BlueEmbed, OrangeEmbed, RedEmbed
+from rsc.embeds import OrangeEmbed, RedEmbed
 from rsc.enums import BulkRoleAction
-from rsc.views import AuthorOnlyView, ConfirmButton, DeclineButton, CancelButton, NextButton
-
-from typing import Optional, Dict, List, Callable, Union, TYPE_CHECKING
+from rsc.views import AuthorOnlyView, CancelButton, ConfirmButton
 
 log = logging.getLogger("red.rsc.utils.views")
+
 
 class BulkRoleConfirmView(AuthorOnlyView):
     def __init__(
@@ -32,7 +30,10 @@ class BulkRoleConfirmView(AuthorOnlyView):
         """Confirm bulk role add or removal"""
         embed = OrangeEmbed(
             title=f"Bulk {self.action.value.capitalize()} Role",
-            description=f"This action will affect **{self.count}** user(s) in {self.role.mention}\n\n **Are you sure you want to do this?**",
+            description=(
+                f"This action will affect **{self.count}** user(s) in {self.role.mention}\n\n"
+                "**Are you sure you want to do this?**"
+            ),
         )
         await self.interaction.response.send_message(
             embed=embed,
@@ -53,6 +54,6 @@ class BulkRoleConfirmView(AuthorOnlyView):
                 title="Cancelled",
                 description="You have cancelled the bulk role action.",
             ),
-            view=None
+            view=None,
         )
         self.stop()

@@ -1,48 +1,20 @@
-import discord
 import logging
+from datetime import datetime, timedelta
 
-from discord.ext import tasks
-from datetime import datetime, time, timedelta
-from urllib.parse import urljoin
-
-from redbot.core import Config, app_commands, commands, checks
-
-from rscapi import ApiClient, TransactionsApi, LeaguePlayersApi, TrackerLinksApi
+import discord
+from redbot.core import app_commands
+from rscapi import ApiClient, TrackerLinksApi
 from rscapi.exceptions import ApiException
-from rscapi.models.cut_a_player_from_a_league import CutAPlayerFromALeague
-from rscapi.models.re_sign_player import ReSignPlayer
-from rscapi.models.sign_a_player_to_a_team_in_a_league import (
-    SignAPlayerToATeamInALeague,
-)
 from rscapi.models.tracker_link import TrackerLink
 from rscapi.models.tracker_link_stats import TrackerLinkStats
-from rscapi.models.temporary_fa_sub import TemporaryFASub
-from rscapi.models.player_transaction_updates import PlayerTransactionUpdates
-from rscapi.models.expire_a_player_sub import ExpireAPlayerSub
-from rscapi.models.league_player import LeaguePlayer
 
 from rsc.abc import RSCMixIn
-from rsc.enums import TrackerLinksStatus, Status
-from rsc.const import CAPTAIN_ROLE, DEV_LEAGUE_ROLE, FREE_AGENT_ROLE, RSC_TRACKER_URL
-from rsc.embeds import (
-    ErrorEmbed,
-    SuccessEmbed,
-    YellowEmbed,
-    WarningEmbed,
-    BlueEmbed,
-    OrangeEmbed,
-    ExceptionErrorEmbed,
-    ApiExceptionErrorEmbed,
-)
-from rsc.exceptions import RscException, translate_api_error
-from rsc.teams import TeamMixIn
-from rsc.transactions.views import TradeAnnouncementModal, TradeAnnouncementView
-from rsc.types import Substitute
+from rsc.const import RSC_TRACKER_URL
+from rsc.embeds import ApiExceptionErrorEmbed, BlueEmbed, YellowEmbed
+from rsc.enums import TrackerLinksStatus
+from rsc.exceptions import RscException
 from rsc.utils import utils
 from rsc.views import LinkButton
-
-
-from typing import Optional, TypedDict, List
 
 log = logging.getLogger("red.rsc.trackers")
 
@@ -62,18 +34,22 @@ class TrackerMixIn(RSCMixIn):
 
     # App Commands
 
-    @_trackers.command(name="testscraper", description="Testing things")
-    async def _trackers_testscraper(
-        self, interaction: discord.Interaction, member: discord.Member
-    ):
-        await interaction.response.defer(thinking=False, ephemeral=True)
-        from rsc.trackers.scraper import TrackerScraper
+    # @_trackers.command(name="testscraper", description="Testing things")
+    # async def _trackers_testscraper(
+    #     self, interaction: discord.Interaction, member: discord.Member
+    # ):
+    #     await interaction.response.defer(thinking=False, ephemeral=True)
+    #     from rsc.trackers.scraper import TrackerScraper
 
-        t = TrackerScraper()
+    #     t = TrackerScraper()
+    #     log.debug(t)
+    #     #TODO REMOVE ME
 
     @_trackers.command(name="list", description="List the trackers")
     @app_commands.describe(player="RSC Discord Member")
-    async def _trackers_list(self, interaction: discord.Interaction, player: discord.Member):
+    async def _trackers_list(
+        self, interaction: discord.Interaction, player: discord.Member
+    ):
         await interaction.response.defer(ephemeral=True)
         trackers = await self.trackers(interaction.guild, player=player.id)
 
@@ -175,18 +151,21 @@ class TrackerMixIn(RSCMixIn):
         log.debug(f"Getting tracker data older than {date_cutoff.date()}")
         trackers = await self.trackers(interaction.guild, status)
 
-        log.debug(f"Removing recently updated trackers")
+        log.debug("Removing recently updated trackers")
         old_trackers = []
         for t in trackers:
             if not t.last_updated:
                 old_trackers.append(t)
             if t.last_updated.date() < date_cutoff.date():
                 old_trackers.append(t)
-        log.debug(f"Finished iterating tracker list")
+        log.debug("Finished iterating tracker list")
 
         embed = YellowEmbed(
             title="Outdated RSC Trackers",
-            description=f"Found **{len(old_trackers)}/{len(trackers)} {status.name}** trackers have not been updated since **{date_cutoff.date()}**",
+            description=(
+                f"Found **{len(old_trackers)}/{len(trackers)} {status.name}**"
+                f" trackers have not been updated since **{date_cutoff.date()}**"
+            ),
         )
         await interaction.followup.send(embed=embed)
 
@@ -220,7 +199,7 @@ class TrackerMixIn(RSCMixIn):
         desc = ""
         for t in trackers:
             url = await utils.fix_tracker_url(t.link)
-            desc += f" - [{t.platform} - {t.platform_id or t.name}]({t.link})"
+            desc += f" - [{t.platform} - {t.platform_id or t.name}]({url})"
 
         embed = BlueEmbed(title=f"{player.display_name} Accounts", description=desc)
 
@@ -243,8 +222,8 @@ class TrackerMixIn(RSCMixIn):
         status: TrackerLinksStatus | None = None,
         player: discord.Member | int | None = None,
         name: str | None = None,
-        limit: int=0,
-        offset: int=0
+        limit: int = 0,
+        offset: int = 0,
     ) -> list[TrackerLink]:
         """Fetch RSC tracker data"""
         player_id = None
@@ -261,7 +240,7 @@ class TrackerMixIn(RSCMixIn):
                     discord_id=player_id,
                     member_name=name,
                     limit=limit,
-                    offset=offset
+                    offset=offset,
                 )
                 return trackers.results
             except ApiException as exc:

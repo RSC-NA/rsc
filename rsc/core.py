@@ -1,32 +1,27 @@
-import discord
-import logging
 import asyncio
-import validators
 import itertools
-from aiohttp import ClientConnectionError
-
-import pytz
+import logging
 from zoneinfo import ZoneInfo
 
-from redbot.core import Config, app_commands, commands, checks
-
+import discord
+import pytz
+import validators  # type: ignore
+from redbot.core import Config, app_commands, commands
 from rscapi import Configuration
 
-# Types
 from rsc.abc import CompositeMetaClass
-from rsc.enums import LogLevel
-
-# Mix Ins
 from rsc.admin import AdminMixIn
 from rsc.ballchasing import BallchasingMixIn
 from rsc.combines import CombineMixIn
-from rsc.freeagents import FreeAgentMixIn
+from rsc.embeds import BlueEmbed, ErrorEmbed, SuccessEmbed
+from rsc.enums import LogLevel
 from rsc.franchises import FranchiseMixIn
+from rsc.freeagents import FreeAgentMixIn
+from rsc.leagues import LeagueMixIn
 from rsc.matches import MatchMixIn
 from rsc.members import MemberMixIn
 from rsc.moderator import ModeratorMixIn, ThreadMixIn
 from rsc.numbers import NumberMixIn
-from rsc.leagues import LeagueMixIn
 from rsc.ranks import RankMixIn
 from rsc.ranks.api import RapidApi
 from rsc.teams import TeamMixIn
@@ -34,15 +29,8 @@ from rsc.tiers import TierMixIn
 from rsc.trackers import TrackerMixIn
 from rsc.transactions import TransactionMixIn
 from rsc.utils import UtilsMixIn
-from rsc.welcome import WelcomeMixIn
-
-# Views
 from rsc.views import LeagueSelectView, RSCSetupModal
-
-# Util
-from rsc.embeds import SuccessEmbed, ErrorEmbed, BlueEmbed
-
-from typing import Optional, Dict, List, Union, TYPE_CHECKING
+from rsc.welcome import WelcomeMixIn
 
 log = logging.getLogger("red.rsc.core")
 
@@ -183,7 +171,8 @@ class RSC(
         if not current:
             return [
                 app_commands.Choice(name=c.qualified_name, value=c.qualified_name)
-                for c in itertools.islice(cmds, 25) if c not in HIDDEN_COMMANDS
+                for c in itertools.islice(cmds, 25)
+                if c not in HIDDEN_COMMANDS
             ]
 
         choices = []
@@ -194,7 +183,10 @@ class RSC(
                 == 0
             ):
                 continue
-            elif current.lower() in c.qualified_name.lower() and c.name not in HIDDEN_COMMANDS:
+            elif (
+                current.lower() in c.qualified_name.lower()
+                and c.name not in HIDDEN_COMMANDS
+            ):
                 choices.append(
                     app_commands.Choice(name=c.qualified_name, value=c.qualified_name)
                 )
@@ -228,6 +220,9 @@ class RSC(
 
     @rsc_settings.command(name="key", description="Configure the RSC API key.")
     async def _rsc_set_key(self, interaction: discord.Interaction, key: str):
+        if not interaction.guild:
+            return
+
         await self._set_api_key(interaction.guild, key)
         await interaction.response.send_message(
             embed=SuccessEmbed(
@@ -238,6 +233,9 @@ class RSC(
 
     @rsc_settings.command(name="url", description="Configure the RSC API web address.")
     async def _rsc_set_url(self, interaction: discord.Interaction, url: str):
+        if not interaction.guild:
+            return
+
         await self._set_api_url(interaction.guild, url)
         await interaction.response.send_message(
             embed=SuccessEmbed(
@@ -250,23 +248,21 @@ class RSC(
         name="settings", description="Display the current RSC API settings."
     )
     async def _rsc_settings(self, interaction: discord.Interaction):
-        key = (
-            "Configured"
-            if await self._get_api_key(interaction.guild)
-            else "Not Configured"
-        )
-        url = await self._get_api_url(interaction.guild) or "Not Configured"
-        tz = await self._get_timezone(interaction.guild)
+        guild = interaction.guild
+        if not guild:
+            return
+
+        key = "Configured" if await self._get_api_key(guild) else "Not Configured"
+        url = await self._get_api_url(guild) or "Not Configured"
+        tz = await self._get_timezone(guild)
         rapid_api_key = (
-            "Configured"
-            if await self._get_rapidapi_key(interaction.guild)
-            else "Not Configured"
+            "Configured" if await self._get_rapidapi_key(guild) else "Not Configured"
         )
 
         # Find league name if it is configured/exists
         league = None
-        if self._league[interaction.guild_id]:
-            league = await self.league(interaction.guild)
+        if self._league[guild.id]:
+            league = await self.league(guild)
 
         league_str = "Not Configured"
         if league:
@@ -288,6 +284,9 @@ class RSC(
         name="league", description="Set the league this guild correlates to in the API"
     )
     async def _rsc_league(self, interaction: discord.Interaction):
+        if not interaction.guild:
+            return None
+
         leagues = await self.leagues(interaction.guild)
         log.debug(leagues)
         league_view = LeagueSelectView(interaction, leagues)
@@ -307,6 +306,9 @@ class RSC(
         name="setup", description="Perform some basic first time setup for the server"
     )
     async def _rsc_setup(self, interaction: discord.Interaction):
+        if not interaction.guild:
+            return
+
         setup_modal = RSCSetupModal()
         await interaction.response.send_modal(setup_modal)
         await setup_modal.wait()
@@ -326,7 +328,10 @@ class RSC(
         if not validators.url(setup_modal.url.value):
             await interaction.followup.send(
                 embed=ErrorEmbed(
-                    description=f'The URL provided is invalid: **{setup_modal.url.value}**\n\nDid you remember to include **"https://"**?'
+                    description=(
+                        f"The URL provided is invalid: **{setup_modal.url.value}**\n\n"
+                        'Did you remember to include **"https://"**?'
+                    )
                 ),
                 ephemeral=True,
             )
@@ -346,6 +351,9 @@ class RSC(
     @app_commands.describe(timezone="Common time zone string (Ex: America/New_York)")
     @app_commands.autocomplete(timezone=timezone_autocomplete)
     async def _rsc_timezone(self, interaction: discord.Interaction, timezone: str):
+        if not interaction.guild:
+            return
+
         if timezone not in pytz.common_timezones:
             await interaction.response.send_message(
                 embed=ErrorEmbed(
@@ -373,30 +381,30 @@ class RSC(
             f"Logging level is now **{level}**", ephemeral=True
         )
 
-
     @rsc_settings.command(
         name="rapidapikey",
         description="Configure the guild RapidAPI key",
     )
-    async def _rsc_set_rapidapi(
-        self, interaction: discord.Interaction, key: str
-    ):
+    async def _rsc_set_rapidapi(self, interaction: discord.Interaction, key: str):
+        if not interaction.guild:
+            return
+
         await self._set_rapidapi_key(interaction.guild, key)
         await interaction.response.send_message(
-            embed=SuccessEmbed(description=f"RapidAPI key has been configured."),
-            ephemeral=True
+            embed=SuccessEmbed(description="RapidAPI key has been configured."),
+            ephemeral=True,
         )
 
     # Non-Group Commands
 
-
-    @app_commands.command(
-        name="whatami", description="What am I?"
-    )
+    @app_commands.command(name="whatami", description="What am I?")
     async def _whatami(self, interaction: discord.Interaction):
         embed = BlueEmbed(
             title="What Am I?",
-            description="I am a discord bot created to operate Rocket Soccar Confederation (RSC) discord servers.\n\nI was designed and written by **nickm**."
+            description=(
+                "I am a discord bot created to operate Rocket Soccar Confederation (RSC) discord servers.\n\n"
+                "I was designed and written by <@138778232802508801>."
+            ),
         )
         await interaction.response.send_message(embed=embed)
 
@@ -407,6 +415,9 @@ class RSC(
     @app_commands.autocomplete(command=command_autocomplete)
     @app_commands.guild_only()
     async def _help_cmd(self, interaction: discord.Interaction, command: str | None):
+        if not interaction.guild or not isinstance(interaction.user, discord.Member):
+            return
+
         cmds = self.get_app_commands()
         if not command:
             embeds = []
@@ -446,7 +457,7 @@ class RSC(
 
             # Build Group Embeds
             group_desc = "List of group commands available to you.\n\n"
-            gembed = BlueEmbed(title=f"RSC Command Groups")
+            gembed = BlueEmbed(title="RSC Command Groups")
             for g in groups:
                 group_desc += f"**/{g.name}** - {g.description}\n"
             gembed.description = group_desc
@@ -509,9 +520,9 @@ class RSC(
         """Returns server timezone as ZoneInfo object for use in datetime objects"""
         return ZoneInfo(await self._get_timezone(guild))
 
-    async def rapid_connector(self, guild: discord.Guild) -> Optional[RapidApi]:
+    async def rapid_connector(self, guild: discord.Guild) -> RapidApi | None:
         """Returns server timezone as ZoneInfo object for use in datetime objects"""
-        return self.rapid_api.get(guild.id, None)
+        return self.rapid_api.get(guild.id)
 
     # Config
 

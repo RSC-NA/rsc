@@ -1,10 +1,8 @@
 import discord
-from typing import Callable, Union
+
 from rsc.const import DEFAULT_TIMEOUT
 from rsc.embeds import ErrorEmbed, SuccessEmbed
 from rsc.views import AuthorOnlyView, ConfirmButton, DeclineButton
-
-from typing import Optional
 
 
 class CheckInView(AuthorOnlyView):
@@ -25,7 +23,9 @@ class CheckInView(AuthorOnlyView):
     async def prompt(self):
         prompt = discord.Embed(
             title="Check In",
-            description="By checking in you are letting GMs know that you are available to play on the following match day in the following tier.",
+            description=(
+                "By checking in you are letting GMs know that you are available to play."
+            ),
             color=self.color,
         )
         prompt.add_field(name="Tier", value=self.tier, inline=False)
@@ -39,7 +39,7 @@ class CheckInView(AuthorOnlyView):
         await self.interaction.edit_original_response(
             embed=SuccessEmbed(
                 title="Checked In",
-                description=f"Thank you for checking in! GMs will now be able to see that you're available.",
+                description="Thank you for checking in! GMs will now be able to see that you're available.",
             ),
             view=None,
         )
@@ -50,7 +50,7 @@ class CheckInView(AuthorOnlyView):
         await self.interaction.edit_original_response(
             embed=ErrorEmbed(
                 title="Unlucky...",
-                description=f"You were not checked in. If you wish to check in, use the command again.",
+                description="You were not checked in. If you wish to check in, use the command again.",
             ),
             view=None,
         )
@@ -75,7 +75,10 @@ class CheckOutView(AuthorOnlyView):
     async def prompt(self):
         prompt = discord.Embed(
             title="Check Out",
-            description="You are currently checked in as available for the following match day and tier.\n\nDo you wish to take yourself off the availability list?",
+            description=(
+                "You are currently checked in as available for the following match day and tier.\n\n"
+                "Do you wish to take yourself off the availability list?"
+            ),
             color=self.color,
         )
         prompt.add_field(name="Tier", value=self.tier, inline=False)
@@ -89,7 +92,10 @@ class CheckOutView(AuthorOnlyView):
         await self.interaction.edit_original_response(
             embed=SuccessEmbed(
                 title="Checked Out",
-                description="You have been removed from the available free agent list.\n\nThank you for updating your availability.",
+                description=(
+                    "You have been removed from the available free agent list.\n\n"
+                    "Thank you for updating your availability."
+                ),
             ),
             view=None,
         )

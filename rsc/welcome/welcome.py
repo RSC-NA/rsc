@@ -1,21 +1,17 @@
 import logging
-import discord
 
-from redbot.core import Config, app_commands, commands, checks
+import discord
+from redbot.core import app_commands, commands
 
 from rsc.abc import RSCMixIn
-from rsc.embeds import SuccessEmbed, BlueEmbed
-
-from typing import List, Optional
+from rsc.embeds import BlueEmbed, SuccessEmbed
+from rsc.types import WelcomeSettings
 
 log = logging.getLogger("red.rsc.welcome")
 
-defaults_guild = {
-    "WelcomeChannel": None,
-    "WelcomeMsg": None,
-    "WelcomeRoles": [],
-    "WelcomeStatus": False,
-}
+defaults_guild = WelcomeSettings(
+    WelcomeChannel=None, WelcomeMsg=None, WelcomeRoles=[], WelcomeStatus=False
+)
 
 
 class WelcomeMixIn(RSCMixIn):
@@ -61,10 +57,14 @@ class WelcomeMixIn(RSCMixIn):
         name="settings", description="Display the current RSC welcome settings."
     )
     async def _rsc_settings(self, interaction: discord.Interaction):
-        welcome_channel = await self._get_welcome_channel(interaction.guild)
-        welcome_msg = await self._get_welcome_msg(interaction.guild)
-        welcome_roles = await self._get_welcome_roles(interaction.guild)
-        welcome_active = await self._get_welcome_status(interaction.guild)
+        guild = interaction.guild
+        if not guild:
+            return
+
+        welcome_channel = await self._get_welcome_channel(guild)
+        welcome_msg = await self._get_welcome_msg(guild)
+        welcome_roles = await self._get_welcome_roles(guild)
+        welcome_active = await self._get_welcome_status(guild)
 
         settings_embed = BlueEmbed(
             title="RSC Welcome Settings",
@@ -92,6 +92,9 @@ class WelcomeMixIn(RSCMixIn):
         name="toggle", description="Toggle the welcome message on or off"
     )
     async def _rsc_welcome_toggle(self, interaction: discord.Interaction):
+        if not interaction.guild:
+            return
+
         status = await self._get_welcome_status(interaction.guild)
         status ^= True  # Flip boolean with xor
         log.debug(f"Welcome Status: {status}")
@@ -113,6 +116,9 @@ class WelcomeMixIn(RSCMixIn):
     async def _rsc_welcome_channel(
         self, interaction: discord.Interaction, channel: discord.TextChannel
     ):
+        if not interaction.guild:
+            return
+
         await self._set_welcome_channel(interaction.guild, channel)
         await interaction.response.send_message(
             embed=SuccessEmbed(
@@ -131,6 +137,9 @@ class WelcomeMixIn(RSCMixIn):
     async def _rsc_welcome_msg(
         self, interaction: discord.Interaction, msg: app_commands.Range[str, 1, 512]
     ):
+        if not interaction.guild:
+            return
+
         await self._set_welcome_msg(interaction.guild, msg)
 
         embed = SuccessEmbed(title="Welcome Message Configured", description=msg)
@@ -148,6 +157,9 @@ class WelcomeMixIn(RSCMixIn):
         role3: discord.Role | None = None,
         role4: discord.Role | None = None,
     ):
+        if not interaction.guild:
+            return
+
         roles = [role1]
         if role2:
             roles.append(role2)
@@ -168,9 +180,12 @@ class WelcomeMixIn(RSCMixIn):
 
     async def _get_welcome_channel(
         self, guild: discord.Guild
-    ) -> Optional[discord.TextChannel]:
-        c = await self.config.custom("Welcome", guild.id).WelcomeChannel()
-        return guild.get_channel(c)
+    ) -> discord.TextChannel | None:
+        cid = await self.config.custom("Welcome", guild.id).WelcomeChannel()
+        channel = guild.get_channel(cid)
+        if not channel or not isinstance(channel, discord.TextChannel):
+            return None
+        return channel
 
     async def _set_welcome_channel(
         self, guild: discord.Guild, channel: discord.TextChannel

@@ -1,40 +1,16 @@
-import discord
 import logging
-import tempfile
 
-from pydantic import parse_obj_as
-from os import PathLike
-from redbot.core import app_commands, checks
-from urllib.parse import urljoin
-
-from rscapi import ApiClient, FranchisesApi, TeamsApi
-from rscapi.exceptions import ApiException
-from rscapi.models.franchise import Franchise
-from rscapi.models.franchise_gm import FranchiseGM
-from rscapi.models.franchise_list import FranchiseList
-from rscapi.models.rebrand_a_franchise import RebrandAFranchise
-from rscapi.models.franchise_logo import FranchiseLogo
-from rscapi.models.transfer_franchise import TransferFranchise
-from rscapi.models.league import League
-from rscapi.models.team_list import TeamList
+import discord
+from redbot.core import app_commands
 
 from rsc.abc import RSCMixIn
-from rsc.const import FREE_AGENT_ROLE, GM_ROLE
-from rsc.embeds import ErrorEmbed, SuccessEmbed, BlueEmbed, ApiExceptionErrorEmbed
-from rsc.exceptions import RscException
-from rsc.enums import Status
-from rsc.types import ThreadGroup
-from rsc.utils import utils
-
-from typing import List, Dict, Optional
+from rsc.embeds import BlueEmbed, ErrorEmbed, SuccessEmbed
+from rsc.types import ModThreadSettings, ThreadGroup
 
 log = logging.getLogger("red.rsc.moderator")
 
-defaults_guild = {
-    "PrimaryCategory": None,
-    "ManagementRole": None,
-    "Groups": {},
-}
+
+defaults_guild = ModThreadSettings(PrimaryCategory=None, ManagementRole=None, Groups={})
 
 
 class ThreadMixIn(RSCMixIn):
@@ -94,6 +70,9 @@ class ThreadMixIn(RSCMixIn):
         name="settings", description="Current configuration for ModMail thread handling"
     )
     async def _thread_settings(self, interaction: discord.Interaction):
+        if not interaction.guild:
+            return
+
         category = await self._get_primary_category(interaction.guild)
         role = await self._get_management_role(interaction.guild)
 
@@ -116,14 +95,17 @@ class ThreadMixIn(RSCMixIn):
         name="list", description="List of current configured ModMail groups"
     )
     async def _thread_groups_list(self, interaction: discord.Interaction):
-        groups = await self._get_groups(interaction.guild)
+        guild = interaction.guild
+        if not guild:
+            return
+        groups = await self._get_groups(guild)
 
         name_fmt = "\n".join(groups.keys())
         role_fmt: list[str] = []
         category_fmt: list[str] = []
         for g in groups.values():
-            r = interaction.guild.get_role(g["role"])
-            c = interaction.guild.get_channel(g["category"])
+            r = guild.get_role(g["role"])
+            c = guild.get_channel(g["category"])
             role_fmt.append(r.mention if r else str(g["role"]))
             category_fmt.append(c.mention if c else str(g["category"]))
 
@@ -152,13 +134,15 @@ class ThreadMixIn(RSCMixIn):
         category: discord.CategoryChannel,
         role: discord.Role,
     ):
+        if not interaction.guild:
+            return
         await self._set_group(
             interaction.guild, name=name, category=category, role=role
         )
 
         embed = SuccessEmbed(
             title="ModMail Group Added",
-            description=f"Created new assignable modmail group.",
+            description="Created new assignable modmail group.",
         )
         embed.add_field(name="Name", value=name, inline=True)
         embed.add_field(name="Role", value=role.mention, inline=True)
@@ -172,9 +156,16 @@ class ThreadMixIn(RSCMixIn):
     @app_commands.describe(group="Assignable ModMail group name")
     @app_commands.autocomplete(group=thread_autocomplete)
     async def _thread_groups_rm(self, interaction: discord.Interaction, group: str):
+        if not interaction.guild:
+            return
         groups = await self._get_groups(interaction.guild)
         if group not in groups.keys():
-            await interaction.response.send_message(embed=ErrorEmbed(description=f"**{group}** is not a valid assignable ModMail group."), ephemeral=True)
+            await interaction.response.send_message(
+                embed=ErrorEmbed(
+                    description=f"**{group}** is not a valid assignable ModMail group."
+                ),
+                ephemeral=True,
+            )
             return
         await self._unset_group(interaction.guild, group)
 
@@ -191,6 +182,8 @@ class ThreadMixIn(RSCMixIn):
     async def _thread_category(
         self, interaction: discord.Interaction, category: discord.CategoryChannel
     ):
+        if not interaction.guild:
+            return
         await self._set_primary_category(interaction.guild, category)
         await interaction.response.send_message(
             embed=SuccessEmbed(
@@ -201,9 +194,11 @@ class ThreadMixIn(RSCMixIn):
 
     @_thread.command(name="role", description="Management role for ModMail threads")
     @app_commands.describe(role="Management role for assigning ModMail threads")
-    async def _thread_category(
+    async def _thread_management_role(
         self, interaction: discord.Interaction, role: discord.Role
     ):
+        if not interaction.guild:
+            return
         await self._set_management_role(interaction.guild, role)
         await interaction.response.send_message(
             embed=SuccessEmbed(
@@ -221,76 +216,113 @@ class ThreadMixIn(RSCMixIn):
     @app_commands.autocomplete(group=thread_autocomplete)
     @app_commands.guild_only
     async def _thread_assign(self, interaction: discord.Interaction, group: str):
+        channel = interaction.channel
+        guild = interaction.guild
+        if not (guild and channel):
+            return
+
+        if not isinstance(channel, discord.TextChannel):
+            return
+
         # Validate group exists
-        tgroup = await self.get_thread_group(interaction.guild, group)
+        tgroup = await self.get_thread_group(guild, group)
         if not tgroup:
             await interaction.response.send_message(
-                f"**{group}** is not an assignable modmail group.",
-                ephemeral=True
+                f"**{group}** is not an assignable modmail group.", ephemeral=True
             )
             return
 
-        category = interaction.guild.get_channel(tgroup["category"])
+        category = guild.get_channel(tgroup["category"])
         if not category:
             await interaction.response.send_message(
-                f"Category does not exist: **{tgroup['category']}**",
-                ephemeral=True
+                f"Category does not exist: **{tgroup['category']}**", ephemeral=True
             )
             return
 
-        role = interaction.guild.get_role(tgroup["role"])
+        role = guild.get_role(tgroup["role"])
         role_fmt = role.mention if role else tgroup["role"]
 
-        await interaction.channel.move(
-            end=True, category=category, sync_permissions=True
+        await channel.move(end=True, category=category, sync_permissions=True)
+        await channel.send(
+            f"This ticket has been assigned to {role_fmt}",
+            allowed_mentions=discord.AllowedMentions(roles=True),
         )
-        await interaction.channel.send(f"This ticket has been assigned to {role_fmt}", allowed_mentions=discord.AllowedMentions(roles=True))
-        await interaction.response.send_message(embed=SuccessEmbed(description=f"Moved modmail thread to {category.jump_url}"), ephemeral=True)
+        await interaction.response.send_message(
+            embed=SuccessEmbed(
+                description=f"Moved modmail thread to {category.jump_url}"
+            ),
+            ephemeral=True,
+        )
 
     @app_commands.command(
         name="unassign", description="Move thread back to the primary ModMail category"
     )
     @app_commands.guild_only
     async def _thread_unassign(self, interaction: discord.Interaction):
-        if not await self.is_modmail_thread(interaction.channel):
-            await interaction.response.send_message("Only allowed in a modmail thread.", ephemeral=True)
+        channel = interaction.channel
+        guild = interaction.guild
+        if not (guild and channel):
             return
 
-        category = await self._get_primary_category(interaction.guild)
+        if not isinstance(channel, discord.TextChannel):
+            return
+
+        if not await self.is_modmail_thread(channel):
+            await interaction.response.send_message(
+                "Only allowed in a modmail thread.", ephemeral=True
+            )
+            return
+
+        category = await self._get_primary_category(guild)
         if not category:
-            await interaction.response.send_message("Primary modmail category is not configured or does not exist anymore.", ephemeral=True)
+            await interaction.response.send_message(
+                "Primary modmail category is not configured or does not exist anymore.",
+                ephemeral=True,
+            )
             return
 
-        role = await self._get_management_role(interaction.guild)
-        if not category:
-            await interaction.response.send_message("ModMail management role is not configured or does not exist anymore.", ephemeral=True)
+        role = await self._get_management_role(guild)
+        if not role:
+            await interaction.response.send_message(
+                "ModMail management role is not configured or does not exist anymore.",
+                ephemeral=True,
+            )
             return
 
-        await interaction.channel.move(end=True, category=category, sync_permissions=True)
-        await interaction.channel.send(f"This ticket has been given back to {role.mention}", allowed_mentions=discord.AllowedMentions(roles=True))
-        await interaction.response.send_message(embed=SuccessEmbed(description=f"Moved modmail thread to {category.jump_url}"), ephemeral=True)
-
+        await channel.move(end=True, category=category, sync_permissions=True)
+        await channel.send(
+            f"This ticket has been given back to {role.mention}",
+            allowed_mentions=discord.AllowedMentions(roles=True),
+        )
+        await interaction.response.send_message(
+            embed=SuccessEmbed(
+                description=f"Moved modmail thread to {category.jump_url}"
+            ),
+            ephemeral=True,
+        )
 
     @app_commands.command(
         name="resolve", description="Send resolved message to a modmail thread"
     )
     @app_commands.guild_only
     async def _thread_resolve(self, interaction: discord.Interaction):
-        if not interaction.channel or isinstance(
-            interaction.channel, (discord.DMChannel, discord.GroupChannel)
-        ):
+        guild = interaction.guild
+        channel = interaction.channel
+        if not (guild and channel):
+            return
+        if isinstance(channel, (discord.DMChannel, discord.GroupChannel)):
             await interaction.response.send_message(
                 "Must be used in a modmail thread.", ephemeral=True
             )
             return
-        if not interaction.channel.category:
+        if not channel.category:
             await interaction.response.send_message(
                 "Must be used in a modmail thread.", ephemeral=True
             )
             return
 
-        category = interaction.channel.category
-        groups = await self._get_groups(interaction.guild)
+        category = channel.category
+        groups = await self._get_groups(guild)
         for g in groups.values():
             if category.id == g["category"]:
                 await interaction.response.send_message("```\nresolved\n```")
@@ -312,7 +344,7 @@ class ThreadMixIn(RSCMixIn):
 
     async def get_thread_group(
         self, guild: discord.Guild, group: str
-    ) -> Optional[ThreadGroup]:
+    ) -> ThreadGroup | None:
         groups = await self._get_groups(guild)
         for k, v in groups.items():
             if k == group:
@@ -330,7 +362,6 @@ class ThreadMixIn(RSCMixIn):
                 log.debug(f"Valid modmail thread: {channel}")
                 return True
         return False
-
 
     # region jsondb
     async def _unset_group(
@@ -356,15 +387,13 @@ class ThreadMixIn(RSCMixIn):
 
     async def _get_primary_category(
         self, guild: discord.Guild
-    ) -> Optional[discord.CategoryChannel]:
+    ) -> discord.CategoryChannel | None:
         return discord.utils.get(
             guild.categories,
             id=await self.config.custom("Thread", guild.id).PrimaryCategory(),
         )
 
-    async def _get_management_role(
-        self, guild: discord.Guild
-    ) -> discord.Role | None:
+    async def _get_management_role(self, guild: discord.Guild) -> discord.Role | None:
         return guild.get_role(
             await self.config.custom("Thread", guild.id).ManagementRole()
         )

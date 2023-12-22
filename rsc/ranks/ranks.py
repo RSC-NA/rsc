@@ -1,51 +1,19 @@
-import discord
 import logging
 
-from discord.ext import tasks
-from datetime import datetime, time, timedelta
-from urllib.parse import urljoin
-
-from redbot.core import Config, app_commands, commands, checks
-
-from rscapi import ApiClient, TransactionsApi, LeaguePlayersApi, TrackerLinksApi
-from rscapi.exceptions import ApiException
-from rscapi.models.cut_a_player_from_a_league import CutAPlayerFromALeague
-from rscapi.models.re_sign_player import ReSignPlayer
-from rscapi.models.sign_a_player_to_a_team_in_a_league import (
-    SignAPlayerToATeamInALeague,
-)
-from rscapi.models.tracker_link import TrackerLink
-from rscapi.models.tracker_link_stats import TrackerLinkStats
-from rscapi.models.temporary_fa_sub import TemporaryFASub
-from rscapi.models.player_transaction_updates import PlayerTransactionUpdates
-from rscapi.models.expire_a_player_sub import ExpireAPlayerSub
-from rscapi.models.league_player import LeaguePlayer
+import discord
+from redbot.core import app_commands
 
 from rsc.abc import RSCMixIn
-from rsc.enums import TrackerLinksStatus, Status, RLStatType, RLChallengeType, AnsiColor, RankedPlaylist
-from rsc.const import CAPTAIN_ROLE, DEV_LEAGUE_ROLE, FREE_AGENT_ROLE, RSC_TRACKER_URL, SEASON_TITLE_REGEX
+from rsc.const import SEASON_TITLE_REGEX
 from rsc.embeds import (
-    ErrorEmbed,
-    SuccessEmbed,
-    YellowEmbed,
-    WarningEmbed,
-    RapidQuotaEmbed,
-    RapidTimeOutEmbed,
-    CooldownEmbed,
     BlueEmbed,
     OrangeEmbed,
-    ExceptionErrorEmbed,
-    ApiExceptionErrorEmbed,
+    RapidQuotaEmbed,
+    RapidTimeOutEmbed,
+    WarningEmbed,
 )
-from rsc.exceptions import RscException, RapidQuotaExceeded, RapidApiTimeOut
-from rsc.teams import TeamMixIn
-from rsc.transactions.views import TradeAnnouncementModal, TradeAnnouncementView
-from rsc.types import Substitute
-from rsc.utils import utils
-from rsc.views import LinkButton
-
-
-from typing import Optional, TypedDict, List
+from rsc.enums import AnsiColor, RankedPlaylist, RLStatType
+from rsc.exceptions import RapidApiTimeOut, RapidQuotaExceeded
 
 log = logging.getLogger("red.rsc.ranks")
 
@@ -65,20 +33,22 @@ class RankMixIn(RSCMixIn):
 
     @_rl.command(name="ranks", description="Display rocket league rank (Epic Only)")
     @app_commands.describe(player="RSC Discord Member")
-    # @app_commands.checks.cooldown(1, 60.0, key=lambda i: (i.guild_id, i.user.id))
+    @app_commands.checks.cooldown(1, 60.0, key=lambda i: (i.guild_id, i.user.id))
     async def _rl_ranks(self, interaction: discord.Interaction, player: discord.Member):
-        api = await self.rapid_connector(interaction.guild)
+        guild = interaction.guild
+        if not guild:
+            return
+
+        api = await self.rapid_connector(guild)
         if not api:
             await interaction.response.send_message(
-                embed=WarningEmbed(
-                    description=f"RapidAPI is not currently configured."
-                ),
+                embed=WarningEmbed(description="RapidAPI is not currently configured."),
                 ephemeral=True,
             )
             return
 
         await interaction.response.defer()
-        trackers = await self.trackers(interaction.guild, player=player)
+        trackers = await self.trackers(guild, player=player)
 
         embed = BlueEmbed(
             title=f"{player.display_name} Ranks",
@@ -116,22 +86,24 @@ class RankMixIn(RSCMixIn):
         name="stats", description="Display rocket league stats for Epic accounts"
     )
     @app_commands.describe(stat="Stat type to query", player="RSC Discord Member")
-    # @app_commands.checks.cooldown(1, 60.0, key=lambda i: (i.guild_id, i.user.id))
+    @app_commands.checks.cooldown(1, 60.0, key=lambda i: (i.guild_id, i.user.id))
     async def _rl_stats(
         self, interaction: discord.Interaction, stat: RLStatType, player: discord.Member
     ):
-        api = await self.rapid_connector(interaction.guild)
+        guild = interaction.guild
+        if not guild:
+            return
+
+        api = await self.rapid_connector(guild)
         if not api:
             await interaction.response.send_message(
-                embed=WarningEmbed(
-                    description=f"RapidAPI is not currently configured."
-                ),
+                embed=WarningEmbed(description="RapidAPI is not currently configured."),
                 ephemeral=True,
             )
             return
 
         await interaction.response.defer()
-        members = await self.members(interaction.guild, discord_id=player.id, limit=1)
+        members = await self.members(guild, discord_id=player.id, limit=1)
         if not members:
             await interaction.followup.send(
                 embed=OrangeEmbed(
@@ -142,7 +114,7 @@ class RankMixIn(RSCMixIn):
             )
             return
 
-        trackers = await self.trackers(interaction.guild, name=members[0].rsc_name)
+        trackers = await self.trackers(guild, name=members[0].rsc_name)
 
         embed = BlueEmbed(
             title=f"{members[0].rsc_name.title()} RL {stat}",
@@ -164,11 +136,11 @@ class RankMixIn(RSCMixIn):
             await interaction.followup.send(embed=RapidTimeOutEmbed(), ephemeral=True)
             return
 
+        embed.add_field(name="Account", value="\n".join(stats.keys()), inline=True)
         embed.add_field(
-            name="Account", value="\n".join([k for k in stats.keys()]), inline=True
-        )
-        embed.add_field(
-            name="Stat Count", value="\n".join([str(v) for v in stats.values()]), inline=True
+            name="Stat Count",
+            value="\n".join([str(v) for v in stats.values()]),
+            inline=True,
         )
 
         await interaction.followup.send(embed=embed)
@@ -177,16 +149,14 @@ class RankMixIn(RSCMixIn):
         name="status", description="Display rocket league status for Epic accounts"
     )
     @app_commands.describe(player="RSC Discord Member")
-    # @app_commands.checks.cooldown(1, 60.0, key=lambda i: (i.guild_id, i.user.id))
+    @app_commands.checks.cooldown(1, 60.0, key=lambda i: (i.guild_id, i.user.id))
     async def _rl_status(
         self, interaction: discord.Interaction, player: discord.Member
     ):
         api = await self.rapid_connector(interaction.guild)
         if not api:
             await interaction.response.send_message(
-                embed=WarningEmbed(
-                    description=f"RapidAPI is not currently configured."
-                ),
+                embed=WarningEmbed(description="RapidAPI is not currently configured."),
                 ephemeral=True,
             )
             return
@@ -207,7 +177,7 @@ class RankMixIn(RSCMixIn):
 
         embed = BlueEmbed(
             title=f"{members[0].rsc_name} RL Status".title(),
-            description=f"Displaying Rocket League status for player. Only displays known **Epic** accounts.",
+            description="Displaying Rocket League status for player. Only displays known **Epic** accounts.",
         )
 
         profiles = []
@@ -234,21 +204,16 @@ class RankMixIn(RSCMixIn):
 
         await interaction.followup.send(embed=embed)
 
-
     @_rl.command(
         name="titles", description="Display rocket league titles for Epic account"
     )
     @app_commands.describe(player="Rocket League Epic Account name or Epic ID")
-    # @app_commands.checks.cooldown(1, 60.0, key=lambda i: (i.guild_id, i.user.id))
-    async def _rl_status(
-        self, interaction: discord.Interaction, player: str 
-    ):
+    @app_commands.checks.cooldown(1, 60.0, key=lambda i: (i.guild_id, i.user.id))
+    async def _rl_titles(self, interaction: discord.Interaction, player: str):
         api = await self.rapid_connector(interaction.guild)
         if not api:
             await interaction.response.send_message(
-                embed=WarningEmbed(
-                    description=f"RapidAPI is not currently configured."
-                ),
+                embed=WarningEmbed(description="RapidAPI is not currently configured."),
                 ephemeral=True,
             )
             return
@@ -264,7 +229,13 @@ class RankMixIn(RSCMixIn):
             return
 
         if not titles:
-            await interaction.followup.send(embed=OrangeEmbed(title=f"{player} RL Titles", description=f"No data found for **{player}**"), ephemeral=True)
+            await interaction.followup.send(
+                embed=OrangeEmbed(
+                    title=f"{player} RL Titles",
+                    description=f"No data found for **{player}**",
+                ),
+                ephemeral=True,
+            )
             return
 
         desc = "Displaying Rocket League titles for Epic account.\n\n```ansi\n"

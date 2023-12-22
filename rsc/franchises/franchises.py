@@ -1,35 +1,20 @@
-import discord
 import logging
-import tempfile
-
-from pydantic import parse_obj_as
 from os import PathLike
-from redbot.core import app_commands, checks
 from urllib.parse import urljoin
 
-from rscapi import ApiClient, FranchisesApi, TeamsApi
+import discord
+from redbot.core import app_commands
+from rscapi import ApiClient, FranchisesApi
 from rscapi.exceptions import ApiException
 from rscapi.models.franchise import Franchise
 from rscapi.models.franchise_gm import FranchiseGM
 from rscapi.models.franchise_list import FranchiseList
 from rscapi.models.rebrand_a_franchise import RebrandAFranchise
-from rscapi.models.franchise_logo import FranchiseLogo
 from rscapi.models.transfer_franchise import TransferFranchise
-from rscapi.models.league import League
-from rscapi.models.team_list import TeamList
 
 from rsc.abc import RSCMixIn
-from rsc.const import FREE_AGENT_ROLE, GM_ROLE
-from rsc.embeds import ErrorEmbed, SuccessEmbed, BlueEmbed, ApiExceptionErrorEmbed
+from rsc.embeds import BlueEmbed
 from rsc.exceptions import RscException
-from rsc.enums import Status
-from rsc.utils.utils import (
-    franchise_role_from_name,
-    update_prefix_for_franchise_role,
-    remove_prefix,
-)
-
-from typing import List, Dict, Optional, Union
 
 log = logging.getLogger("red.rsc.franchises")
 
@@ -74,21 +59,22 @@ class FranchiseMixIn(RSCMixIn):
     @app_commands.guild_only
     async def _franchises(self, interaction: discord.Interaction):
         """Get a list of all RSC franchises"""
+        guild = interaction.guild
+        if not guild:
+            return
+
         await interaction.response.defer()
-        franchises = await self.franchises(interaction.guild)
+        franchises = await self.franchises(guild)
 
         gm_names = []
         for f in franchises:
-            member = interaction.guild.get_member(f.gm.discord_id)
+            member = guild.get_member(f.gm.discord_id)
             if member:
                 gm_names.append(member.mention)
             else:
                 gm_names.append(f.gm.rsc_name)
 
-        embed = discord.Embed(
-            title=f"{interaction.guild} Franchises",
-            color=discord.Color.blue(),
-        )
+        embed = BlueEmbed(title=f"{guild.name} Franchises")
         embed.add_field(
             name="Prefix", value="\n".join([f.prefix for f in franchises]), inline=True
         )
@@ -100,8 +86,8 @@ class FranchiseMixIn(RSCMixIn):
             value="\n".join(gm_names),
             inline=True,
         )
-        if interaction.guild.icon:
-            embed.set_thumbnail(url=interaction.guild.icon.url)
+        if guild.icon:
+            embed.set_thumbnail(url=guild.icon.url)
         await interaction.followup.send(embed=embed)
 
     # Functions
@@ -160,20 +146,19 @@ class FranchiseMixIn(RSCMixIn):
                 franchises.sort(key=lambda f: f.name)
                 if self._franchise_cache.get(guild.id):
                     cached = set(self._franchise_cache[guild.id])
-                    different = set([f.name for f in franchises]) - cached
-                    log.debug(
-                        f"[{guild.name}] Franchises being added to cache: {different}"
-                    )
-                    self._franchise_cache[guild.id] += list(different)
+                    different = {f.name for f in franchises} - cached
+                    if different:
+                        log.debug(
+                            f"[{guild.name}] Franchises being added to cache: {different}"
+                        )
+                        self._franchise_cache[guild.id] += list(different)
                 else:
                     log.debug(f"[{guild.name}] Starting fresh franchises cache")
                     self._franchise_cache[guild.id] = [f.name for f in franchises]
                 self._franchise_cache[guild.id].sort()
             return franchises
 
-    async def franchise_by_id(
-        self, guild: discord.Guild, id: int
-    ) -> Franchise | None:
+    async def franchise_by_id(self, guild: discord.Guild, id: int) -> Franchise | None:
         async with ApiClient(self._api_conf[guild.id]) as client:
             api = FranchisesApi(client)
             return await api.franchises_read(id)
@@ -264,10 +249,10 @@ class FranchiseMixIn(RSCMixIn):
         async with ApiClient(self._api_conf[guild.id]) as client:
             api = FranchisesApi(client)
             try:
-                l = await api.franchises_logo(id)
-                log.debug(f"Franchise Logo: {l}")
-                if not (l and l.logo):
+                logo = await api.franchises_logo(id)
+                log.debug(f"Franchise Logo: {logo}")
+                if not (logo and logo.logo):
                     return None
-                return urljoin(host, l.logo)
+                return urljoin(host, logo.logo)
             except ApiException as exc:
                 raise RscException(response=exc)

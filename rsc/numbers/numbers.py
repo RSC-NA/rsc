@@ -1,47 +1,24 @@
-import discord
 import logging
+from datetime import datetime
 
-from discord.ext import tasks
-from datetime import datetime, time, timedelta
-from pathlib import Path
-
-from redbot.core import Config, app_commands, commands, checks
-
-from rscapi import ApiClient, NumbersApi, LeaguePlayersApi
+import discord
+from redbot.core import app_commands
+from rscapi import ApiClient, NumbersApi
 from rscapi.exceptions import ApiException
 from rscapi.models.player_mmr import PlayerMMR
-from rscapi.models.re_sign_player import ReSignPlayer
-from rscapi.models.sign_a_player_to_a_team_in_a_league import (
-    SignAPlayerToATeamInALeague,
-)
-
 
 from rsc.abc import RSCMixIn
-from rsc.enums import Status
-from rsc.const import CAPTAIN_ROLE, DEV_LEAGUE_ROLE, FREE_AGENT_ROLE
-from rsc.embeds import (
-    ErrorEmbed,
-    SuccessEmbed,
-    YellowEmbed,
-    BlueEmbed,
-    ExceptionErrorEmbed,
-    ApiExceptionErrorEmbed,
-)
-from rsc.exceptions import RscException, translate_api_error
-from rsc.teams import TeamMixIn
-from rsc.transactions.views import TradeAnnouncementModal, TradeAnnouncementView
-from rsc.transformers import DateTransformer
-from rsc.types import Substitute
-from rsc.utils import utils
-
-
-from typing import Optional, TypedDict, List
+from rsc.embeds import YellowEmbed
+from rsc.exceptions import RscException
+from rsc.types import NumbersSettings
 
 log = logging.getLogger("red.rsc.transactions")
 
-defaults_guild = {"NumbersRoles": []}
+
+defaults_guild = NumbersSettings(NumbersRoles=[])
 
 NUMBERS_ROLES = "Numbers Committee"
+
 
 class NumberMixIn(RSCMixIn):
     def __init__(self):
@@ -78,20 +55,49 @@ class NumberMixIn(RSCMixIn):
 
     # App Commands
 
-    @_numbers.command(name="fetch", description="Display list of MMR pulls for a player")
+    @_numbers.command(
+        name="fetch", description="Display list of MMR pulls for a player"
+    )
     @app_commands.describe(player="RSC Discord Member")
     @app_commands.checks.has_any_role(NUMBERS_ROLES)
-    async def _numbers_fetch(self, interaction: discord.Interaction, player: discord.Member) -> PlayerMMR:
+    async def _numbers_fetch(
+        self, interaction: discord.Interaction, player: discord.Member
+    ):
+        if not interaction.guild:
+            return None
+
         pulls = await self.mmr_pulls(interaction.guild, player=player)
         pulls.sort(key=lambda x: x.date_pulled, reverse=True)
         embed = YellowEmbed(
-            title=f"Player MMR Pulls",
-            description=f"List of MMR pulls for {player.mention}. Peaks only."
+            title="Player MMR Pulls",
+            description=f"List of MMR pulls for {player.mention}. Peaks only.",
         )
-        embed.add_field(name="Date", value="\n".join([str(x.date_pulled.date()) for x in pulls]), inline=True)
-        embed.add_field(name="3v3", value="\n".join([f"{x.threes_season_peak} ({x.threes_games_played})" for x in pulls]), inline=True)
-        embed.add_field(name="2v2", value="\n".join([f"{x.twos_season_peak} ({x.twos_games_played})" for x in pulls]), inline=True)
-        embed.add_field(name="1v1", value="\n".join([f"{x.ones_season_peak} ({x.ones_games_played})" for x in pulls]), inline=True)
+        embed.add_field(
+            name="Date",
+            value="\n".join([str(x.date_pulled.date()) for x in pulls]),
+            inline=True,
+        )
+        embed.add_field(
+            name="3v3",
+            value="\n".join(
+                [f"{x.threes_season_peak} ({x.threes_games_played})" for x in pulls]
+            ),
+            inline=True,
+        )
+        embed.add_field(
+            name="2v2",
+            value="\n".join(
+                [f"{x.twos_season_peak} ({x.twos_games_played})" for x in pulls]
+            ),
+            inline=True,
+        )
+        embed.add_field(
+            name="1v1",
+            value="\n".join(
+                [f"{x.ones_season_peak} ({x.ones_games_played})" for x in pulls]
+            ),
+            inline=True,
+        )
         await interaction.response.send_message(embed=embed)
 
     # API
@@ -125,7 +131,7 @@ class NumberMixIn(RSCMixIn):
         role_ids = await self.config.custom("Numbers", guild.id).NumbersRoles()
         roles = []
         for id in role_ids:
-            r = guild.get_role(r)
+            r = guild.get_role(id)
             if not r:
                 log.warning(f"Numbers roles contains invalid role id: {id}")
                 continue

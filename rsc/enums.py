@@ -1,6 +1,6 @@
 import logging
 import math
-from enum import StrEnum, IntEnum
+from enum import IntEnum, StrEnum
 
 log = logging.getLogger("red.rsc.enums")
 
@@ -41,6 +41,7 @@ class MatchFormat(StrEnum):
     BEST_OF_THREE = "BO3"  # Best of Three
     BEST_OF_FIVE = "BO5"  # Best of Five
     BEST_OF_SEVEN = "BO7"  # Best of Seven
+
 
 class Division(StrEnum):
     OCEAN = "O"  # Ocean
@@ -180,9 +181,11 @@ class MatchTeamEnum(StrEnum):
     def full_name(self) -> str:
         return self.name.capitalize()
 
+
 class IntentResponse:
     RETURN = ""
     NOT = ""
+
 
 class SubStatus(IntEnum):
     NOT = 0  # Not subbed
@@ -206,6 +209,7 @@ class RegionPreference(StrEnum):
                 return "Europe"
             case _:
                 raise ValueError(f"Unknown Region: {self}")
+
 
 class PlayerType(StrEnum):
     NEW = "NEW"
@@ -342,14 +346,14 @@ class AnsiColor(IntEnum):
 
         if red == green and green == blue:
             if red < 8:
-                log.debug(f"red < 8")
+                log.debug("red < 8")
                 return 16
 
             if red > 248:
-                log.debug(f"red > 248")
+                log.debug("red > 248")
                 return 231
 
-            log.debug(f"Other Red")
+            log.debug("Other Red")
             return round((((red - 8) / 247) * 24) + 232)
 
         return (

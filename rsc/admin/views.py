@@ -1,18 +1,15 @@
-import discord
 import logging
-
 from enum import IntEnum
 
+import discord
+
 from rsc.const import DEFAULT_TIMEOUT
-from rsc.embeds import ErrorEmbed, SuccessEmbed, LoadingEmbed, BlueEmbed, OrangeEmbed, RedEmbed
-from rsc.views import AuthorOnlyView, ConfirmButton, DeclineButton, CancelButton, NextButton
-
+from rsc.embeds import LoadingEmbed, OrangeEmbed, RedEmbed
 from rsc.types import RebrandTeamDict
-
-from typing import Optional, Dict, List, Callable, Union, TYPE_CHECKING
-
+from rsc.views import AuthorOnlyView, CancelButton, ConfirmButton, DeclineButton
 
 log = logging.getLogger("red.rsc.admin.views")
+
 
 class CreateState(IntEnum):
     START = 1
@@ -21,6 +18,7 @@ class CreateState(IntEnum):
     FINISHED = 4
     CANCELLED = 5
     NOTIERS = 6
+
 
 class ConfirmSyncView(AuthorOnlyView):
     def __init__(
@@ -37,7 +35,10 @@ class ConfirmSyncView(AuthorOnlyView):
         """Note: The prompt does not all wait()"""
         prompt = OrangeEmbed(
             title="API Sync",
-            description="You are about to sync data from the API directly into the discord server.\n\n**Are you sure you want to do this?**",
+            description=(
+                "You are about to sync data from the API directly into the discord server.\n\n"
+                "**Are you sure you want to do this?**"
+            ),
         )
         await self.interaction.response.send_message(
             embed=prompt, view=self, ephemeral=True
@@ -56,7 +57,7 @@ class ConfirmSyncView(AuthorOnlyView):
         await self.interaction.edit_original_response(
             embed=RedEmbed(
                 title="Sync Canelled",
-                description=f"You have cancelled syncing from the API.",
+                description="You have cancelled syncing from the API.",
             ),
             view=None,
         )
@@ -92,8 +93,12 @@ class RebrandFranchiseView(AuthorOnlyView):
                 f"**Prefix**: {self.prefix}"
             ),
         )
-        embed.add_field(name="Tier", value="\n".join([t["tier"] for t in self.teams]), inline=True)
-        embed.add_field(name="Teams", value="\n".join(t["name"] for t in self.teams), inline=True)
+        embed.add_field(
+            name="Tier", value="\n".join([t["tier"] for t in self.teams]), inline=True
+        )
+        embed.add_field(
+            name="Teams", value="\n".join(t["name"] for t in self.teams), inline=True
+        )
         await self.interaction.response.send_message(
             embed=embed,
             view=self,
@@ -113,10 +118,9 @@ class RebrandFranchiseView(AuthorOnlyView):
                 title="Cancelled",
                 description="You have cancelled deleting this franchise.",
             ),
-            view=None
+            view=None,
         )
         self.stop()
-
 
 
 class DeleteFranchiseView(AuthorOnlyView):
@@ -137,7 +141,7 @@ class DeleteFranchiseView(AuthorOnlyView):
         embed = OrangeEmbed(
             title="Delete Franchise",
             description="Are you sure you want to delete the following franchise?",
-            color=discord.Color.orange()
+            color=discord.Color.orange(),
         )
         embed.add_field(name="Name", value=self.name, inline=True)
         await self.interaction.followup.send(
@@ -159,7 +163,7 @@ class DeleteFranchiseView(AuthorOnlyView):
                 title="Cancelled",
                 description="You have cancelled deleting this franchise.",
             ),
-            view=None
+            view=None,
         )
         self.stop()
 
@@ -206,9 +210,10 @@ class CreateFranchiseView(AuthorOnlyView):
                 title="Cancelled",
                 description="You have cancelled creating a new franchise.",
             ),
-            view=None
+            view=None,
         )
         self.stop()
+
 
 class TransferFranchiseView(AuthorOnlyView):
     def __init__(
@@ -252,6 +257,6 @@ class TransferFranchiseView(AuthorOnlyView):
                 title="Cancelled",
                 description="You have cancelled transferring franchise.",
             ),
-            view=None
+            view=None,
         )
         self.stop()

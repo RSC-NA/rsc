@@ -1,10 +1,9 @@
-import discord
 import logging
 
+import discord
 from discord.ui import TextInput
-from rsc.embeds import SuccessEmbed, GreenEmbed
 
-from typing import List, Dict
+from rsc.embeds import SuccessEmbed
 
 log = logging.getLogger("red.rsc.franchises.modals")
 

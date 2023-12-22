@@ -1,46 +1,30 @@
-import discord
 import logging
 import tempfile
 
-from redbot.core import app_commands, checks, commands
-
-from rscapi.models.elevated_role import ElevatedRole
+import discord
+from redbot.core import app_commands
 from rscapi.models.franchise import Franchise
-from rscapi.models.franchise_list import FranchiseList
 from rscapi.models.league_player import LeaguePlayer
-from rscapi.models.member import Member
 from rscapi.models.rebrand_a_franchise import RebrandAFranchise
 from rscapi.models.team_details import TeamDetails
-from rscapi.models.tier import Tier
 
 from rsc.abc import RSCMixIn
-from rsc.exceptions import RscException
-from rsc.tiers import TierMixIn
-from rsc.franchises import FranchiseMixIn
-from rsc.const import (
-    LEAGUE_ROLE,
-    MUTED_ROLE,
-    FRANCHISE_ROLE_PERMS,
-    FREE_AGENT_ROLE,
-    GM_ROLE,
-    TROPHY_EMOJI,
-    STAR_EMOJI,
-)
-from rsc.embeds import ErrorEmbed, SuccessEmbed, ApiExceptionErrorEmbed, BlueEmbed
-from rsc.enums import Status
+from rsc.admin.modals import FranchiseRebrandModal, LeagueDatesModal
 from rsc.admin.views import (
     ConfirmSyncView,
-    RebrandFranchiseView,
-    DeleteFranchiseView,
     CreateFranchiseView,
+    DeleteFranchiseView,
+    RebrandFranchiseView,
     TransferFranchiseView,
 )
-from rsc.admin.modals import FranchiseRebrandModal, LeagueDatesModal
+from rsc.const import FRANCHISE_ROLE_PERMS, GM_ROLE
+from rsc.embeds import ApiExceptionErrorEmbed, BlueEmbed, ErrorEmbed, SuccessEmbed
+from rsc.enums import Status
+from rsc.exceptions import RscException
+from rsc.franchises import FranchiseMixIn
 from rsc.types import RebrandTeamDict
-from rsc.views import LinkButton
 from rsc.utils import utils
-
-from typing import List, Dict, Optional
+from rsc.views import LinkButton
 
 log = logging.getLogger("red.rsc.admin")
 
@@ -92,18 +76,19 @@ class AdminMixIn(RSCMixIn):
 
     @_members.command(name="changename", description="Change RSC name for a member")
     @app_commands.describe(member="RSC discord member", name="Desired player name")
-    async def _member_create(
+    async def _member_changename(
         self,
         interaction: discord.Interaction,
         member: discord.Member,
         name: str,
     ):
+        if not interaction.guild:
+            return
+
         await interaction.response.defer(ephemeral=True)
 
         try:
-            new_member = await self.change_member_name(
-                interaction.guild, id=member.id, name=name
-            )
+            await self.change_member_name(interaction.guild, id=member.id, name=name)
         except RscException as exc:
             await interaction.followup.send(
                 embed=ApiExceptionErrorEmbed(exc), ephemeral=True
@@ -137,8 +122,11 @@ class AdminMixIn(RSCMixIn):
         member: discord.Member,
         rsc_name: str | None = None,
     ):
+        if not interaction.guild:
+            return
+
         try:
-            lp = await self.create_member(
+            await self.create_member(
                 interaction.guild,
                 member=member,
                 rsc_name=rsc_name or member.display_name,
@@ -165,6 +153,9 @@ class AdminMixIn(RSCMixIn):
     async def _member_delete(
         self, interaction: discord.Interaction, member: discord.Member
     ):
+        if not interaction.guild:
+            return
+
         try:
             await self.delete_member(interaction.guild, member=member)
         except RscException as exc:
@@ -198,6 +189,10 @@ class AdminMixIn(RSCMixIn):
         limit: app_commands.Range[int, 1, 64] = 10,
         offset: app_commands.Range[int, 0, 64] = 0,
     ):
+        guild = interaction.guild
+        if not guild:
+            return
+
         if not (rsc_name or discord_username or discord_id):
             await interaction.response.send_message(
                 "You must specify at least one search option.", ephemeral=True
@@ -215,7 +210,7 @@ class AdminMixIn(RSCMixIn):
 
         await interaction.response.defer(ephemeral=True)
         ml = await self.members(
-            interaction.guild,
+            guild,
             rsc_name=rsc_name,
             discord_username=discord_username,
             discord_id=discord_id,
@@ -223,10 +218,10 @@ class AdminMixIn(RSCMixIn):
             offset=offset,
         )
 
-        league_id = self._league[interaction.guild.id]
+        league_id = self._league[guild.id]
         m_fmt = []
         for m in ml:
-            x = interaction.guild.get_member(m.discord_id)
+            x = guild.get_member(m.discord_id)
             l: LeaguePlayer = next(
                 (i for i in m.player_leagues if i.league.id == league_id), None
             )
@@ -270,7 +265,6 @@ class AdminMixIn(RSCMixIn):
     ):
         added: list[discord.TextChannel] = []
         existing: list[discord.TextChannel] = []
-        removed: list[discord.TextChannel] = []
 
         guild = interaction.guild
         if not guild:
@@ -300,24 +294,26 @@ class AdminMixIn(RSCMixIn):
                 gm = None
 
                 # Default Permissions
-                overwrites: dict[discord.Role | discord.Member, discord.PermissionOverwrite] = {
+                overwrites: dict[
+                    discord.Role | discord.Member, discord.PermissionOverwrite
+                ] = {
                     guild.default_role: discord.PermissionOverwrite(view_channel=False)
                 }
 
                 # Add Transactions
                 trole = await self._trans_role(guild)
                 if trole:
-                        overwrites[trole] = discord.PermissionOverwrite(
-                            manage_channels=True,
-                            manage_permissions=True,
-                            view_channel=True,
-                            send_messages=True,
-                            embed_links=True,
-                            attach_files=True,
-                            read_messages=True,
-                            read_message_history=True,
-                            add_reactions=True,
-                        )
+                    overwrites[trole] = discord.PermissionOverwrite(
+                        manage_channels=True,
+                        manage_permissions=True,
+                        view_channel=True,
+                        send_messages=True,
+                        embed_links=True,
+                        attach_files=True,
+                        read_messages=True,
+                        read_message_history=True,
+                        add_reactions=True,
+                    )
 
                 # Add GM
                 if f.gm:
@@ -358,7 +354,9 @@ class AdminMixIn(RSCMixIn):
         )
         if existing:
             embed.add_field(
-                name="Found", value="\n".join([r.mention for r in existing]), inline=True
+                name="Found",
+                value="\n".join([r.mention for r in existing]),
+                inline=True,
             )
         if added:
             embed.add_field(
@@ -376,7 +374,6 @@ class AdminMixIn(RSCMixIn):
         interaction: discord.Interaction,
     ):
         added: list[discord.Role] = []
-        notfound: list[str] = []
         existing: list[discord.Role] = []
         fixed: list[discord.Role] = []
 
@@ -425,7 +422,9 @@ class AdminMixIn(RSCMixIn):
         )
         if existing:
             embed.add_field(
-                name="Found", value="\n".join([r.mention for r in existing]), inline=True
+                name="Found",
+                value="\n".join([r.mention for r in existing]),
+                inline=True,
             )
         if fixed:
             embed.add_field(
@@ -446,11 +445,15 @@ class AdminMixIn(RSCMixIn):
     async def _franchise_logo(
         self, interaction: discord.Interaction, franchise: str, logo: discord.Attachment
     ):
+        guild = interaction.guild
+        if not guild:
+            return
+
         # Defer in case file is large
         await interaction.response.defer(ephemeral=True)
 
         # validate franchise
-        flist = await self.franchises(interaction.guild, name=franchise)
+        flist = await self.franchises(guild, name=franchise)
         if not flist:
             await interaction.followup.send(
                 embed=ErrorEmbed(description=f"**{franchise}** does not exist."),
@@ -479,32 +482,35 @@ class AdminMixIn(RSCMixIn):
             )
 
         # Remove old emoji. Discord API doesn't let us update it in place
-        old_emoji = await utils.emoji_from_prefix(interaction.guild, fdata.prefix)
+        old_emoji = await utils.emoji_from_prefix(guild, fdata.prefix)
         if old_emoji:
             log.debug(f"Deleting old franchise emoji: {old_emoji.name}")
             await old_emoji.delete(reason="Updating emoji to new logo")
 
         # Recreate emoji
-        new_emoji = await interaction.guild.create_custom_emoji(
+        new_emoji = await guild.create_custom_emoji(
             name=fdata.prefix, image=logo_bytes, reason=f"{franchise} has a new logo"
         )
         log.debug(f"New franchise emoji: {new_emoji.name}")
 
         # Update franchise display icon
-        icons_allowed = "ROLE_ICONS" in interaction.guild.features
+        icons_allowed = "ROLE_ICONS" in guild.features
         if icons_allowed:
-            frole = await utils.franchise_role_from_name(interaction.guild, fdata.name)
+            frole = await utils.franchise_role_from_name(guild, fdata.name)
             if not frole:
                 log.error(f"Unable to find franchise role: {fdata.name}")
             else:
                 await frole.edit(display_icon=logo_bytes)
         log.debug("Franchise role display icon was updated.")
 
-        full_logo_url = await self.full_logo_url(interaction.guild, result.logo)
+        full_logo_url = await self.full_logo_url(guild, result.logo)
 
         embed = SuccessEmbed(
             title="Logo Updated",
-            description=f"{franchise} logo has been uploaded to the API.\n\nFranchise emoji and display icon have also been updated.",
+            description=(
+                f"{franchise} logo has been uploaded to the API.\n\n"
+                "Franchise emoji and display icon have also been updated."
+            ),
         )
         embed.add_field(name="Height", value=logo.height, inline=True)
         embed.add_field(name="Width", value=logo.width, inline=True)
@@ -528,14 +534,18 @@ class AdminMixIn(RSCMixIn):
         self,
         interaction: discord.Interaction,
         franchise: str,
-        override: Optional[bool] = False,
+        override: bool = False,
     ):
+        guild = interaction.guild
+        if not guild:
+            return
+
         # Send modal
         rebrand_modal = FranchiseRebrandModal()
         await interaction.response.send_modal(rebrand_modal)
 
         # Fetch franchise data while user is in modal
-        fl = await self.franchises(interaction.guild, name=franchise)
+        fl = await self.franchises(guild, name=franchise)
         await rebrand_modal.wait()
 
         # Validate original franchise exists
@@ -606,7 +616,7 @@ class AdminMixIn(RSCMixIn):
         )
         try:
             new_fdata = await self.rebrand_franchise(
-                interaction.guild, id=fdata.id, rebrand=rebrand
+                guild, id=fdata.id, rebrand=rebrand
             )
             log.debug(new_fdata)
         except RscException as exc:
@@ -616,7 +626,7 @@ class AdminMixIn(RSCMixIn):
             return
 
         # Update franchise role
-        frole = await utils.franchise_role_from_name(interaction.guild, franchise)
+        frole = await utils.franchise_role_from_name(guild, franchise)
         if not frole:
             log.error(
                 f"[{interaction.guild}] Unable to find franchise role for rebrand: {franchise}"
@@ -646,8 +656,12 @@ class AdminMixIn(RSCMixIn):
         interaction: discord.Interaction,
         franchise: str,
     ):
+        guild = interaction.guild
+        if not guild:
+            return
+
         await interaction.response.defer(ephemeral=True)
-        fl = await self.franchises(interaction.guild, name=franchise)
+        fl = await self.franchises(guild, name=franchise)
         if not fl:
             await interaction.followup.send(
                 embed=ErrorEmbed(description=f"**{franchise}** does not exist."),
@@ -667,7 +681,7 @@ class AdminMixIn(RSCMixIn):
         await delete_view.prompt()
 
         # Get detailed information on players
-        fdata = await self.franchise_by_id(interaction.guild, fl[0].id)
+        fdata = await self.franchise_by_id(guild, fl[0].id)
         await delete_view.wait()
 
         if not delete_view.result:
@@ -675,7 +689,7 @@ class AdminMixIn(RSCMixIn):
 
         # Delete franchise in API
         try:
-            await self.delete_franchise(interaction.guild, id=fdata.id)
+            await self.delete_franchise(guild, id=fdata.id)
         except RscException as exc:
             await interaction.edit_original_response(
                 embed=ApiExceptionErrorEmbed(exc), view=None
@@ -683,16 +697,16 @@ class AdminMixIn(RSCMixIn):
             return
 
         # Roles
-        fa_role = await utils.get_free_agent_role(interaction.guild)
-        gm_role = await utils.get_gm_role(interaction.guild)
-        former_gm_role = await utils.get_former_gm_role(interaction.guild)
-        frole = await utils.franchise_role_from_name(interaction.guild, fdata.name)
+        fa_role = await utils.get_free_agent_role(guild)
+        gm_role = await utils.get_gm_role(guild)
+        former_gm_role = await utils.get_former_gm_role(guild)
+        frole = await utils.franchise_role_from_name(guild, fdata.name)
 
         # Transaction Channel
-        tchan: discord.TextChannel = await self._trans_channel(interaction.guild)
+        tchan: discord.TextChannel = await self._trans_channel(guild)
 
         # Edit GM
-        gm = interaction.guild.get_member(fdata.gm.discord_id)
+        gm = guild.get_member(fdata.gm.discord_id)
         if gm:
             await gm.remove_roles(gm_role)
             await gm.add_roles(former_gm_role)
@@ -700,9 +714,9 @@ class AdminMixIn(RSCMixIn):
         # Edit roles and prefix
         for t in fdata.teams:
             tier = t.tier
-            tier_fa_role = await utils.get_tier_fa_role(interaction.guild, tier)
+            tier_fa_role = await utils.get_tier_fa_role(guild, tier)
             for p in t.players:
-                m = interaction.guild.get_member(p.discord_id)
+                m = guild.get_member(p.discord_id)
                 if not m:
                     continue
 
@@ -724,9 +738,7 @@ class AdminMixIn(RSCMixIn):
             log.debug(f"Deleting franchise role: {frole.name}")
             await frole.delete(reason="Franchise has been deleted")
         else:
-            log.error(
-                f"[{interaction.guild.name}] Unable to find franchise role: {fdata.name}"
-            )
+            log.error(f"[{guild.name}] Unable to find franchise role: {fdata.name}")
 
         # Send result
         await interaction.edit_original_response(
@@ -751,6 +763,10 @@ class AdminMixIn(RSCMixIn):
         prefix: str,
         gm: discord.Member,
     ):
+        guild = interaction.guild
+        if not guild:
+            return
+
         create_view = CreateFranchiseView(interaction, name, gm)
         await create_view.prompt()
         await create_view.wait()
@@ -760,9 +776,7 @@ class AdminMixIn(RSCMixIn):
 
         try:
             log.debug(f"Creating franchise: {name}")
-            f: Franchise = await self.create_franchise(
-                interaction.guild, name, prefix, gm
-            )
+            f: Franchise = await self.create_franchise(guild, name, prefix, gm)
         except RscException as exc:
             await interaction.edit_original_response(
                 embed=ApiExceptionErrorEmbed(exc),
@@ -771,12 +785,12 @@ class AdminMixIn(RSCMixIn):
             return
 
         # Create franchise role
-        frole = await interaction.guild.create_role(
+        frole = await guild.create_role(
             name=f"{name} ({f.gm.rsc_name})", reason="New franchise created"
         )
 
         # GM role
-        gm_role = discord.utils.get(interaction.guild.roles, name=GM_ROLE)
+        gm_role = discord.utils.get(guild.roles, name=GM_ROLE)
 
         await gm.add_roles(frole, gm_role)
 
@@ -784,7 +798,7 @@ class AdminMixIn(RSCMixIn):
         gm_name = await utils.remove_prefix(gm)
         await gm.edit(nick=f"{prefix} | {gm_name}")
 
-        embed = SuccessEmbed(description=f"Franchise has been created.")
+        embed = SuccessEmbed(description="Franchise has been created.")
         embed.add_field(name="Name", value=name, inline=True)
         embed.add_field(name="GM", value=gm.mention, inline=True)
         await interaction.edit_original_response(embed=embed, view=None)
@@ -800,10 +814,14 @@ class AdminMixIn(RSCMixIn):
         franchise: str,
         gm: discord.Member,
     ):
+        guild = interaction.guild
+        if not guild:
+            return
+
         transfer_view = TransferFranchiseView(interaction, franchise=franchise, gm=gm)
         await transfer_view.prompt()
         # Fetch franchise data during view
-        fl = await self.franchises(interaction.guild, name=franchise)
+        fl = await self.franchises(guild, name=franchise)
         await transfer_view.wait()
 
         if not fl:
@@ -828,9 +846,7 @@ class AdminMixIn(RSCMixIn):
 
         try:
             log.debug(f"Transfering {franchise} to {gm.id}")
-            f: Franchise = await self.transfer_franchise(
-                interaction.guild, fdata.id, gm
-            )
+            f: Franchise = await self.transfer_franchise(guild, fdata.id, gm)
         except RscException as exc:
             await interaction.edit_original_response(
                 embed=ApiExceptionErrorEmbed(exc),
@@ -845,7 +861,7 @@ class AdminMixIn(RSCMixIn):
             await gm.remove_roles(old_frole)
 
         # Update franchise role
-        frole = await utils.franchise_role_from_name(interaction.guild, franchise)
+        frole = await utils.franchise_role_from_name(guild, franchise)
         if not frole:
             await interaction.edit_original_response(
                 embed=ErrorEmbed(

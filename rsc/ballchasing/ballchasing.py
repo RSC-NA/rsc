@@ -1,35 +1,30 @@
-import discord
+import asyncio
+import difflib
 import logging
 import random
+import statistics
 import string
-import asyncio
-import pytz
-
-from zoneinfo import ZoneInfo
+import time
+from datetime import datetime, timedelta
 from urllib.parse import urljoin
-from datetime import datetime, timedelta, timezone
-
-from discord import VoiceState
-from discord.app_commands import Choice, Transform
 
 import ballchasing
-
-from redbot.core import app_commands, checks, commands, Config
-
-from rscapi.models.tier import Tier
+import discord
+from discord.app_commands import Transform
+from redbot.core import app_commands
 from rscapi.models.match import Match
+from rscapi.models.match_list import MatchList
 from rscapi.models.tracker_link import TrackerLink
 
 from rsc.abc import RSCMixIn
-from rsc.const import LEAGUE_ROLE, MUTED_ROLE
-from rsc.embeds import ErrorEmbed, SuccessEmbed, RedEmbed, YellowEmbed
-from rsc.enums import TrackerLinksStatus, MatchFormat, MatchType
+from rsc.ballchasing.views import BallchasingProcessingView
+from rsc.embeds import BlueEmbed, ErrorEmbed, RedEmbed, SuccessEmbed, YellowEmbed
+from rsc.enums import MatchFormat, MatchType, TrackerLinksStatus
 from rsc.teams import TeamMixIn
-from rsc.types import BallchasingResult, BallchasingCollisions
+from rsc.tiers import TierMixIn
 from rsc.transformers import DateTransformer
+from rsc.types import BallchasingCollisions, BallchasingResult
 from rsc.utils import utils
-
-from typing import List, Dict, Tuple, Optional
 
 log = logging.getLogger("red.rsc.ballchasing")
 
@@ -49,6 +44,9 @@ WHITE_X_REACT = "\U0000274E"  # :negative_squared_cross_mark:
 WHITE_CHECK_REACT = "\U00002705"  # :white_check_mark:
 # RSC_STEAM_ID = 76561199096013422  # RSC Steam ID
 # RSC_STEAM_ID = 76561197960409023  # REMOVEME - my steam id for development
+
+LARGE_BATCH_SIZE = 10
+SMALL_BATCH_SIZE = 5
 
 
 class BallchasingMixIn(RSCMixIn):
@@ -86,16 +84,23 @@ class BallchasingMixIn(RSCMixIn):
     @app_commands.checks.has_permissions(manage_guild=True)
     async def _bc_settings(self, interaction: discord.Interaction):
         """Show transactions settings"""
+        guild = interaction.guild
+        if not guild:
+            return
+
         url = BALLCHASING_URL
         token = (
-            "Configured"
-            if await self._get_bc_auth_token(interaction.guild)
-            else "Not Configured"
+            "Configured" if await self._get_bc_auth_token(guild) else "Not Configured"
         )
-        log_channel = await self._get_bc_log_channel(interaction.guild)
-        score_category = await self._get_score_reporting_category(interaction.guild)
-        role = await self._get_bc_manager_role(interaction.guild)
-        tlg = await self._get_top_level_group(interaction.guild)
+        log_channel = await self._get_bc_log_channel(guild)
+        score_category = await self._get_score_reporting_category(guild)
+        role = await self._get_bc_manager_role(guild)
+        tlg = await self._get_top_level_group(guild)
+
+        if tlg:
+            tlg_url = await self.bc_group_full_url(tlg)
+        else:
+            tlg_url = "None"
 
         embed = discord.Embed(
             title="Ballchasing Settings",
@@ -120,7 +125,7 @@ class BallchasingMixIn(RSCMixIn):
         )
         embed.add_field(
             name="Top Level Ballchasing Group",
-            value=await self.bc_group_full_url(tlg),
+            value=tlg_url,
             inline=False,
         )
 
@@ -131,6 +136,8 @@ class BallchasingMixIn(RSCMixIn):
     )
     @app_commands.checks.has_permissions(manage_guild=True)
     async def _bc_key(self, interaction: discord.Interaction, key: str):
+        if not interaction.guild:
+            return
         await self._save_bc_auth_token(interaction.guild, key)
         await interaction.response.send_message(
             embed=SuccessEmbed(
@@ -147,6 +154,8 @@ class BallchasingMixIn(RSCMixIn):
     async def _bc_management_role(
         self, interaction: discord.Interaction, role: discord.Role
     ):
+        if not interaction.guild:
+            return
         await self._save_bc_manager_role(interaction.guild, role)
         await interaction.response.send_message(
             embed=SuccessEmbed(
@@ -163,6 +172,8 @@ class BallchasingMixIn(RSCMixIn):
     async def _bc_log_channel(
         self, interaction: discord.Interaction, channel: discord.TextChannel
     ):
+        if not interaction.guild:
+            return
         await self._save_bc_log_channel(interaction.guild, channel)
         await interaction.response.send_message(
             embed=SuccessEmbed(
@@ -194,6 +205,8 @@ class BallchasingMixIn(RSCMixIn):
     @app_commands.describe(group='Ballchasing group string (Ex: "rsc-v4rxmuxj6o")')
     @app_commands.checks.has_permissions(manage_guild=True)
     async def _bc_top_level_group(self, interaction: discord.Interaction, group: str):
+        if not interaction.guild:
+            return
         await self._save_top_level_group(interaction.guild, group)
         full_url = await self.bc_group_full_url(group)
         await interaction.response.send_message(
@@ -211,31 +224,284 @@ class BallchasingMixIn(RSCMixIn):
         name="reportall",
         description="Find and report all matches for the day on ballchasing",
     )
-    async def _bc_reportall(self, interaction: discord.Interaction):
+    @app_commands.describe(
+        matchday="Match day to report (Optional: Defaults to current match day)",
+        matchtype="Match type to find. (Default: Regular Season)",
+        force="Force reporting even if match has been marked completed. (Default: False)",
+        upload="Enable or disable replay uploads to RSC ballchasing group. (Default: True)",
+        announce="Announce the match result to the tier score reporting channel. (Default: True)",
+    )
+    async def _bc_reportall(
+        self,
+        interaction: discord.Interaction,
+        matchday: int | None = None,
+        matchtype: MatchType = MatchType.REGULAR,
+        force: bool = False,
+        upload: bool = True,
+        announce: bool = True,
+    ):
+        guild = interaction.guild
+        if not (guild and isinstance(interaction.user, discord.Member)):
+            return
+
         if not await self.has_bc_permissions(interaction.user):
             await interaction.response.send_message(
                 "You do not have permission to run this command.", ephemeral=True
             )
             return
 
-        # Check if league match day (Ex: Mon/Wed)
-        # if not self.is_match_day(interaction.guild):
-        #     #TODO
+        log_channel = await self._get_bc_log_channel(guild)
+        if not log_channel:
+            await interaction.response.send_message(
+                embed=ErrorEmbed(
+                    description="Ballchasing log channel is not configured."
+                ),
+                ephemeral=True,
+            )
+            return
 
-        # Todays Date
-        tz = await self.timezone(interaction.guild)
-        # dt_today = datetime.now(tz).date()
-        dt_today = datetime(2023, 9, 1, tzinfo=tz)  # Dev TEST TIME
-        log.info(f"Reporting all matches on {dt_today}")
-        # TODO
+        # Send loading...
+        await interaction.response.send_message(
+            embed=BlueEmbed(
+                title="Replay Processing Started",
+                description="Please be patient while match data is collected...",
+            ),
+            ephemeral=True,
+        )
+
+        date_gt = None
+        date_lt = None
+        if not matchday:
+            log.debug("Match day not specified. Searching by todays date")
+            # Get guild timezone
+            tz = await self.timezone(guild)
+            date = datetime.now(tz=tz).replace(
+                hour=0, minute=0, second=0, microsecond=0
+            )
+            date_gt, date_lt = await self.get_match_date_range(date)
+
+        # Get match by teams and date
+        log.debug(f"Fetching matches for {matchday or 'today'}. Type: {matchtype}")
+        mlist: list[MatchList] = await self.matches(
+            guild,
+            date__lt=date_lt,
+            date__gt=date_gt,
+            day=matchday,
+            match_type=matchtype,
+            # limit=40,  # Development limit. TODO FIX ME
+            limit=500,
+        )
+        log.debug(f"Found {len(mlist)} matches")
+
+        # No match found
+        if not mlist:
+            await interaction.followup.send(
+                embed=ErrorEmbed(description="No matches found."), ephemeral=True
+            )
+            return
+
+        log.debug("Fetching detailed match data")
+        mtasks: list[asyncio.Task] = []
+        # Workaround for now
+        for i in range(0, len(mlist), LARGE_BATCH_SIZE):
+            log.debug(f"Fetching batch {i}")
+            mbatch = mlist[i : i + LARGE_BATCH_SIZE]
+            try:
+                async with asyncio.TaskGroup() as tg:
+                    for m in mbatch:
+                        if m.id:
+                            mtasks.append(tg.create_task(self.match_by_id(guild, m.id)))
+            except ExceptionGroup as eg:
+                for err in eg.exceptions:
+                    log.error(f"ExceptionGroup Err: {err}")
+                raise eg
+        matches: list[Match] = [r.result() for r in mtasks]
+
+        log.debug("Fetching tier data")
+        tiers = await self.tiers(guild)
+        if not tiers:
+            await interaction.edit_original_response(
+                embed=ErrorEmbed(description="Unable to fetch tier data.")
+            )
+
+        if not matches:
+            await interaction.edit_original_response(
+                embed=ErrorEmbed(description="Unable to fetch detailed match data.")
+            )
+            return
+
+        stats_role = await self._get_bc_manager_role(guild)
+
+        # ballchasing match day groups
+        tgroups: dict[str, str | None] = {}
+        for match in matches:
+            if tgroups.get(match.home_team.tier):
+                continue
+            grp = await self.match_day_bc_group(guild, match)
+            if grp:
+                url = await self.bc_group_full_url(grp)
+                tgroups[match.home_team.tier] = url
+
+        report_view = BallchasingProcessingView(
+            interaction, matches, tiers, log_channel, stats_role
+        )
+        report_view.tier_groups = tgroups
+        await report_view.prompt()
+
+        # Shuffle because it looks better :)
+        random.shuffle(matches)
+
+        log.debug("Fetching matches from ballchasing")
+        bc_results: list[BallchasingResult] = []
+        for i in range(0, len(matches), LARGE_BATCH_SIZE):
+            if report_view.cancelled:
+                continue
+
+            log.debug(f"Fetching batch {i}")
+            bcbatch = matches[i : i + LARGE_BATCH_SIZE]
+
+            await report_view.next_batch(bcbatch)
+
+            # Discovery replays
+            task_results: list[BallchasingResult] = []
+            bc_tasks: list[asyncio.Task] = []
+            try:
+                async with asyncio.TaskGroup() as tg:
+                    for b in bcbatch:
+                        bc_tasks.append(tg.create_task(self.process_match(guild, b)))
+            except ExceptionGroup as eg:
+                for err in eg.exceptions:
+                    log.error(err)
+                raise eg
+
+            # Store successful results
+            task_results = [r.result() for r in bc_tasks]
+            # for r in results that are "valid":
+            # Create Group
+            # Upload replays
+
+            bc_results.extend(task_results)
+            await report_view.update(
+                [tr["match"] for tr in task_results if tr["valid"]]
+            )
+
+        await report_view.finished()
+        await report_view.prompt()
+
+        # Missing matches
+        for r in bc_results:
+            if not r["valid"]:
+                rmatch = r["match"]
+                log.debug(
+                    (
+                        f"{rmatch.home_team.name} vs {rmatch.away_team.name} not found."
+                        " Total Replays: {len(r['replays'])}"
+                    )
+                )
+
+        # Statistics
+        exc_times = [x["execution_time"] for x in bc_results]
+        median = statistics.median(exc_times)
+        fmean = statistics.fmean(exc_times)
+        stdev = statistics.stdev(exc_times)
+        log.debug(f"Median execution time: {median}")
+        log.debug(f"Mean execution time: {fmean}")
+        log.debug(f"Standard deviation: {stdev}")
+        for x in bc_results:
+            if x["execution_time"] > (median + 2 * stdev):
+                match = x["match"]
+                home = match.home_team.name
+                away = match.away_team.name
+                log.warning(
+                    f"Very slow execution time for {home} vs {away}. ExecutionTime={x['execution_time']}"
+                )
+
+            # match_group = await self.rsc_match_bc_group(interaction.guild, match)
+            # if match_group:
+            #     await self.upload_replays(
+            #         guild=interaction.guild,
+            #         group=match_group,
+            #         match=match,
+            #         result=result,
+            #     )
+            # else:
+            #     log.error("Failed to retrieve or create a ballchasing group for match.")
+
+    @_ballchasing.command(
+        name="reporttier",
+        description="Report a specific tier on ballchasing",
+    )
+    @app_commands.autocomplete(tier=TierMixIn.tier_autocomplete)
+    @app_commands.describe(
+        tier="Tier name to report",
+        matchday="Match day to report (Optional: Defaults to current match day)",
+        matchtype="Match type to find. (Default: Regular Season)",
+        force="Force reporting even if match has been marked completed. (Default: False)",
+        upload="Enable or disable replay uploads to RSC ballchasing group. (Default: True)",
+        announce="Announce the match result to the tier score reporting channel. (Default: True)",
+    )
+    async def _bc_reporttier(
+        self,
+        interaction: discord.Interaction,
+        tier: str,
+        matchday: int | None = None,
+        matchtype: MatchType = MatchType.REGULAR,
+        force: bool = False,
+        upload: bool = True,
+        announce: bool = True,
+    ):
+        guild = interaction.guild
+        if not (guild and isinstance(interaction.user, discord.Member)):
+            return
+
+        if not await self.has_bc_permissions(interaction.user):
+            await interaction.response.send_message(
+                "You do not have permission to run this command.", ephemeral=True
+            )
+            return
+
+        # Defer
+        await interaction.response.defer()
+
+        date_gt = None
+        date_lt = None
+        if not matchday:
+            log.debug("Match day not specified. Searching by todays date")
+            # Get guild timezone
+            tz = await self.timezone(guild)
+            date = datetime.now(tz=tz).replace(
+                hour=0, minute=0, second=0, microsecond=0
+            )
+            date_gt, date_lt = await self.get_match_date_range(date)
+
+        # Get match by teams and date
+        log.debug(f"Fetching matches for {tier}. Type: {matchtype}")
+        mlist: list[MatchList] = await self.matches(
+            guild,
+            date__lt=date_lt,
+            date__gt=date_gt,
+            day=matchday,
+            match_type=matchtype,
+            limit=100,
+        )
+        log.debug("Done searching")
+
+        # No match found
+        if not mlist:
+            await interaction.followup.send(
+                embed=ErrorEmbed(description="No matches found.")
+            )
+            return
+        # TODO need monty to add tier search
 
     @_ballchasing.command(
         name="reportmatch",
         description="Report a specific match on ballchasing",
     )
     @app_commands.autocomplete(
-        home=TeamMixIn.teams_autocomplete, away=TeamMixIn.teams_autocomplete
-    )
+        home=TeamMixIn.teams_autocomplete,
+        away=TeamMixIn.teams_autocomplete,
+    )  # type: ignore
     @app_commands.describe(
         home="Home team name",
         away="Away team name",
@@ -254,6 +520,9 @@ class BallchasingMixIn(RSCMixIn):
         upload: bool = True,
         announce: bool = True,
     ):
+        if not (interaction.guild and isinstance(interaction.user, discord.Member)):
+            return
+
         if not await self.has_bc_permissions(interaction.user):
             await interaction.response.send_message(
                 "You do not have permission to run this command.", ephemeral=True
@@ -282,7 +551,7 @@ class BallchasingMixIn(RSCMixIn):
         # Get match by teams and date
         date_gt, date_lt = await self.get_match_date_range(date)
         log.debug(f"Search Start: {date_gt} Search End: {date_lt}")
-        matches: List[Match] = await self.find_match(
+        matches: list[Match] = await self.find_match(
             interaction.guild,
             date__lt=date_lt,
             date__gt=date_gt,
@@ -308,7 +577,10 @@ class BallchasingMixIn(RSCMixIn):
         if not match:
             await interaction.followup.send(
                 embed=ErrorEmbed(
-                    description=f"Unable to find match for **{home}** vs **{away}**. Try specifying a date."
+                    description=(
+                        f"Unable to find match for **{home}** vs **{away}**."
+                        " Try specifying a date."
+                    )
                 )
             )
             return
@@ -319,7 +591,10 @@ class BallchasingMixIn(RSCMixIn):
         if await self.match_already_complete(match) and not force:
             await interaction.followup.send(
                 embed=ErrorEmbed(
-                    description="This match has already been completed and recorded.\n\nRun the command again with `force` parameter to pull regardless."
+                    description=(
+                        "This match has already been completed and recorded."
+                        "\n\nRun the command again with `force` parameter to pull regardless."
+                    )
                 )
             )
             return
@@ -340,22 +615,28 @@ class BallchasingMixIn(RSCMixIn):
 
         # Send "working" message
         await interaction.followup.send(
-            embed=discord.Embed(
+            embed=YellowEmbed(
                 title="Processing Match",
                 description=f"Searching ballchasing for match **{home}** vs **{away}** on **{match.var_date.date()}**",
-                color=discord.Color.yellow(),
             )
         )
 
         result = await self.process_match(interaction.guild, match)
 
-        if not result:
-            await interaction.edit_original_response(
-                embed=RedEmbed(
-                    title="Match Processing Failed",
-                    description=f"Unable to find a valid replay set for **{home}** vs **{away}** on **{match.var_date.date()}**",
-                )
+        if not result or not result["valid"]:
+            fembed = RedEmbed(
+                title="Match Processing Failed",
+                description="Unable to find a valid replay set.",
             )
+            if match.var_date:
+                fembed.add_field(
+                    name="Date",
+                    value=discord.utils.format_dt(match.var_date),
+                    inline=True,
+                )
+            fembed.add_field(name="Home", value=home, inline=True)
+            fembed.add_field(name="Away", value=home, inline=True)
+            await interaction.edit_original_response(embed=fembed)
             return
 
         match_group = None
@@ -378,6 +659,10 @@ class BallchasingMixIn(RSCMixIn):
                 )
             else:
                 log.error("Failed to retrieve or create a ballchasing group for match.")
+
+        if match_group:
+            url = await self.bc_group_full_url(match_group)
+            embed.url = url
 
         if announce:
             await self.announce_to_score_reporting(
@@ -422,20 +707,33 @@ class BallchasingMixIn(RSCMixIn):
             raise RuntimeError("Ballchasing API is not configured.")
 
         if not result["replays"]:
-            return None
+            return []
 
         collisions = await self.group_replay_collisions(guild, group, result)
         if not collisions:
-            return None
+            return []
 
-        # To save on complexity, we should purge the group if an unknown match_guid is found
-        if len(collisions["unknown"]) > 0:
+        total_collisions = len(collisions["collisions"])
+        total_unknown = len(collisions["unknown"])
+        total_replays = collisions["total_replays"]
+
+        log.debug(
+            f"Collision Report. Total={total_replays} Unknown={total_unknown} Collisions={total_collisions}"
+        )
+        min_games = await self.minimum_games_required(match)
+
+        if total_collisions == min_games:
+            # Match already uploaded
+            log.debug("Match already uploaded. Skipping...")
+            return [r.id for r in result["replays"]]
+        elif total_unknown > 0:
+            # To save on complexity, purge the group if an unknown match_guid is found
             log.warning("Unknown group replay found. Purging group...")
             await self.purge_ballchasing_group(guild, group)
-        elif len(collisions["collisions"]) > 0:
+        elif total_collisions > 0:
             # Remove collisions from upload list
             for replay in collisions["collisions"]:
-                log.debug("Removing replay collisions: {}")
+                log.debug(f"Removing replay collision: {replay.id}")
                 result["replays"].remove(replay)
 
         replay_content = []
@@ -457,11 +755,12 @@ class BallchasingMixIn(RSCMixIn):
                 if resp:
                     replay_ids.append(resp.id)
             except ValueError as exc:
-                resp = exc.args[0]
-                if resp.status == 409:
+                log.debug(exc)
+                err = exc.args[0]
+                if err.status == 409:
                     # duplicate replay. patch it under the BC group
-                    err_info = await resp.json()
-                    log.debug(f"Error uploading replay. {resp.status} -- {err_info}")
+                    err_info = await err.json()
+                    log.debug(f"Error uploading replay. {err.status} -- {err_info}")
                     r_id = err_info.get("id")
                     if r_id:
                         log.debug("Patching replay under correct group")
@@ -648,10 +947,12 @@ class BallchasingMixIn(RSCMixIn):
         else:
             winning_franchise = match.away_team.franchise
 
+        flogo = None
         fsearch = await self.franchises(guild, name=winning_franchise)
         if fsearch:
             f = fsearch.pop()
-            flogo = await self.franchise_logo(guild=guild, id=f.id)
+            if f.id:
+                flogo = await self.franchise_logo(guild=guild, id=f.id)
             if flogo:
                 embed.set_thumbnail(url=flogo)
 
@@ -662,8 +963,10 @@ class BallchasingMixIn(RSCMixIn):
         guild: discord.Guild,
         embed: discord.Embed,
         content: str | None = None,
-        files: list[discord.File] = [],
+        files: list[discord.File] | None = None,
     ) -> discord.Message | None:
+        if files is None:
+            files = []
         log_channel = await self._get_bc_log_channel(guild)
         if not log_channel:
             return None
@@ -676,8 +979,11 @@ class BallchasingMixIn(RSCMixIn):
         tier: str,
         embed: discord.Embed,
         content: str | None = None,
-        files: list[discord.File] = [],
+        files: list[discord.File] | None = None,
     ) -> discord.Message | None:
+        if files is None:
+            files = []
+
         category = await self._get_score_reporting_category(guild)
         if not category:
             return None
@@ -695,11 +1001,24 @@ class BallchasingMixIn(RSCMixIn):
 
     async def process_match(
         self, guild: discord.Guild, match: Match
-    ) -> BallchasingResult | None:
+    ) -> BallchasingResult:
         log.debug(
             f"Searching ballchasing for {match.home_team.name} vs {match.away_team.name}"
         )
+
+        st = time.time()
+
+        result = BallchasingResult(
+            valid=False,
+            match=match,
+            home_wins=0,
+            away_wins=0,
+            replays=set(),
+            execution_time=0,
+        )
+
         # Get trackers
+        log.debug("Fetching trackers")
         trackers = await self.get_all_trackers(guild, match)
         log.debug(f"Found {len(trackers)} trackers")
 
@@ -727,16 +1046,25 @@ class BallchasingMixIn(RSCMixIn):
                 if len(replays) >= min_games:
                     break
 
-        # Check if we overshot the expected game count. Discard malformed data set
-        if len(replays) > min_games:
+        # Second chance check for valid replay set
+        if len(replays) != min_games:
             log.warning(
-                f"[{match.home_team.name} vs {match.away_team.name}] Found {len(replays)} but expected {min_games}"
+                f"[{match.home_team.name} vs {match.away_team.name}] Found {len(replays)} replays but expected {min_games}"
             )
-            return None
+        else:
+            log.debug(f"Found valid set of {len(replays)} replays")
+            result["valid"] = True
 
-        log.debug(f"Found {len(replays)} replays")
+        et = time.time()
+        exc_time = et - st
+
         hwins, awins = await self.team_win_count(match, replays)
-        return BallchasingResult(home_wins=hwins, away_wins=awins, replays=replays)
+
+        result["execution_time"] = exc_time
+        result["home_wins"] = hwins
+        result["away_wins"] = awins
+        result["replays"] = replays
+        return result
 
     async def find_match_replays(
         self, guild: discord.Guild, match: Match, tracker: TrackerLink
@@ -745,9 +1073,6 @@ class BallchasingMixIn(RSCMixIn):
         bapi = self._ballchasing_api[guild.id]
 
         replays: set[ballchasing.models.Replay] = set()
-        home = match.home_team.name
-        away = match.away_team.name
-
         min_games = await self.minimum_games_required(match)
 
         if tracker.platform == "STEAM":
@@ -771,6 +1096,7 @@ class BallchasingMixIn(RSCMixIn):
             if not tracker.name:
                 return replays
 
+            log.debug(f"Searching {tracker.platform} tracker: {tracker.name}")
             async for r in bapi.get_replays(
                 playlist=ballchasing.Playlist.PRIVATE,
                 sort_by=ballchasing.ReplaySortBy.REPLAY_DATE,
@@ -799,7 +1125,10 @@ class BallchasingMixIn(RSCMixIn):
             return []
 
         tasks = []
-        trackers: List[TrackerLink] = []
+        trackers: list[TrackerLink] = []
+
+        if not (match.home_team.players and match.away_team.players):
+            return []
 
         async with asyncio.TaskGroup() as tg:
             for p in match.home_team.players:
@@ -825,22 +1154,26 @@ class BallchasingMixIn(RSCMixIn):
         if not match.var_date:
             raise ValueError("Match has no date attribute.")
         match_date = match.var_date
-        after = match_date.replace(hour=20, minute=55, second=0)
+        after = match_date.replace(hour=21, minute=55, second=0)
         before = match_date.replace(hour=23, minute=59, second=0)
-        log.debug(f"Ballchasing Range. After: {after} Before: {before}")
         return after, before
 
     async def valid_replay(
         self, match: Match, replay: ballchasing.models.Replay
     ) -> bool:
+        # Check ballchasing status
+        if replay.status != ballchasing.ReplayStatus.OK:
+            return False
         # Both team names are present
         if not await self.validate_team_names(match, replay):
             return False
         # Duration >= 300 seconds (5 minute game)
         if replay.duration < 280:
+            log.debug(f"Bad replay duration: {replay.duration}")
             return False
         # Deep relay search should return stats
         if not (replay.blue.stats and replay.orange.stats):
+            log.debug("Stats not found in replay")
             return False
         # You can't win a game without a goal
         log.debug(
@@ -868,6 +1201,33 @@ class BallchasingMixIn(RSCMixIn):
         log.debug(f"Blue: {replay.blue.name} Orange: {replay.orange.name}")
 
         if replay.blue.name.lower() in valid and replay.orange.name.lower() in valid:
+            log.debug("Valid team names")
+            return True
+
+        # Similarity check (Levenshtein ratio)
+        # Check both team names since people do dumb things
+        home_lev1 = difflib.SequenceMatcher(
+            None, valid[0], replay.blue.name.lower()
+        ).ratio()
+        home_lev2 = difflib.SequenceMatcher(
+            None, valid[0], replay.orange.name.lower()
+        ).ratio()
+
+        away_lev1 = difflib.SequenceMatcher(
+            None, valid[1], replay.blue.name.lower()
+        ).ratio()
+        away_lev2 = difflib.SequenceMatcher(
+            None, valid[1], replay.orange.name.lower()
+        ).ratio()
+
+        log.debug(
+            f"Levehstein Ratios. Home: {home_lev1:.3f} {home_lev2:.3f} Away: {away_lev1:.3f} {away_lev2:.3f}"
+        )
+        lev_threshold = 0.9
+        if (home_lev1 > lev_threshold or home_lev2 > lev_threshold) and (
+            away_lev1 > lev_threshold or away_lev2 > lev_threshold
+        ):
+            log.debug("Team names are close enough to threshold.")
             return True
 
         return False
@@ -909,7 +1269,7 @@ class BallchasingMixIn(RSCMixIn):
             case _:
                 raise ValueError(f"Unknown Match Format: {match.match_format}")
 
-    async def get_match_date_range(self, date: datetime) -> Tuple[datetime, datetime]:
+    async def get_match_date_range(self, date: datetime) -> tuple[datetime, datetime]:
         """Return a tuple of datetime objects that has a search range for specified date"""
         date_gt = date - timedelta(minutes=1)
         date_lt = date.replace(hour=23, minute=59, second=59)

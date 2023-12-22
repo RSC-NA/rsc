@@ -1,32 +1,32 @@
-from abc import ABCMeta, ABC, abstractmethod
-import discord
-from discord.ext.commands import CogMeta as DPYCogMeta
-from rscapi import Configuration as ApiConfig
-from redbot.core import Config as RedConfig
-from redbot.core.bot import Red
-
+from abc import ABC, ABCMeta, abstractmethod
+from datetime import datetime
+from typing import TYPE_CHECKING
 from zoneinfo import ZoneInfo
 
-from rscapi.models.league import League
-from rscapi.models.members_list200_response import MembersList200Response
-from rscapi.models.season import Season
+import discord
+from discord.ext.commands import CogMeta as DPYCogMeta
+from redbot.core import Config as RedConfig
+from redbot.core.bot import Red
+from rscapi import Configuration as ApiConfig
 from rscapi.models.franchise import Franchise
-from rscapi.models.member import Member
-from rscapi.models.match import Match
-from rscapi.models.player import Player
-from rscapi.models.team import Team
 from rscapi.models.franchise_list import FranchiseList
-from rscapi.models.team_list import TeamList
+from rscapi.models.high_level_match import HighLevelMatch
+from rscapi.models.league import League
 from rscapi.models.league_player import LeaguePlayer
-from rscapi.models.tracker_link_stats import TrackerLinkStats
+from rscapi.models.match import Match
+from rscapi.models.match_list import MatchList
+from rscapi.models.member import Member
+from rscapi.models.player import Player
+from rscapi.models.season import Season
+from rscapi.models.team import Team
+from rscapi.models.team_list import TeamList
 from rscapi.models.tracker_link import TrackerLink
 
-from rsc.enums import Status, TrackerLinksStatus
-
-from typing import Dict, List, Optional, TYPE_CHECKING
+from rsc.enums import MatchFormat, MatchTeamEnum, MatchType, Status, TrackerLinksStatus
 
 if TYPE_CHECKING:
     from rsc.ranks.api import RapidApi
+
 
 class RSCMixIn(ABC):
     """ABC class used for type hinting RSC Mix In modules"""
@@ -48,7 +48,7 @@ class RSCMixIn(ABC):
         ...
 
     @abstractmethod
-    async def rapid_connector(self, guild: discord.Guild) -> Optional["RapidApi"]:
+    async def rapid_connector(self, guild: discord.Guild) -> "RapidApi" | None:
         ...
 
     # Franchises
@@ -66,11 +66,7 @@ class RSCMixIn(ABC):
         ...
 
     @abstractmethod
-    async def franchise_by_id(
-        self,
-        guild: discord.Guild,
-        id: int
-    ) -> Franchise | None:
+    async def franchise_by_id(self, guild: discord.Guild, id: int) -> Franchise | None:
         ...
 
     @abstractmethod
@@ -88,18 +84,18 @@ class RSCMixIn(ABC):
         ...
 
     @abstractmethod
-    async def league_by_id(self, guild: discord.Guild) -> League | None:
+    async def league_by_id(self, guild: discord.Guild, id: int) -> League | None:
         ...
 
     @abstractmethod
-    async def current_season(self, guild: discord.Guild) -> Optional[Season]:
+    async def current_season(self, guild: discord.Guild) -> Season | None:
         ...
 
     @abstractmethod
     async def players(
         self,
         guild: discord.Guild,
-        status: Optional[Status] = None,
+        status: Status | None = None,
         name: str | None = None,
         tier: int | None = None,
         tier_name: str | None = None,
@@ -111,6 +107,49 @@ class RSCMixIn(ABC):
         limit: int = 0,
         offset: int = 0,
     ) -> list[LeaguePlayer]:
+        ...
+
+    # Matches
+
+    @abstractmethod
+    async def matches(
+        self,
+        guild: discord.Guild,
+        date__lt: datetime | None = None,
+        date__gt: datetime | None = None,
+        season: int | None = None,
+        season_number: int | None = None,
+        match_team_type: MatchTeamEnum = MatchTeamEnum.ALL,
+        team_name: str | None = None,
+        day: int | None = None,
+        match_type: MatchType | None = None,
+        match_format: MatchFormat | None = None,
+        limit: int = 0,
+        offset: int = 0,
+        preseason: int = 0,
+    ) -> list[MatchList]:
+        ...
+
+    @abstractmethod
+    async def find_match(
+        self,
+        guild: discord.Guild,
+        teams: str,
+        date__lt: datetime | None = None,
+        date__gt: datetime | None = None,
+        season: int | None = None,
+        season_number: int | None = None,
+        day: int | None = None,
+        match_type: MatchType | None = None,
+        match_format: MatchFormat | None = None,
+        limit: int = 0,
+        offset: int = 0,
+        preseason: int = 0,
+    ) -> list[Match]:
+        ...
+
+    @abstractmethod
+    async def match_by_id(self, guild: discord.Guild, id: int) -> Match:
         ...
 
     # Members
@@ -147,7 +186,7 @@ class RSCMixIn(ABC):
         id: int,
         season: int | None = None,
         preseason: bool = True,
-    ) -> list[Match]:
+    ) -> list[HighLevelMatch]:
         ...
 
     @abstractmethod
@@ -155,7 +194,7 @@ class RSCMixIn(ABC):
         self,
         guild: discord.Guild,
         id: int,
-    ) -> Optional[Match]:
+    ) -> Match | None:
         ...
 
     @abstractmethod
@@ -187,8 +226,8 @@ class RSCMixIn(ABC):
         status: TrackerLinksStatus | None = None,
         player: discord.Member | int | None = None,
         name: str | None = None,
-        limit: int=0,
-        offset: int=0
+        limit: int = 0,
+        offset: int = 0,
     ) -> list[TrackerLink]:
         ...
 

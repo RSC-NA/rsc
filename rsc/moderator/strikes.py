@@ -1,4 +1,3 @@
-
 MINOR_OFFENSES = [
     "Being generally disrespectful, rude or toxic to community members",
     "Explicit Conversations ",

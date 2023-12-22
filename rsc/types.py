@@ -1,12 +1,12 @@
-import discord
-from rsc.const import TROPHY_EMOJI, DEV_LEAGUE_EMOJI, STAR_EMOJI
 from dataclasses import dataclass
-import ballchasing
+from typing import TypedDict
 
+import ballchasing
+import discord
 from rscapi.models.match import Match
 
+from rsc.const import DEV_LEAGUE_EMOJI, STAR_EMOJI, TROPHY_EMOJI
 
-from typing import TypedDict, NewType
 
 class RebrandTeamDict(TypedDict):
     name: str
@@ -103,10 +103,31 @@ class TransactionSettings(TypedDict):
     Substitutes: list[Substitute]
 
 
+class WelcomeSettings(TypedDict):
+    WelcomeChannel: discord.TextChannel | None
+    WelcomeMsg: str | None
+    WelcomeRoles: list[discord.Role]
+    WelcomeStatus: bool
+
+
+class ModThreadSettings(TypedDict):
+    PrimaryCategory: discord.CategoryChannel | None
+    ManagementRole: discord.Role | None
+    Groups: dict[str, ThreadGroup]
+
+
+class NumbersSettings(TypedDict):
+    NumbersRoles: list[discord.Role]
+
+
 class BallchasingResult(TypedDict):
-    home_wins: int
+    valid: bool
     away_wins: int
+    home_wins: int
+    match: Match
     replays: set[ballchasing.models.Replay]
+    execution_time: float
+
 
 class BallchasingCollisions(TypedDict):
     total_replays: int

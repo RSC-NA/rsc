@@ -1,19 +1,13 @@
-import discord
 import logging
 
-from pydantic import parse_obj_as
-from redbot.core import app_commands, checks
-
-from rscapi import ApiClient, FranchisesApi, TiersApi
+import discord
+from redbot.core import app_commands
+from rscapi import ApiClient, TiersApi
 from rscapi.exceptions import ApiException
 from rscapi.models.tier import Tier
 
 from rsc.abc import RSCMixIn
 from rsc.exceptions import RscException
-from rsc.embeds import ErrorEmbed
-from rsc.utils.utils import role_by_name
-
-from typing import List, Dict, Optional
 
 log = logging.getLogger("red.rsc.tiers")
 
@@ -50,12 +44,16 @@ class TierMixIn(RSCMixIn):
     @app_commands.guild_only
     async def _tiers(self, interaction: discord.Interaction):
         """Get a list of all league tiers"""
-        tiers = await self.tiers(interaction.guild)
+        guild = interaction.guild
+        if not guild:
+            return
+
+        tiers = await self.tiers(guild)
 
         # Get roles from guild and additional data
         tier_roles = []
         for t in tiers:
-            tier_roles.append(discord.utils.get(interaction.guild.roles, name=t.name))
+            tier_roles.append(discord.utils.get(guild.roles, name=t.name))
             # Fetch teams from each tier
 
         embed = discord.Embed(
@@ -63,8 +61,8 @@ class TierMixIn(RSCMixIn):
             description="\n".join([r.mention for r in tier_roles]),
             color=discord.Color.blue(),
         )
-        if interaction.guild.icon:
-            embed.set_thumbnail(url=interaction.guild.icon.url)
+        if guild.icon:
+            embed.set_thumbnail(url=guild.icon.url)
         await interaction.response.send_message(embed=embed)
 
     # Functions
@@ -87,10 +85,8 @@ class TierMixIn(RSCMixIn):
             if r:
                 roles.append(r)
         return r
-        
 
     # API
-
 
     async def tier_by_id(self, guild: discord.Guild, id: int) -> Tier:
         async with ApiClient(self._api_conf[guild.id]) as client:
@@ -98,9 +94,7 @@ class TierMixIn(RSCMixIn):
             tier = await api.tiers_read(id)
             return tier
 
-    async def tiers(
-        self, guild: discord.Guild, name: str | None = None
-    ) -> list[Tier]:
+    async def tiers(self, guild: discord.Guild, name: str | None = None) -> list[Tier]:
         """Fetch a list of tiers"""
         async with ApiClient(self._api_conf[guild.id]) as client:
             api = TiersApi(client)
@@ -111,23 +105,21 @@ class TierMixIn(RSCMixIn):
             if tiers:
                 if self._tier_cache.get(guild.id):
                     cached = set(self._tier_cache[guild.id])
-                    different = set([t.name for t in tiers]) - cached
+                    different = {t.name for t in tiers} - cached
                     self._tier_cache[guild.id] += list(different)
                 else:
                     self._tier_cache[guild.id] = [t.name for t in tiers]
             return tiers
 
-    async def create_tier(self, guild: discord.Guild, name: str, color: int, position: int) -> Tier:
+    async def create_tier(
+        self, guild: discord.Guild, name: str, color: int, position: int
+    ) -> Tier:
         async with ApiClient(self._api_conf[guild.id]) as client:
             api = TiersApi(client)
-            data = Tier(
-                name=name,
-                color=color,
-                position=position
-            )
+            data = Tier(name=name, color=color, position=position)
             log.debug(f"Create Tier Data: {data}")
             try:
-                return await api.tiers_create()
+                return await api.tiers_create(data)
             except ApiException as exc:
                 raise RscException(response=exc)
 
@@ -135,6 +127,6 @@ class TierMixIn(RSCMixIn):
         async with ApiClient(self._api_conf[guild.id]) as client:
             api = TiersApi(client)
             try:
-                return await api.tiers_create(id)
+                return await api.tiers_delete(id)
             except ApiException as exc:
                 raise RscException(response=exc)

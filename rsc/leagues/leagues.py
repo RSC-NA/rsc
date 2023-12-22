@@ -1,21 +1,17 @@
-import discord
 import logging
-from pydantic import parse_obj_as
 
+import discord
 from redbot.core import app_commands
-
-from rscapi import ApiClient, LeaguesApi, SeasonsApi, LeaguePlayersApi, Configuration
+from rscapi import ApiClient, LeaguePlayersApi, LeaguesApi
 from rscapi.exceptions import ApiException
 from rscapi.models.league import League
 from rscapi.models.league_player import LeaguePlayer
 from rscapi.models.season import Season
 
 from rsc.abc import RSCMixIn
+from rsc.embeds import BlueEmbed, ErrorEmbed, YellowEmbed
 from rsc.enums import Status
-from rsc.embeds import ErrorEmbed, BlueEmbed, YellowEmbed
 from rsc.exceptions import RscException
-
-from typing import List, Optional, Dict
 
 log = logging.getLogger("red.rsc.leagues")
 
@@ -32,20 +28,26 @@ class LeagueMixIn(RSCMixIn):
     @app_commands.command(name="leagues", description="Show all configured RSC leagues")
     @app_commands.guild_only
     async def _leagues(self, interaction: discord.Interaction):
-        leagues = await self.leagues(interaction.guild)
+        guild = interaction.guild
+        if not guild:
+            return
+
+        leagues = await self.leagues(guild)
 
         embed = discord.Embed(title="RSC Leagues", color=discord.Color.blue())
         embed.add_field(
-            name="League", value="\n".join(l.name for l in leagues), inline=True
+            name="League",
+            value="\n".join(league.name for league in leagues),
+            inline=True,
         )
         embed.add_field(
             name="Game Mode",
-            value="\n".join(l.league_data.game_mode for l in leagues),
+            value="\n".join(league.league_data.game_mode for league in leagues),
             inline=True,
         )
 
-        if interaction.guild.icon:
-            embed.set_thumbnail(url=interaction.guild.icon.url)
+        if guild.icon:
+            embed.set_thumbnail(url=guild.icon.url)
         await interaction.response.send_message(embed=embed)
 
     @app_commands.command(
@@ -53,7 +55,10 @@ class LeagueMixIn(RSCMixIn):
     )
     @app_commands.guild_only
     async def _leagues_info(self, interaction: discord.Interaction):
-        league_data = await self.current_season()
+        if not interaction.guild:
+            return
+
+        league_data = await self.current_season(interaction.guild)
 
         if not league_data:
             await interaction.response.send_message(
@@ -63,9 +68,9 @@ class LeagueMixIn(RSCMixIn):
             )
             return
 
-        embed = discord.Embed(
-            title=f"{league_data.league.name} League Information",
-        )
+        # embed = discord.Embed(
+        #     title=f"{league_data.league.name} League Information",
+        # )
         # TODO - Is this useful?
 
     @app_commands.command(
@@ -73,7 +78,11 @@ class LeagueMixIn(RSCMixIn):
     )
     @app_commands.guild_only
     async def _season(self, interaction: discord.Interaction):
-        season = await self.current_season(interaction.guild)
+        guild = interaction.guild
+        if not guild:
+            return
+
+        season = await self.current_season(guild)
         if not season:
             await interaction.response.send_message(
                 embed=ErrorEmbed(
@@ -87,28 +96,28 @@ class LeagueMixIn(RSCMixIn):
             title="Current Season",
             description=f"The current season is **S{season.number}**",
         )
-        if interaction.guild.icon:
-            embed.set_thumbnail(url=interaction.guild.icon.url)
+        if guild.icon:
+            embed.set_thumbnail(url=guild.icon.url)
         await interaction.response.send_message(embed=embed)
 
-
-    @app_commands.command(
-        name="dates", description="Display important RSC dates"
-    )
+    @app_commands.command(name="dates", description="Display important RSC dates")
     @app_commands.guild_only
     async def _dates_cmd(self, interaction: discord.Interaction):
-        dates = await self._get_dates(interaction.guild)
-        if not dates:
-            await interaction.response.send_message(embed=YellowEmbed(description="No league dates have been posted."))
+        guild = interaction.guild
+        if not guild:
             return
 
-        embed = BlueEmbed(
-            title="Important League Dates",
-            description=dates
-        )
+        dates = await self._get_dates(guild)
+        if not dates:
+            await interaction.response.send_message(
+                embed=YellowEmbed(description="No league dates have been posted.")
+            )
+            return
 
-        if interaction.guild.icon:
-            embed.set_thumbnail(url=interaction.guild.icon.url)
+        embed = BlueEmbed(title="Important League Dates", description=dates)
+
+        if guild.icon:
+            embed.set_thumbnail(url=guild.icon.url)
         await interaction.response.send_message(embed=embed)
 
     # API
@@ -131,7 +140,7 @@ class LeagueMixIn(RSCMixIn):
             api = LeaguesApi(client)
             return await api.leagues_read(id)
 
-    async def current_season(self, guild: discord.Guild) -> Optional[Season]:
+    async def current_season(self, guild: discord.Guild) -> Season | None:
         """Get current season of league from API"""
         async with ApiClient(self._api_conf[guild.id]) as client:
             api = LeaguesApi(client)
@@ -140,7 +149,7 @@ class LeagueMixIn(RSCMixIn):
     async def players(
         self,
         guild: discord.Guild,
-        status: Optional[Status] = None,
+        status: Status | None = None,
         name: str | None = None,
         tier: int | None = None,
         tier_name: str | None = None,
@@ -170,7 +179,9 @@ class LeagueMixIn(RSCMixIn):
             )
             return players.results
 
-    async def league_player_partial_update(self, guild: discord.Guild, id: int, lp: LeaguePlayer) -> LeaguePlayer:
+    async def league_player_partial_update(
+        self, guild: discord.Guild, id: int, lp: LeaguePlayer
+    ) -> LeaguePlayer:
         """Partial update to league player in API"""
         async with ApiClient(self._api_conf[guild.id]) as client:
             api = LeaguePlayersApi(client)
@@ -179,4 +190,3 @@ class LeagueMixIn(RSCMixIn):
                 return await api.league_players_partial_update(id, lp)
             except ApiException as exc:
                 raise RscException(response=exc)
-

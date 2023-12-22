@@ -1,11 +1,12 @@
-import discord
 import logging
+from enum import IntEnum
 
+import discord
 from discord.ui import TextInput
 
-from rsc.const import DEFAULT_TIMEOUT, BEHAVIOR_RULES_URL
-from rsc.embeds import RedEmbed, BlueEmbed
-from rsc.enums import RegionPreference, Platform, PlayerType, Referrer
+from rsc.const import BEHAVIOR_RULES_URL, DEFAULT_TIMEOUT
+from rsc.embeds import BlueEmbed, RedEmbed
+from rsc.enums import Platform, PlayerType, Referrer, RegionPreference
 from rsc.views import (
     AgreeButton,
     AuthorOnlyView,
@@ -17,10 +18,6 @@ from rsc.views import (
     NoButton,
     YesButton,
 )
-
-from enum import StrEnum, IntEnum
-
-from typing import List
 
 log = logging.getLogger("red.rsc.members.views")
 
@@ -47,7 +44,9 @@ class IntentState(IntEnum):
 
 
 class PlayerInfoModal(discord.ui.Modal, title="Rocket League Trackers"):
-    rsc_name: TextInput = TextInput(label="In-game Name", style=discord.TextStyle.short, required=True)
+    rsc_name: TextInput = TextInput(
+        label="In-game Name", style=discord.TextStyle.short, required=True
+    )
     links: TextInput = TextInput(
         label="Tracker Links", style=discord.TextStyle.paragraph, required=False
     )
@@ -103,11 +102,11 @@ class PlayerTypeSelect(discord.ui.Select):
 class IntentSelect(discord.ui.Select):
     def __init__(self):
         super().__init__(placeholder="What is your intent?")
-        self.add_option(label=f"Returning next season", value="yes")
-        self.add_option(label=f"Not returning next season", value="no")
+        self.add_option(label="Returning next season", value="yes")
+        self.add_option(label="Not returning next season", value="no")
 
     async def callback(self, interaction: discord.Interaction):
-        self.view.result = True if self.values[0] == "yes" else False # type: ignore
+        self.view.result = self.values[0] == "yes"  # type: ignore
         await interaction.response.defer(ephemeral=True)
 
 
@@ -153,7 +152,9 @@ class IntentToPlayView(AuthorOnlyView):
             title="Intent to Play",
             description="Please declare your intent for the next season of RSC below.",
         )
-        await self.interaction.response.send_message(embed=embed, view=self, ephemeral=True)
+        await self.interaction.response.send_message(
+            embed=embed, view=self, ephemeral=True
+        )
 
     async def confirm(self, interaction: discord.Interaction):
         """User pressed Yes Button"""
@@ -173,7 +174,10 @@ class IntentToPlayView(AuthorOnlyView):
         await self.interaction.edit_original_response(
             embed=RedEmbed(
                 title="Intent Declaration Cancelled",
-                description="You have cancelled declaring your intent to play for next season. If this was an error, please run the command again.",
+                description=(
+                    "You have cancelled declaring your intent to play for next season."
+                    " If this was an error, please run the command again.",
+                ),
             ),
             view=None,
         )
@@ -272,19 +276,24 @@ class SignupView(AuthorOnlyView):
         )
         embed.add_field(
             name="In-game Name",
-            value="You will need to provide your desired in-game name for Rocket League.\n\n"
-            "This **needs** to match the name you play matches on, there are no exceptions.",
+            value=(
+                "You will need to provide your desired in-game name for Rocket League.\n\n"
+                "This **needs** to match the name you play matches on, there are no exceptions."
+            ),
             inline=False,
         )
         embed.add_field(
             name="Tracker Links",
-            value="You will need to submit rocket league tracker links for **ALL** of your accounts. Please seperate each link by a new line.\n\n"
-            "For example:\n"
-            "https://rocketleague.tracker.network/rocket-league/profile/psn/Untamed-chaos/overview\n"
-            "https://rocketleague.tracker.network/rocket-league/profile/steam/76561198028063203/overview\n\n"
-            "Note: Steam accounts must list your Steam64ID.\n"
-            "You can find your Steam64ID here: https://steamidfinder.com/\n"
-            "Find your tracker link here: https://rocketleague.tracker.network\n",
+            value=(
+                "You will need to submit rocket league tracker links for **ALL** of your accounts."
+                " Please seperate each link by a new line.\n\n"
+                "For example:\n"
+                "https://rocketleague.tracker.network/rocket-league/profile/psn/Untamed-chaos/overview\n"
+                "https://rocketleague.tracker.network/rocket-league/profile/steam/76561198028063203/overview\n\n"
+                "Note: Steam accounts must list your Steam64ID.\n"
+                "You can find your Steam64ID here: https://steamidfinder.com/\n"
+                "Find your tracker link here: https://rocketleague.tracker.network\n",
+            ),
             inline=False,
         )
         # First form, so we respond to the interaction instead of followup
@@ -331,8 +340,11 @@ class SignupView(AuthorOnlyView):
 
         embed = discord.Embed(
             title="RSC Rules",
-            description="In RSC we maintain a non negotiable set of rules in regards to player behavior. For more information, see the link below.\n\n"
-            "By selecting **Agree**, you are agreeing to any RSC rules in our discord, website, and RSC related games.",
+            description=(
+                "In RSC we maintain a non negotiable set of rules in regards to player behavior."
+                " For more information, see the link below.\n\n"
+                "By selecting **Agree**, you are agreeing to any RSC rules in our discord, website, and RSC related games."
+            ),
             color=discord.Color.blue(),
         )
         await self.interaction.edit_original_response(embed=embed, view=self)

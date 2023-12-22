@@ -1,9 +1,9 @@
-from rsc.enums import RankedPlaylist, RewardLevel, RLStatType, RLChallengeType, RLRegion
-from dataclasses import dataclass
 from datetime import datetime
-from pydantic import BaseModel 
 
-from typing import List
+from pydantic import BaseModel
+
+from rsc.enums import RankedPlaylist, RewardLevel, RLStatType
+
 
 class Rank(BaseModel):
     division: int
@@ -13,29 +13,36 @@ class Rank(BaseModel):
     rank: str
     streak: int
 
+
 class Rewards(BaseModel):
     progress: int
     level: RewardLevel
+
 
 class PlayerRanks(BaseModel):
     ranks: list[Rank]
     reward: Rewards
 
+
 class Stat(BaseModel):
     value: int
     name: RLStatType
+
 
 class Profile(BaseModel):
     presence: str
     name: str
 
+
 class ClubMember(BaseModel):
     joined: datetime
     name: str
 
+
 class ClubColors(BaseModel):
     primary: str
     accent: str
+
 
 class Club(BaseModel):
     verified: bool
@@ -47,17 +54,21 @@ class Club(BaseModel):
     members: list[ClubMember]
     colors: ClubColors
 
+
 class Title(BaseModel):
     color: str
     name: str
+
 
 class PlaylistPopulation(BaseModel):
     population: int
     name: str
 
+
 class Population(BaseModel):
     online: int
     playlists: list[PlaylistPopulation]
+
 
 class NewsArticle(BaseModel):
     slug: str
@@ -65,9 +76,15 @@ class NewsArticle(BaseModel):
     title: str
 
 
+class ArticleResult(BaseModel):
+    articles: list[NewsArticle]
 
 
+class Tournament(BaseModel):
+    players: int
+    starts: datetime
+    mode: str
 
 
-
-
+class TournamentResult(BaseModel):
+    tournaments: list[Tournament]

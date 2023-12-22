@@ -1,10 +1,9 @@
 import logging
+
 import discord
-from discord.ui import TextInput, UserSelect
+from discord.ui import TextInput
 
 from rsc.views import ConfirmButton, DeclineButton
-
-from typing import Optional
 
 log = logging.getLogger("red.rsc.transactions.views")
 
@@ -19,7 +18,7 @@ class TradeInfo(discord.ui.TextInput):
         )
 
     async def callback(self, interaction: discord.Interaction):
-        self.view.announcement = self.value
+        self.view.announcement = self.value  # type: ignore
 
 
 class TradeAnnouncementView(discord.ui.View):
@@ -32,22 +31,21 @@ class TradeAnnouncementView(discord.ui.View):
 
     async def confirm(self, interaction: discord.Interaction):
         log.debug("Trade confirmed.")
-        log.debug(f"Trade Data")
 
     async def decline(self, interaction: discord.Interaction):
         log.debug("Trade declined.")
 
 
 class TradeAnnouncementModal(discord.ui.Modal, title="Trade Announcement"):
-    gm1 = UserSelect(placeholder="General Manager 1")
-    trade = TextInput(
+    # gm1 = UserSelect(placeholder="General Manager 1")
+    trade: TextInput = TextInput(
         label="Enter what GM receives",
         placeholder="GM receives...",
         style=discord.TextStyle.paragraph,
         required=True,
     )
-    gm2 = UserSelect(placeholder="General Manager 2")
-    trade2 = TextInput(
+    # gm2 = UserSelect(placeholder="General Manager 2")
+    trade2: TextInput = TextInput(
         label="Enter what GM receives",
         placeholder="GM receives...",
         style=discord.TextStyle.paragraph,

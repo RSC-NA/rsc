@@ -1,5 +1,6 @@
-import discord
 import re
+
+import discord
 
 # Views
 DEFAULT_TIMEOUT = 30.0
@@ -20,7 +21,7 @@ IR_ROLE = "IR"
 # Emoji
 TROPHY_EMOJI = "\U0001F3C6"  # :trophy:
 STAR_EMOJI = "\U00002B50"  # :star:
-DEV_LEAGUE_EMOJI = "\U0001F451" # :crown:
+DEV_LEAGUE_EMOJI = "\U0001F451"  # :crown:
 
 # Links
 
@@ -33,8 +34,8 @@ RSC_TRACKER_URL = ""
 
 # Moderation
 
-DEFAULT_MUTE_LENGTH = 30 # Default 30 minute mute
-DEFAULT_BAN_LENGTH = 30 # Default 30 minute mute
+DEFAULT_MUTE_LENGTH = 30  # Default 30 minute mute
+DEFAULT_BAN_LENGTH = 30  # Default 30 minute mute
 
 # Permissions
 

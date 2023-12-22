@@ -2,12 +2,9 @@ import logging
 
 import discord
 from discord.ui import TextInput
-
 from rscapi.models.league import League
 
 from rsc.const import DEFAULT_TIMEOUT
-
-from typing import List, Optional, Union, Callable
 
 log = logging.getLogger("red.rsc.views")
 
@@ -30,7 +27,7 @@ class AuthorOnlyView(discord.ui.View):
         if self.interaction:
             embed = discord.Embed(
                 title="Time out",
-                description=f"Sorry, you didn't respond quick enough. Please try again.",
+                description="Sorry, you didn't respond quick enough. Please try again.",
                 colour=discord.Colour.orange(),
             )
 
@@ -154,7 +151,7 @@ class LeagueSelect(discord.ui.Select):
         await self.view.save_selection(interaction, self.values)
 
 
-class LeagueSelectView(discord.ui.View):
+class LeagueSelectView(AuthorOnlyView):
     def __init__(
         self,
         interaction: discord.Interaction,
@@ -171,7 +168,7 @@ class LeagueSelectView(discord.ui.View):
         """Display time out message if we have reference to original"""
         embed = discord.Embed(
             title="Time out",
-            description=f"Sorry, you didn't respond quick enough. Please try again.",
+            description="Sorry, you didn't respond quick enough. Please try again.",
             colour=discord.Colour.orange(),
         )
         await self.interaction.edit_original_response(embed=embed, view=None)

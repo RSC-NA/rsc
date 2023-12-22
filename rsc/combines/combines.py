@@ -1,17 +1,13 @@
-import discord
 import logging
 
+import discord
 from discord import VoiceState
-
-from redbot.core import app_commands, checks, commands
-
+from redbot.core import app_commands, commands
 from rscapi.models.tier import Tier
 
 from rsc.abc import RSCMixIn
 from rsc.const import LEAGUE_ROLE, MUTED_ROLE
 from rsc.embeds import ErrorEmbed, SuccessEmbed
-
-from typing import List, Dict, Tuple
 
 log = logging.getLogger("red.rsc.combines")
 
@@ -78,9 +74,13 @@ class CombineMixIn(RSCMixIn):
 
     @_combines.command(name="settings", description="Display combine settings")
     async def _combines_settings(self, interaction: discord.Interaction):
-        active = await self._get_combines_active(interaction.guild)
-        capacity = await self._get_room_capacity(interaction.guild)
-        public = await self._get_publicity(interaction.guild)
+        guild = interaction.guild
+        if not guild:
+            return
+
+        active = await self._get_combines_active(guild)
+        capacity = await self._get_room_capacity(guild)
+        public = await self._get_publicity(guild)
 
         embed = discord.Embed(
             title="Combine Settings",
@@ -97,9 +97,13 @@ class CombineMixIn(RSCMixIn):
         description='Toggle combine rooms publicity (Private rooms require "League" role)',
     )
     async def _combines_public(self, interaction: discord.Interaction):
-        public = await self._get_publicity(interaction.guild)
+        guild = interaction.guild
+        if not guild:
+            return
+
+        public = await self._get_publicity(guild)
         public ^= True
-        await self._save_publicity(interaction.guild, public)
+        await self._save_publicity(guild, public)
         await interaction.response.send_message(
             embed=discord.Embed(
                 title="Room Publicity Configured",
@@ -115,6 +119,9 @@ class CombineMixIn(RSCMixIn):
     )
     @app_commands.describe(capacity="Max number of players in combine channel")
     async def _combines_capacity(self, interaction: discord.Interaction, capacity: int):
+        if not interaction.guild:
+            return
+
         await self._save_room_capacity(interaction.guild, capacity)
         await interaction.response.send_message(
             embed=discord.Embed(
@@ -131,14 +138,18 @@ class CombineMixIn(RSCMixIn):
         name="start", description="Begin RSC combines and create channels"
     )
     async def _combines_start(self, interaction: discord.Interaction):
-        if await self._get_combines_active(interaction.guild):
+        guild = interaction.guild
+        if not guild:
+            return
+
+        if await self._get_combines_active(guild):
             await interaction.response.send_message(
                 embed=ErrorEmbed(description="Combines are already started."),
                 ephemeral=True,
             )
             return
         # Get tiers for league
-        tiers: list[Tier] = await self.tiers(interaction.guild)
+        tiers: list[Tier] = await self.tiers(guild)
         log.debug(tiers)
 
         # Exit if no Tiers exist
@@ -154,8 +165,8 @@ class CombineMixIn(RSCMixIn):
         # This can take more than 3 seconds. Defer response.
         await interaction.response.defer()
 
-        await self._save_combines_active(interaction.guild, True)
-        await self.create_combines(interaction.guild, tiers)
+        await self._save_combines_active(guild, True)
+        await self.create_combines(guild, tiers)
         await interaction.followup.send(
             embed=SuccessEmbed(
                 description="Combines have been **started** and all channels created."
@@ -164,6 +175,9 @@ class CombineMixIn(RSCMixIn):
 
     @_combines.command(name="stop", description="End RSC combines and delete channels")
     async def _combines_stop(self, interaction: discord.Interaction):
+        if not interaction.guild:
+            return
+
         categories = await self.get_combine_categories(interaction.guild)
 
         # This can take more than 3 seconds. Defer response.
@@ -182,6 +196,9 @@ class CombineMixIn(RSCMixIn):
         name="overview", description="Get overview of current combine channels"
     )
     async def _combines_overview(self, interaction: discord.Interaction):
+        if not interaction.guild:
+            return
+
         if not await self._get_combines_active(interaction.guild):
             await interaction.response.send_message(
                 embed=ErrorEmbed(description="Combines are not currently active."),
@@ -199,7 +216,7 @@ class CombineMixIn(RSCMixIn):
             )
             return
 
-        overview: list[Tuple[discord.CategoryChannel, int, int]] = []
+        overview: list[tuple[discord.CategoryChannel, int, int]] = []
         for c in categories:
             data = (
                 c,
@@ -256,6 +273,9 @@ class CombineMixIn(RSCMixIn):
         muted_role = discord.utils.get(guild.roles, name=MUTED_ROLE)
         log.debug(f"[{guild}] Default Role: {guild.default_role}")
 
+        if not league_role:
+            raise ValueError("League role does not exist.")
+
         # Configure permissions
         overwrites = {
             guild.default_role: discord.PermissionOverwrite(
@@ -274,7 +294,7 @@ class CombineMixIn(RSCMixIn):
             name=f"{tier_name} Combines",
             position=len(guild.channels),
             overwrites=overwrites,
-            reason=f"Starting combines",
+            reason="Starting combines",
         )
         log.debug(f"[{guild} Created combine category: {category.name}]")
 
@@ -325,9 +345,10 @@ class CombineMixIn(RSCMixIn):
         if state.channel.category_id not in self._combine_cache[state.channel.guild]:
             return
 
-        category = state.channel.guild.get_channel(state.channel.category_id)
+        category = state.channel.category
         if not category:
             return
+
         log.debug(f"Found combine category: {category.name}")
 
         # Check if there is a combine channel with enough spots still
@@ -363,7 +384,7 @@ class CombineMixIn(RSCMixIn):
             return
 
         # Return if voice channel not in a category
-        if not state.channel.category_id:
+        if not (state.channel.category and state.channel.category_id):
             return
 
         # Do nothing if user still in voice
@@ -378,7 +399,7 @@ class CombineMixIn(RSCMixIn):
         if state.channel.name.endswith("1"):
             return
 
-        category = state.channel.guild.get_channel(state.channel.category_id)
+        category = state.channel.category
         log.debug(f"Found combine category: {category.name}")
 
         # Check if another channel is below

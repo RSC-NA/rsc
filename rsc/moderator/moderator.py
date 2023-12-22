@@ -1,32 +1,11 @@
-import discord
 import logging
-import tempfile
 
-from pydantic import parse_obj_as
-from os import PathLike
-from redbot.core import app_commands, checks
-from urllib.parse import urljoin
-
-from rscapi import ApiClient, FranchisesApi, TeamsApi
-from rscapi.exceptions import ApiException
-from rscapi.models.franchise import Franchise
-from rscapi.models.franchise_gm import FranchiseGM
-from rscapi.models.franchise_list import FranchiseList
-from rscapi.models.rebrand_a_franchise import RebrandAFranchise
-from rscapi.models.franchise_logo import FranchiseLogo
-from rscapi.models.transfer_franchise import TransferFranchise
-from rscapi.models.league import League
-from rscapi.models.team_list import TeamList
+import discord
+from redbot.core import app_commands
 
 from rsc.abc import RSCMixIn
-from rsc.const import FREE_AGENT_ROLE, GM_ROLE, DEFAULT_MUTE_LENGTH, DEFAULT_BAN_LENGTH
-from rsc.embeds import ErrorEmbed, SuccessEmbed, BlueEmbed, ApiExceptionErrorEmbed
 from rsc.enums import ModActionType
-from rsc.exceptions import RscException
-from rsc.enums import Status
 from rsc.utils import utils
-
-from typing import List, Dict, Optional, Union
 
 log = logging.getLogger("red.rsc.moderator")
 
@@ -112,7 +91,7 @@ class ModeratorMixIn(RSCMixIn):
         interaction: discord.Interaction,
         member: discord.Member,
         rule: str,
-        action: Optional[ModActionType],
+        action: ModActionType | None,
         days: int = 0,
         hours: int = 0,
         minutes: int = 0,
