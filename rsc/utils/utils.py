@@ -143,6 +143,8 @@ async def remove_prefix(member: discord.Member) -> str:
     result = member.display_name.split(" | ")
     if len(result) == 2:
         return result[1].strip()
+    elif len(result) > 2:
+        return " | ".join(result[1:]).strip()
     elif len(result) == 1:
         return result[0].strip()  # No prefix found
     raise ValueError(f"Unable to remove prefix from {member.display_name}")
@@ -636,8 +638,8 @@ class UtilsMixIn(RSCMixIn):
         self,
         interaction: discord.Interaction,
         role: discord.Role,
-        role2: discord.Role | None,
-        role3: discord.Role | None,
+        role2: discord.Role | None = None,
+        role3: discord.Role | None = None,
     ):
         desc = f"Role(s): {role.mention}"
         if not (role2 or role3):
@@ -731,7 +733,7 @@ class UtilsMixIn(RSCMixIn):
         interaction: discord.Interaction,
         role: discord.Role,
         members: Optional[Transform[list[discord.Member], GreedyMemberTransformer]],
-        to_role: discord.Role | None,
+        to_role: discord.Role | None = None,
     ):
         if not (members or to_role):
             await interaction.response.send_message(

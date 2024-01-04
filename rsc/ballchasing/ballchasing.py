@@ -376,9 +376,45 @@ class BallchasingMixIn(RSCMixIn):
 
             # Store successful results
             task_results = [r.result() for r in bc_tasks]
-            # for r in results that are "valid":
-            # Create Group
-            # Upload replays
+
+            upload_tasks = []
+            if upload:
+                # Upload to ballchasing
+                log.debug("Uploading result batch to ballchasing")
+                async with asyncio.TaskGroup() as tg:
+                    for result in task_results:
+                        utask = tg.create_task(
+                            self.create_and_upload_replays(guild, result)
+                        )
+                        upload_tasks.append(utask)
+                upload_results = [u.result() for u in upload_tasks]
+
+                for i in range(len(upload_results)):
+                    url = await self.bc_group_full_url(upload_results[i])
+                    task_results[i]["link"] = url
+
+            # Announce to score report channel
+            if announce:
+                log.debug("Announcing result batch")
+                embed_tasks = []
+                async with asyncio.TaskGroup() as tg:
+                    for result in task_results:
+                        mtier = result["match"].home_team.tier
+                        etask = tg.create_task(
+                            self.build_match_result_embed(
+                                guild, result=result, link=result["link"]
+                            )
+                        )
+                        embed_tasks.append(etask)
+
+                embed_results = [e.result() for e in embed_tasks]
+
+                log.debug(f"Embed Len: {len(embed_results)}")
+                for i in range(len(embed_results)):
+                    mtier = task_results[i]["match"].home_team.tier
+                    await self.announce_to_score_reporting(
+                        guild, tier=mtier, embed=embed_results[i]
+                    )
 
             bc_results.extend(task_results)
             await report_view.update(
@@ -395,7 +431,7 @@ class BallchasingMixIn(RSCMixIn):
                 log.debug(
                     (
                         f"{rmatch.home_team.name} vs {rmatch.away_team.name} not found."
-                        " Total Replays: {len(r['replays'])}"
+                        f" Total Replays: {len(r['replays'])}"
                     )
                 )
 
@@ -510,7 +546,7 @@ class BallchasingMixIn(RSCMixIn):
         upload="Enable or disable replay uploads to RSC ballchasing group. (Default: True)",
         announce="Announce the match result to the tier score reporting channel. (Default: True)",
     )
-    async def _bc_reportmatch(
+    async def _bc_manager_reportmatch(
         self,
         interaction: discord.Interaction,
         home: str,
@@ -635,14 +671,14 @@ class BallchasingMixIn(RSCMixIn):
                     inline=True,
                 )
             fembed.add_field(name="Home", value=home, inline=True)
-            fembed.add_field(name="Away", value=home, inline=True)
+            fembed.add_field(name="Away", value=away, inline=True)
             await interaction.edit_original_response(embed=fembed)
             return
 
         match_group = None
         tier = match.home_team.tier
         embed = await self.build_match_result_embed(
-            guild=interaction.guild, match=match, result=result, link=None
+            guild=interaction.guild, result=result, link=None
         )  # TODO give link
 
         # Give notice that replays are not being uploaded
@@ -654,7 +690,6 @@ class BallchasingMixIn(RSCMixIn):
                 await self.upload_replays(
                     guild=interaction.guild,
                     group=match_group,
-                    match=match,
                     result=result,
                 )
             else:
@@ -670,6 +705,59 @@ class BallchasingMixIn(RSCMixIn):
             )
 
         await interaction.edit_original_response(embed=embed)
+
+    @app_commands.command(
+        name="reportmatch",
+        description="Report the results of your RSC match",
+    )
+    @app_commands.autocomplete(
+        home=TeamMixIn.teams_autocomplete,
+        away=TeamMixIn.teams_autocomplete,
+    )  # type: ignore
+    @app_commands.describe(
+        matchday="Match day number",
+        home="Home team name",
+        away="Away team name",
+        replay1="Rocket League replay file",
+        replay2="Rocket League replay file",
+        replay3="Rocket League replay file",
+        replay4="Rocket League replay file",
+        replay5="Rocket League replay file",
+        replay6="Rocket League replay file",
+        replay7="Rocket League replay file",
+        replay8="Rocket League replay file",
+    )
+    async def _reportmatch_cmd(
+        self,
+        interaction: discord.Interaction,
+        matchday: int,
+        home: str,
+        away: str,
+        replay1: discord.Attachment,
+        preseason: bool = False,
+        replay2: discord.Attachment | None = None,
+        replay3: discord.Attachment | None = None,
+        replay4: discord.Attachment | None = None,
+        replay5: discord.Attachment | None = None,
+        replay6: discord.Attachment | None = None,
+        replay7: discord.Attachment | None = None,
+        replay8: discord.Attachment | None = None,
+    ):
+        guild = interaction.guild
+        member = interaction.user
+        if not (guild and isinstance(member, discord.Member)):
+            return
+
+        argv = locals()
+        replays: list[discord.Attachment] = []
+
+        log.debug(f"Locals: {argv}")
+        for k, v in argv.items():
+            if v and k.startswith("replay"):
+                replays.append(v)
+        log.debug(f"Replay Count: {len(replays)}")
+
+        await interaction.response.defer()
 
     # Functions
 
@@ -700,7 +788,7 @@ class BallchasingMixIn(RSCMixIn):
         )
 
     async def upload_replays(
-        self, guild: discord.Guild, group: str, match: Match, result: BallchasingResult
+        self, guild: discord.Guild, group: str, result: BallchasingResult
     ) -> list[str]:
         bapi = self._ballchasing_api.get(guild.id)
         if not bapi:
@@ -708,6 +796,8 @@ class BallchasingMixIn(RSCMixIn):
 
         if not result["replays"]:
             return []
+
+        match = result["match"]
 
         collisions = await self.group_replay_collisions(guild, group, result)
         if not collisions:
@@ -926,10 +1016,10 @@ class BallchasingMixIn(RSCMixIn):
     async def build_match_result_embed(
         self,
         guild: discord.Guild,
-        match: Match,
         result: BallchasingResult,
         link: str | None = None,
     ) -> discord.Embed:
+        match = result["match"]
         tier_color = await utils.tier_color_by_name(guild, match.home_team.tier)
 
         embed = discord.Embed(
@@ -986,18 +1076,35 @@ class BallchasingMixIn(RSCMixIn):
 
         category = await self._get_score_reporting_category(guild)
         if not category:
+            log.warning(
+                f"[{guild.name}] Ballchasing score report category is not configured"
+            )
             return None
 
-        score_channel = discord.utils.get(
-            category.channels, name=f"{tier}-score-reporting"
-        )
+        cname = f"{tier.lower()}-score-reporting"
+
+        score_channel = discord.utils.get(category.channels, name=cname)
         if not score_channel:
+            log.warning(
+                f"[{guild.name}] Unable to find tier score report channel: {cname}"
+            )
             return None
 
         if not isinstance(score_channel, discord.TextChannel):
             return None
 
         return await score_channel.send(content=content, embed=embed, files=files)
+
+    async def create_and_upload_replays(
+        self, guild: discord.Guild, result: BallchasingResult
+    ) -> str:
+        match = result["match"]
+        mgroup = await self.rsc_match_bc_group(guild, match)
+        if not mgroup:
+            raise RuntimeError("Failed to create ballchasing group")
+
+        await self.upload_replays(guild, mgroup, result)
+        return mgroup
 
     async def process_match(
         self, guild: discord.Guild, match: Match
@@ -1015,6 +1122,7 @@ class BallchasingMixIn(RSCMixIn):
             away_wins=0,
             replays=set(),
             execution_time=0,
+            link=None,
         )
 
         # Get trackers
@@ -1161,9 +1269,6 @@ class BallchasingMixIn(RSCMixIn):
     async def valid_replay(
         self, match: Match, replay: ballchasing.models.Replay
     ) -> bool:
-        # Check ballchasing status
-        if replay.status != ballchasing.ReplayStatus.OK:
-            return False
         # Both team names are present
         if not await self.validate_team_names(match, replay):
             return False
@@ -1194,6 +1299,9 @@ class BallchasingMixIn(RSCMixIn):
             return False
 
         valid = (home.lower(), away.lower())
+
+        if not (replay.blue and replay.orange):
+            return False
 
         if not (replay.blue.name and replay.orange.name):
             return False

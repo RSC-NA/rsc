@@ -91,7 +91,7 @@ class ModeratorMixIn(RSCMixIn):
         interaction: discord.Interaction,
         member: discord.Member,
         rule: str,
-        action: ModActionType | None,
+        action: ModActionType | None = None,
         days: int = 0,
         hours: int = 0,
         minutes: int = 0,

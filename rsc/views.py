@@ -53,7 +53,7 @@ class ConfirmButton(discord.ui.Button):
 
     async def callback(self, interaction: discord.Interaction):
         """Button will callback to the containing view `confirm()` function"""
-        await self.view.confirm(interaction)
+        await self.view.confirm(interaction)  # type: ignore
 
 
 class DeclineButton(discord.ui.Button):
@@ -66,7 +66,7 @@ class DeclineButton(discord.ui.Button):
 
     async def callback(self, interaction: discord.Interaction):
         """Button will callback to the containing view `decline()` function"""
-        await self.view.decline(interaction)
+        await self.view.decline(interaction)  # type: ignore
 
 
 class CancelButton(discord.ui.Button):
@@ -79,7 +79,7 @@ class CancelButton(discord.ui.Button):
 
     async def callback(self, interaction: discord.Interaction):
         """Button will callback to the containing view `cancel()` function"""
-        await self.view.decline(interaction)
+        await self.view.decline(interaction)  # type: ignore
 
 
 class NextButton(discord.ui.Button):
@@ -92,7 +92,7 @@ class NextButton(discord.ui.Button):
 
     async def callback(self, interaction: discord.Interaction):
         """Button will callback to the containing view `decline()` function"""
-        await self.view.confirm(interaction)
+        await self.view.confirm(interaction)  # type: ignore
 
 
 class NoButton(discord.ui.Button):
@@ -103,7 +103,7 @@ class NoButton(discord.ui.Button):
 
     async def callback(self, interaction: discord.Interaction):
         """Button will callback to the containing view `no()` function"""
-        await self.view.decline(interaction)
+        await self.view.decline(interaction)  # type: ignore
 
 
 class YesButton(discord.ui.Button):
@@ -114,7 +114,7 @@ class YesButton(discord.ui.Button):
 
     async def callback(self, interaction: discord.Interaction):
         """Button will callback to the containing view `confirm()` function"""
-        await self.view.confirm(interaction)
+        await self.view.confirm(interaction)  # type: ignore
 
 
 class AgreeButton(discord.ui.Button):
@@ -127,7 +127,7 @@ class AgreeButton(discord.ui.Button):
 
     async def callback(self, interaction: discord.Interaction):
         """Button will callback to the containing view `confirm()` function"""
-        await self.view.confirm(interaction)
+        await self.view.confirm(interaction)  # type: ignore
 
 
 class LinkButton(discord.ui.Button):

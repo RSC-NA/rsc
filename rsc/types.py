@@ -127,6 +127,7 @@ class BallchasingResult(TypedDict):
     match: Match
     replays: set[ballchasing.models.Replay]
     execution_time: float
+    link: str | None
 
 
 class BallchasingCollisions(TypedDict):

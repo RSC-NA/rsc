@@ -187,22 +187,21 @@ class MemberMixIn(RSCMixIn):
     )
     @app_commands.describe(player="Player discord name to query")
     @app_commands.guild_only
-    async def _playerinfo(
+    async def _playerinfo_cmd(
         self, interaction: discord.Interaction, player: discord.Member
     ):
         guild = interaction.guild
         if not guild:
             return
 
+        await interaction.response.defer()
         players = await self.players(guild, discord_id=player.id, limit=1)
         if not players:
-            await interaction.response.send_message(
-                embed=discord.Embed(
+            await interaction.followup.send(
+                embed=YellowEmbed(
                     title="Player Info",
                     description=f"{player.mention} is not currently playing in the league.",
-                    color=discord.Color.yellow(),
-                ),
-                ephemeral=True,
+                )
             )
             return
 
@@ -210,16 +209,16 @@ class MemberMixIn(RSCMixIn):
         tier_color = await utils.tier_color_by_name(guild, p.tier.name)
 
         embed = discord.Embed(
-            title="Player Info",
+            title=f"Player Info: {p.player.name}",
             color=tier_color,
         )
 
         embed.add_field(name="Player", value=player.mention, inline=True)
         embed.add_field(name="Tier", value=p.tier.name, inline=True)
-        embed.add_field(name="Status", value=p.status, inline=True)
+        embed.add_field(name="Status", value=Status(p.status).full_name, inline=True)
 
         if not p.team:
-            await interaction.response.send_message(embed=embed, ephemeral=True)
+            await interaction.response.send_message(embed=embed)
             return
 
         frole = await utils.franchise_role_from_name(guild, p.team.franchise.name)
@@ -228,7 +227,11 @@ class MemberMixIn(RSCMixIn):
         embed.add_field(name="", value="", inline=False)  # Line Break
         embed.add_field(name="Team", value=p.team.name, inline=True)
         embed.add_field(name="Franchise", value=f_fmt, inline=True)
-        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+        flogo = await self.franchise_logo(guild, p.team.franchise.id)
+        if flogo:
+            embed.set_thumbnail(url=flogo)
+        await interaction.followup.send(embed=embed)
 
     @app_commands.command(
         name="waivers", description="Display players currently on waivers"
@@ -415,7 +418,7 @@ class MemberMixIn(RSCMixIn):
         self,
         guild: discord.Guild,
         id: int,
-        season: int | None,
+        season: int | None = None,
     ) -> PlayerSeasonStats:
         async with ApiClient(self._api_conf[guild.id]) as client:
             api = MembersApi(client)

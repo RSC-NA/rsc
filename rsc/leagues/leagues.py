@@ -12,6 +12,7 @@ from rsc.abc import RSCMixIn
 from rsc.embeds import BlueEmbed, ErrorEmbed, YellowEmbed
 from rsc.enums import Status
 from rsc.exceptions import RscException
+from rsc.utils import utils
 
 log = logging.getLogger("red.rsc.leagues")
 
@@ -57,6 +58,8 @@ class LeagueMixIn(RSCMixIn):
     async def _leagues_info(self, interaction: discord.Interaction):
         if not interaction.guild:
             return
+
+        await utils.not_implemented(interaction)
 
         league_data = await self.current_season(interaction.guild)
 

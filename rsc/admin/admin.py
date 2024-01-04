@@ -75,12 +75,17 @@ class AdminMixIn(RSCMixIn):
     # Member Commands
 
     @_members.command(name="changename", description="Change RSC name for a member")
-    @app_commands.describe(member="RSC discord member", name="Desired player name")
+    @app_commands.describe(
+        member="RSC discord member",
+        name="New player name",
+        tracker="Add a tracker link to the user. (Optional)",
+    )
     async def _member_changename(
         self,
         interaction: discord.Interaction,
         member: discord.Member,
         name: str,
+        tracker: str | None = None,
     ):
         if not interaction.guild:
             return
@@ -89,6 +94,8 @@ class AdminMixIn(RSCMixIn):
 
         try:
             await self.change_member_name(interaction.guild, id=member.id, name=name)
+            if tracker:
+                await self.add_tracker(interaction.guild, member, tracker)
         except RscException as exc:
             await interaction.followup.send(
                 embed=ApiExceptionErrorEmbed(exc), ephemeral=True

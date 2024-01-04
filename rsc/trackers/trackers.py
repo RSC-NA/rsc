@@ -10,7 +10,7 @@ from rscapi.models.tracker_link_stats import TrackerLinkStats
 
 from rsc.abc import RSCMixIn
 from rsc.const import RSC_TRACKER_URL
-from rsc.embeds import ApiExceptionErrorEmbed, BlueEmbed, YellowEmbed
+from rsc.embeds import ApiExceptionErrorEmbed, YellowEmbed
 from rsc.enums import TrackerLinksStatus
 from rsc.exceptions import RscException
 from rsc.utils import utils
@@ -178,8 +178,10 @@ class TrackerMixIn(RSCMixIn):
     @app_commands.describe(player="RSC Discord Member")
     @app_commands.guild_only
     async def _accounts(self, interaction: discord.Interaction, player: discord.Member):
-        await interaction.response.defer()
+        if not interaction.guild:
+            return
 
+        await interaction.response.defer()
         try:
             trackers = await self.trackers(interaction.guild, player=player.id)
         except RscException as exc:
@@ -188,23 +190,27 @@ class TrackerMixIn(RSCMixIn):
         if not trackers:
             await interaction.followup.send(
                 embed=YellowEmbed(
-                    description=f"{player.display_name} does not have any registered RL trackers."
+                    description=f"{player.mention} does not have any registered RL trackers."
                 ),
                 ephemeral=True,
             )
             return
-
-        frole = await utils.franchise_role_from_disord_member(player)
 
         desc = ""
         for t in trackers:
             url = await utils.fix_tracker_url(t.link)
             desc += f" - [{t.platform} - {t.platform_id or t.name}]({url})"
 
-        embed = BlueEmbed(title=f"{player.display_name} Accounts", description=desc)
+        tier_color = utils.tier_color_by_name
 
-        if frole and frole.display_icon:
-            embed.set_thumbnail(url=frole.display_icon.url)
+        embed = discord.Embed(
+            title=f"{player.display_name} Accounts", description=desc, color=tier_color
+        )
+
+        if player.avatar:
+            embed.set_thumbnail(url=player.avatar.url)
+        elif interaction.guild.icon:
+            embed.set_thumbnail(url=interaction.guild.icon.url)
 
         link_button = LinkButton(label="RSC Tracker Links", url=RSC_TRACKER_URL)
         account_view = discord.ui.View()
@@ -268,5 +274,21 @@ class TrackerMixIn(RSCMixIn):
             api = TrackerLinksApi(client)
             try:
                 return await api.tracker_links_next(limit=limit)
+            except ApiException as exc:
+                raise RscException(response=exc)
+
+    async def add_tracker(
+        self,
+        guild: discord.Guild,
+        player: discord.Member,
+        tracker: str,
+    ):
+        """Add a tracker to a user"""
+        async with ApiClient(self._api_conf[guild.id]) as client:
+            api = TrackerLinksApi(client)
+            data = TrackerLink(link=tracker, discord_id=player.id)
+            log.debug(f"Tracker Create: {data}")
+            try:
+                return await api.tracker_links_create(data)
             except ApiException as exc:
                 raise RscException(response=exc)

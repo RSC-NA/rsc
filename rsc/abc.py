@@ -1,6 +1,6 @@
 from abc import ABC, ABCMeta, abstractmethod
 from datetime import datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 from zoneinfo import ZoneInfo
 
 import discord
@@ -48,7 +48,7 @@ class RSCMixIn(ABC):
         ...
 
     @abstractmethod
-    async def rapid_connector(self, guild: discord.Guild) -> "RapidApi" | None:
+    async def rapid_connector(self, guild: discord.Guild) -> Optional["RapidApi"]:
         ...
 
     # Franchises
