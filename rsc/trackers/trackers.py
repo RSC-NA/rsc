@@ -10,7 +10,7 @@ from rscapi.models.tracker_link_stats import TrackerLinkStats
 
 from rsc.abc import RSCMixIn
 from rsc.const import RSC_TRACKER_URL
-from rsc.embeds import ApiExceptionErrorEmbed, YellowEmbed
+from rsc.embeds import ApiExceptionErrorEmbed, BlueEmbed, YellowEmbed
 from rsc.enums import TrackerLinksStatus
 from rsc.exceptions import RscException
 from rsc.utils import utils
@@ -199,13 +199,9 @@ class TrackerMixIn(RSCMixIn):
         desc = ""
         for t in trackers:
             url = await utils.fix_tracker_url(t.link)
-            desc += f" - [{t.platform} - {t.platform_id or t.name}]({url})"
+            desc += f"- [{t.platform} - {t.platform_id or t.name}]({url})\n"
 
-        tier_color = utils.tier_color_by_name
-
-        embed = discord.Embed(
-            title=f"{player.display_name} Accounts", description=desc, color=tier_color
-        )
+        embed = BlueEmbed(title=f"{player.display_name} Accounts", description=desc)
 
         if player.avatar:
             embed.set_thumbnail(url=player.avatar.url)

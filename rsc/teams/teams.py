@@ -99,7 +99,6 @@ class TeamMixIn(RSCMixIn):
         embed = BlueEmbed()
 
         if franchise:
-            # Include tier data when API is fixed
             embed.title = f"{franchise} Teams"
             embed.add_field(
                 name="Team", value="\n".join([t.name for t in teams]), inline=True
@@ -117,13 +116,14 @@ class TeamMixIn(RSCMixIn):
             await interaction.followup.send(embed=embed)
         elif tier:
             # Sort by Team Name
+            teams.sort(key=lambda x: x.name)
             embed.title = f"{tier} Teams"
             embed.add_field(
                 name="Team", value="\n".join([t.name for t in teams]), inline=True
             )
             embed.add_field(
                 name="Franchise",
-                value="\n".join([t.franchise for t in teams]),
+                value="\n".join([t.franchise.name for t in teams]),
                 inline=True,
             )
 
@@ -221,14 +221,18 @@ class TeamMixIn(RSCMixIn):
         roster_str = "\n".join(roster)
         tier_color = await utils.tier_color_by_name(guild, players[0].tier.name)
 
-        desc = f"**{team} - {franchise} ({gm_name}) - {players[0].tier.name}**\n```\n{roster_str}\n```"
+        header = f"{team} - {franchise} ({gm_name}) - {players[0].tier.name}"
+        # desc = f"**{header}**\n```\n{roster_str}\n```"
         # desc = f"\n```\n{roster_str}\n```"
+        desc = f"```\n{roster_str}\n```"
 
         embed = discord.Embed(
             # title=f"{team} - {franchise} ({gm_name}) - {players[0].tier.name}",
             description=desc,
             color=tier_color,
         )
+
+        embed.set_author(name=header)
 
         if subbed:
             sub_str = "\n".join(subbed)

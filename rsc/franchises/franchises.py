@@ -250,9 +250,10 @@ class FranchiseMixIn(RSCMixIn):
             api = FranchisesApi(client)
             try:
                 logo = await api.franchises_logo(id)
-                log.debug(f"Franchise Logo: {logo}")
                 if not (logo and logo.logo):
                     return None
-                return urljoin(host, logo.logo)
+                full_url = urljoin(host, logo.logo)
+                log.debug(f"Franchise Logo: {full_url}")
+                return full_url
             except ApiException as exc:
                 raise RscException(response=exc)

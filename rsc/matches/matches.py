@@ -35,24 +35,26 @@ class MatchMixIn(RSCMixIn):
         preseason="Include preseason matches (Default: False)",
     )
     @app_commands.guild_only
-    async def _schedule_args(
+    async def _schedule_cmd(
         self,
         interaction: discord.Interaction,
         team: str | None = None,
         preseason: bool = False,
     ):
+        guild = interaction.guild
+        if not (guild and isinstance(interaction.user, discord.Member)):
+            return
         await interaction.response.defer()
         team_id = 0
         tier = None
         if team:
             # If team name was supplied, find the ID of that team
             log.debug(f"Searching for team: {team}")
-            team_id = await self.team_id_by_name(interaction.guild, name=team)
+            team_id = await self.team_id_by_name(guild, name=team)
         else:
+            log.debug(f"Finding team for {interaction.user.display_name}")
             # Find the team ID of interaction user
-            player = await self.players(
-                interaction.guild, discord_id=interaction.user.id, limit=1
-            )
+            player = await self.players(guild, discord_id=interaction.user.id, limit=1)
             if not player:
                 await interaction.followup.send(
                     embed=ErrorEmbed(
@@ -60,16 +62,27 @@ class MatchMixIn(RSCMixIn):
                     ),
                 )
                 return
-            if player[0].status != Status.ROSTERED:
+
+            pdata = player[0]
+            if pdata.status not in (Status.ROSTERED, Status.IR, Status.AGMIR):
                 await interaction.followup.send(
                     embed=ErrorEmbed(
                         description="You are not currently rostered on a team."
                     ),
                 )
                 return
-            team = player[0].team.name
-            tier = player[0].tier.name
-            team_id = player[0].team.id
+
+            if not (pdata.team and pdata.tier):
+                await interaction.followup.send(
+                    embed=ErrorEmbed(
+                        description="Malformed data returned from API. Please submit a modmail."
+                    ),
+                )
+                return
+
+            team = pdata.team.name
+            tier = pdata.tier.name
+            team_id = pdata.team.id
 
         if not team_id:
             await interaction.followup.send(
@@ -79,12 +92,10 @@ class MatchMixIn(RSCMixIn):
 
         # Fetch team schedule
         log.debug(f"Fetching next match for team id: {team_id}")
-        schedule = await self.season_matches(
-            interaction.guild, team_id, preseason=preseason
-        )
+        schedule = await self.season_matches(guild, team_id, preseason=preseason)
 
         # Get tier color
-        tier_color = await tier_color_by_name(interaction.guild, tier)
+        tier_color = await tier_color_by_name(guild, tier)
 
         if not schedule:
             await interaction.followup.send(
@@ -94,6 +105,7 @@ class MatchMixIn(RSCMixIn):
                     color=tier_color or discord.Color.blue(),
                 )
             )
+            return
 
         # Sorting
         if preseason:
@@ -113,9 +125,7 @@ class MatchMixIn(RSCMixIn):
 
         embed.add_field(
             name="Day",
-            value="\n".join(
-                [f"{str(m.match_type).capitalize()}-{m.day}" for m in matches]
-            ),
+            value="\n".join([f"{m.day}" for m in matches]),
             inline=True,
         )
         embed.add_field(
@@ -137,11 +147,13 @@ class MatchMixIn(RSCMixIn):
     )
     @app_commands.guild_only
     async def _match_cmd(self, interaction: discord.Interaction):
+        guild = interaction.guild
+        if not (guild and isinstance(interaction.user, discord.Member)):
+            return
+
         await interaction.response.defer(ephemeral=True)
         # Find the team ID of interaction user
-        player = await self.players(
-            interaction.guild, discord_id=interaction.user.id, limit=1
-        )
+        player = await self.players(guild, discord_id=interaction.user.id, limit=1)
         if not player:
             await interaction.followup.send(
                 embed=ErrorEmbed(
@@ -160,13 +172,11 @@ class MatchMixIn(RSCMixIn):
             return
 
         # Get API id of team
-        team_id = await self.team_id_by_name(
-            interaction.guild, name=player[0].team.name
-        )
+        team_id = await self.team_id_by_name(guild, name=player[0].team.name)
 
         # Get teams next match
         try:
-            match = await self.next_match(interaction.guild, team_id)
+            match = await self.next_match(guild, team_id)
         except ApiException as exc:
             log.debug(f"Match Return Status: {exc.status}")
             await interaction.followup.send(
@@ -181,9 +191,7 @@ class MatchMixIn(RSCMixIn):
         # Is interaction user away/home
         user_team = await self.match_team_by_user(match, interaction.user)
 
-        embed = await self.build_match_embed(
-            interaction.guild, match, user_team=user_team
-        )
+        embed = await self.build_match_embed(guild, match, user_team=user_team)
         # await interaction.user.send(embed=embed)
         await interaction.followup.send(embed=embed, ephemeral=True)
 

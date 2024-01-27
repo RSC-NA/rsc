@@ -8,6 +8,7 @@ import pytz
 import validators  # type: ignore
 from redbot.core import Config, app_commands, commands
 from rscapi import Configuration
+from rscapi.exceptions import ApiException
 
 from rsc.abc import CompositeMetaClass
 from rsc.admin import AdminMixIn
@@ -119,9 +120,24 @@ class RSC(
                         tg.create_task(self._populate_combines_cache(guild))
                         tg.create_task(self._populate_free_agent_cache(guild))
                         tg.create_task(self.prepare_ballchasing(guild))
-                except ExceptionGroup as eg:
+                except* ApiException as eg:
+                    # API is down or not responding
                     for err in eg.exceptions:
-                        raise err
+                        match err.status:
+                            case 504:
+                                log.error("Connection to RSC API timed out. (504)")
+                            case 502:
+                                log.error("Bad gateway response from RSC API. (502)")
+                            case 403:
+                                log.error("Forbidden response from RSC API. (403)")
+                            case 401:
+                                log.error("Unauthorized response from RSC API. (401)")
+                            case _:
+                                raise err
+                # except ExceptionGroup as eg:
+                #     for err in eg.exceptions:
+                #         log.error(f"Type: {type(err)}")
+                #         log.error(err)
 
     async def prepare_rapidapi(self, guild: discord.Guild):
         token = await self._get_rapidapi_key(guild)
@@ -289,7 +305,7 @@ class RSC(
 
         leagues = await self.leagues(interaction.guild)
         log.debug(leagues)
-        league_view = LeagueSelectView(interaction, leagues)
+        league_view = LeagueSelectView(interaction=interaction, leagues=leagues)
         await league_view.prompt()
         await league_view.wait()
 

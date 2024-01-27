@@ -254,6 +254,12 @@ class AdminMixIn(RSCMixIn):
             name="Status", value="\n".join([x[2] for x in m_fmt]), inline=True
         )
 
+        if embed.exceeds_limits():
+            await interaction.followup.send(
+                content="Result exceeds discord character limits. Please refine your search."
+            )
+            return
+
         await interaction.followup.send(embed=embed, ephemeral=True)
 
     # Validate Commands
@@ -888,7 +894,7 @@ class AdminMixIn(RSCMixIn):
 
     # Other Group Commands
 
-    @_franchise.command(name="dates", description="Configure the dates command output")
+    @_admin.command(name="dates", description="Configure the dates command output")
     async def _admin_set_dates(self, interaction: discord.Interaction):
         dates_modal = LeagueDatesModal()
         await interaction.response.send_modal(dates_modal)

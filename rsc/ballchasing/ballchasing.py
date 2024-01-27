@@ -6,6 +6,7 @@ import statistics
 import string
 import time
 from datetime import datetime, timedelta
+from hashlib import md5
 from urllib.parse import urljoin
 
 import ballchasing
@@ -50,8 +51,6 @@ SMALL_BATCH_SIZE = 5
 
 
 class BallchasingMixIn(RSCMixIn):
-    COMBINE_PLAYER_RATIO = 0.5
-
     def __init__(self):
         log.debug("Initializing BallchasingMixIn")
 
@@ -757,9 +756,137 @@ class BallchasingMixIn(RSCMixIn):
                 replays.append(v)
         log.debug(f"Replay Count: {len(replays)}")
 
-        await interaction.response.defer()
+        await interaction.response.defer(ephemeral=True)
+
+        # Get match data
+        log.debug(f"Searching for match: {home} vs {away}")
+        matches: list[Match] = await self.find_match(
+            guild,
+            day=matchday,
+            teams=f"{home}, {away}",
+            preseason=int(preseason),
+            limit=1,
+        )
+        log.debug("Done searching")
+        # No match found
+        if not matches:
+            await interaction.followup.send(
+                embed=ErrorEmbed(
+                    description=f"No matches found for **{home}** vs **{away}** on match day **{matchday}**."
+                ),
+                ephemeral=True,
+            )
+            return
+
+        match = None
+        for m in matches:
+            if home in (m.home_team.name, m.away_team.name) and away in (
+                m.home_team.name,
+                m.away_team.name,
+            ):
+                match = m
+
+        if not match:
+            await interaction.followup.send(
+                embed=ErrorEmbed(
+                    description=f"No matches found for **{home}** vs **{away}** on match day **{matchday}**."
+                ),
+                ephemeral=True,
+            )
+            return
+
+        log.debug("Match found in RSC API.")
+
+        # Check if match is already complete
+        # if await self.match_already_complete(match):
+        #     bc_view = discord.ui.View()
+        #     if match.results.ballchasing_group:
+        #         bc_view.add_item(
+        #             LinkButton(
+        #                 label="Ballchasing Link",
+        #                 url=await self.bc_group_full_url(
+        #                     match.results.ballchasing_group
+        #                 ),
+        #             )
+        #         )
+        #     await interaction.followup.send(
+        #         embed=ErrorEmbed(
+        #             title="Match Completed",
+        #             description="This match has already been completed and recorded.",
+        #         ),
+        #         view=bc_view,
+        #         ephemeral=True,
+        #     )
+        #     return
+
+        # Check valid number of replays
+        min_games = await self.minimum_games_required(match)
+        if len(replays) < min_games:
+            await interaction.followup.send(
+                embed=ErrorEmbed(
+                    title="Not Enough Replays",
+                    description=(
+                        f"You only provided **{len(replays)}** replay file,"
+                        f" expected at least **{match.num_games}**.\n\n"
+                        "If you don't all the replays, please coordinate with the other team captain."
+                    ),
+                ),
+                ephemeral=True,
+            )
+            return
+
+        log.debug("Checking if attachments are replay files.")
+        for r in replays:
+            if not await self.is_replay_file(r):
+                await interaction.followup.send(
+                    embed=ErrorEmbed(
+                        title="Invalid Replay File",
+                        description=f"**{r.filename}** is not a valid Rocket League replay.",
+                    ),
+                    ephemeral=True,
+                )
+
+        log.debug("Checking for duplicate replays")
+        if await self.duplicate_replay_files(replays):
+            await interaction.followup.send(
+                embed=ErrorEmbed(
+                    title="Duplicate Replays Found",
+                    description="Found duplicate replay files in the data submitted.",
+                ),
+                ephemeral=True,
+            )
+
+        log.debug(f"Match ID: {match.id}")
+
+        # Send "working" message
+        await interaction.followup.send(
+            embed=YellowEmbed(
+                title="Processing Match",
+                description=f"Processing replays for match **{home}** vs **{away}** on **match day {matchday}**",
+            ),
+            ephemeral=True,
+        )
 
     # Functions
+
+    @staticmethod
+    async def is_replay_file(replay: discord.Attachment) -> bool:
+        """Check if file provided is a replay file"""
+        if replay.filename.endswith(".replay"):
+            return True
+        return False
+
+    @staticmethod
+    async def duplicate_replay_files(replays: list[discord.Attachment]) -> bool:
+        hashes = []
+        for r in replays:
+            data = await r.read()
+            h = md5(data).hexdigest()
+            if h in hashes:
+                return True
+            else:
+                hashes.append(h)
+        return False
 
     async def group_replay_collisions(
         self, guild: discord.Guild, group: str, result: BallchasingResult

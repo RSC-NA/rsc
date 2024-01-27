@@ -23,6 +23,7 @@ from rsc.const import (
     TROPHY_EMOJI,
 )
 from rsc.embeds import (
+    ErrorEmbed,
     ExceptionErrorEmbed,
     NotImplementedEmbed,
     OrangeEmbed,
@@ -31,6 +32,7 @@ from rsc.embeds import (
 from rsc.enums import BulkRoleAction, TransactionType
 from rsc.transformers import GreedyMemberTransformer
 from rsc.types import Accolades
+from rsc.utils import filters
 from rsc.utils.views import BulkRoleConfirmView
 
 log = logging.getLogger("red.rsc.utils")
@@ -359,6 +361,10 @@ async def iter_gather(result):
 
 
 class UtilsMixIn(RSCMixIn):
+    def __init__(self):
+        log.debug("Initializing UtilsMixIn")
+        super().__init__()
+
     @app_commands.command(
         name="getmassid",
         description="Mass lookup version of /getid.",
@@ -397,10 +403,133 @@ class UtilsMixIn(RSCMixIn):
         name="userinfo",
         description="Display discord user information for a user",
     )
-    @app_commands.describe(member="RSC Discord Member")
+    @app_commands.describe(member="RSC Discord Member (Optional)")
     @app_commands.guild_only
-    async def _userinfo(self, interaction: discord.Interaction, member: discord.Member):
-        pass
+    async def _userinfo(
+        self, interaction: discord.Interaction, member: discord.Member | None = None
+    ):
+        """Show information about a member.
+
+        This includes fields for status, discord join date, server
+        join date, voice state and previous usernames/global display names/nicknames.
+
+        If the member has no roles, previous usernames, global display names, or server nicknames,
+        these fields will be omitted.
+        """
+        guild = interaction.guild
+        if not guild:
+            return
+
+        if not member:
+            if not isinstance(interaction.user, discord.Member):
+                return
+            member = interaction.user
+
+        roles = member.roles[-1:0:-1]
+
+        joined_at = member.joined_at
+        voice_state = member.voice
+        member_number = (
+            sorted(
+                guild.members, key=lambda m: m.joined_at or interaction.created_at
+            ).index(member)
+            + 1
+        )
+
+        created_on = (
+            f"{discord.utils.format_dt(member.created_at)}\n"
+            f"{discord.utils.format_dt(member.created_at, 'R')}"
+        )
+        if joined_at is not None:
+            joined_on = (
+                f"{discord.utils.format_dt(joined_at)}\n"
+                f"{discord.utils.format_dt(joined_at, 'R')}"
+            )
+        else:
+            joined_on = "Unknown"
+
+        if any(a.type is discord.ActivityType.streaming for a in member.activities):
+            statusemoji = "\N{LARGE PURPLE CIRCLE}"
+        elif member.status.name == "online":
+            statusemoji = "\N{LARGE GREEN CIRCLE}"
+        elif member.status.name == "offline":
+            statusemoji = "\N{MEDIUM WHITE CIRCLE}\N{VARIATION SELECTOR-16}"
+        elif member.status.name == "dnd":
+            statusemoji = "\N{LARGE RED CIRCLE}"
+        elif member.status.name == "idle":
+            statusemoji = "\N{LARGE ORANGE CIRCLE}"
+        activity = f"Chilling in {member.status} status"
+        status_string = self.get_status_string(member)
+
+        if roles:
+            role_str = ", ".join([x.mention for x in roles])
+            # 400 BAD REQUEST (error code: 50035): Invalid Form Body
+            # In embed.fields.2.value: Must be 1024 or fewer in length.
+            if len(role_str) > 1024:
+                # Alternative string building time.
+                # This is not the most optimal, but if you're hitting this, you are losing more time
+                # to every single check running on users than the occasional user info invoke
+                # We don't start by building this way, since the number of times we hit this should be
+                # infinitesimally small compared to when we don't across all uses of Red.
+                continuation_string = (
+                    "and {numeric_number} more roles not displayed due to embed limits."
+                )
+                available_length = 1024 - len(
+                    continuation_string
+                )  # do not attempt to tweak, i18n
+
+                role_chunks = []
+                remaining_roles = 0
+
+                for r in roles:
+                    chunk = f"{r.mention}, "
+                    chunk_size = len(chunk)
+
+                    if chunk_size < available_length:
+                        available_length -= chunk_size
+                        role_chunks.append(chunk)
+                    else:
+                        remaining_roles += 1
+
+                role_chunks.append(
+                    continuation_string.format(numeric_number=remaining_roles)
+                )
+
+                role_str = "".join(role_chunks)
+
+        else:
+            role_str = None
+
+        data = discord.Embed(
+            description=status_string or activity, colour=member.colour
+        )
+
+        data.add_field(name="Joined Discord on", value=created_on)
+        data.add_field(name="Joined this server on", value=joined_on)
+        if role_str is not None:
+            data.add_field(
+                name="Roles" if len(roles) > 1 else "Role", value=role_str, inline=False
+            )
+
+        if voice_state and voice_state.channel:
+            data.add_field(
+                name="Current voice channel",
+                value="{0.mention} ID: {0.id}".format(voice_state.channel),
+                inline=False,
+            )
+        data.set_footer(
+            text="Member #{} | User ID: {}".format(member_number, member.id)
+        )
+
+        name = str(member)
+        name = " ~ ".join((name, member.nick)) if member.nick else name
+        name = filters.filter_invites(name)
+
+        avatar = member.display_avatar.replace(static_format="png")
+        data.set_author(name=f"{statusemoji} {name}", url=avatar)
+        data.set_thumbnail(url=avatar)
+
+        await interaction.response.send_message(embed=data)
 
     @app_commands.command(
         name="serverinfo",
@@ -681,7 +810,9 @@ class UtilsMixIn(RSCMixIn):
                 name="Username", value="\n".join(r.name for r in results), inline=True
             )
             embed.add_field(
-                name="ID", value="\n".join(str(r.id) for r in results), inline=True
+                name="Discord ID",
+                value="\n".join(str(r.id) for r in results),
+                inline=True,
             )
 
             embed.set_footer(text=f"Found {len(results)} matching player(s).")
@@ -722,8 +853,8 @@ class UtilsMixIn(RSCMixIn):
     )
     @app_commands.describe(
         role="Discord role to add",
-        members='Space delimited discord IDs to apply role. (Example: "138778232802508801 352600418062303244")',
-        to_role="Add the role to everyone in this role.",
+        members='Space delimited discord IDs to apply role. (Example: "138778232802508801 352600418062303244") (Optional)',
+        to_role="Add the role to everyone in this role. (Optional)",
     )
     @app_commands.checks.has_permissions(manage_roles=True)
     @app_commands.checks.bot_has_permissions(manage_roles=True)
@@ -732,17 +863,22 @@ class UtilsMixIn(RSCMixIn):
         self,
         interaction: discord.Interaction,
         role: discord.Role,
-        members: Optional[Transform[list[discord.Member], GreedyMemberTransformer]],
+        members: Transform[list[discord.Member], GreedyMemberTransformer] | None = None,
         to_role: discord.Role | None = None,
     ):
-        if not (members or to_role):
+        if members:
+            mlist = members
+        elif to_role:
+            mlist = to_role.members
+        else:
             await interaction.response.send_message(
-                "You must specify one either members or destination role.",
+                embed=ErrorEmbed(
+                    description="You must specify a list of members or a destination role."
+                ),
                 ephemeral=True,
             )
             return
 
-        mlist = members if members else to_role.members
         count = len(mlist)
         bulk_view = BulkRoleConfirmView(
             interaction, action=BulkRoleAction.ADD, role=role, count=count
@@ -847,3 +983,99 @@ class UtilsMixIn(RSCMixIn):
                 inline=False,
             )
         await interaction.edit_original_response(embed=embed, view=None)
+
+    def handle_custom(self, user):
+        a = [c for c in user.activities if c.type == discord.ActivityType.custom]
+        if not a:
+            return None, discord.ActivityType.custom
+        activity: discord.CustomActivity = a[0]
+        c_status = None
+        if not activity.name and not activity.emoji:
+            return None, discord.ActivityType.custom
+        elif activity.name and activity.emoji:
+            c_status = f"Custom: {activity.emoji} {activity.name}"
+        elif activity.emoji:
+            c_status = f"Custom: {activity.emoji}"
+        elif activity.name:
+            c_status = f"Custom: {activity.name}"
+        return c_status, discord.ActivityType.custom
+
+    def handle_playing(self, user):
+        p_acts = [c for c in user.activities if c.type == discord.ActivityType.playing]
+        if not p_acts:
+            return None, discord.ActivityType.playing
+        p_act = p_acts[0]
+        act = f"Playing: {p_act.name}"
+        return act, discord.ActivityType.playing
+
+    def handle_streaming(self, user):
+        s_acts = [
+            c for c in user.activities if c.type == discord.ActivityType.streaming
+        ]
+        if not s_acts:
+            return None, discord.ActivityType.streaming
+        s_act = s_acts[0]
+        if isinstance(s_act, discord.Streaming) and s_act.name:
+            act = "Streaming: [{name}{sep}{game}]({url})".format(
+                name=discord.utils.escape_markdown(s_act.name),
+                sep=" | " if s_act.game else "",
+                game=discord.utils.escape_markdown(s_act.game) if s_act.game else "",
+                url=s_act.url,
+            )
+        else:
+            act = f"Streaming: {s_act.name}"
+        return act, discord.ActivityType.streaming
+
+    def handle_listening(self, user):
+        l_acts = [
+            c for c in user.activities if c.type == discord.ActivityType.listening
+        ]
+        if not l_acts:
+            return None, discord.ActivityType.listening
+        l_act = l_acts[0]
+        if isinstance(l_act, discord.Spotify):
+            act = "Listening: [{title}{sep}{artist}]({url})".format(
+                title=discord.utils.escape_markdown(l_act.title),
+                sep=" | " if l_act.artist else "",
+                artist=discord.utils.escape_markdown(l_act.artist)
+                if l_act.artist
+                else "",
+                url=f"https://open.spotify.com/track/{l_act.track_id}",
+            )
+        else:
+            act = f"Listening: {l_act.name}"
+        return act, discord.ActivityType.listening
+
+    def handle_watching(self, user):
+        w_acts = [c for c in user.activities if c.type == discord.ActivityType.watching]
+        if not w_acts:
+            return None, discord.ActivityType.watching
+        w_act = w_acts[0]
+        act = f"Watching: {w_act.name}"
+        return act, discord.ActivityType.watching
+
+    def handle_competing(self, user):
+        w_acts = [
+            c for c in user.activities if c.type == discord.ActivityType.competing
+        ]
+        if not w_acts:
+            return None, discord.ActivityType.competing
+        w_act = w_acts[0]
+        act = f"Competing in: {w_act.name}"
+        return act, discord.ActivityType.competing
+
+    def get_status_string(self, user):
+        string = ""
+        for a in [
+            self.handle_custom(user),
+            self.handle_playing(user),
+            self.handle_listening(user),
+            self.handle_streaming(user),
+            self.handle_watching(user),
+            self.handle_competing(user),
+        ]:
+            status_string, status_type = a
+            if status_string is None:
+                continue
+            string += f"{status_string}\n"
+        return string

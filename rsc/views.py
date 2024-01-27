@@ -159,9 +159,8 @@ class LeagueSelectView(AuthorOnlyView):
         timeout: float = DEFAULT_TIMEOUT,
     ):
         self.result: int | None = None
-        self.interaction = interaction
         self.leagues = leagues
-        super().__init__(timeout=timeout)
+        super().__init__(interaction=interaction, timeout=timeout)
         self.add_item(LeagueSelect(self.leagues))
 
     async def on_timeout(self):

@@ -26,7 +26,7 @@ class LeagueMixIn(RSCMixIn):
 
     # Commands
 
-    @app_commands.command(name="leagues", description="Show all configured RSC leagues")
+    @app_commands.command(name="leagues", description="Show all RSC leagues")
     @app_commands.guild_only
     async def _leagues(self, interaction: discord.Interaction):
         guild = interaction.guild
