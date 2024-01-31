@@ -24,6 +24,8 @@ This module is designed for RSC admins to perform day to day league management.
 
 - `/admin sync transactionchannels` - Check if all franchise transaction channels exist. If not, create them.
 - `/admin sync franchiseroles` - Check if all franchise roles exist. If not, create them.
+- `/admin sync tiers` - Create tier roles and associated channels
+- `/admin sync requiredroles` - Create generic required roles for RSC
 
 ### Franchise Group
 
