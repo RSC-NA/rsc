@@ -109,8 +109,10 @@ class MatchMixIn(RSCMixIn):
 
         # Sorting
         if preseason:
+            title = f"{team} Preseason Schedule"
             matches = [s for s in schedule if s.match_type == MatchType.PRESEASON]
         else:
+            title = f"{team} Schedule"
             matches = [s for s in schedule if s.match_type == MatchType.REGULAR]
             matches.extend(
                 [s for s in schedule if s.match_type == MatchType.POSTSEASON]
@@ -118,7 +120,7 @@ class MatchMixIn(RSCMixIn):
             matches.extend([s for s in schedule if s.match_type == MatchType.FINALS])
 
         embed = discord.Embed(
-            title=f"{team} Schedule",
+            title=title,
             description="Full schedule for the current season",
             color=tier_color or discord.Color.blue(),
         )

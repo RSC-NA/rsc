@@ -8,6 +8,7 @@ from rscapi.models.league_player import LeaguePlayer
 from rscapi.models.rebrand_a_franchise import RebrandAFranchise
 from rscapi.models.team_details import TeamDetails
 
+from rsc import const
 from rsc.abc import RSCMixIn
 from rsc.admin.modals import FranchiseRebrandModal, LeagueDatesModal
 from rsc.admin.views import (
@@ -17,7 +18,6 @@ from rsc.admin.views import (
     RebrandFranchiseView,
     TransferFranchiseView,
 )
-from rsc.const import FRANCHISE_ROLE_PERMS, GM_ROLE
 from rsc.embeds import ApiExceptionErrorEmbed, BlueEmbed, ErrorEmbed, SuccessEmbed
 from rsc.enums import Status
 from rsc.exceptions import RscException
@@ -265,6 +265,393 @@ class AdminMixIn(RSCMixIn):
     # Validate Commands
 
     @_sync.command(
+        name="requiredroles",
+        description="Check if all base required roles exist. If not, create them.",
+    )
+    async def _validate_required_roles(
+        self,
+        interaction: discord.Interaction,
+    ):
+        guild = interaction.guild
+        if not guild:
+            return
+
+        await interaction.response.defer(ephemeral=True)
+
+        guild_icon = None
+        if guild.icon:
+            gdata = await guild.icon.read()
+            guild_icon = gdata
+
+        role_list = []
+
+        # Check feature list
+        icons_allowed = "ROLE_ICONS" in guild.features
+
+        # League
+        r = discord.utils.get(guild.roles, name=const.LEAGUE_ROLE)
+        if not r:
+            result = await guild.create_role(
+                name=const.LEAGUE_ROLE,
+                hoist=False,
+                display_icon=guild_icon if icons_allowed else None,
+                permissions=const.GENERIC_ROLE_PERMS,
+                reason="Syncing required roles.",
+            )
+            role_list.append(result)
+
+        # General Manager
+        r = discord.utils.get(guild.roles, name=const.GM_ROLE)
+        if not r:
+            result = await guild.create_role(
+                name=const.GM_ROLE,
+                hoist=False,
+                display_icon=guild_icon if icons_allowed else None,
+                permissions=const.GENERIC_ROLE_PERMS,
+                color=0x00D9FF,
+                reason="Syncing required roles.",
+            )
+            role_list.append(result)
+
+        # AGM
+        r = discord.utils.get(guild.roles, name=const.AGM_ROLE)
+        if not r:
+            result = await guild.create_role(
+                name=const.AGM_ROLE,
+                hoist=False,
+                permissions=const.GM_ROLE_PERMS,
+                color=0xCABDFF,
+                reason="Syncing required roles.",
+            )
+            role_list.append(result)
+
+        # Free Agent
+        r = discord.utils.get(guild.roles, name=const.FREE_AGENT_ROLE)
+        if not r:
+            result = await guild.create_role(
+                name=const.FREE_AGENT_ROLE,
+                hoist=False,
+                display_icon=guild_icon if icons_allowed else None,
+                permissions=const.GENERIC_ROLE_PERMS,
+                reason="Syncing required roles.",
+            )
+            role_list.append(result)
+
+        # Captain
+        r = discord.utils.get(guild.roles, name=const.CAPTAIN_ROLE)
+        if not r:
+            result = await guild.create_role(
+                name=const.CAPTAIN_ROLE,
+                hoist=False,
+                permissions=const.GENERIC_ROLE_PERMS,
+                reason="Syncing required roles.",
+            )
+            role_list.append(result)
+
+        # Former Player
+        r = discord.utils.get(guild.roles, name=const.FORMER_PLAYER_ROLE)
+        if not r:
+            result = await guild.create_role(
+                name=const.FORMER_PLAYER_ROLE,
+                hoist=False,
+                permissions=const.GENERIC_ROLE_PERMS,
+                color=0xBB2F5D,
+                reason="Syncing required roles.",
+            )
+            role_list.append(result)
+
+        # Former Admin
+        r = discord.utils.get(guild.roles, name=const.FORMER_ADMIN_ROLE)
+        if not r:
+            result = await guild.create_role(
+                name=const.FORMER_ADMIN_ROLE,
+                hoist=False,
+                permissions=const.GENERIC_ROLE_PERMS,
+                color=0xCF7864,
+                reason="Syncing required roles.",
+            )
+            role_list.append(result)
+
+        # Former Staff
+        r = discord.utils.get(guild.roles, name=const.FORMER_STAFF_ROLE)
+        if not r:
+            result = await guild.create_role(
+                name=const.FORMER_STAFF_ROLE,
+                hoist=False,
+                permissions=const.GENERIC_ROLE_PERMS,
+                color=0xA18BFA,
+                reason="Syncing required roles.",
+            )
+            role_list.append(result)
+
+        # Spectator
+        r = discord.utils.get(guild.roles, name=const.SPECTATOR_ROLE)
+        if not r:
+            result = await guild.create_role(
+                name=const.SPECTATOR_ROLE,
+                hoist=False,
+                permissions=const.GENERIC_ROLE_PERMS,
+                color=0xE91E63,
+                reason="Syncing required roles.",
+            )
+            role_list.append(result)
+
+        # Subbed Out
+        r = discord.utils.get(guild.roles, name=const.SUBBED_OUT_ROLE)
+        if not r:
+            result = await guild.create_role(
+                name=const.SUBBED_OUT_ROLE,
+                hoist=False,
+                permissions=const.GENERIC_ROLE_PERMS,
+                reason="Syncing required roles.",
+            )
+            role_list.append(result)
+
+        # IR
+        r = discord.utils.get(guild.roles, name=const.IR_ROLE)
+        if not r:
+            result = await guild.create_role(
+                name=const.IR_ROLE,
+                hoist=False,
+                permissions=const.GENERIC_ROLE_PERMS,
+                reason="Syncing required roles.",
+            )
+            role_list.append(result)
+
+        # Muted
+        r = discord.utils.get(guild.roles, name=const.MUTED_ROLE)
+        if not r:
+            result = await guild.create_role(
+                name=const.MUTED_ROLE,
+                hoist=False,
+                permissions=const.MUTED_ROLE_PERMS,
+                color=0x0E0B0B,
+                reason="Syncing required roles.",
+            )
+            role_list.append(result)
+
+        # Perm FA
+        r = discord.utils.get(guild.roles, name=const.PERM_FA_ROLE)
+        if not r:
+            result = await guild.create_role(
+                name=const.PERM_FA_ROLE,
+                hoist=False,
+                permissions=const.GENERIC_ROLE_PERMS,
+                reason="Syncing required roles.",
+            )
+            role_list.append(result)
+
+        embed = BlueEmbed(
+            title="Required Roles Synced",
+            description="All of the following roles have been added to the server.",
+        )
+
+        embed.add_field(
+            name="Name", value="\n".join([r.name for r in role_list]), inline=True
+        )
+        embed.add_field(
+            name="Role", value="\n".join([r.mention for r in role_list]), inline=True
+        )
+        await interaction.followup.send(embed=embed, ephemeral=True)
+
+    @_sync.command(
+        name="tiers",
+        description="Check if all tier roles and channels exist. If not, create them.",
+    )
+    @app_commands.describe(
+        scorecategory="Existing score reporting category. (Optional)",
+        chatcategory="Existing category for tier chats. (Optional)",
+    )
+    async def _validate_tier_roles(
+        self,
+        interaction: discord.Interaction,
+        chatcategory: discord.CategoryChannel | None = None,
+        scorecategory: discord.CategoryChannel | None = None,
+    ):
+        guild = interaction.guild
+        if not guild:
+            return
+
+        await interaction.response.defer(ephemeral=True)
+        tiers = await self.tiers(guild)
+
+        # Check feature list
+        icons_allowed = "ROLE_ICONS" in guild.features
+
+        gm_role = await utils.get_gm_role(guild)
+        agm_role = await utils.get_agm_role(guild)
+        league_role = await utils.get_league_role(guild)
+
+        log.info(f"[{guild.name}] Syncing tier roles and channels")
+        roles: dict[str, list[discord.Role]] = {}
+        for t in tiers:
+            if not t.name:
+                log.error(f"{t.id} has no name associated with it.")
+                await interaction.followup.send(
+                    embed=ErrorEmbed(
+                        description=f"{t.id} has no name associated with it."
+                    )
+                )
+                return
+
+            schannel = None
+            tchannel = None
+            trole = None
+            farole = None
+
+            log.debug(f"[{guild.name}] Syncing {t.name} roles")
+
+            # Tier Role
+            trole = discord.utils.get(guild.roles, name=t.name)
+            if not trole:
+                trole = await guild.create_role(
+                    name=t.name,
+                    hoist=False,
+                    permissions=const.GENERIC_ROLE_PERMS,
+                    color=t.color or discord.Color.default(),
+                    reason="Syncing tier roles from API.",
+                )
+
+            # Get FA display icon
+            fa_icon = None
+            if icons_allowed:
+                fa_img_path = await utils.fa_img_path_from_tier(t.name, tiny=True)
+                if fa_img_path:
+                    fa_icon = fa_img_path.read_bytes()
+
+            # FA Role
+            farole = discord.utils.get(guild.roles, name=f"{t.name}FA")
+            if not farole:
+                farole = await guild.create_role(
+                    name=f"{t.name}FA",
+                    hoist=False,
+                    display_icon=fa_icon,
+                    permissions=const.GENERIC_ROLE_PERMS,
+                    color=t.color or discord.Color.default(),
+                    reason="Syncing tier roles from API.",
+                )
+
+            if scorecategory:
+                # Score Reporting Permissions
+                s_overwrites = {
+                    guild.default_role: discord.PermissionOverwrite(
+                        view_channel=False, send_messages=False, add_reactions=False
+                    ),
+                    league_role: discord.PermissionOverwrite(
+                        view_channel=True,
+                        read_messages=True,
+                        send_messages=False,
+                        add_reactions=False,
+                        read_message_history=True,
+                    ),
+                    trole: discord.PermissionOverwrite(
+                        view_channel=True,
+                        read_messages=True,
+                        send_messages=True,
+                        add_reactions=False,
+                        read_message_history=True,
+                    ),
+                    farole: discord.PermissionOverwrite(
+                        view_channel=True,
+                        read_messages=True,
+                        send_messages=True,
+                        add_reactions=False,
+                        read_message_history=True,
+                    ),
+                    gm_role: discord.PermissionOverwrite(
+                        view_channel=True,
+                        send_messages=True,
+                        read_messages=True,
+                        read_message_history=True,
+                        add_reactions=True,
+                    ),
+                    agm_role: discord.PermissionOverwrite(
+                        view_channel=True,
+                        send_messages=True,
+                        read_messages=True,
+                        read_message_history=True,
+                        add_reactions=True,
+                    ),
+                }
+
+                log.debug(f"[{guild.name}] Syncing {t.name} score reporting channel")
+                schannel = discord.utils.get(
+                    scorecategory.channels, name=f"{t.name}-score-reporting".lower()
+                )
+                if not schannel:
+                    # Create score reporting channel
+                    schannel = await guild.create_text_channel(
+                        name=f"{t.name}-score-reporting".lower(),
+                        category=scorecategory,
+                        overwrites=s_overwrites,
+                        reason="Syncing tier channels from API",
+                    )
+                else:
+                    await schannel.edit(overwrites=s_overwrites)
+
+            if chatcategory:
+                # Tier Chat Permissions
+                t_overwrites = {
+                    guild.default_role: discord.PermissionOverwrite(
+                        view_channel=False, send_messages=False
+                    ),
+                    trole: discord.PermissionOverwrite(
+                        view_channel=True,
+                        read_messages=True,
+                        send_messages=True,
+                        add_reactions=True,
+                        read_message_history=True,
+                    ),
+                    farole: discord.PermissionOverwrite(
+                        view_channel=True,
+                        read_messages=True,
+                        send_messages=True,
+                        add_reactions=True,
+                        read_message_history=True,
+                    ),
+                    gm_role: discord.PermissionOverwrite(
+                        view_channel=True,
+                        send_messages=True,
+                        read_messages=True,
+                        read_message_history=True,
+                        add_reactions=True,
+                    ),
+                }
+
+                log.debug(f"[{guild.name}] Syncing {t.name} tier chat")
+                tchannel = discord.utils.get(
+                    chatcategory.channels, name=f"{t.name}-chat".lower()
+                )
+                if not tchannel:
+                    # Create tier chat channel
+                    tchannel = await guild.create_text_channel(
+                        name=f"{t.name}-chat".lower(),
+                        category=chatcategory,
+                        overwrites=t_overwrites,
+                        reason="Syncing tier channels from API",
+                    )
+                else:
+                    await tchannel.edit(overwrites=t_overwrites)
+
+            # Store roles for response
+            roles[t.name] = [trole, farole]
+
+        embed = BlueEmbed(
+            title="Tiers Roles Synced",
+            description="Synced all tier roles and created associated channels",
+        )
+        embed.add_field(
+            name="Name", value="\n".join([t.name for t in tiers]), inline=True
+        )
+
+        role_fmt = []
+        for v in roles.values():
+            role_fmt.append(", ".join([r.mention for r in v]))
+        embed.add_field(name="Roles", value="\n".join(role_fmt), inline=True)
+
+        await interaction.followup.send(embed=embed, ephemeral=True)
+
+    @_sync.command(
         name="transactionchannels",
         description="Check if all franchise transaction channels. If not, create them.",
     )
@@ -421,7 +808,7 @@ class AdminMixIn(RSCMixIn):
                     name=fname,
                     hoist=True,
                     display_icon=f.logo if icons_allowed else None,
-                    permissions=FRANCHISE_ROLE_PERMS,
+                    permissions=const.FRANCHISE_ROLE_PERMS,
                     reason="Syncing franchise roles from API",
                 )
                 added.append(nrole)
@@ -803,7 +1190,7 @@ class AdminMixIn(RSCMixIn):
         )
 
         # GM role
-        gm_role = discord.utils.get(guild.roles, name=GM_ROLE)
+        gm_role = discord.utils.get(guild.roles, name=const.GM_ROLE)
 
         await gm.add_roles(frole, gm_role)
 

@@ -29,7 +29,8 @@ from rsc.exceptions import (
     translate_api_error,
 )
 from rsc.teams import TeamMixIn
-from rsc.transactions.views import TradeAnnouncementView
+
+# from rsc.transactions.views import TradeAnnouncementView
 from rsc.types import Substitute, TransactionSettings
 from rsc.utils import utils
 
@@ -809,13 +810,14 @@ class TransactionMixIn(RSCMixIn):
         if not guild or not isinstance(interaction.user, discord.Member):
             return
 
+        await interaction.response.defer(ephemeral=True)
+
         if override and not interaction.user.guild_permissions.manage_guild:
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 embed=ErrorEmbed(description="Only admins can process an override.")
             )
             return
 
-        await interaction.response.defer(ephemeral=True)
         try:
             result = await self.substitution(
                 guild,
@@ -914,17 +916,20 @@ class TransactionMixIn(RSCMixIn):
         if not interaction.guild:
             return
 
-        trans_channel = await self._trans_channel(interaction.guild)
-        if not trans_channel:
-            await interaction.response.send_message(
-                embed=ErrorEmbed(description="Transaction channel is not configured."),
-                ephemeral=True,
-            )
-            return
+        await utils.not_implemented(interaction)
+        return
 
-        embed = discord.Embed(title="Trade Announcement", color=discord.Color.blue())
-        trade_view = TradeAnnouncementView()
-        await interaction.response.send_message(embed=embed, view=trade_view)
+        # trans_channel = await self._trans_channel(interaction.guild)
+        # if not trans_channel:
+        #     await interaction.response.send_message(
+        #         embed=ErrorEmbed(description="Transaction channel is not configured."),
+        #         ephemeral=True,
+        #     )
+        #     return
+
+        # embed = discord.Embed(title="Trade Announcement", color=discord.Color.blue())
+        # trade_view = TradeAnnouncementView()
+        # await interaction.response.send_message(embed=embed, view=trade_view)
 
         # if not trade.trade:
         #     await interaction.followup.send_message(content="No trade announcement provided.", ephemeral=True)
@@ -940,13 +945,39 @@ class TransactionMixIn(RSCMixIn):
     )
     @app_commands.describe(player="RSC Discord Member")
     async def _transactions_captain(
-        self, interaction: discord.Interaction, player: discord.Member
+        self,
+        interaction: discord.Interaction,
+        player: discord.Member,
+        player1: discord.Member | None = None,
+        player2: discord.Member | None = None,
+        player3: discord.Member | None = None,
+        player4: discord.Member | None = None,
+        player5: discord.Member | None = None,
+        player6: discord.Member | None = None,
     ):
         guild = interaction.guild
         if not guild:
             return
 
         await interaction.response.defer(ephemeral=True)
+
+        argv = locals()
+        captains: list[discord.Member] = []
+
+        log.debug(f"Locals: {argv}")
+        for k, v in argv.items():
+            if v and k.startswith("player"):
+                captains.append(v)
+        log.debug(f"Captain Count: {len(captains)}")
+
+        # Get Captain Role
+        cpt_role = await utils.get_captain_role(guild)
+        if not cpt_role:
+            await interaction.followup.send(
+                embed=ErrorEmbed(description="Captain role does not exist in guild.")
+            )
+            return
+
         # Get team of player being made captain
         player_list = await self.players(guild, discord_id=player.id, limit=1)
 
@@ -973,16 +1004,8 @@ class TransactionMixIn(RSCMixIn):
         # Get team data
         team_players = await self.team_players(guild, player_data.team.id)
 
-        # Get Captain Role
-        cpt_role = await utils.get_captain_role(guild)
-        if not cpt_role:
-            await interaction.followup.send(
-                embed=ErrorEmbed(description="Captain role does not exist in guild.")
-            )
-            return
-
         # Remove captain role from anyone on the team that has it just in case
-        notFound = []
+        alreadyCaptain = False
         for p in team_players:
             m = guild.get_member(p.discord_id)
 
@@ -990,13 +1013,29 @@ class TransactionMixIn(RSCMixIn):
                 log.error(
                     f"[{guild.name}] Unable to find rostered player in guild: {p.discord_id}"
                 )
-                notFound.append(str(p.discord_id))
                 continue
+
+            if m.id == player.id and p.captain:
+                log.debug(
+                    f"{player.display_name} is already captain. Removing captain status"
+                )
+                alreadyCaptain = True
             log.debug(f"Removing captain role from: {m.display_name}")
             await m.remove_roles(cpt_role)
 
-        # Promote new player to captain
+        # Promote new player to captain or flip captain flag off.
         await self.set_captain(guild, player_data.id)
+
+        # If player was already captain, they are being removed.
+        if alreadyCaptain:
+            embed = SuccessEmbed(
+                title="Captain Removed",
+                description=f"{player.mention} has been removed as **captain**",
+            )
+            await interaction.followup.send(embed=embed, ephemeral=True)
+            return
+
+        # Add captain role
         await player.add_roles(cpt_role)
 
         # Announce to transaction channel
@@ -1016,8 +1055,6 @@ class TransactionMixIn(RSCMixIn):
             title="Captain Designated",
             description=f"{player.mention} has been promoted to **captain**",
         )
-        if notFound:
-            embed.add_field(name="Players Not Found", value="\n".join(notFound))
 
         await interaction.followup.send(embed=embed, ephemeral=True)
 

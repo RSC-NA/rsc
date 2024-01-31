@@ -5,7 +5,7 @@ import random
 import statistics
 import string
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from hashlib import md5
 from urllib.parse import urljoin
 
@@ -26,6 +26,7 @@ from rsc.tiers import TierMixIn
 from rsc.transformers import DateTransformer
 from rsc.types import BallchasingCollisions, BallchasingResult
 from rsc.utils import utils
+from rsc.views import LinkButton
 
 log = logging.getLogger("red.rsc.ballchasing")
 
@@ -398,6 +399,12 @@ class BallchasingMixIn(RSCMixIn):
                 embed_tasks = []
                 async with asyncio.TaskGroup() as tg:
                     for result in task_results:
+                        log.debug(f"Match Valid: {result['valid']}")
+                        log.debug(
+                            f"Home Wins {result['home_wins']} Away Wins: {result['away_wins']}"
+                        )
+                        if not result["valid"]:
+                            continue
                         mtier = result["match"].home_team.tier
                         etask = tg.create_task(
                             self.build_match_result_embed(
@@ -705,6 +712,22 @@ class BallchasingMixIn(RSCMixIn):
 
         await interaction.edit_original_response(embed=embed)
 
+    @_ballchasing.command(
+        name="scanmissing",
+        description="Find missing matches in ballchasing",
+    )
+    @app_commands.describe(
+        matchday="Match day to report (Optional: Defaults to current match day)",
+        matchtype="Match type to find. (Default: Regular Season)",
+    )
+    async def _bc_scan_missing_matches(
+        self,
+        interaction: discord.Interaction,
+        matchday: int | None = None,
+        matchtype: MatchType = MatchType.REGULAR,
+    ):
+        await utils.not_implemented(interaction)
+
     @app_commands.command(
         name="reportmatch",
         description="Report the results of your RSC match",
@@ -798,26 +821,26 @@ class BallchasingMixIn(RSCMixIn):
         log.debug("Match found in RSC API.")
 
         # Check if match is already complete
-        # if await self.match_already_complete(match):
-        #     bc_view = discord.ui.View()
-        #     if match.results.ballchasing_group:
-        #         bc_view.add_item(
-        #             LinkButton(
-        #                 label="Ballchasing Link",
-        #                 url=await self.bc_group_full_url(
-        #                     match.results.ballchasing_group
-        #                 ),
-        #             )
-        #         )
-        #     await interaction.followup.send(
-        #         embed=ErrorEmbed(
-        #             title="Match Completed",
-        #             description="This match has already been completed and recorded.",
-        #         ),
-        #         view=bc_view,
-        #         ephemeral=True,
-        #     )
-        #     return
+        if await self.match_already_complete(match):
+            bc_view = discord.ui.View()
+            if match.results.ballchasing_group:
+                bc_view.add_item(
+                    LinkButton(
+                        label="Ballchasing Link",
+                        url=await self.bc_group_full_url(
+                            match.results.ballchasing_group
+                        ),
+                    )
+                )
+            await interaction.followup.send(
+                embed=ErrorEmbed(
+                    title="Match Completed",
+                    description="This match has already been completed and recorded.",
+                ),
+                view=bc_view,
+                ephemeral=True,
+            )
+            return
 
         # Check valid number of replays
         min_games = await self.minimum_games_required(match)
@@ -855,6 +878,7 @@ class BallchasingMixIn(RSCMixIn):
                 ),
                 ephemeral=True,
             )
+            return
 
         log.debug(f"Match ID: {match.id}")
 
@@ -866,6 +890,18 @@ class BallchasingMixIn(RSCMixIn):
             ),
             ephemeral=True,
         )
+
+        bcresult = BallchasingResult(
+            valid=True,
+            away_wins=0,
+            home_wins=0,
+            match=m,
+            replays=set(),
+            execution_time=0,
+            link=None,
+        )
+
+        # Upload
 
     # Functions
 
@@ -882,6 +918,7 @@ class BallchasingMixIn(RSCMixIn):
         for r in replays:
             data = await r.read()
             h = md5(data).hexdigest()
+            log.debug(f"Replay Hash: {h}")
             if h in hashes:
                 return True
             else:
@@ -1305,6 +1342,7 @@ class BallchasingMixIn(RSCMixIn):
         self, guild: discord.Guild, match: Match, tracker: TrackerLink
     ) -> set[ballchasing.models.Replay]:
         after, before = await self.get_bc_date_range(match)
+        log.debug(f"Ballchasing Date Range. After: {after} Before: {before}")
         bapi = self._ballchasing_api[guild.id]
 
         replays: set[ballchasing.models.Replay] = set()
@@ -1389,8 +1427,13 @@ class BallchasingMixIn(RSCMixIn):
         if not match.var_date:
             raise ValueError("Match has no date attribute.")
         match_date = match.var_date
-        after = match_date.replace(hour=21, minute=55, second=0)
-        before = match_date.replace(hour=23, minute=59, second=0)
+        log.debug(f"BC Match Date: {match_date}")
+        after = match_date.replace(hour=21, minute=55, second=0).astimezone(
+            tz=timezone.utc
+        )
+        before = match_date.replace(hour=23, minute=59, second=0).astimezone(
+            tz=timezone.utc
+        )
         return after, before
 
     async def valid_replay(

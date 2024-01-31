@@ -20,6 +20,7 @@ from rscapi.models.player import Player
 from rscapi.models.season import Season
 from rscapi.models.team import Team
 from rscapi.models.team_list import TeamList
+from rscapi.models.tier import Tier
 from rscapi.models.tracker_link import TrackerLink
 
 from rsc.enums import MatchFormat, MatchTeamEnum, MatchType, Status, TrackerLinksStatus
@@ -215,6 +216,12 @@ class RSCMixIn(ABC):
         guild: discord.Guild,
         id: int,
     ) -> list[Player]:
+        ...
+
+    # Tiers
+
+    @abstractmethod
+    async def tiers(self, guild: discord.Guild, name: str | None = None) -> list[Tier]:
         ...
 
     # Trackers

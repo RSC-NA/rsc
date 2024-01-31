@@ -8,20 +8,8 @@ from discord.app_commands import Transform
 from redbot.core import app_commands
 from rscapi.models.league_player import LeaguePlayer
 
+from rsc import const
 from rsc.abc import RSCMixIn
-from rsc.const import (
-    CAPTAIN_ROLE,
-    DEV_LEAGUE_EMOJI,
-    FORMER_GM_ROLE,
-    FREE_AGENT_ROLE,
-    GM_ROLE,
-    IR_ROLE,
-    LEAGUE_ROLE,
-    SPECTATOR_ROLE,
-    STAR_EMOJI,
-    SUBBED_OUT_ROLE,
-    TROPHY_EMOJI,
-)
 from rsc.embeds import (
     ErrorEmbed,
     ExceptionErrorEmbed,
@@ -69,73 +57,99 @@ async def not_implemented(interaction: discord.Interaction):
 
 
 async def get_ir_role(guild: discord.Guild) -> discord.Role:
-    r = discord.utils.get(guild.roles, name=IR_ROLE)
+    r = discord.utils.get(guild.roles, name=const.IR_ROLE)
     if not r:
-        log.error(f"[{guild.name}] Expected role does not exist: {IR_ROLE}")
-        raise ValueError(f"[{guild.name}] Expected role does not exist: {IR_ROLE}")
+        log.error(f"[{guild.name}] Expected role does not exist: {const.IR_ROLE}")
+        raise ValueError(
+            f"[{guild.name}] Expected role does not exist: {const.IR_ROLE}"
+        )
     return r
 
 
 async def get_captain_role(guild: discord.Guild) -> discord.Role:
-    r = discord.utils.get(guild.roles, name=CAPTAIN_ROLE)
+    r = discord.utils.get(guild.roles, name=const.CAPTAIN_ROLE)
     if not r:
-        log.error(f"[{guild.name}] Expected role does not exist: {CAPTAIN_ROLE}")
-        raise ValueError(f"[{guild.name}] Expected role does not exist: {CAPTAIN_ROLE}")
+        log.error(f"[{guild.name}] Expected role does not exist: {const.CAPTAIN_ROLE}")
+        raise ValueError(
+            f"[{guild.name}] Expected role does not exist: {const.CAPTAIN_ROLE}"
+        )
     return r
 
 
 async def get_spectator_role(guild: discord.Guild) -> discord.Role:
-    r = discord.utils.get(guild.roles, name=SPECTATOR_ROLE)
+    r = discord.utils.get(guild.roles, name=const.SPECTATOR_ROLE)
     if not r:
-        log.error(f"[{guild.name}] Expected role does not exist: {SPECTATOR_ROLE}")
+        log.error(
+            f"[{guild.name}] Expected role does not exist: {const.SPECTATOR_ROLE}"
+        )
         raise ValueError(
-            f"[{guild.name}] Expected role does not exist: {SPECTATOR_ROLE}"
+            f"[{guild.name}] Expected role does not exist: {const.SPECTATOR_ROLE}"
         )
     return r
 
 
 async def get_league_role(guild: discord.Guild) -> discord.Role:
-    r = discord.utils.get(guild.roles, name=LEAGUE_ROLE)
+    r = discord.utils.get(guild.roles, name=const.LEAGUE_ROLE)
     if not r:
-        log.error(f"[{guild.name}] Expected role does not exist: {LEAGUE_ROLE}")
-        raise ValueError(f"[{guild.name}] Expected role does not exist: {LEAGUE_ROLE}")
+        log.error(f"[{guild.name}] Expected role does not exist: {const.LEAGUE_ROLE}")
+        raise ValueError(
+            f"[{guild.name}] Expected role does not exist: {const.LEAGUE_ROLE}"
+        )
     return r
 
 
 async def get_free_agent_role(guild: discord.Guild) -> discord.Role:
-    r = discord.utils.get(guild.roles, name=FREE_AGENT_ROLE)
+    r = discord.utils.get(guild.roles, name=const.FREE_AGENT_ROLE)
     if not r:
-        log.error(f"[{guild.name}] Expected role does not exist: {FREE_AGENT_ROLE}")
+        log.error(
+            f"[{guild.name}] Expected role does not exist: {const.FREE_AGENT_ROLE}"
+        )
         raise ValueError(
-            f"[{guild.name}] Expected role does not exist: {FREE_AGENT_ROLE}"
+            f"[{guild.name}] Expected role does not exist: {const.FREE_AGENT_ROLE}"
         )
     return r
 
 
 async def get_gm_role(guild: discord.Guild) -> discord.Role:
-    r = discord.utils.get(guild.roles, name=GM_ROLE)
+    r = discord.utils.get(guild.roles, name=const.GM_ROLE)
     if not r:
-        log.error(f"[{guild.name}] Expected role does not exist: {GM_ROLE}")
-        raise ValueError(f"[{guild.name}] Expected role does not exist: {GM_ROLE}")
+        log.error(f"[{guild.name}] Expected role does not exist: {const.GM_ROLE}")
+        raise ValueError(
+            f"[{guild.name}] Expected role does not exist: {const.GM_ROLE}"
+        )
+    return r
+
+
+async def get_agm_role(guild: discord.Guild) -> discord.Role:
+    r = discord.utils.get(guild.roles, name=const.AGM_ROLE)
+    if not r:
+        log.error(f"[{guild.name}] Expected role does not exist: {const.AGM_ROLE}")
+        raise ValueError(
+            f"[{guild.name}] Expected role does not exist: {const.AGM_ROLE}"
+        )
     return r
 
 
 async def get_subbed_out_role(guild: discord.Guild) -> discord.Role:
-    r = discord.utils.get(guild.roles, name=SUBBED_OUT_ROLE)
+    r = discord.utils.get(guild.roles, name=const.SUBBED_OUT_ROLE)
     if not r:
-        log.error(f"[{guild.name}] Expected role does not exist: {SUBBED_OUT_ROLE}")
+        log.error(
+            f"[{guild.name}] Expected role does not exist: {const.SUBBED_OUT_ROLE}"
+        )
         raise ValueError(
-            f"[{guild.name}] Expected role does not exist: {SUBBED_OUT_ROLE}"
+            f"[{guild.name}] Expected role does not exist: {const.SUBBED_OUT_ROLE}"
         )
     return r
 
 
 async def get_former_gm_role(guild: discord.Guild) -> discord.Role:
-    r = discord.utils.get(guild.roles, name=FORMER_GM_ROLE)
+    r = discord.utils.get(guild.roles, name=const.FORMER_GM_ROLE)
     if not r:
-        log.error(f"[{guild.name}] Expected role does not exist: {FORMER_GM_ROLE}")
+        log.error(
+            f"[{guild.name}] Expected role does not exist: {const.FORMER_GM_ROLE}"
+        )
         raise ValueError(
-            f"[{guild.name}] Expected role does not exist: {FORMER_GM_ROLE}"
+            f"[{guild.name}] Expected role does not exist: {const.FORMER_GM_ROLE}"
         )
     return r
 
@@ -170,7 +184,7 @@ async def give_fa_prefix(member: discord.Member):
 
 async def has_gm_role(member: discord.Member) -> bool:
     """Check if user has General Manager role in guild"""
-    return any(role.name == GM_ROLE for role in member.roles)
+    return any(role.name == const.GM_ROLE for role in member.roles)
 
 
 async def member_from_rsc_name(
@@ -226,6 +240,19 @@ async def fa_img_from_tier(tier: str, tiny: bool = False) -> Optional[discord.Fi
     return None
 
 
+async def fa_img_path_from_tier(tier: str, tiny: bool = False) -> Optional[Path]:
+    root = Path(__file__).parent.parent
+    if tiny:
+        img_path = root / f"resources/FA/64x64/{tier}FA_64x64.png"
+    else:
+        img_path = root / f"resources/FA/{tier}FA.png"
+
+    if img_path.is_file():
+        return img_path
+
+    return None
+
+
 async def transaction_image_from_type(action: TransactionType) -> discord.File:
     root = Path(__file__).parent.parent
     match action:
@@ -242,7 +269,7 @@ async def transaction_image_from_type(action: TransactionType) -> discord.File:
         case TransactionType.TRADE:
             return discord.File(root / "resources/transactions/Traded.png")
         case TransactionType.RETIRE:
-            return discord.File(root / "resources/transactions/Released.png")
+            return discord.File(root / "resources/transactions/Retired.png")
         case TransactionType.INACTIVE_RESERVE:
             return discord.File(root / "resources/transactions/InactiveReserve.png")
         case TransactionType.IR_RETURN:
@@ -323,15 +350,15 @@ async def emoji_from_prefix(
 
 
 async def trophy_count(member: discord.Member) -> int:
-    return member.display_name.count(TROPHY_EMOJI)
+    return member.display_name.count(const.TROPHY_EMOJI)
 
 
 async def star_count(member: discord.Member) -> int:
-    return member.display_name.count(STAR_EMOJI)
+    return member.display_name.count(const.STAR_EMOJI)
 
 
 async def devleague_count(member: discord.Member) -> int:
-    return member.display_name.count(DEV_LEAGUE_EMOJI)
+    return member.display_name.count(const.DEV_LEAGUE_EMOJI)
 
 
 async def member_accolades(member: discord.Member) -> Accolades:
