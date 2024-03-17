@@ -37,40 +37,18 @@ class TradeAnnouncementView(discord.ui.View):
 
 
 class TradeAnnouncementModal(discord.ui.Modal, title="Trade Announcement"):
-    # gm1 = UserSelect(placeholder="General Manager 1")
     trade: TextInput = TextInput(
         label="Enter what GM receives",
         placeholder="GM receives...",
         style=discord.TextStyle.paragraph,
         required=True,
     )
-    # gm2 = UserSelect(placeholder="General Manager 2")
-    trade2: TextInput = TextInput(
-        label="Enter what GM receives",
-        placeholder="GM receives...",
-        style=discord.TextStyle.paragraph,
-        required=True,
-    )
-    # gm3 = UserSelect(placeholder="General Manager 3")
-    # trade3 = TextInput(
-    #     label="Enter what GM receives",
-    #     placeholder="GM receives...",
-    #     style=discord.TextStyle.paragraph,
-    #     required=False
-    # )
-    # gm4 = UserSelect(placeholder="General Manager 4")
-    # trade4 = TextInput(
-    #     label="Enter what GM receives",
-    #     placeholder="GM receives...",
-    #     style=discord.TextStyle.paragraph,
-    #     required=False
-    # )
 
     async def on_submit(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
         if not self.trade:
-            await interaction.response.send_message(
-                content="No trade announcement provided.", ephemeral=True
+            await interaction.followup.send(
+                content="No trade data provided...", ephemeral=True
             )
             return
-
-        await interaction.response.send_message(content="Done.", ephemeral=True)
+        self.stop()

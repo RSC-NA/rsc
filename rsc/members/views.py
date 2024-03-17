@@ -38,9 +38,8 @@ class SignupState(IntEnum):
 
 class IntentState(IntEnum):
     DECLARE = 0
-    CONFIRM = 1
-    FINISHED = 2
-    CANCELLED = 3
+    FINISHED = 1
+    CANCELLED = 2
 
 
 class PlayerInfoModal(discord.ui.Modal, title="Rocket League Trackers"):
@@ -48,7 +47,7 @@ class PlayerInfoModal(discord.ui.Modal, title="Rocket League Trackers"):
         label="In-game Name", style=discord.TextStyle.short, required=True
     )
     links: TextInput = TextInput(
-        label="Tracker Links", style=discord.TextStyle.paragraph, required=False
+        label="Tracker Links", style=discord.TextStyle.paragraph, required=True
     )
 
     async def on_submit(self, interaction: discord.Interaction):
@@ -126,26 +125,26 @@ class IntentToPlayView(AuthorOnlyView):
         match self.state:
             case IntentState.DECLARE:
                 await self.send_declaration()
-            case IntentState.CONFIRM:
-                await self.send_confirmation()
+            # case IntentState.CONFIRM:
+            #     await self.send_confirmation()
             case IntentState.CANCELLED:
                 await self.send_cancelled()
                 self.stop()
             case IntentState.FINISHED:
                 self.stop()
 
-    async def send_confirmation(self):
-        self.clear_items()
-        self.add_item(ConfirmButton())
-        self.add_item(CancelButton())
-        status_fmt = (
-            "Returning Next Season" if self.result else "Not Returning Next Season"
-        )
-        embed = BlueEmbed(
-            title="Intent to Play",
-            description=f"Please verify the following is correct.\n\nIntent: **{status_fmt}**",
-        )
-        await self.interaction.edit_original_response(embed=embed, view=self)
+    # async def send_confirmation(self):
+    #     self.clear_items()
+    #     self.add_item(ConfirmButton())
+    #     self.add_item(CancelButton())
+    #     status_fmt = (
+    #         "Returning Next Season" if self.result else "Not Returning Next Season"
+    #     )
+    #     embed = BlueEmbed(
+    #         title="Intent to Play",
+    #         description=f"Please verify the following is correct.\n\nIntent: **{status_fmt}**",
+    #     )
+    #     await self.interaction.edit_original_response(embed=embed, view=self)
 
     async def send_declaration(self):
         embed = BlueEmbed(
@@ -175,8 +174,8 @@ class IntentToPlayView(AuthorOnlyView):
             embed=RedEmbed(
                 title="Intent Declaration Cancelled",
                 description=(
-                    "You have cancelled declaring your intent to play for next season."
-                    " If this was an error, please run the command again.",
+                    "You have cancelled declaring your intent to play for next season.\n\n"
+                    " If this was an error, please run the command again."
                 ),
             ),
             view=None,
@@ -292,7 +291,7 @@ class SignupView(AuthorOnlyView):
                 "https://rocketleague.tracker.network/rocket-league/profile/steam/76561198028063203/overview\n\n"
                 "Note: Steam accounts must list your Steam64ID.\n"
                 "You can find your Steam64ID here: https://steamidfinder.com/\n"
-                "Find your tracker link here: https://rocketleague.tracker.network\n",
+                "Find your tracker link here: https://rocketleague.tracker.network\n"
             ),
             inline=False,
         )

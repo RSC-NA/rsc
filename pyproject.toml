@@ -19,6 +19,6 @@ check_untyped_defs = true
 profile = "black"
 
 [tool.flake8]
-max-line-length = 125
+max-line-length = 200
 extend-ignore = "E203,W503"
 per-file-ignores = "__init__.py:F401"

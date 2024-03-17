@@ -52,6 +52,7 @@ class RscException(Exception):
 
     def __init__(self, *args, **kwargs):
         self.response = kwargs.pop("response", None)
+        self.message = kwargs.pop("message", None)
         if self.response is not None and isinstance(self.response, RscApiException):
             self.status = self.response.status
             try:
@@ -65,7 +66,7 @@ class RscException(Exception):
                 self.reason = "Received unknown error from server."
                 self.type = "UnknownError"
 
-        super().__init__(*args, **kwargs)
+        super().__init__(self.message, *args, **kwargs)
 
 
 # Generic
@@ -117,6 +118,10 @@ class TeamDoesNotExist(TeamsException):
 
 class TransactionException(RscException):
     """Generic Transaction Exception Base Type"""
+
+
+class TradeParserException(TransactionException):
+    """Error occurred during trade parsing"""
 
 
 class PastTransactionsEndDate(TransactionException):

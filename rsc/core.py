@@ -106,9 +106,6 @@ class RSC(
             log.debug(f"[{guild}] Preparing RSC API configuration")
             await self.prepare_api(guild)
 
-            log.debug(f"[{guild}] Preparing RapidAPI connector")
-            await self.prepare_rapidapi(guild)
-
             if self._api_conf.get(guild.id):
                 await self.prepare_league(guild)
                 log.debug(f"[{guild}] Preparing caches")
@@ -123,21 +120,23 @@ class RSC(
                 except* ApiException as eg:
                     # API is down or not responding
                     for err in eg.exceptions:
+                        log.debug(
+                            f"Setup Error. Status: {err.status} Reason: P{err.args[0]}",
+                            exc_info=err,
+                        )
                         match err.status:
                             case 504:
                                 log.error("Connection to RSC API timed out. (504)")
                             case 502:
                                 log.error("Bad gateway response from RSC API. (502)")
+                            case 500:
+                                log.error("API Internal Server Error. (500)")
                             case 403:
                                 log.error("Forbidden response from RSC API. (403)")
                             case 401:
                                 log.error("Unauthorized response from RSC API. (401)")
                             case _:
                                 raise err
-                # except ExceptionGroup as eg:
-                #     for err in eg.exceptions:
-                #         log.error(f"Type: {type(err)}")
-                #         log.error(err)
 
     async def prepare_rapidapi(self, guild: discord.Guild):
         token = await self._get_rapidapi_key(guild)
@@ -173,7 +172,10 @@ class RSC(
         Does NOT trigger on Cog reload.
         """
         log.debug("In on_ready()")
-        await self.setup()
+        try:
+            await self.setup()
+        except ExceptionGroup as exc:
+            log.exception(f"Error: {exc}", exc_info=exc)
 
     # Autocomplete
 

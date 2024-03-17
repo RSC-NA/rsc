@@ -94,17 +94,25 @@ class MemberMixIn(RSCMixIn):
             )
             log.debug(f"Signup result: {result}")
         except RscException as exc:
-            if exc.status == 405:
-                await interaction.edit_original_response(
-                    embed=YellowEmbed(title="RSC Signup", description=exc.reason),
-                    view=None,
-                )
-                return
-
-            await interaction.edit_original_response(
-                embed=ApiExceptionErrorEmbed(exc),
-                view=None,
-            )
+            match exc.status:
+                case 409:
+                    await interaction.edit_original_response(
+                        embed=YellowEmbed(
+                            title="RSC Sign-up",
+                            description="You are already signed up for the league. Please use `/intenttoplay` to declare your intent for next season.",
+                        ),
+                        view=None,
+                    )
+                case 405:
+                    await interaction.edit_original_response(
+                        embed=YellowEmbed(title="RSC Sign-up", description=exc.reason),
+                        view=None,
+                    )
+                case _:
+                    await interaction.edit_original_response(
+                        embed=ApiExceptionErrorEmbed(exc),
+                        view=None,
+                    )
             return
 
         success_embed = SuccessEmbed(
@@ -130,17 +138,19 @@ class MemberMixIn(RSCMixIn):
         await intent_view.prompt()
         await intent_view.wait()
 
-        if intent_view.state == IntentState.CANCELLED:
-            return
-
-        if intent_view.state != IntentState.FINISHED:
-            await interaction.edit_original_response(
-                embed=ErrorEmbed(
-                    description="Something went wrong declaring your intent to play. Please reach out to an admin."
-                ),
-                view=None,
-            )
-            return
+        match intent_view.state:
+            case IntentState.CANCELLED:
+                return
+            case IntentState.FINISHED:
+                log.debug("Intent view is in finished state.")
+            case _:
+                await interaction.edit_original_response(
+                    embed=ErrorEmbed(
+                        description="Something went wrong declaring your intent to play. Please submit a modmail for assistance."
+                    ),
+                    view=None,
+                )
+                return
 
         # Process intent if state is finished
         try:

@@ -139,6 +139,7 @@ class TransactionType(StrEnum):
     CUT = "CUT"  # Cut
     PICKUP = "PKU"  # Pickup
     TRADE = "TRD"  # Trade
+    PLAYER_TRADE = "PTD"  # Player Trade
     SUBSTITUTION = "SUB"  # Substitution
     TEMP_FA = "TMP"  # Temporary Free Agent
     PROMOTION = "PRO"  # Promotion

@@ -1,4 +1,5 @@
 import logging
+import re
 from datetime import datetime, time, timedelta
 from pathlib import Path
 
@@ -8,9 +9,12 @@ from redbot.core import app_commands, commands
 from rscapi import ApiClient, LeaguePlayersApi, TransactionsApi
 from rscapi.exceptions import ApiException
 from rscapi.models.cut_a_player_from_a_league import CutAPlayerFromALeague
+from rscapi.models.draft_pick import DraftPick
 from rscapi.models.expire_a_player_sub import ExpireAPlayerSub
+from rscapi.models.franchise_identifier import FranchiseIdentifier
 from rscapi.models.inactive_reserve import InactiveReserve
 from rscapi.models.league_player import LeaguePlayer
+from rscapi.models.player1 import Player1
 from rscapi.models.player_transaction_updates import PlayerTransactionUpdates
 from rscapi.models.re_sign_player import ReSignPlayer
 from rscapi.models.retire_a_player import RetireAPlayer
@@ -18,24 +22,48 @@ from rscapi.models.sign_a_player_to_a_team_in_a_league import (
     SignAPlayerToATeamInALeague,
 )
 from rscapi.models.temporary_fa_sub import TemporaryFASub
+from rscapi.models.trade_item import TradeItem
+
+# from rscapi.models.trade_schema import TradeSchema
+from rscapi.models.trade_value import TradeValue
 from rscapi.models.transaction_response import TransactionResponse
 
 from rsc.abc import RSCMixIn
-from rsc.embeds import ApiExceptionErrorEmbed, BlueEmbed, ErrorEmbed, SuccessEmbed
+
+# from rsc.const import GM_ROLE
+from rsc.embeds import (
+    ApiExceptionErrorEmbed,
+    BlueEmbed,
+    ErrorEmbed,
+    ExceptionErrorEmbed,
+    SuccessEmbed,
+)
 from rsc.enums import Status, TransactionType
 from rsc.exceptions import (
     MalformedTransactionResponse,
     RscException,
+    TradeParserException,
     translate_api_error,
 )
 from rsc.teams import TeamMixIn
-
-# from rsc.transactions.views import TradeAnnouncementView
+from rsc.transactions.views import TradeAnnouncementModal
 from rsc.types import Substitute, TransactionSettings
 from rsc.utils import utils
 
 log = logging.getLogger("red.rsc.transactions")
 
+PICK_TRADE_REGEX = re.compile(
+    r"^(?P<gm>[a-z0-9\x20]+)?(?:'s\s+)?(?P<round>\d)(?:st|nd|rd|th)\s+Round\s+(?P<tier>\w+)\s+\((?P<pick>\d{1,2})\)$",
+    re.IGNORECASE,
+)
+FUTURE_TRADE_REGEX = re.compile(
+    r"^(?P<gm>[a-z0-9\x20]+)'s\s+S(?P<season>\d+)\s+(?P<round>\d)(?:st|nd|rd|th)\s+Round\s+(?P<tier>\w+)$",
+    re.IGNORECASE,
+)
+GM_TRADE_REGEX = re.compile(r"^(?P<gm>[a-z0-9\x20]+) receives:$", re.IGNORECASE)
+PLAYER_TRADE_REGEX = re.compile(
+    r"^@(?P<player>[a-z0-9\x20]+?)(?:\sto\s(?P<team>[a-z0-9\x20]+))?$", re.IGNORECASE
+)
 
 defaults = TransactionSettings(
     TransChannel=None,
@@ -916,28 +944,129 @@ class TransactionMixIn(RSCMixIn):
         if not interaction.guild:
             return
 
-        await utils.not_implemented(interaction)
-        return
+        # await utils.not_implemented(interaction)
+        # return
 
-        # trans_channel = await self._trans_channel(interaction.guild)
-        # if not trans_channel:
-        #     await interaction.response.send_message(
-        #         embed=ErrorEmbed(description="Transaction channel is not configured."),
-        #         ephemeral=True,
-        #     )
-        #     return
+        trans_channel = await self._trans_channel(interaction.guild)
+        if not trans_channel:
+            await interaction.response.send_message(
+                embed=ErrorEmbed(description="Transaction channel is not configured."),
+                ephemeral=True,
+            )
+            return
 
-        # embed = discord.Embed(title="Trade Announcement", color=discord.Color.blue())
-        # trade_view = TradeAnnouncementView()
-        # await interaction.response.send_message(embed=embed, view=trade_view)
+        trade_modal = TradeAnnouncementModal()
+        await interaction.response.send_modal(trade_modal)
 
-        # if not trade.trade:
-        #     await interaction.followup.send_message(content="No trade announcement provided.", ephemeral=True)
-        #     return
+        if not trade_modal.trade:
+            await interaction.followup.send(
+                content="No trade information provided... Try again.", ephemeral=True
+            )
+            return
 
         # log.debug(f"Trade Announcement: {trade.trade}")
         # await trans_channel.send(content=trade.trade, allowed_mentions=discord.AllowedMentions(users=True))
         # TODO - modal not working for this because mentions
+
+    @_transactions.command(
+        name="trade",
+        description="Process a trade between franchises",
+    )
+    @app_commands.describe(override="Admin only override")
+    async def _transactions_trade_cmd(
+        self, interaction: discord.Interaction, override: bool = False
+    ):
+        guild = interaction.guild
+        if not guild:
+            return
+
+        trans_channel = await self._trans_channel(guild)
+        if not trans_channel:
+            await interaction.response.send_message(
+                embed=ErrorEmbed(description="Transaction channel is not configured."),
+                ephemeral=True,
+            )
+            return
+
+        trade_modal = TradeAnnouncementModal()
+        await interaction.response.send_modal(trade_modal)
+        await trade_modal.wait()
+
+        if not trade_modal.trade:
+            await interaction.followup.send(
+                content="No trade information provided... Try again.", ephemeral=True
+            )
+            return
+
+        try:
+            trade_items = await self.parse_trade_text(
+                guild=guild, data=trade_modal.trade.value
+            )
+            log.debug(trade_items)
+
+            embed = BlueEmbed(
+                title="Debug Trades",
+                description="Trade Overview",
+            )
+
+            players = []
+            futures = []
+            for x in trade_items:
+                if x.value.player:
+                    p = (
+                        str(x.source.id),
+                        str(x.destination.id),
+                        str(x.value.player.id)[:8],
+                        x.value.player.team,
+                    )
+                    players.append(p)
+                else:
+                    f = (
+                        str(x.source.gm)[:8],
+                        str(x.destination.id),
+                        str(x.value.pick.round),
+                        x.value.pick.tier,
+                    )
+                    futures.append(f)
+
+            if players:
+                embed.add_field(name="Player Trades", value="", inline=False)
+                embed.add_field(
+                    name="Source", value="\n".join([x[0] for x in players]), inline=True
+                )
+                embed.add_field(
+                    name="Dest", value="\n".join([x[1] for x in players]), inline=True
+                )
+                embed.add_field(
+                    name="Player", value="\n".join([x[2] for x in players]), inline=True
+                )
+                embed.add_field(
+                    name="Team", value="\n".join([x[3] for x in players]), inline=True
+                )
+
+            if futures:
+                embed.add_field(name="Draft Picks", value="", inline=False)
+                embed.add_field(
+                    name="Source", value="\n".join([x[0] for x in futures]), inline=True
+                )
+                embed.add_field(
+                    name="Dest", value="\n".join([x[1] for x in futures]), inline=True
+                )
+                embed.add_field(
+                    name="Round", value="\n".join([x[2] for x in futures]), inline=True
+                )
+                embed.add_field(
+                    name="Tier", value="\n".join([x[3] for x in futures]), inline=True
+                )
+            await interaction.followup.send(embed=embed, ephemeral=False)
+        except TradeParserException as exc:
+            await interaction.followup.send(
+                embed=ExceptionErrorEmbed(
+                    title="Trade Parsing Error", exc_message=exc.message
+                ),
+                ephemeral=True,
+            )
+            return
 
     @_transactions.command(
         name="captain",
@@ -1353,6 +1482,37 @@ class TransactionMixIn(RSCMixIn):
             "Locally cached substitute list has been cleared.", ephemeral=True
         )
 
+    @_transactions.command(name="history", description="Fetch transaction history")
+    @app_commands.describe(
+        player="RSC Discord Member (Optional)",
+        executor="Transaction Executor (Optional)",
+        season='RSC Season Number. Example: "19" (Optional)',
+        type="Transaction Type (Optional)",
+    )
+    async def _transactions_history_cmd(
+        self,
+        interaction: discord.Interaction,
+        player: discord.Member | None = None,
+        executor: discord.Member | None = None,
+        season: int | None = None,
+        type: TransactionType | None = None,
+    ):
+        guild = interaction.guild
+        if not guild or not isinstance(interaction.user, discord.Member):
+            return
+
+        await interaction.response.defer(ephemeral=True)
+        try:
+            result = await self.transaction_history(
+                guild, player=player, executor=executor, season=season, trans_type=type
+            )
+            log.debug(f"Transaction History Result: {result}")
+        except RscException as exc:
+            await interaction.followup.send(
+                embed=ApiExceptionErrorEmbed(exc), ephemeral=True
+            )
+            return
+
     # Functions
 
     async def announce_transaction(
@@ -1646,6 +1806,296 @@ class TransactionMixIn(RSCMixIn):
             **kwargs,
         )
 
+    async def parse_trade_text(
+        self, guild: discord.Guild, data: str
+    ) -> list[TradeItem]:
+        if not data:
+            raise TradeParserException(message="No trade data provided...")
+
+        try:
+            league_role = await utils.get_league_role(guild=guild)
+            gm_role = await utils.get_gm_role(guild=guild)
+        except ValueError as exc:
+            raise TradeParserException(message=exc.args[0])
+
+        from pprint import pformat
+
+        # Iterate once to get all franchises involved
+        log.debug("Finding all franchises in trade.")
+        franchises = []
+        for line in data.splitlines():
+            line = line.strip()
+            log.debug(f"Line: {line}")
+
+            if match := GM_TRADE_REGEX.search(line):
+                if not match.group("gm"):
+                    raise TradeParserException(
+                        message=f"Unable to parse GM name from: {line}"
+                    )
+
+                gm_str = match.group("gm").strip()
+                log.debug(f"GM str: {gm_str}")
+
+                # Find name in GM role members
+                for m in gm_role.members:
+                    tmp = await utils.remove_prefix(m)
+                    if tmp.lower().startswith(gm_str.lower()):
+                        gm = m
+                        break
+
+                if not gm:
+                    raise TradeParserException(
+                        message=f"Unable to parse GM name from: {line}"
+                    )
+                log.debug(f"Trade GM: {gm.display_name}")
+
+                # Get franchise from API
+                fdata = await self.franchises(guild=guild, gm_name=tmp)
+                if not fdata or len(fdata) > 1:
+                    raise TradeParserException(
+                        message=f"Error finding franchise for GM: {tmp}"
+                    )
+
+                fname = fdata[0].name
+                fid = fdata[0].id
+                log.debug(f"Franchise ID: {fid} Name: {fname} GM: {gm.id}")
+                f_object = FranchiseIdentifier(gm=gm.id, name=fname, id=fid)
+                franchises.append(f_object)
+                continue
+
+        # Initial validation on franchises
+        if len(franchises) < 2:
+            raise TradeParserException(
+                "Unable to identify 2 or more franchises in trade."
+            )
+
+        trade_list = []
+        dest_franchise = None
+        log.debug("Parsing trades...")
+        for line in data.splitlines():
+            line = line.strip()
+            log.debug(f"Line: {line}")
+
+            # Skip line breaks
+            if len(line) == 0:
+                continue
+
+            # New franchise data
+            elif line.startswith("---"):
+                log.debug("Trade line break. Resetting destination...")
+                dest_franchise = None
+                continue
+
+            # Check for GM
+            elif match := GM_TRADE_REGEX.search(line):
+                if not match.group("gm"):
+                    raise TradeParserException(
+                        message=f"Unable to parse GM name from: {line}"
+                    )
+
+                gm_str = match.group("gm").strip()
+                log.debug(f"GM str: {gm_str}")
+
+                # Find name in GM role members
+                for m in gm_role.members:
+                    tmp = await utils.remove_prefix(m)
+                    if tmp.lower().startswith(gm_str.lower()):
+                        gm = m
+                        break
+
+                if not gm:
+                    raise TradeParserException(
+                        message=f"Unable to parse GM name from: {line}"
+                    )
+                log.debug(f"Trade GM: {gm.display_name}")
+
+                # Get franchise from API
+                dest_franchise = next((x for x in franchises if x.gm == gm.id), None)
+
+                log.debug(f"Destination Franchise: {dest_franchise}")
+                if not dest_franchise:
+                    raise TradeParserException(
+                        message=f"Error finding franchise for GM: {gm.display_name} ({gm.id})"
+                    )
+                continue
+
+            # Player trade
+            elif match := PLAYER_TRADE_REGEX.search(line):
+                if not dest_franchise:
+                    raise TradeParserException(
+                        message="Destination franchise is `None`"
+                    )
+
+                # Parse line with regex
+                if not match or not match.group("player"):
+                    raise TradeParserException(
+                        message=f"Unable to parse player trade from: {line}"
+                    )
+
+                m_str = match.group("player").strip()
+                log.debug(f"Player str: {m_str}")
+                player = discord.utils.get(league_role.members, display_name=m_str)
+
+                if not player:
+                    raise TradeParserException(
+                        message=f"Unable to parse player from: `{m_str}`"
+                    )
+
+                # Get source franchise
+                plist = await self.players(guild=guild, discord_id=player.id)
+
+                if not plist:
+                    raise TradeParserException(
+                        message=f"Unable to find league player: {player.mention})"
+                    )
+
+                pdata = plist[0]
+
+                if not pdata.team:
+                    raise TradeParserException(
+                        message=f"Player is not a team: {player.mention})"
+                    )
+
+                if not pdata.team.franchise:
+                    raise TradeParserException(
+                        message=f"API Error. No franchise id or name for player: {player.mention}"
+                    )
+
+                sf_id = pdata.team.franchise.id
+                sf_name = pdata.team.franchise.name
+                log.debug(f"Source. ID={sf_id} NAME={sf_name}")
+                sfranchise = FranchiseIdentifier(id=sf_id, name=sf_name, gm=None)
+
+                # Get destination team name (find by current tier)
+                dest_team = None
+                if match.group("team"):
+                    dest_team = match.group("team").strip()
+                else:
+                    if not pdata.tier:
+                        raise TradeParserException(
+                            message=f"API Error. Player has no tier data: {player.mention}"
+                        )
+
+                    team_list = await self.teams(
+                        guild=guild, franchise=dest_franchise.name, tier=pdata.tier.name
+                    )
+
+                    if not team_list or len(team_list) > 1:
+                        raise TradeParserException(
+                            message=f"Error finding destination team. Franchise: {dest_franchise.id} Tier: {pdata.tier.name}"
+                        )
+
+                    dest_team = team_list[0].name
+
+                log.debug(f"Destination Team Name: {dest_team}")
+
+                tvalue = TradeValue(player=Player1(id=player.id, team=dest_team))
+                log.debug(tvalue)
+
+                item = TradeItem(
+                    source=sfranchise, destination=dest_franchise, value=tvalue
+                )
+                log.debug(pformat(item))
+
+                trade_list.append(item)
+            elif match := FUTURE_TRADE_REGEX.match(line):
+                if not match:
+                    raise TradeParserException(
+                        message=f"Unable to parse future trade from: {line}"
+                    )
+                if not dest_franchise:
+                    raise TradeParserException(
+                        message="Destination franchise is `None`. Parser error."
+                    )
+
+                gm_str = match.group("gm").strip()
+                tier = match.group("tier")
+                # season = int(match.group("season"))
+                round = int(match.group("round"))
+
+                # Find name in GM role members
+                source_gm = None
+                for m in gm_role.members:
+                    tmp = await utils.remove_prefix(m)
+                    if tmp.lower().startswith(gm_str.lower()):
+                        source_gm = m
+                        break
+
+                if not source_gm:
+                    raise TradeParserException(
+                        message=f"Error finding discord member for future source GM: `{gm_str}`"
+                    )
+
+                sfranchise = FranchiseIdentifier(id=None, name=None, gm=source_gm.id)
+
+                tvalue = TradeValue(
+                    pick=DraftPick(tier=tier, round=round, number=0, future=True)
+                )
+                log.debug(tvalue)
+
+                item = TradeItem(
+                    source=sfranchise, destination=dest_franchise, value=tvalue
+                )
+                log.debug(pformat(item))
+
+                trade_list.append(item)
+
+            elif match := PICK_TRADE_REGEX.match(line):
+                if not match:
+                    raise TradeParserException(
+                        message=f"Unable to parse future trade from: {line}"
+                    )
+                if not dest_franchise:
+                    raise TradeParserException(
+                        message="Destination franchise is `None`. Parser error."
+                    )
+
+                tier = match.group("tier")
+                round = int(match.group("round"))
+                # pick = int(match.group("pick"))
+
+                # Check if GM was provided (3+ way trade)
+                gm_str = None
+                source_gm = None
+                if match.group("gm"):
+                    gm_str = match.group("gm").strip()
+
+                    # Find name in GM role members
+                    source_gm = None
+                    for m in gm_role.members:
+                        tmp = await utils.remove_prefix(m)
+                        if tmp.lower().startswith(gm_str.lower()):
+                            source_gm = m
+                            break
+
+                # If no source gm, check if only two GMs involved
+                raise NotImplementedError("uh what if this is in the first pick?")
+                if not source_gm:
+                    raise TradeParserException(
+                        message=f"Error finding discord member for future source GM: `{gm_str}`"
+                    )
+
+                sfranchise = FranchiseIdentifier(id=None, name=None, gm=source_gm.id)
+
+                tvalue = TradeValue(
+                    pick=DraftPick(tier=tier, round=round, number=0, future=True)
+                )
+                log.debug(tvalue)
+
+                item = TradeItem(
+                    source=sfranchise, destination=dest_franchise, value=tvalue
+                )
+                log.debug(pformat(item))
+
+                trade_list.append(item)
+
+            else:
+                raise TradeParserException(
+                    message=f"Unknown line in trade data: {line}"
+                )
+
+        return trade_list
+
     # API
 
     async def sign(
@@ -1821,6 +2271,33 @@ class TransactionMixIn(RSCMixIn):
             log.debug(f"IR Data: {data}")
             try:
                 return await api.transactions_inactive_reserve_create(data)
+            except ApiException as exc:
+                raise RscException(response=exc)
+
+    async def transaction_history(
+        self,
+        guild: discord.Guild,
+        player: discord.Member | None = None,
+        executor: discord.Member | None = None,
+        season: int | None = None,
+        trans_type: TransactionType | None = None,
+    ) -> list[TransactionResponse]:
+        """Fetch transaction history based on specified criteria"""
+        async with ApiClient(self._api_conf[guild.id]) as client:
+            api = TransactionsApi(client)
+            player_id = player.id if player else None
+            executor_id = executor.id if executor else None
+            log.debug(
+                f"Transaction History Query. Player: {player_id} Executor: {executor_id} Season: {season} Type: {trans_type}"
+            )
+            try:
+                return await api.transactions_history_list(
+                    league=self._league[guild.id],
+                    player=player_id,
+                    executor=executor_id,
+                    transaction_type=str(trans_type),
+                    season_number=season,
+                )
             except ApiException as exc:
                 raise RscException(response=exc)
 

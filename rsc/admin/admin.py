@@ -22,11 +22,13 @@ from rsc.embeds import ApiExceptionErrorEmbed, BlueEmbed, ErrorEmbed, SuccessEmb
 from rsc.enums import Status
 from rsc.exceptions import RscException
 from rsc.franchises import FranchiseMixIn
+from rsc.logs import GuildLogAdapter
 from rsc.types import RebrandTeamDict
 from rsc.utils import utils
 from rsc.views import LinkButton
 
-log = logging.getLogger("red.rsc.admin")
+logger = logging.getLogger("red.rsc.admin")
+log = GuildLogAdapter(logger)
 
 defaults_guild = {"Dates": None}
 
@@ -482,7 +484,7 @@ class AdminMixIn(RSCMixIn):
         agm_role = await utils.get_agm_role(guild)
         league_role = await utils.get_league_role(guild)
 
-        log.info(f"[{guild.name}] Syncing tier roles and channels")
+        log.info("Syncing tier roles and channels", guild=guild)
         roles: dict[str, list[discord.Role]] = {}
         for t in tiers:
             if not t.name:
@@ -499,7 +501,7 @@ class AdminMixIn(RSCMixIn):
             trole = None
             farole = None
 
-            log.debug(f"[{guild.name}] Syncing {t.name} roles")
+            log.debug(f"Syncing {t.name} roles", guild=guild)
 
             # Tier Role
             trole = discord.utils.get(guild.roles, name=t.name)
@@ -511,6 +513,8 @@ class AdminMixIn(RSCMixIn):
                     color=t.color or discord.Color.default(),
                     reason="Syncing tier roles from API.",
                 )
+            elif t.color:
+                await trole.edit(colour=t.color)
 
             # Get FA display icon
             fa_icon = None
@@ -530,6 +534,8 @@ class AdminMixIn(RSCMixIn):
                     color=t.color or discord.Color.default(),
                     reason="Syncing tier roles from API.",
                 )
+            elif t.color:
+                await farole.edit(colour=t.color)
 
             if scorecategory:
                 # Score Reporting Permissions
@@ -574,7 +580,7 @@ class AdminMixIn(RSCMixIn):
                     ),
                 }
 
-                log.debug(f"[{guild.name}] Syncing {t.name} score reporting channel")
+                log.debug(f"Syncing {t.name} score reporting channel", guild=guild)
                 schannel = discord.utils.get(
                     scorecategory.channels, name=f"{t.name}-score-reporting".lower()
                 )
@@ -618,7 +624,7 @@ class AdminMixIn(RSCMixIn):
                     ),
                 }
 
-                log.debug(f"[{guild.name}] Syncing {t.name} tier chat")
+                log.debug(f"Syncing {t.name} tier chat", guild=guild)
                 tchannel = discord.utils.get(
                     chatcategory.channels, name=f"{t.name}-chat".lower()
                 )
@@ -684,11 +690,11 @@ class AdminMixIn(RSCMixIn):
             channel = discord.utils.get(guild.text_channels, name=channel_name)
 
             if channel:
-                log.debug(f"[{guild.name}] Found transaction channel: {channel.name}")
+                log.debug(f"Found transaction channel: {channel.name}", guild=guild)
                 existing.append(channel)
             else:
                 log.info(
-                    f"[{guild.name}] Creating new transaction channel: {channel_name}"
+                    f"Creating new transaction channel: {channel_name}", guild=guild
                 )
                 content = None
                 gm = None
@@ -795,15 +801,15 @@ class AdminMixIn(RSCMixIn):
             fname = f"{f.name} ({f.gm.rsc_name})"
             frole = await utils.franchise_role_from_name(guild, f.name)
             if frole:
-                log.debug(f"[{guild.name}] Found franchise role: {frole.name}")
+                log.debug(f"Found franchise role: {frole.name}", guild=guild)
                 if frole.name != fname:
-                    log.info(f"[{guild.name}] Changing franchise role: {frole.name}")
+                    log.info(f"Changing franchise role: {frole.name}", guild=guild)
                     await frole.edit(name=fname)
                     fixed.append(frole)
                 else:
                     existing.append(frole)
             else:
-                log.info(f"[{guild.name}] Creating new franchise role: {fname}")
+                log.info(f"Creating new franchise role: {fname}", guild=guild)
                 nrole = await guild.create_role(
                     name=fname,
                     hoist=True,
@@ -1138,7 +1144,7 @@ class AdminMixIn(RSCMixIn):
             log.debug(f"Deleting franchise role: {frole.name}")
             await frole.delete(reason="Franchise has been deleted")
         else:
-            log.error(f"[{guild.name}] Unable to find franchise role: {fdata.name}")
+            log.error(f"Unable to find franchise role: {fdata.name}", guild=guild)
 
         # Send result
         await interaction.edit_original_response(
