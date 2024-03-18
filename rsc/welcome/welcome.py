@@ -181,7 +181,7 @@ class WelcomeMixIn(RSCMixIn):
     async def _get_welcome_channel(
         self, guild: discord.Guild
     ) -> discord.TextChannel | None:
-        cid = await self.config.custom("Welcome", guild.id).WelcomeChannel()
+        cid = await self.config.custom("Welcome", str(guild.id)).WelcomeChannel()
         channel = guild.get_channel(cid)
         if not channel or not isinstance(channel, discord.TextChannel):
             return None
@@ -190,12 +190,14 @@ class WelcomeMixIn(RSCMixIn):
     async def _set_welcome_channel(
         self, guild: discord.Guild, channel: discord.TextChannel
     ):
-        await self.config.custom("Welcome", guild.id).WelcomeChannel.set(channel.id)
+        await self.config.custom("Welcome", str(guild.id)).WelcomeChannel.set(
+            channel.id
+        )
 
     async def _get_welcome_roles(self, guild: discord.Guild) -> list[discord.Role]:
         roles = []
         notFound = False
-        r_ids = await self.config.custom("Welcome", guild.id).WelcomeRoles()
+        r_ids = await self.config.custom("Welcome", str(guild.id)).WelcomeRoles()
         for id in r_ids:
             r = guild.get_role(id)
             if not r:
@@ -208,18 +210,18 @@ class WelcomeMixIn(RSCMixIn):
         return roles
 
     async def _set_welcome_roles(self, guild: discord.Guild, roles: list[discord.Role]):
-        await self.config.custom("Welcome", guild.id).WelcomeRoles.set(
+        await self.config.custom("Welcome", str(guild.id)).WelcomeRoles.set(
             [x.id for x in roles]
         )
 
     async def _get_welcome_msg(self, guild: discord.Guild) -> str | None:
-        return await self.config.custom("Welcome", guild.id).WelcomeMsg()
+        return await self.config.custom("Welcome", str(guild.id)).WelcomeMsg()
 
     async def _set_welcome_msg(self, guild: discord.Guild, msg: str):
-        await self.config.custom("Welcome", guild.id).WelcomeMsg.set(msg)
+        await self.config.custom("Welcome", str(guild.id)).WelcomeMsg.set(msg)
 
     async def _get_welcome_status(self, guild: discord.Guild) -> bool:
-        return await self.config.custom("Welcome", guild.id).WelcomeStatus()
+        return await self.config.custom("Welcome", str(guild.id)).WelcomeStatus()
 
     async def _set_welcome_status(self, guild: discord.Guild, status: bool):
-        await self.config.custom("Welcome", guild.id).WelcomeStatus.set(status)
+        await self.config.custom("Welcome", str(guild.id)).WelcomeStatus.set(status)

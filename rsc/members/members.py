@@ -216,6 +216,25 @@ class MemberMixIn(RSCMixIn):
             return
 
         p = players[0]
+
+        if not (p.tier and p.tier.name):
+            await interaction.followup.send(
+                embed=YellowEmbed(
+                    title="Player Info",
+                    description=f"{player.mention} has no tier data. If this is an error, please submit a modmail.",
+                )
+            )
+            return
+
+        if not p.status:
+            await interaction.followup.send(
+                embed=YellowEmbed(
+                    title="Player Info",
+                    description=f"{player.mention} has unknown or no league status. Please submit a modmail.",
+                )
+            )
+            return
+
         tier_color = await utils.tier_color_by_name(guild, p.tier.name)
 
         embed = discord.Embed(

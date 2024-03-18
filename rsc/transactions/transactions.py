@@ -2304,14 +2304,20 @@ class TransactionMixIn(RSCMixIn):
     # Config
 
     async def _trans_role(self, guild: discord.Guild) -> discord.Role | None:
-        trans_role_id = await self.config.custom("Transactions", guild.id).TransRole()
+        trans_role_id = await self.config.custom(
+            "Transactions", str(guild.id)
+        ).TransRole()
         return guild.get_role(trans_role_id)
 
     async def _save_trans_role(self, guild: discord.Guild, trans_role_id: int | None):
-        await self.config.custom("Transactions", guild.id).TransRole.set(trans_role_id)
+        await self.config.custom("Transactions", str(guild.id)).TransRole.set(
+            trans_role_id
+        )
 
     async def _trans_channel(self, guild: discord.Guild) -> discord.TextChannel | None:
-        channel_id = await self.config.custom("Transactions", guild.id).TransChannel()
+        channel_id = await self.config.custom(
+            "Transactions", str(guild.id)
+        ).TransChannel()
         if not channel_id:
             return None
         c = guild.get_channel(channel_id)
@@ -2322,7 +2328,7 @@ class TransactionMixIn(RSCMixIn):
     async def _save_trans_channel(
         self, guild: discord.Guild, trans_channel: int | None
     ):
-        await self.config.custom("Transactions", guild.id).TransChannel.set(
+        await self.config.custom("Transactions", str(guild.id)).TransChannel.set(
             trans_channel
         )
 
@@ -2330,7 +2336,7 @@ class TransactionMixIn(RSCMixIn):
         self, guild: discord.Guild
     ) -> discord.TextChannel | None:
         channel_id = await self.config.custom(
-            "Transactions", guild.id
+            "Transactions", str(guild.id)
         ).TransLogChannel()
         if not channel_id:
             return None
@@ -2342,43 +2348,45 @@ class TransactionMixIn(RSCMixIn):
     async def _save_trans_log_channel(
         self, guild: discord.Guild, trans_log_channel: int | None
     ):
-        await self.config.custom("Transactions", guild.id).TransLogChannel.set(
+        await self.config.custom("Transactions", str(guild.id)).TransLogChannel.set(
             trans_log_channel
         )
 
     async def _get_cut_message(self, guild: discord.Guild) -> str | None:
-        return await self.config.custom("Transactions", guild.id).CutMessage()
+        return await self.config.custom("Transactions", str(guild.id)).CutMessage()
 
     async def _save_cut_message(self, guild: discord.Guild, message):
-        await self.config.custom("Transactions", guild.id).CutMessage.set(message)
+        await self.config.custom("Transactions", str(guild.id)).CutMessage.set(message)
 
     async def _notifications_enabled(self, guild: discord.Guild) -> bool:
-        return await self.config.custom("Transactions", guild.id).TransNotifications()
+        return await self.config.custom(
+            "Transactions", str(guild.id)
+        ).TransNotifications()
 
     async def _set_notifications(self, guild: discord.Guild, enabled: bool):
-        await self.config.custom("Transactions", guild.id).TransNotifications.set(
+        await self.config.custom("Transactions", str(guild.id)).TransNotifications.set(
             enabled
         )
 
     async def _trans_dms_enabled(self, guild: discord.Guild) -> bool:
-        return await self.config.custom("Transactions", guild.id).TransDMs()
+        return await self.config.custom("Transactions", str(guild.id)).TransDMs()
 
     async def _set_trans_dm(self, guild: discord.Guild, enabled: bool):
-        await self.config.custom("Transactions", guild.id).TransDMs.set(enabled)
+        await self.config.custom("Transactions", str(guild.id)).TransDMs.set(enabled)
 
     async def _get_substitutes(self, guild: discord.Guild) -> list[Substitute]:
-        return await self.config.custom("Transactions", guild.id).Substitutes()
+        return await self.config.custom("Transactions", str(guild.id)).Substitutes()
 
     async def _set_substitutes(self, guild: discord.Guild, subs: list[Substitute]):
-        await self.config.custom("Transactions", guild.id).Substitutes.set(subs)
+        await self.config.custom("Transactions", str(guild.id)).Substitutes.set(subs)
 
     async def _add_substitute(self, guild: discord.Guild, sub: Substitute):
-        s = await self.config.custom("Transactions", guild.id).Substitutes()
+        s = await self.config.custom("Transactions", str(guild.id)).Substitutes()
         s.append(sub)
         await self._set_substitutes(guild, s)
 
     async def _rm_substitute(self, guild: discord.Guild, sub: Substitute):
-        s = await self.config.custom("Transactions", guild.id).Substitutes()
+        s = await self.config.custom("Transactions", str(guild.id)).Substitutes()
         try:
             s.remove(sub)
         except ValueError:

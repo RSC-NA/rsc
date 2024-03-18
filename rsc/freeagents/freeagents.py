@@ -380,7 +380,7 @@ class FreeAgentMixIn(RSCMixIn):
     # Config
 
     async def _get_check_ins(self, guild: discord.Guild) -> list[CheckIn]:
-        return await self.config.custom("FreeAgents", guild.id).CheckIns()
+        return await self.config.custom("FreeAgents", str(guild.id)).CheckIns()
 
     async def _save_check_ins(self, guild: discord.Guild, check_ins: list[CheckIn]):
-        await self.config.custom("FreeAgents", guild.id).CheckIns.set(check_ins)
+        await self.config.custom("FreeAgents", str(guild.id)).CheckIns.set(check_ins)

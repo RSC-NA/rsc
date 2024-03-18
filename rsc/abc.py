@@ -1,5 +1,6 @@
 from abc import ABC, ABCMeta, abstractmethod
 from datetime import datetime
+from os import PathLike
 from typing import TYPE_CHECKING, Optional
 from zoneinfo import ZoneInfo
 
@@ -8,6 +9,7 @@ from discord.ext.commands import CogMeta as DPYCogMeta
 from redbot.core import Config as RedConfig
 from redbot.core.bot import Red
 from rscapi import Configuration as ApiConfig
+from rscapi.models.deleted import Deleted
 from rscapi.models.franchise import Franchise
 from rscapi.models.franchise_list import FranchiseList
 from rscapi.models.high_level_match import HighLevelMatch
@@ -17,13 +19,26 @@ from rscapi.models.match import Match
 from rscapi.models.match_list import MatchList
 from rscapi.models.member import Member
 from rscapi.models.player import Player
+from rscapi.models.player_season_stats import PlayerSeasonStats
+from rscapi.models.rebrand_a_franchise import RebrandAFranchise
 from rscapi.models.season import Season
 from rscapi.models.team import Team
 from rscapi.models.team_list import TeamList
 from rscapi.models.tier import Tier
 from rscapi.models.tracker_link import TrackerLink
+from rscapi.models.tracker_link_stats import TrackerLinkStats
 
-from rsc.enums import MatchFormat, MatchTeamEnum, MatchType, Status, TrackerLinksStatus
+from rsc.enums import (
+    MatchFormat,
+    MatchTeamEnum,
+    MatchType,
+    Platform,
+    PlayerType,
+    Referrer,
+    RegionPreference,
+    Status,
+    TrackerLinksStatus,
+)
 
 if TYPE_CHECKING:
     from rsc.ranks.api import RapidApi
@@ -52,6 +67,16 @@ class RSCMixIn(ABC):
     async def rapid_connector(self, guild: discord.Guild) -> Optional["RapidApi"]:
         ...
 
+    @abstractmethod
+    async def _get_api_url(self, guild: discord.Guild) -> str | None:
+        ...
+
+    # Admin
+
+    @abstractmethod
+    async def _get_dates(self, guild: discord.Guild) -> str:
+        ...
+
     # Franchises
 
     @abstractmethod
@@ -67,11 +92,50 @@ class RSCMixIn(ABC):
         ...
 
     @abstractmethod
+    async def upload_franchise_logo(
+        self,
+        guild: discord.Guild,
+        id: int,
+        logo: str | bytes | PathLike,
+    ) -> Franchise:
+        ...
+
+    @abstractmethod
     async def franchise_by_id(self, guild: discord.Guild, id: int) -> Franchise | None:
         ...
 
     @abstractmethod
     async def franchise_logo(self, guild: discord.Guild, id: int) -> str | None:
+        ...
+
+    @abstractmethod
+    async def full_logo_url(self, guild: discord.Guild, logo_url: str) -> str | None:
+        ...
+
+    @abstractmethod
+    async def rebrand_franchise(
+        self, guild: discord.Guild, id: int, rebrand: RebrandAFranchise
+    ) -> Franchise:
+        ...
+
+    @abstractmethod
+    async def delete_franchise(self, guild: discord.Guild, id: int) -> None:
+        ...
+
+    @abstractmethod
+    async def transfer_franchise(
+        self, guild: discord.Guild, id: int, gm: discord.Member
+    ) -> Franchise:
+        ...
+
+    @abstractmethod
+    async def create_franchise(
+        self,
+        guild: discord.Guild,
+        name: str,
+        prefix: str,
+        gm: discord.Member,
+    ) -> Franchise:
         ...
 
     # League
@@ -111,6 +175,10 @@ class RSCMixIn(ABC):
         ...
 
     # Matches
+
+    @abstractmethod
+    async def is_match_day(self, guild: discord.Guild) -> bool:
+        ...
 
     @abstractmethod
     async def matches(
@@ -156,6 +224,15 @@ class RSCMixIn(ABC):
     # Members
 
     @abstractmethod
+    async def change_member_name(
+        self,
+        guild: discord.Guild,
+        id: int,
+        name: str,
+    ) -> Member:
+        ...
+
+    @abstractmethod
     async def members(
         self,
         guild: discord.Guild,
@@ -165,6 +242,61 @@ class RSCMixIn(ABC):
         limit: int = 0,
         offset: int = 0,
     ) -> list[Member]:
+        ...
+
+    @abstractmethod
+    async def declare_intent(
+        self,
+        guild: discord.Guild,
+        member: discord.Member,
+        returning: bool,
+        executor: discord.Member | None = None,
+        admin_overrride: bool = False,
+    ) -> Deleted:
+        ...
+
+    @abstractmethod
+    async def player_stats(
+        self,
+        guild: discord.Guild,
+        id: int,
+        season: int | None = None,
+    ) -> PlayerSeasonStats:
+        ...
+
+    @abstractmethod
+    async def delete_member(
+        self,
+        guild: discord.Guild,
+        member: discord.Member,
+    ):
+        ...
+
+    @abstractmethod
+    async def create_member(
+        self,
+        guild: discord.Guild,
+        member: discord.Member,
+        rsc_name: str | None = None,
+    ) -> Member:
+        ...
+
+    @abstractmethod
+    async def signup(
+        self,
+        guild: discord.Guild,
+        member: discord.Member,
+        rsc_name: str,
+        trackers: list[str],
+        region_preference: RegionPreference | None = None,
+        player_type: PlayerType | None = None,
+        platform: Platform | None = None,
+        referrer: Referrer | None = None,
+        accepted_rules: bool = True,
+        accepted_match_nights: bool = True,
+        executor: discord.Member | None = None,
+        override: bool = False,
+    ) -> LeaguePlayer:
         ...
 
     # Teams
@@ -224,6 +356,10 @@ class RSCMixIn(ABC):
     async def tiers(self, guild: discord.Guild, name: str | None = None) -> list[Tier]:
         ...
 
+    @abstractmethod
+    async def is_valid_tier(self, guild: discord.Guild, name: str) -> bool:
+        ...
+
     # Trackers
 
     @abstractmethod
@@ -236,6 +372,41 @@ class RSCMixIn(ABC):
         limit: int = 0,
         offset: int = 0,
     ) -> list[TrackerLink]:
+        ...
+
+    @abstractmethod
+    async def tracker_stats(
+        self,
+        guild: discord.Guild,
+    ) -> TrackerLinkStats:
+        """Fetch RSC Tracker Stats"""
+        ...
+
+    @abstractmethod
+    async def next_tracker(
+        self,
+        guild: discord.Guild,
+        limit: int = 25,
+    ) -> list[TrackerLink]:
+        """Get list of trackers ready to be updated"""
+
+    @abstractmethod
+    async def add_tracker(
+        self,
+        guild: discord.Guild,
+        player: discord.Member,
+        tracker: str,
+    ):
+        ...
+
+    # Transactions
+
+    @abstractmethod
+    async def _trans_role(self, guild: discord.Guild) -> discord.Role | None:
+        ...
+
+    @abstractmethod
+    async def _trans_channel(self, guild: discord.Guild) -> discord.TextChannel | None:
         ...
 
 

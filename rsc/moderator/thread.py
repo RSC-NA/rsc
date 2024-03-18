@@ -371,7 +371,7 @@ class ThreadMixIn(RSCMixIn):
     ):
         groups = await self._get_groups(guild)
         groups.pop(group_name)
-        await self.config.custom("Thread", guild.id).Groups.set(groups)
+        await self.config.custom("Thread", str(guild.id)).Groups.set(groups)
 
     async def _set_group(
         self,
@@ -383,31 +383,33 @@ class ThreadMixIn(RSCMixIn):
         groups = await self._get_groups(guild)
         group = ThreadGroup(category=category.id, role=role.id)
         groups[name] = group
-        await self.config.custom("Thread", guild.id).Groups.set(groups)
+        await self.config.custom("Thread", str(guild.id)).Groups.set(groups)
 
     async def _get_primary_category(
         self, guild: discord.Guild
     ) -> discord.CategoryChannel | None:
         return discord.utils.get(
             guild.categories,
-            id=await self.config.custom("Thread", guild.id).PrimaryCategory(),
+            id=await self.config.custom("Thread", str(guild.id)).PrimaryCategory(),
         )
 
     async def _get_management_role(self, guild: discord.Guild) -> discord.Role | None:
         return guild.get_role(
-            await self.config.custom("Thread", guild.id).ManagementRole()
+            await self.config.custom("Thread", str(guild.id)).ManagementRole()
         )
 
     async def _set_primary_category(
         self, guild: discord.Guild, category: discord.CategoryChannel
     ):
-        await self.config.custom("Thread", guild.id).PrimaryCategory.set(category.id)
+        await self.config.custom("Thread", str(guild.id)).PrimaryCategory.set(
+            category.id
+        )
 
     async def _set_management_role(self, guild: discord.Guild, role: discord.Role):
-        await self.config.custom("Thread", guild.id).ManagementRole.set(role.id)
+        await self.config.custom("Thread", str(guild.id)).ManagementRole.set(role.id)
 
     async def _get_groups(self, guild: discord.Guild) -> dict[str, ThreadGroup]:
-        return await self.config.custom("Thread", guild.id).Groups()
+        return await self.config.custom("Thread", str(guild.id)).Groups()
 
 
 # endregion jsondb

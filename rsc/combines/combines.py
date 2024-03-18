@@ -418,19 +418,19 @@ class CombineMixIn(RSCMixIn):
     # Config
 
     async def _get_room_capacity(self, guild: discord.Guild) -> int:
-        return await self.config.custom("Combines", guild.id).Capacity()
+        return await self.config.custom("Combines", str(guild.id)).Capacity()
 
     async def _save_room_capacity(self, guild: discord.Guild, capacity: int):
-        await self.config.custom("Combines", guild.id).Capacity.set(capacity)
+        await self.config.custom("Combines", str(guild.id)).Capacity.set(capacity)
 
     async def _get_publicity(self, guild: discord.Guild) -> bool:
-        return await self.config.custom("Combines", guild.id).Public()
+        return await self.config.custom("Combines", str(guild.id)).Public()
 
     async def _save_publicity(self, guild: discord.Guild, public: bool):
-        await self.config.custom("Combines", guild.id).Public.set(public)
+        await self.config.custom("Combines", str(guild.id)).Public.set(public)
 
     async def _get_combines_active(self, guild: discord.Guild) -> bool:
-        return await self.config.custom("Combines", guild.id).Active()
+        return await self.config.custom("Combines", str(guild.id)).Active()
 
     async def _save_combines_active(self, guild: discord.Guild, active: bool):
-        await self.config.custom("Combines", guild.id).Active.set(active)
+        await self.config.custom("Combines", str(guild.id)).Active.set(active)

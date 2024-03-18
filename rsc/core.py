@@ -120,23 +120,30 @@ class RSC(
                 except* ApiException as eg:
                     # API is down or not responding
                     for err in eg.exceptions:
-                        log.debug(
-                            f"Setup Error. Status: {err.status} Reason: P{err.args[0]}",
-                            exc_info=err,
-                        )
-                        match err.status:
-                            case 504:
-                                log.error("Connection to RSC API timed out. (504)")
-                            case 502:
-                                log.error("Bad gateway response from RSC API. (502)")
-                            case 500:
-                                log.error("API Internal Server Error. (500)")
-                            case 403:
-                                log.error("Forbidden response from RSC API. (403)")
-                            case 401:
-                                log.error("Unauthorized response from RSC API. (401)")
-                            case _:
-                                raise err
+                        if hasattr(err, "status"):
+                            log.debug(
+                                f"Setup Error. Status: {err.status} Reason: P{err.args[0]}",
+                                exc_info=err,
+                            )
+                            match err.status:
+                                case 504:
+                                    log.error("Connection to RSC API timed out. (504)")
+                                case 502:
+                                    log.error(
+                                        "Bad gateway response from RSC API. (502)"
+                                    )
+                                case 500:
+                                    log.error("API Internal Server Error. (500)")
+                                case 403:
+                                    log.error("Forbidden response from RSC API. (403)")
+                                case 401:
+                                    log.error(
+                                        "Unauthorized response from RSC API. (401)"
+                                    )
+                                case _:
+                                    raise err
+                        else:
+                            raise err
 
     async def prepare_rapidapi(self, guild: discord.Guild):
         token = await self._get_rapidapi_key(guild)
@@ -184,6 +191,9 @@ class RSC(
     ) -> list[app_commands.Choice[str]]:
         cmds = self.walk_app_commands()
         if not cmds:
+            return []
+
+        if not isinstance(interaction.user, discord.Member):
             return []
 
         if not current:
@@ -462,7 +472,7 @@ class RSC(
                     if (
                         stats_role and stats_role in interaction.user.roles
                     ) or interaction.user.guild_permissions.manage_guild:
-                        groups.append(cmd)
+                        groups.append(cmd)  # type: ignore
                     continue
 
                 if isinstance(cmd, discord.app_commands.Group):
@@ -496,7 +506,7 @@ class RSC(
             await interaction.response.send_message(embeds=embeds, ephemeral=True)
         else:
             cmd = None
-            for c in self.walk_app_commands():
+            for c in self.walk_app_commands():  # type: ignore
                 if c.name == "feet":
                     continue
                 if c.qualified_name == command:

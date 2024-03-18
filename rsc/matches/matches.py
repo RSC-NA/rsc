@@ -45,6 +45,7 @@ class MatchMixIn(RSCMixIn):
         if not (guild and isinstance(interaction.user, discord.Member)):
             return
         await interaction.response.defer()
+
         team_id = 0
         tier = None
         if team:
@@ -72,7 +73,7 @@ class MatchMixIn(RSCMixIn):
                 )
                 return
 
-            if not (pdata.team and pdata.tier):
+            if not (pdata.team and pdata.tier and pdata.team.id):
                 await interaction.followup.send(
                     embed=ErrorEmbed(
                         description="Malformed data returned from API. Please submit a modmail."
@@ -95,7 +96,10 @@ class MatchMixIn(RSCMixIn):
         schedule = await self.season_matches(guild, team_id, preseason=preseason)
 
         # Get tier color
-        tier_color = await tier_color_by_name(guild, tier)
+        if tier:
+            tier_color = await tier_color_by_name(guild, tier)
+        else:
+            tier_color = discord.Color.blue()
 
         if not schedule:
             await interaction.followup.send(
@@ -154,6 +158,7 @@ class MatchMixIn(RSCMixIn):
             return
 
         await interaction.response.defer(ephemeral=True)
+
         # Find the team ID of interaction user
         player = await self.players(guild, discord_id=interaction.user.id, limit=1)
         if not player:
@@ -190,11 +195,20 @@ class MatchMixIn(RSCMixIn):
             )
             return
 
+        if not match:
+            await interaction.followup.send(
+                embed=BlueEmbed(
+                    title="Match Info",
+                    description="You do not have any upcoming matches.",
+                ),
+                ephemeral=True,
+            )
+            return
+
         # Is interaction user away/home
         user_team = await self.match_team_by_user(match, interaction.user)
 
         embed = await self.build_match_embed(guild, match, user_team=user_team)
-        # await interaction.user.send(embed=embed)
         await interaction.followup.send(embed=embed, ephemeral=True)
 
     # Functions

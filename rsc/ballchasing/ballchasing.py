@@ -1610,21 +1610,23 @@ class BallchasingMixIn(RSCMixIn):
     # Config
 
     async def _get_bc_auth_token(self, guild: discord.Guild) -> str:
-        return await self.config.custom("Ballchasing", guild.id).AuthToken()
+        return await self.config.custom("Ballchasing", str(guild.id)).AuthToken()
 
     async def _save_bc_auth_token(self, guild: discord.Guild, key: str):
-        await self.config.custom("Ballchasing", guild.id).AuthToken.set(key)
+        await self.config.custom("Ballchasing", str(guild.id)).AuthToken.set(key)
 
     async def _save_top_level_group(self, guild: discord.Guild, group_id):
-        await self.config.custom("Ballchasing", guild.id).TopLevelGroup.set(group_id)
+        await self.config.custom("Ballchasing", str(guild.id)).TopLevelGroup.set(
+            group_id
+        )
 
     async def _get_top_level_group(self, guild: discord.Guild) -> str | None:
-        return await self.config.custom("Ballchasing", guild.id).TopLevelGroup()
+        return await self.config.custom("Ballchasing", str(guild.id)).TopLevelGroup()
 
     async def _get_bc_log_channel(
         self, guild: discord.Guild
     ) -> discord.TextChannel | None:
-        id = await self.config.custom("Ballchasing", guild.id).LogChannel()
+        id = await self.config.custom("Ballchasing", str(guild.id)).LogChannel()
         if not id:
             return None
         c = guild.get_channel(id)
@@ -1635,28 +1637,37 @@ class BallchasingMixIn(RSCMixIn):
     async def _save_bc_log_channel(
         self, guild: discord.Guild, channel: discord.TextChannel
     ):
-        await self.config.custom("Ballchasing", guild.id).LogChannel.set(channel.id)
+        await self.config.custom("Ballchasing", str(guild.id)).LogChannel.set(
+            channel.id
+        )
 
     async def _get_bc_manager_role(self, guild: discord.Guild) -> discord.Role | None:
-        r = await self.config.custom("Ballchasing", guild.id).ManagerRole()
+        r = await self.config.custom("Ballchasing", str(guild.id)).ManagerRole()
         if not r:
             return None
         return guild.get_role(r)
 
     async def _save_bc_manager_role(self, guild: discord.Guild, role: discord.Role):
-        await self.config.custom("Ballchasing", guild.id).ManagerRole.set(role.id)
+        await self.config.custom("Ballchasing", str(guild.id)).ManagerRole.set(role.id)
 
     async def _save_score_reporting_category(
-        self, guild, category: discord.CategoryChannel
+        self, guild: discord.Guild, category: discord.CategoryChannel
     ):
-        await self.config.custom("Ballchasing", guild.id).ReportCategory.set(
+        await self.config.custom("Ballchasing", str(guild.id)).ReportCategory.set(
             category.id
         )
 
     async def _get_score_reporting_category(
-        self, guild
+        self, guild: discord.Guild
     ) -> discord.CategoryChannel | None:
-        c = await self.config.custom("Ballchasing", guild.id).ReportCategory()
+        c = await self.config.custom("Ballchasing", str(guild.id)).ReportCategory()
         if not c:
             return None
-        return guild.get_channel(c)
+
+        category = guild.get_channel(c)
+        if not isinstance(category, discord.CategoryChannel):
+            log.warning(
+                f"[{guild.name}] Score report channel is not a category channel."
+            )
+            return None
+        return category

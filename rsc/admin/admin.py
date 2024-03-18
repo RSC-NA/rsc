@@ -4,7 +4,6 @@ import tempfile
 import discord
 from redbot.core import app_commands
 from rscapi.models.franchise import Franchise
-from rscapi.models.league_player import LeaguePlayer
 from rscapi.models.rebrand_a_franchise import RebrandAFranchise
 from rscapi.models.team_details import TeamDetails
 
@@ -208,9 +207,10 @@ class AdminMixIn(RSCMixIn):
             )
             return
 
+        discord_id_int = None
         if discord_id:
             try:
-                discord_id = int(discord_id)
+                discord_id_int = int(discord_id)
             except ValueError:
                 await interaction.response.send_message(
                     "Discord ID must be an integer.", ephemeral=True
@@ -222,7 +222,7 @@ class AdminMixIn(RSCMixIn):
             guild,
             rsc_name=rsc_name,
             discord_username=discord_username,
-            discord_id=discord_id,
+            discord_id=discord_id_int,
             limit=limit,
             offset=offset,
         )
@@ -230,15 +230,29 @@ class AdminMixIn(RSCMixIn):
         league_id = self._league[guild.id]
         m_fmt = []
         for m in ml:
-            x = guild.get_member(m.discord_id)
-            l: LeaguePlayer = next(
-                (i for i in m.player_leagues if i.league.id == league_id), None
-            )
+            player = None
+            if m.discord_id:
+                p_member = guild.get_member(m.discord_id)
+                if p_member:
+                    player = p_member.mention
+            else:
+                player = m.rsc_name
+
+            league = None
+            if m.player_leagues:
+                league = next(
+                    (i for i in m.player_leagues if i.league.id == league_id), None
+                )
+
+            status = "Spectator"
+            if league and league.status:
+                status = Status(league.status).full_name
+
             m_fmt.append(
                 (
-                    x.mention if x else m.rsc_name,
+                    player,
                     m.discord_id,
-                    Status(l.status).full_name if l else "Spectator",
+                    status,
                 )
             )
 
@@ -686,6 +700,15 @@ class AdminMixIn(RSCMixIn):
 
         franchises = await self.franchises(guild)
         for f in franchises:
+            if not f.name:
+                log.error(f"Franchise {f.id} has no name.")
+                await interaction.edit_original_response(
+                    embed=ErrorEmbed(
+                        description=f"Franchise {f.id} has no name in the API..."
+                    )
+                )
+                return
+
             channel_name = f"{f.name.lower().replace(' ', '-')}-transactions"
             channel = discord.utils.get(guild.text_channels, name=channel_name)
 
@@ -884,7 +907,7 @@ class AdminMixIn(RSCMixIn):
             fp.write(logo_bytes)
             fp.seek(0)
             result: Franchise = await self.upload_franchise_logo(
-                interaction.guild, fdata.id, fp.name
+                guild, fdata.id, fp.name
             )
 
         # Remove old emoji. Discord API doesn't let us update it in place
@@ -1295,7 +1318,7 @@ class AdminMixIn(RSCMixIn):
     # Config
 
     async def _set_dates(self, guild: discord.Guild, value: str):
-        await self.config.custom("Admin", guild.id).Dates.set(value)
+        await self.config.custom("Admin", str(guild.id)).Dates.set(value)
 
     async def _get_dates(self, guild: discord.Guild) -> str:
-        return await self.config.custom("Admin", guild.id).Dates()
+        return await self.config.custom("Admin", str(guild.id)).Dates()

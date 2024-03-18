@@ -128,7 +128,7 @@ class NumberMixIn(RSCMixIn):
     # Config
 
     async def _get_numbers_roles(self, guild: discord.Guild) -> list[discord.Role]:
-        role_ids = await self.config.custom("Numbers", guild.id).NumbersRoles()
+        role_ids = await self.config.custom("Numbers", str(guild.id)).NumbersRoles()
         roles = []
         for id in role_ids:
             r = guild.get_role(id)
@@ -139,6 +139,6 @@ class NumberMixIn(RSCMixIn):
         return roles
 
     async def _set_numbers_roles(self, guild: discord.Guild, roles: list[discord.Role]):
-        await self.config.custom("Transactions", guild.id).NumbersRoles.set(
+        await self.config.custom("Transactions", str(guild.id)).NumbersRoles.set(
             [r.id for r in roles]
         )
