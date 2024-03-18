@@ -53,7 +53,7 @@ class WelcomeMixIn(RSCMixIn):
         default_permissions=discord.Permissions(manage_roles=True),
     )
 
-    @_rsc_welcome.command(
+    @_rsc_welcome.command(  # type: ignore
         name="settings", description="Display the current RSC welcome settings."
     )
     async def _rsc_settings(self, interaction: discord.Interaction):
@@ -88,7 +88,7 @@ class WelcomeMixIn(RSCMixIn):
         )
         await interaction.response.send_message(embed=settings_embed, ephemeral=True)
 
-    @_rsc_welcome.command(
+    @_rsc_welcome.command(  # type: ignore
         name="toggle", description="Toggle the welcome message on or off"
     )
     async def _rsc_welcome_toggle(self, interaction: discord.Interaction):
@@ -109,7 +109,7 @@ class WelcomeMixIn(RSCMixIn):
             ephemeral=True,
         )
 
-    @_rsc_welcome.command(name="channel", description="Modify the welcome channel")
+    @_rsc_welcome.command(name="channel", description="Modify the welcome channel")  # type: ignore
     @app_commands.describe(
         channel="Channel to send welcome message in. (Must be text channel)"
     )
@@ -127,7 +127,7 @@ class WelcomeMixIn(RSCMixIn):
             ephemeral=True,
         )
 
-    @_rsc_welcome.command(
+    @_rsc_welcome.command(  # type: ignore
         name="message",
         description="Modify the welcome message when a user joins the server (Max 512 characters)",
     )
@@ -145,7 +145,7 @@ class WelcomeMixIn(RSCMixIn):
         embed = SuccessEmbed(title="Welcome Message Configured", description=msg)
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-    @_rsc_welcome.command(
+    @_rsc_welcome.command(  # type: ignore
         name="roles",
         description="Modify the roles a user receives when joining the server",
     )
