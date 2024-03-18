@@ -116,7 +116,7 @@ class RapidApi:
             url = urljoin(self.url, f"/tournaments/{region}")
             resp = await session.get(url=url)
             data = await resp.json()
-            await self._check_response(resp)
+            await self._check_response(data)
             return models.TournamentResult(**data)
 
     async def _check_response(self, data: dict):

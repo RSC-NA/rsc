@@ -143,6 +143,9 @@ class LeagueSelect(discord.ui.Select):
         super().__init__(placeholder="Select a league...")
         self.build(leagues)
 
+        # Typing
+        self.view: LeagueSelectView
+
     def build(self, leagues: list[League]):
         for league in leagues:
             self.add_option(label=league.name, value=str(league.id))
