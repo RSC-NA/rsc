@@ -88,13 +88,16 @@ class MemberMixIn(RSCMixIn):
             await interaction.edit_original_response(embed=embed, view=None)
             return
 
+        # Filter empty new lines
+        tracker_list = list(filter(None, signup_view.trackers))
+
         # Process signup if state is finished
         try:
             result = await self.signup(
                 guild=guild,
                 member=interaction.user,
                 rsc_name=signup_view.rsc_name,
-                trackers=signup_view.trackers,
+                trackers=tracker_list,
                 player_type=signup_view.player_type,
                 platform=signup_view.platform,
                 referrer=signup_view.referrer,
