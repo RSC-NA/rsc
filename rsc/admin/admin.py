@@ -1312,8 +1312,14 @@ class AdminMixIn(RSCMixIn):
 
     @_admin.command(name="dates", description="Configure the dates command output")
     async def _admin_set_dates(self, interaction: discord.Interaction):
+        if not interaction.guild:
+            return
+
         dates_modal = LeagueDatesModal()
         await interaction.response.send_modal(dates_modal)
+        await dates_modal.wait()
+
+        await self._set_dates(interaction.guild, value=dates_modal.date_input.value)
 
     # Config
 
