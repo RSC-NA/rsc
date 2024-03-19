@@ -54,10 +54,20 @@ class MemberMixIn(RSCMixIn):
             return
 
         log.debug(f"{interaction.user} is signing up for the league")
-        # Check if not a league player?
+
         # User prompts
         signup_view = SignupView(interaction)
         await signup_view.prompt()
+
+        # Create a member just in case
+        try:
+            await self.create_member(
+                guild, interaction.user, rsc_name=interaction.user.display_name
+            )
+        except RscException as exc:
+            log.exception(f"Member create exception: {exc}", exc_info=exc)
+
+        # Wait for embed finish.
         await signup_view.wait()
 
         if signup_view.state == SignupState.CANCELLED:
