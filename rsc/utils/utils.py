@@ -1,3 +1,4 @@
+import io
 import logging
 import re
 from pathlib import Path
@@ -5,6 +6,7 @@ from typing import Optional
 
 import discord
 from discord.app_commands import Transform
+from PIL import Image
 from redbot.core import app_commands
 from rscapi.models.league_player import LeaguePlayer
 
@@ -48,6 +50,28 @@ EMOJI_REGEX = re.compile(
     "]+",
     re.UNICODE,
 )
+
+
+async def resize_image(img_data: bytes, height: int, width: int, imgtype: str):
+    img = Image.open(io.BytesIO(img_data))
+    img.resize((height, width))
+
+    log.debug(f"Image Mode: {img.mode}")
+    if img.mode == "RGBA" and imgtype == "JPEG":
+        log.debug("Converting RGBA to RGB for JPEG.")
+        img = img.convert("RGB")
+
+    with io.BytesIO() as buf:
+        img.save(buf, format=imgtype)
+        return buf.getvalue()
+
+
+async def img_to_thumbnail(img_data: bytes, height: int, width: int, imgtype: str):
+    img = Image.open(io.BytesIO(img_data))
+    img.thumbnail(size=(128, 128))
+    with io.BytesIO() as buf:
+        img.save(buf, format=imgtype)
+        return buf.getvalue()
 
 
 def escape(text: str, *, mass_mentions: bool = False, formatting: bool = False) -> str:

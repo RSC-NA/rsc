@@ -109,7 +109,7 @@ class RSCMixIn(ABC):
         ...
 
     @abstractmethod
-    async def full_logo_url(self, guild: discord.Guild, logo_url: str) -> str | None:
+    async def full_logo_url(self, guild: discord.Guild, logo_url: str) -> str:
         ...
 
     @abstractmethod

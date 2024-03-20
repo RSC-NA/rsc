@@ -901,6 +901,16 @@ class AdminMixIn(RSCMixIn):
 
         fdata = flist.pop()
 
+        # Validate franchise data
+        if not (fdata.id and fdata.prefix and fdata.name):
+            await interaction.followup.send(
+                embed=ErrorEmbed(
+                    description=f"**{franchise}** returned malformed data from API."
+                ),
+                ephemeral=True,
+            )
+            return
+
         logo_bytes = await logo.read()
         # have to do this because monty sux
         try:
@@ -917,11 +927,64 @@ class AdminMixIn(RSCMixIn):
             )
             return
 
+        # Validate result
+        if not result.logo:
+            await interaction.followup.send(
+                embed=ErrorEmbed(
+                    description="Something went wrong during logo upload. API did not return a logo url."
+                ),
+                ephemeral=True,
+            )
+            return
+
         # Remove old emoji. Discord API doesn't let us update it in place
         old_emoji = await utils.emoji_from_prefix(guild, fdata.prefix)
         if old_emoji:
             log.debug(f"Deleting old franchise emoji: {old_emoji.name}")
             await old_emoji.delete(reason="Updating emoji to new logo")
+
+        # Discord Max
+        MAX_EMOJIS = 200 if "ROLE_ICONS" in guild.features else 50
+        MAX_EMOJI_SIZE = 256000  # 256kb
+
+        # Make sure we have enough emoji slots
+        log.debug(
+            f"[{guild.name}] Max Emojis: {MAX_EMOJIS} Emoji Size: {MAX_EMOJI_SIZE}"
+        )
+        if len(guild.emojis) >= MAX_EMOJIS:
+            await interaction.followup.send(
+                embed=ErrorEmbed(
+                    title="Logo Upload Error",
+                    description=(
+                        "Franchise logo was uploaded but guild doesn't have enough emoji slots available.\n\n"
+                        f"Guild Emoji Count: {len(guild.emojis)}\n"
+                        f"Max Emoji Count: {MAX_EMOJIS}"
+                    ),
+                )
+            )
+            return
+
+        # Validate image size for emoji. Resize to 128x128 if needed.
+        log.debug(f"Img Size: {len(logo_bytes)}")
+        if len(logo_bytes) >= MAX_EMOJI_SIZE:
+            log.debug("Image is too large... resizing to 128x128")
+            orig_size = len(logo_bytes)
+            logo_bytes = await utils.img_to_thumbnail(logo_bytes, 128, 128, "PNG")
+            log.debug(f"New Img Size: {len(logo_bytes)}")
+            # Final size validation
+            if len(logo_bytes) >= MAX_EMOJI_SIZE:
+                await interaction.followup.send(
+                    embed=ErrorEmbed(
+                        title="Logo Upload Error",
+                        description=(
+                            "Franchise logo was uploaded but we were unable to resize it as a guild emoji.\n\n"
+                            f"Original Image Size: {orig_size}\n"
+                            f"Resized 128x128 Size: {len(logo_bytes)}\n"
+                            f"Max Emoji Size: {MAX_EMOJI_SIZE}"
+                        ),
+                    )
+                )
+                return
 
         # Recreate emoji
         new_emoji = await guild.create_custom_emoji(
@@ -953,6 +1016,7 @@ class AdminMixIn(RSCMixIn):
         embed.add_field(name="Size", value=logo.size, inline=True)
 
         # URL Button (Fix this once full link is returned)
+
         url_button = LinkButton(label="Logo Link", url=full_logo_url)
         logo_view = discord.ui.View()
         logo_view.add_item(url_button)

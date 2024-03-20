@@ -112,11 +112,10 @@ class FranchiseMixIn(RSCMixIn):
         f = flist.pop()
         await self.delete_franchise(guild, f.id)
 
-    async def full_logo_url(self, guild: discord.Guild, logo_url: str) -> str | None:
+    async def full_logo_url(self, guild: discord.Guild, logo_url: str) -> str:
         host = await self._get_api_url(guild)
         if not host:
-            log.warning(f"[{guild.name}] RSC API host is not configured.")
-            return None
+            raise RuntimeError(f"[{guild.name}] RSC API host is not configured.")
         return urljoin(host, logo_url)
 
     # API
