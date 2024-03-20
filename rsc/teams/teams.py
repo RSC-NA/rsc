@@ -129,7 +129,7 @@ class TeamMixIn(RSCMixIn):
 
             # Get Tier Color
             tier_color = await utils.tier_color_by_name(guild, name=tier)
-            embed.color = tier_color
+            embed.colour = tier_color
 
             if guild.icon:
                 embed.set_thumbnail(url=guild.icon.url)
