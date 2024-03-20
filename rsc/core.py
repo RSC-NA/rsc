@@ -14,6 +14,7 @@ from rsc.abc import CompositeMetaClass
 from rsc.admin import AdminMixIn
 from rsc.ballchasing import BallchasingMixIn
 from rsc.combines import CombineMixIn
+from rsc.developer import DeveloperMixIn
 from rsc.embeds import BlueEmbed, ErrorEmbed, SuccessEmbed
 from rsc.enums import LogLevel
 from rsc.franchises import FranchiseMixIn
@@ -52,6 +53,7 @@ class RSC(
     CombineMixIn,
     FranchiseMixIn,
     LeagueMixIn,
+    DeveloperMixIn,
     FreeAgentMixIn,
     MemberMixIn,
     MatchMixIn,
@@ -441,7 +443,7 @@ class RSC(
     )
     @app_commands.describe(command="Display help for a specific command.")
     @app_commands.autocomplete(command=command_autocomplete)
-    @app_commands.guild_only()
+    @app_commands.guild_only
     async def _help_cmd(self, interaction: discord.Interaction, command: str | None):
         if not interaction.guild or not isinstance(interaction.user, discord.Member):
             return

@@ -50,6 +50,32 @@ EMOJI_REGEX = re.compile(
 )
 
 
+def escape(text: str, *, mass_mentions: bool = False, formatting: bool = False) -> str:
+    """Get text with all mass mentions or markdown escaped.
+
+    Parameters
+    ----------
+    text : str
+        The text to be escaped.
+    mass_mentions : `bool`, optional
+        Set to :code:`True` to escape mass mentions in the text.
+    formatting : `bool`, optional
+        Set to :code:`True` to escape any markdown formatting in the text.
+
+    Returns
+    -------
+    str
+        The escaped text.
+
+    """
+    if mass_mentions:
+        text = text.replace("@everyone", "@\u200beveryone")
+        text = text.replace("@here", "@\u200bhere")
+    if formatting:
+        text = discord.utils.escape_markdown(text)
+    return text
+
+
 async def get_audit_log_reason(
     guild: discord.Guild,
     target: discord.abc.GuildChannel | discord.Member | discord.Role | int,
