@@ -171,7 +171,10 @@ class FranchiseMixIn(RSCMixIn):
     ) -> Franchise:
         async with ApiClient(self._api_conf[guild.id]) as client:
             api = FranchisesApi(client)
-            return await api.franchises_upload_logo(id=id, logo=logo)  # type: ignore
+            try:
+                return await api.franchises_upload_logo(id=id, logo=logo)  # type: ignore
+            except ApiException as exc:
+                raise RscException(response=exc)
 
     async def create_franchise(
         self,

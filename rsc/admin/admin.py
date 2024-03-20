@@ -903,12 +903,19 @@ class AdminMixIn(RSCMixIn):
 
         logo_bytes = await logo.read()
         # have to do this because monty sux
-        with tempfile.NamedTemporaryFile() as fp:
-            fp.write(logo_bytes)
-            fp.seek(0)
-            result: Franchise = await self.upload_franchise_logo(
-                guild, fdata.id, fp.name
+        try:
+            with tempfile.NamedTemporaryFile() as fp:
+                fp.write(logo_bytes)
+                fp.seek(0)
+                result: Franchise = await self.upload_franchise_logo(
+                    guild, fdata.id, fp.name
+                )
+        except RscException as exc:
+            await interaction.followup.send(
+                embed=ApiExceptionErrorEmbed(exc=exc),
+                ephemeral=True,
             )
+            return
 
         # Remove old emoji. Discord API doesn't let us update it in place
         old_emoji = await utils.emoji_from_prefix(guild, fdata.prefix)
