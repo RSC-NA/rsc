@@ -52,6 +52,12 @@ EMOJI_REGEX = re.compile(
 )
 
 
+async def valid_emoji_name(name: str) -> bool:
+    if not re.match(r"[0-9A-Za-z_]+", name):
+        return False
+    return True
+
+
 async def resize_image(img_data: bytes, height: int, width: int, imgtype: str):
     img = Image.open(io.BytesIO(img_data))
     img.resize((height, width))

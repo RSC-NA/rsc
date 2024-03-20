@@ -17,7 +17,13 @@ from rsc.admin.views import (
     RebrandFranchiseView,
     TransferFranchiseView,
 )
-from rsc.embeds import ApiExceptionErrorEmbed, BlueEmbed, ErrorEmbed, SuccessEmbed
+from rsc.embeds import (
+    ApiExceptionErrorEmbed,
+    BlueEmbed,
+    ErrorEmbed,
+    SuccessEmbed,
+    YellowEmbed,
+)
 from rsc.enums import Status
 from rsc.exceptions import RscException
 from rsc.franchises import FranchiseMixIn
@@ -964,7 +970,7 @@ class AdminMixIn(RSCMixIn):
             )
             return
 
-        # Validate image size for emoji. Resize to 128x128 if needed.
+        # Validate image size for emoji/icon. Resize to 128x128 if needed.
         log.debug(f"Img Size: {len(logo_bytes)}")
         if len(logo_bytes) >= MAX_EMOJI_SIZE:
             log.debug("Image is too large... resizing to 128x128")
@@ -986,21 +992,46 @@ class AdminMixIn(RSCMixIn):
                 )
                 return
 
-        # Recreate emoji
-        new_emoji = await guild.create_custom_emoji(
-            name=fdata.prefix, image=logo_bytes, reason=f"{franchise} has a new logo"
-        )
-        log.debug(f"New franchise emoji: {new_emoji.name}")
-
         # Update franchise display icon
         icons_allowed = "ROLE_ICONS" in guild.features
         if icons_allowed:
             frole = await utils.franchise_role_from_name(guild, fdata.name)
             if not frole:
                 log.error(f"Unable to find franchise role: {fdata.name}")
+                await interaction.followup.send(
+                    embed=YellowEmbed(
+                        title="Logo Updated",
+                        description=(
+                            "Franchise logo was uploaded but we were unable to find the franchise role in the guild.\n\n"
+                            f"Franchise Name: `{fdata.name}`"
+                        ),
+                    )
+                )
+                return
             else:
                 await frole.edit(display_icon=logo_bytes)
         log.debug("Franchise role display icon was updated.")
+
+        # Validate emoji name
+        log.debug(f"Emoji Name: {fdata.prefix}")
+        if not await utils.valid_emoji_name(fdata.prefix):
+            await interaction.followup.send(
+                embed=YellowEmbed(
+                    title="Logo Updated",
+                    description=(
+                        "Franchise logo was uploaded but desired emoji name is invalid. "
+                        "Must only contain the following characters. `[a-z0-9_]`.\n\n"
+                        f"Emoji Name: `{fdata.prefix}`"
+                    ),
+                )
+            )
+            return
+
+        # Recreate emoji
+        new_emoji = await guild.create_custom_emoji(
+            name=fdata.prefix, image=logo_bytes, reason=f"{franchise} has a new logo"
+        )
+        log.debug(f"New franchise emoji: {new_emoji.name}")
 
         full_logo_url = await self.full_logo_url(guild, result.logo)
 
@@ -1014,8 +1045,7 @@ class AdminMixIn(RSCMixIn):
         embed.add_field(name="Height", value=logo.height, inline=True)
         embed.add_field(name="Width", value=logo.width, inline=True)
         embed.add_field(name="Size", value=logo.size, inline=True)
-
-        # URL Button (Fix this once full link is returned)
+        embed.add_field(name="Emoji", value=f"`:{fdata.prefix}:`", inline=False)
 
         url_button = LinkButton(label="Logo Link", url=full_logo_url)
         logo_view = discord.ui.View()
