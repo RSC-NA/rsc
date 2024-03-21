@@ -210,24 +210,6 @@ class ExceptionErrorEmbed(RedEmbed):
         self.add_field(name="Reason", value=exc_message, inline=False)
 
 
-class RapidQuotaEmbed(OrangeEmbed):
-    def __init__(self, **kwargs):
-        title = kwargs.pop("title", "Quota Exceeded")
-        desc = kwargs.pop(
-            "description", "We have exceeded the maximum number of requests for today."
-        )
-        super().__init__(title=title, description=desc, **kwargs)
-
-
-class RapidTimeOutEmbed(OrangeEmbed):
-    def __init__(self, **kwargs):
-        title = kwargs.pop("title", "API Timeout")
-        desc = kwargs.pop(
-            "description", "Request to API has timed out. Please try again later."
-        )
-        super().__init__(title=title, description=desc, **kwargs)
-
-
 class NotImplementedEmbed(RedEmbed):
     def __init__(self, **kwargs):
         super().__init__(

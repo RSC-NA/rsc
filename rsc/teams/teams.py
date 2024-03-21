@@ -3,16 +3,19 @@ import logging
 import discord
 from redbot.core import app_commands
 from rscapi import ApiClient, TeamsApi
+from rscapi.exceptions import ApiException
 from rscapi.models.high_level_match import HighLevelMatch
 from rscapi.models.league_player import LeaguePlayer
 from rscapi.models.match import Match
 from rscapi.models.player import Player
 from rscapi.models.team import Team
 from rscapi.models.team_list import TeamList
+from rscapi.models.team_season_stats import TeamSeasonStats
 
 from rsc.abc import RSCMixIn
 from rsc.embeds import BlueEmbed, ErrorEmbed
 from rsc.enums import Status, SubStatus
+from rsc.exceptions import RscException
 from rsc.franchises import FranchiseMixIn
 from rsc.tiers import TierMixIn
 from rsc.utils import utils
@@ -425,22 +428,6 @@ class TeamMixIn(RSCMixIn):
         )
         await interaction.followup.send(embed=embed)
 
-    # Non-Group Commands
-
-    @app_commands.command(name="teamstats", description="Display stats for an RSC team")
-    @app_commands.autocomplete(team=teams_autocomplete)
-    @app_commands.guild_only
-    async def _team_stats(self, interaction: discord.Interaction, team: str):
-        await utils.not_implemented(interaction)
-
-    @app_commands.command(
-        name="standings", description="Display the team standings for a specific tier"
-    )
-    @app_commands.autocomplete(tier=TierMixIn.tier_autocomplete)
-    @app_commands.guild_only
-    async def _standings_cmd(self, interaction: discord.Interaction, tier: str):
-        await utils.not_implemented(interaction)
-
     # Functions
 
     async def team_id_by_name(self, guild: discord.Guild, name: str) -> int:
@@ -569,3 +556,17 @@ class TeamMixIn(RSCMixIn):
             )
             matches.sort(key=lambda x: x.day)
             return matches
+
+    async def team_stats(
+        self,
+        guild: discord.Guild,
+        team_id: int,
+        season: int | None = None,
+    ) -> TeamSeasonStats:
+        try:
+            async with ApiClient(self._api_conf[guild.id]) as client:
+                api = TeamsApi(client)
+                stats = await api.teams_stats(team_id, season=season)
+                return stats
+        except ApiException as exc:
+            raise RscException(exc)

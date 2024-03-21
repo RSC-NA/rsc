@@ -150,18 +150,3 @@ class NotEnoughMatchDays(TransactionException):
 
 class MalformedTransactionResponse(TransactionException):
     """TransactionResponse did not contain expected data"""
-
-
-# RapidAPI
-
-
-class RapidApiException(Exception):
-    """Generic RapidAPI Exception Base Type"""
-
-
-class RapidQuotaExceeded(RapidApiException):
-    """Exceeded RapidAPI request quota"""
-
-
-class RapidApiTimeOut(RapidApiException):
-    """Request to RapidAPI timed out"""

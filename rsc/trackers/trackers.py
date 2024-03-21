@@ -24,8 +24,6 @@ class TrackerMixIn(RSCMixIn):
         log.debug("Initializing TrackersMixIn")
         super().__init__()
 
-    # Tasks
-
     # Top Level Groups
 
     _trackers = app_commands.Group(
@@ -33,17 +31,6 @@ class TrackerMixIn(RSCMixIn):
     )
 
     # App Commands
-
-    # @_trackers.command(name="testscraper", description="Testing things")
-    # async def _trackers_testscraper(
-    #     self, interaction: discord.Interaction, member: discord.Member
-    # ):
-    #     await interaction.response.defer(thinking=False, ephemeral=True)
-    #     from rsc.trackers.scraper import TrackerScraper
-
-    #     t = TrackerScraper()
-    #     log.debug(t)
-    #     #TODO REMOVE ME
 
     @_trackers.command(name="list", description="List the trackers")
     @app_commands.describe(player="RSC Discord Member")

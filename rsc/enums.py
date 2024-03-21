@@ -234,7 +234,7 @@ class Referrer(StrEnum):
     OTHER = "OTHER"
 
 
-# RapidAPI
+# Game Enums (originally for RapidApi which has been deprecated)
 
 
 class RLStatType(StrEnum):

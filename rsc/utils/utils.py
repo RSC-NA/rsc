@@ -130,8 +130,13 @@ async def get_audit_log_reason(
     return perp, reason
 
 
-async def not_implemented(interaction: discord.Interaction):
-    await interaction.response.send_message(embed=NotImplementedEmbed(), ephemeral=True)
+async def not_implemented(interaction: discord.Interaction, followup=False):
+    if followup:
+        await interaction.followup.send(embed=NotImplementedEmbed(), ephemeral=True)
+    else:
+        await interaction.response.send_message(
+            embed=NotImplementedEmbed(), ephemeral=True
+        )
 
 
 async def get_ir_role(guild: discord.Guild) -> discord.Role:

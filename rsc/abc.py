@@ -1,7 +1,6 @@
 from abc import ABC, ABCMeta, abstractmethod
 from datetime import datetime
 from os import PathLike
-from typing import TYPE_CHECKING, Optional
 from zoneinfo import ZoneInfo
 
 import discord
@@ -12,7 +11,9 @@ from rscapi import Configuration as ApiConfig
 from rscapi.models.deleted import Deleted
 from rscapi.models.franchise import Franchise
 from rscapi.models.franchise_list import FranchiseList
+from rscapi.models.franchise_standings import FranchiseStandings
 from rscapi.models.high_level_match import HighLevelMatch
+from rscapi.models.intent_to_play import IntentToPlay
 from rscapi.models.league import League
 from rscapi.models.league_player import LeaguePlayer
 from rscapi.models.match import Match
@@ -24,6 +25,7 @@ from rscapi.models.rebrand_a_franchise import RebrandAFranchise
 from rscapi.models.season import Season
 from rscapi.models.team import Team
 from rscapi.models.team_list import TeamList
+from rscapi.models.team_season_stats import TeamSeasonStats
 from rscapi.models.tier import Tier
 from rscapi.models.tracker_link import TrackerLink
 from rscapi.models.tracker_link_stats import TrackerLinkStats
@@ -40,17 +42,12 @@ from rsc.enums import (
     TrackerLinksStatus,
 )
 
-if TYPE_CHECKING:
-    from rsc.ranks.api import RapidApi
-
 
 class RSCMixIn(ABC):
     """ABC class used for type hinting RSC Mix In modules"""
 
     bot: Red
     config: RedConfig
-
-    rapid_api: dict[int, "RapidApi"]
 
     _league: dict[int, int]
     _api_conf: dict[int, ApiConfig]
@@ -61,10 +58,6 @@ class RSCMixIn(ABC):
 
     @abstractmethod
     async def timezone(self, guild: discord.Guild) -> ZoneInfo:
-        ...
-
-    @abstractmethod
-    async def rapid_connector(self, guild: discord.Guild) -> Optional["RapidApi"]:
         ...
 
     @abstractmethod
@@ -85,8 +78,9 @@ class RSCMixIn(ABC):
         guild: discord.Guild,
         prefix: str | None = None,
         gm_name: str | None = None,
+        gm_discord_id: int | None = None,
         name: str | None = None,
-        tier: str | None = None,
+        tier: int | None = None,
         tier_name: str | None = None,
     ) -> list[FranchiseList]:
         ...
@@ -174,6 +168,10 @@ class RSCMixIn(ABC):
     ) -> list[LeaguePlayer]:
         ...
 
+    @abstractmethod
+    async def league_seasons(self, guild: discord.Guild) -> list[Season]:
+        ...
+
     # Matches
 
     @abstractmethod
@@ -259,8 +257,9 @@ class RSCMixIn(ABC):
     async def player_stats(
         self,
         guild: discord.Guild,
-        id: int,
+        player: discord.Member,
         season: int | None = None,
+        postseason: bool = False,
     ) -> PlayerSeasonStats:
         ...
 
@@ -297,6 +296,28 @@ class RSCMixIn(ABC):
         executor: discord.Member | None = None,
         override: bool = False,
     ) -> LeaguePlayer:
+        ...
+
+    # Seasons
+
+    @abstractmethod
+    async def seasons(self, guild: discord.Guild) -> list[Season]:
+        ...
+
+    @abstractmethod
+    async def season_by_id(self, guild: discord.Guild, season_id: int) -> Season:
+        ...
+
+    @abstractmethod
+    async def player_intents(
+        self, guild: discord.Guild, season_id: int
+    ) -> IntentToPlay:
+        ...
+
+    @abstractmethod
+    async def franchise_standings(
+        self, guild: discord.Guild, season_id: int
+    ) -> list[FranchiseStandings]:
         ...
 
     # Teams
@@ -348,6 +369,15 @@ class RSCMixIn(ABC):
         guild: discord.Guild,
         id: int,
     ) -> list[Player]:
+        ...
+
+    @abstractmethod
+    async def team_stats(
+        self,
+        guild: discord.Guild,
+        team_id: int,
+        season: int | None = None,
+    ) -> TeamSeasonStats:
         ...
 
     # Tiers

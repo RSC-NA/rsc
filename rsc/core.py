@@ -6,6 +6,7 @@ from zoneinfo import ZoneInfo
 import discord
 import pytz
 import validators  # type: ignore
+from pydantic import ValidationError
 from redbot.core import Config, app_commands, commands
 from rscapi import Configuration
 from rscapi.exceptions import ApiException
@@ -17,6 +18,7 @@ from rsc.combines import CombineMixIn
 from rsc.developer import DeveloperMixIn
 from rsc.embeds import BlueEmbed, ErrorEmbed, SuccessEmbed
 from rsc.enums import LogLevel
+from rsc.extras import ExtrasMixIn
 from rsc.franchises import FranchiseMixIn
 from rsc.freeagents import FreeAgentMixIn
 from rsc.leagues import LeagueMixIn
@@ -24,8 +26,8 @@ from rsc.matches import MatchMixIn
 from rsc.members import MemberMixIn
 from rsc.moderator import ModeratorMixIn, ThreadMixIn
 from rsc.numbers import NumberMixIn
-from rsc.ranks import RankMixIn
-from rsc.ranks.api import RapidApi
+from rsc.seasons import SeasonsMixIn
+from rsc.stats import StatsMixIn
 from rsc.teams import TeamMixIn
 from rsc.tiers import TierMixIn
 from rsc.trackers import TrackerMixIn
@@ -42,7 +44,6 @@ defaults_guild = {
     "ApiKey": None,
     "ApiUrl": None,
     "League": None,
-    "RapidApi": None,
     "TimeZone": "UTC",
 }
 
@@ -54,12 +55,14 @@ class RSC(
     FranchiseMixIn,
     LeagueMixIn,
     DeveloperMixIn,
+    ExtrasMixIn,
     FreeAgentMixIn,
     MemberMixIn,
     MatchMixIn,
     ModeratorMixIn,
     NumberMixIn,
-    RankMixIn,
+    SeasonsMixIn,
+    StatsMixIn,
     TeamMixIn,
     TierMixIn,
     ThreadMixIn,
@@ -80,7 +83,6 @@ class RSC(
 
         # Define state of API connection
         self._api_conf: dict[int, Configuration] = {}
-        self.rapid_api: dict[int, RapidApi] = {}
         # Cache the league associated with each guild
         self._league: dict[int, int] = {}
 
@@ -146,11 +148,10 @@ class RSC(
                                     raise err
                         else:
                             raise err
-
-    async def prepare_rapidapi(self, guild: discord.Guild):
-        token = await self._get_rapidapi_key(guild)
-        if token:
-            self.rapid_api[guild.id] = RapidApi(token=token)
+                except* ValidationError as eg:
+                    for verr in eg.exceptions:
+                        log.error(f"*ValidationError: {verr!r}")
+                    raise eg.exceptions[0]
 
     async def prepare_league(self, guild: discord.Guild):
         league = await self._get_league(guild)
@@ -285,9 +286,6 @@ class RSC(
         key = "Configured" if await self._get_api_key(guild) else "Not Configured"
         url = await self._get_api_url(guild) or "Not Configured"
         tz = await self._get_timezone(guild)
-        rapid_api_key = (
-            "Configured" if await self._get_rapidapi_key(guild) else "Not Configured"
-        )
 
         # Find league name if it is configured/exists
         league = None
@@ -307,7 +305,6 @@ class RSC(
         settings_embed.add_field(name="API URL", value=url, inline=False)
         settings_embed.add_field(name="League", value=league_str, inline=False)
         settings_embed.add_field(name="Time Zone", value=tz, inline=False)
-        settings_embed.add_field(name="RapidAPI Key", value=rapid_api_key, inline=False)
         await interaction.response.send_message(embed=settings_embed, ephemeral=True)
 
     @rsc_settings.command(
@@ -409,20 +406,6 @@ class RSC(
         logging.getLogger("red.rsc").setLevel(level)
         await interaction.response.send_message(
             f"Logging level is now **{level}**", ephemeral=True
-        )
-
-    @rsc_settings.command(
-        name="rapidapikey",
-        description="Configure the guild RapidAPI key",
-    )
-    async def _rsc_set_rapidapi(self, interaction: discord.Interaction, key: str):
-        if not interaction.guild:
-            return
-
-        await self._set_rapidapi_key(interaction.guild, key)
-        await interaction.response.send_message(
-            embed=SuccessEmbed(description="RapidAPI key has been configured."),
-            ephemeral=True,
         )
 
     # Non-Group Commands
@@ -550,10 +533,6 @@ class RSC(
         """Returns server timezone as ZoneInfo object for use in datetime objects"""
         return ZoneInfo(await self._get_timezone(guild))
 
-    async def rapid_connector(self, guild: discord.Guild) -> RapidApi | None:
-        """Returns server timezone as ZoneInfo object for use in datetime objects"""
-        return self.rapid_api.get(guild.id)
-
     # Config
 
     async def _set_api_key(self, guild: discord.Guild, key: str):
@@ -585,10 +564,3 @@ class RSC(
     async def _get_timezone(self, guild: discord.Guild) -> str:
         """Default: UTC"""
         return await self.config.guild(guild).TimeZone()
-
-    async def _set_rapidapi_key(self, guild: discord.Guild, key: str):
-        self.rapid_api[guild.id] = RapidApi(token=key)
-        await self.config.guild(guild).RapidApi.set(key)
-
-    async def _get_rapidapi_key(self, guild: discord.Guild) -> str | None:
-        return await self.config.guild(guild).RapidApi()

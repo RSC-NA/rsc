@@ -125,27 +125,29 @@ class FranchiseMixIn(RSCMixIn):
         guild: discord.Guild,
         prefix: str | None = None,
         gm_name: str | None = None,
+        gm_discord_id: int | None = None,
         name: str | None = None,
-        tier: str | None = None,
+        tier: int | None = None,
         tier_name: str | None = None,
     ) -> list[FranchiseList]:
         async with ApiClient(self._api_conf[guild.id]) as client:
             api = FranchisesApi(client)
-            franchises = await api.franchises_list(
+            flist = await api.franchises_list(
                 prefix=prefix,
+                league=self._league[guild.id],
                 gm_name=gm_name,
+                gm_discord_id=gm_discord_id,
                 name=name,
                 tier=tier,
                 tier_name=tier_name,
-                league=self._league[guild.id],
             )
 
             # Populate cache
-            if franchises:
-                franchises.sort(key=lambda f: f.name)
+            if flist:
+                flist.sort(key=lambda f: f.name)
                 if self._franchise_cache.get(guild.id):
                     cached = set(self._franchise_cache[guild.id])
-                    different = {f.name for f in franchises} - cached
+                    different = {f.name for f in flist} - cached
                     if different:
                         log.debug(
                             f"[{guild.name}] Franchises being added to cache: {different}"
@@ -153,9 +155,9 @@ class FranchiseMixIn(RSCMixIn):
                         self._franchise_cache[guild.id] += list(different)
                 else:
                     log.debug(f"[{guild.name}] Starting fresh franchises cache")
-                    self._franchise_cache[guild.id] = [f.name for f in franchises]
+                    self._franchise_cache[guild.id] = [f.name for f in flist]
                 self._franchise_cache[guild.id].sort()
-            return franchises
+            return flist
 
     async def franchise_by_id(self, guild: discord.Guild, id: int) -> Franchise | None:
         async with ApiClient(self._api_conf[guild.id]) as client:

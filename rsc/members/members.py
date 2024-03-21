@@ -324,16 +324,6 @@ class MemberMixIn(RSCMixIn):
 
         await interaction.followup.send(embed=embed)
 
-    @app_commands.command(
-        name="playerstats", description="Display RSC stats for a player"
-    )
-    @app_commands.describe(player="RSC Discord Member")
-    @app_commands.guild_only
-    async def _player_stats(
-        self, interaction: discord.Interaction, player: discord.Member
-    ):
-        await utils.not_implemented(interaction)
-
     @app_commands.command(name="staff", description="Display RSC Committees and Staff")
     @app_commands.guild_only
     async def _staff_cmd(self, interaction: discord.Interaction):
@@ -459,15 +449,21 @@ class MemberMixIn(RSCMixIn):
     async def player_stats(
         self,
         guild: discord.Guild,
-        id: int,
+        player: discord.Member,
         season: int | None = None,
+        postseason: bool = False,
     ) -> PlayerSeasonStats:
         async with ApiClient(self._api_conf[guild.id]) as client:
             api = MembersApi(client)
             try:
-                return await api.members_stats(
-                    id, self._league[guild.id], season=season
-                )
+                if postseason:
+                    return await api.members_postseason_stats(
+                        player.id, self._league[guild.id], season=season
+                    )
+                else:
+                    return await api.members_stats(
+                        player.id, self._league[guild.id], season=season
+                    )
             except ApiException as exc:
                 raise RscException(response=exc)
 

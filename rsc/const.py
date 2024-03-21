@@ -33,7 +33,6 @@ BALLCHASING_URL = "https://ballchasing.com"
 BEHAVIOR_RULES_URL = (
     "https://docs.google.com/document/d/1AR241UmyNos8xflYqrzmpHE6Cy6xDcCtfn-32gdtPdI/"
 )
-RAPIDAPI_URL = "https://rocket-league1.p.rapidapi.com"
 RSC_TRACKER_URL = "https://docs.google.com/spreadsheets/d/1HLd_2yMGh_lX3adMLxQglWPIfRuiSiv587ABYnQX-0s/"
 
 # Moderation
