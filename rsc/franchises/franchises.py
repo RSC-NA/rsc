@@ -53,7 +53,7 @@ class FranchiseMixIn(RSCMixIn):
 
     # Commands
 
-    @app_commands.command(
+    @app_commands.command(  # type: ignore
         name="franchises", description="Get a list of all RSC franchises"
     )
     @app_commands.guild_only

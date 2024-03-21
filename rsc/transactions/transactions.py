@@ -248,8 +248,12 @@ class TransactionMixIn(RSCMixIn):
         tz = await self.timezone(guild)
         now = datetime.now(tz=tz)
 
-        fname = p.team.franchise.name
-        gm_id = (p.team.franchise.gm.discord_id,)
+        if not (p.team and p.team.franchise):
+            log.info(f"{member.display_name} has no team. Skipping notifications...")
+            return
+
+        fname = p.team.franchise.name or "**Unknown Franchise**"
+        gm_id = p.team.franchise.gm.discord_id
 
         match p.status:
             case Status.ROSTERED | Status.IR | Status.AGMIR:
@@ -313,7 +317,7 @@ class TransactionMixIn(RSCMixIn):
 
     # Settings
 
-    @_transactions.command(
+    @_transactions.command(  # type: ignore
         name="settings", description="Display current transactions settings"
     )
     @app_commands.checks.has_permissions(manage_guild=True)
@@ -377,7 +381,7 @@ class TransactionMixIn(RSCMixIn):
             )
             await interaction.response.send_message(embed=cut_embed, ephemeral=True)
 
-    @_transactions.command(
+    @_transactions.command(  # type: ignore
         name="notifications", description="Toggle channel notifications on or off"
     )
     @app_commands.checks.has_permissions(manage_guild=True)
@@ -400,7 +404,7 @@ class TransactionMixIn(RSCMixIn):
             ephemeral=True,
         )
 
-    @_transactions.command(
+    @_transactions.command(  # type: ignore
         name="toggledm", description="Toggle player direct messages on or off"
     )
     @app_commands.checks.has_permissions(manage_guild=True)
@@ -423,7 +427,7 @@ class TransactionMixIn(RSCMixIn):
             ephemeral=True,
         )
 
-    @_transactions.command(
+    @_transactions.command(  # type: ignore
         name="transactionchannel",
         description="Configure the transaction announcement channel",
     )
@@ -447,7 +451,7 @@ class TransactionMixIn(RSCMixIn):
             ephemeral=True,
         )
 
-    @_transactions.command(
+    @_transactions.command(  # type: ignore
         name="logchannel", description="Set the transactions committee log channel"
     )
     @app_commands.describe(
@@ -470,7 +474,7 @@ class TransactionMixIn(RSCMixIn):
             ephemeral=True,
         )
 
-    @_transactions.command(
+    @_transactions.command(  # type: ignore
         name="role", description="Configure the transaction committee role"
     )
     @app_commands.describe(role="Transaction committee discord role")
@@ -490,7 +494,7 @@ class TransactionMixIn(RSCMixIn):
             ephemeral=True,
         )
 
-    @_transactions.command(
+    @_transactions.command(  # type: ignore
         name="cutmsg", description="Configure the player cut message"
     )
     @app_commands.describe(msg="Cut message string")
@@ -517,7 +521,7 @@ class TransactionMixIn(RSCMixIn):
 
     # Committee Commands
 
-    @_transactions.command(name="cut", description="Release a player from their team")
+    @_transactions.command(name="cut", description="Release a player from their team")  # type: ignore
     @app_commands.describe(
         player="Player to cut",
         notes="Transaction notes (Optional)",
@@ -561,6 +565,28 @@ class TransactionMixIn(RSCMixIn):
 
         ptu = await self.league_player_from_transaction(result, player=player)
 
+        if not ptu.old_team:
+            return await interaction.followup.send(
+                embed=ErrorEmbed(
+                    description=(
+                        "Player was cut but the API did not return any information on previous team. "
+                        "Please reach out to modmail.\n\n"
+                        "**Roles and names were not modified**"
+                    )
+                )
+            )
+
+        if not ptu.player.tier or not ptu.player.tier.name:
+            return await interaction.followup.send(
+                embed=ErrorEmbed(
+                    description=(
+                        "Player was cut but the API did not return any tier information. "
+                        "Please reach out to modmail.\n\n"
+                        "**Roles and names were not modified**"
+                    )
+                )
+            )
+
         # Update tier role, handle promotion case
         log.debug(f"[{guild.name}] Updating tier roles for {player.id}")
         old_tier_role = await utils.get_tier_role(guild, ptu.old_team.tier)
@@ -576,6 +602,17 @@ class TransactionMixIn(RSCMixIn):
         # Free agent roles
         fa_role = await utils.get_free_agent_role(guild)
         tier_fa_role = await utils.get_tier_fa_role(guild, ptu.player.tier.name)
+
+        if not result.first_franchise:
+            return await interaction.followup.send(
+                embed=ErrorEmbed(
+                    description=(
+                        "Player was cut but the API did not return first/second franchise data. "
+                        "Please reach out to modmail.\n\n"
+                        "**Roles and names were not modified**"
+                    )
+                )
+            )
 
         # Franchise Role
         franchise_role = await utils.franchise_role_from_name(
@@ -634,7 +671,7 @@ class TransactionMixIn(RSCMixIn):
             ephemeral=True,
         )
 
-    @_transactions.command(
+    @_transactions.command(  # type: ignore
         name="sign", description="Sign a player to the specified team"
     )
     @app_commands.describe(
@@ -643,7 +680,7 @@ class TransactionMixIn(RSCMixIn):
         notes="Transaction notes (Optional)",
         override="Admin only override",
     )
-    @app_commands.autocomplete(team=TeamMixIn.teams_autocomplete)
+    @app_commands.autocomplete(team=TeamMixIn.teams_autocomplete)  # type: ignore
     async def _transactions_sign(
         self,
         interaction: discord.Interaction,
@@ -684,6 +721,17 @@ class TransactionMixIn(RSCMixIn):
         ptu: PlayerTransactionUpdates = await self.league_player_from_transaction(
             result, player=player
         )
+
+        if not ptu.player.tier or not ptu.player.tier.name:
+            return await interaction.followup.send(
+                embed=ErrorEmbed(
+                    description=(
+                        "Player was cut but the API did not return any tier information. "
+                        "Please reach out to modmail.\n\n"
+                        "**Roles and names were not modified**"
+                    )
+                )
+            )
 
         # Remove FA roles
         log.debug(f"[{guild.name}] Removing FA roles from {player.id}")
@@ -731,8 +779,8 @@ class TransactionMixIn(RSCMixIn):
             ephemeral=True,
         )
 
-    @_transactions.command(name="resign", description="Re-sign a player to their team.")
-    @app_commands.autocomplete(team=TeamMixIn.teams_autocomplete)
+    @_transactions.command(name="resign", description="Re-sign a player to their team.")  # type: ignore
+    @app_commands.autocomplete(team=TeamMixIn.teams_autocomplete)  # type: ignore
     @app_commands.describe(
         player="RSC Discord Member",
         team="Name of team player resigning player",
@@ -819,7 +867,7 @@ class TransactionMixIn(RSCMixIn):
             ephemeral=True,
         )
 
-    @_transactions.command(name="sub", description="Substitute a player on a team")
+    @_transactions.command(name="sub", description="Substitute a player on a team")  # type: ignore
     @app_commands.describe(
         player_in="Player being subbed in on the team",
         player_out="Player being subbed out on the team",
@@ -910,7 +958,7 @@ class TransactionMixIn(RSCMixIn):
             embed.add_field(name="Notes", value=result.notes, inline=False)
         await interaction.followup.send(embed=embed, ephemeral=True)
 
-    @_transactions.command(
+    @_transactions.command(  # type: ignore
         name="announce",
         description="Perform a generic announcement to the transactions channel.",
     )
@@ -936,7 +984,7 @@ class TransactionMixIn(RSCMixIn):
         )
         await interaction.response.send_message(content="Done", ephemeral=True)
 
-    @_transactions.command(
+    @_transactions.command(  # type: ignore
         name="announcetrade",
         description="Announce a trade between two franchises to the transaction chanenl",
     )
@@ -968,7 +1016,7 @@ class TransactionMixIn(RSCMixIn):
         # await trans_channel.send(content=trade.trade, allowed_mentions=discord.AllowedMentions(users=True))
         # TODO - modal not working for this because mentions
 
-    @_transactions.command(
+    @_transactions.command(  # type: ignore
         name="trade",
         description="Process a trade between franchises",
     )
@@ -1068,7 +1116,7 @@ class TransactionMixIn(RSCMixIn):
             )
             return
 
-    @_transactions.command(
+    @_transactions.command(  # type: ignore
         name="captain",
         description="Promote a player to captain of their team",
     )
@@ -1187,7 +1235,7 @@ class TransactionMixIn(RSCMixIn):
 
         await interaction.followup.send(embed=embed, ephemeral=True)
 
-    @_transactions.command(
+    @_transactions.command(  # type: ignore
         name="expire",
         description="Manually expire a temporary FA contract",
     )
@@ -1274,7 +1322,7 @@ class TransactionMixIn(RSCMixIn):
             ephemeral=True,
         )
 
-    @_transactions.command(
+    @_transactions.command(  # type: ignore
         name="sublist",
         description="Fetch a list of all players with a temporary FA contract",
     )
@@ -1299,7 +1347,7 @@ class TransactionMixIn(RSCMixIn):
         )
         await interaction.response.send_message(embed=embed)
 
-    @_transactions.command(
+    @_transactions.command(  # type: ignore
         name="ir",
         description="Modify inactive reserve status of a player",
     )
@@ -1382,7 +1430,7 @@ class TransactionMixIn(RSCMixIn):
             ephemeral=True,
         )
 
-    @_transactions.command(name="retire", description="Retire a player from the league")
+    @_transactions.command(name="retire", description="Retire a player from the league")  # type: ignore
     @app_commands.describe(
         player="RSC discord member to retire",
         notes="Transaction notes (Optional)",
@@ -1469,7 +1517,7 @@ class TransactionMixIn(RSCMixIn):
             ephemeral=True,
         )
 
-    @_transactions.command(
+    @_transactions.command(  # type: ignore
         name="clearsublist", description="Clear cached substitute list"
     )
     @app_commands.checks.has_permissions(manage_guild=True)
@@ -1482,7 +1530,7 @@ class TransactionMixIn(RSCMixIn):
             "Locally cached substitute list has been cleared.", ephemeral=True
         )
 
-    @_transactions.command(name="history", description="Fetch transaction history")
+    @_transactions.command(name="history", description="Fetch transaction history")  # type: ignore
     @app_commands.describe(
         player="RSC Discord Member (Optional)",
         executor="Transaction Executor (Optional)",
@@ -1743,6 +1791,9 @@ class TransactionMixIn(RSCMixIn):
     async def league_player_from_transaction(
         self, transaction: TransactionResponse, player=discord.Member
     ) -> PlayerTransactionUpdates:
+        if not transaction.player_updates:
+            raise ValueError("Transaction response contains no Player Updates.")
+
         lp = next(
             (
                 x

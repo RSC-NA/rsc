@@ -249,7 +249,7 @@ class RSC(
         default_permissions=discord.Permissions(manage_guild=True),
     )
 
-    @rsc_settings.command(name="key", description="Configure the RSC API key.")
+    @rsc_settings.command(name="key", description="Configure the RSC API key.")  # type: ignore
     async def _rsc_set_key(self, interaction: discord.Interaction, key: str):
         if not interaction.guild:
             return
@@ -262,7 +262,7 @@ class RSC(
             ephemeral=True,
         )
 
-    @rsc_settings.command(name="url", description="Configure the RSC API web address.")
+    @rsc_settings.command(name="url", description="Configure the RSC API web address.")  # type: ignore
     async def _rsc_set_url(self, interaction: discord.Interaction, url: str):
         if not interaction.guild:
             return
@@ -275,7 +275,7 @@ class RSC(
             ephemeral=True,
         )
 
-    @rsc_settings.command(
+    @rsc_settings.command(  # type: ignore
         name="settings", description="Display the current RSC API settings."
     )
     async def _rsc_settings(self, interaction: discord.Interaction):
@@ -307,7 +307,7 @@ class RSC(
         settings_embed.add_field(name="Time Zone", value=tz, inline=False)
         await interaction.response.send_message(embed=settings_embed, ephemeral=True)
 
-    @rsc_settings.command(
+    @rsc_settings.command(  # type: ignore
         name="league", description="Set the league this guild correlates to in the API"
     )
     async def _rsc_league(self, interaction: discord.Interaction):
@@ -329,7 +329,7 @@ class RSC(
                 ),
             )
 
-    @rsc_settings.command(
+    @rsc_settings.command(  # type: ignore
         name="setup", description="Perform some basic first time setup for the server"
     )
     async def _rsc_setup(self, interaction: discord.Interaction):
@@ -372,7 +372,7 @@ class RSC(
             )
         )
 
-    @rsc_settings.command(
+    @rsc_settings.command(  # type: ignore
         name="timezone", description="Set the desired time zone for the guild"
     )
     @app_commands.describe(timezone="Common time zone string (Ex: America/New_York)")
@@ -396,7 +396,7 @@ class RSC(
             ephemeral=True,
         )
 
-    @rsc_settings.command(
+    @rsc_settings.command(  # type: ignore
         name="loglevel",
         description="Modify the log level of the bot (Development Feature)",
     )
@@ -410,7 +410,7 @@ class RSC(
 
     # Non-Group Commands
 
-    @app_commands.command(name="whatami", description="What am I?")
+    @app_commands.command(name="whatami", description="What am I?")  # type: ignore
     async def _whatami(self, interaction: discord.Interaction):
         embed = BlueEmbed(
             title="What Am I?",
@@ -421,7 +421,7 @@ class RSC(
         )
         await interaction.response.send_message(embed=embed)
 
-    @app_commands.command(
+    @app_commands.command(  # type: ignore
         name="help", description="Display a help for RSC Bot or a specific command."
     )
     @app_commands.describe(command="Display help for a specific command.")

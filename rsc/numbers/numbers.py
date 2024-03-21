@@ -55,7 +55,7 @@ class NumberMixIn(RSCMixIn):
 
     # App Commands
 
-    @_numbers.command(
+    @_numbers.command(  # type: ignore
         name="fetch", description="Display list of MMR pulls for a player"
     )
     @app_commands.describe(player="RSC Discord Member")

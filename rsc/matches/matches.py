@@ -25,11 +25,11 @@ class MatchMixIn(RSCMixIn):
 
     # App Commands
 
-    @app_commands.command(
+    @app_commands.command(  # type: ignore
         name="schedule",
         description="Display your team or another teams entire schedule",
     )
-    @app_commands.autocomplete(team=TeamMixIn.teams_autocomplete)
+    @app_commands.autocomplete(team=TeamMixIn.teams_autocomplete)  # type: ignore
     @app_commands.describe(
         team="Get the schedule for a specific team (Optional)",
         preseason="Include preseason matches (Default: False)",
@@ -147,7 +147,7 @@ class MatchMixIn(RSCMixIn):
 
         await interaction.followup.send(embed=embed)
 
-    @app_commands.command(
+    @app_commands.command(  # type: ignore
         name="match",
         description="Get information about your upcoming match",
     )

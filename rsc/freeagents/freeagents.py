@@ -74,11 +74,11 @@ class FreeAgentMixIn(RSCMixIn):
 
     # Commands
 
-    @app_commands.command(
+    @app_commands.command(  # type: ignore
         name="freeagents", description="List free agents in a specified tier"
     )
     @app_commands.describe(tier='Free agent tier (Ex: "Elite")')
-    @app_commands.autocomplete(tier=TierMixIn.tier_autocomplete)
+    @app_commands.autocomplete(tier=TierMixIn.tier_autocomplete)  # type: ignore
     @app_commands.guild_only
     async def _free_agents(self, interaction: discord.Interaction, tier: str):
         guild = interaction.guild
@@ -86,7 +86,7 @@ class FreeAgentMixIn(RSCMixIn):
             return
 
         await interaction.response.defer()
-        if not await self.is_valid_tier(interaction.guild, tier):
+        if not await self.is_valid_tier(guild, tier):
             await interaction.followup.send(
                 embed=ErrorEmbed(description=f"**{tier}** is not a valid tier."),
             )
@@ -198,7 +198,7 @@ class FreeAgentMixIn(RSCMixIn):
             )
             await self.add_checkin(guild, checkin)
 
-    @app_commands.command(
+    @app_commands.command(  # type: ignore
         name="checkout",
         description="Check out as an available free agent for the current match day",
     )
@@ -226,12 +226,12 @@ class FreeAgentMixIn(RSCMixIn):
         if checkout_view.result:
             await self.remove_checkin(guild, checkin)
 
-    @app_commands.command(
+    @app_commands.command(  # type: ignore
         name="availability",
         description="Get list of available free agents for specified tier",
     )
     @app_commands.describe(tier='Free agent tier (Ex: "Elite")')
-    @app_commands.autocomplete(tier=TierMixIn.tier_autocomplete)
+    @app_commands.autocomplete(tier=TierMixIn.tier_autocomplete)  # type: ignore
     @app_commands.guild_only
     async def _fa_availability(self, interaction: discord.Interaction, tier: str):
         guild = interaction.guild
@@ -263,12 +263,12 @@ class FreeAgentMixIn(RSCMixIn):
             )
         await interaction.response.send_message(embed=embed)
 
-    @app_commands.command(
+    @app_commands.command(  # type: ignore
         name="clearavailability",
         description="Clear free agent availability for a specified tier",
     )
     @app_commands.describe(tier='Free agent tier (Ex: "Elite")')
-    @app_commands.autocomplete(tier=TierMixIn.tier_autocomplete)
+    @app_commands.autocomplete(tier=TierMixIn.tier_autocomplete)  # type: ignore
     @app_commands.checks.has_permissions(manage_guild=True)
     @app_commands.guild_only
     async def _clear_fa_availability(self, interaction: discord.Interaction, tier: str):
@@ -282,7 +282,7 @@ class FreeAgentMixIn(RSCMixIn):
             )
         )
 
-    @app_commands.command(
+    @app_commands.command(  # type: ignore
         name="clearallavailability",
         description="Clear free agent availability for all tiers",
     )

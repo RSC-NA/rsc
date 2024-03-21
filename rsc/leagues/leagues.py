@@ -26,7 +26,7 @@ class LeagueMixIn(RSCMixIn):
 
     # Commands
 
-    @app_commands.command(name="leagues", description="Show all RSC leagues")
+    @app_commands.command(name="leagues", description="Show all RSC leagues")  # type: ignore
     @app_commands.guild_only
     async def _leagues(self, interaction: discord.Interaction):
         guild = interaction.guild
@@ -51,7 +51,7 @@ class LeagueMixIn(RSCMixIn):
             embed.set_thumbnail(url=guild.icon.url)
         await interaction.response.send_message(embed=embed)
 
-    @app_commands.command(
+    @app_commands.command(  # type: ignore
         name="leagueinfo", description="Show league and current season information"
     )
     @app_commands.guild_only
@@ -76,7 +76,7 @@ class LeagueMixIn(RSCMixIn):
         # )
         # TODO - Is this useful?
 
-    @app_commands.command(
+    @app_commands.command(  # type: ignore
         name="season", description="Display current RSC season for league"
     )
     @app_commands.guild_only
@@ -103,7 +103,7 @@ class LeagueMixIn(RSCMixIn):
             embed.set_thumbnail(url=guild.icon.url)
         await interaction.response.send_message(embed=embed)
 
-    @app_commands.command(name="dates", description="Display important RSC dates")
+    @app_commands.command(name="dates", description="Display important RSC dates")  # type: ignore
     @app_commands.guild_only
     async def _dates_cmd(self, interaction: discord.Interaction):
         guild = interaction.guild

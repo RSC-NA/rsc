@@ -40,7 +40,7 @@ class TierMixIn(RSCMixIn):
 
     # Commands
 
-    @app_commands.command(name="tiers", description="Get a list of all league tiers")
+    @app_commands.command(name="tiers", description="Get a list of all league tiers")  # type: ignore
     @app_commands.guild_only
     async def _tiers(self, interaction: discord.Interaction):
         """Get a list of all league tiers"""

@@ -29,7 +29,7 @@ class DeveloperMixIn(RSCMixIn):
 
     # Commands
 
-    @_log_group.command(
+    @_log_group.command(  # type: ignore
         name="tail",
         description=f"Tail the latest log file (Max {BUFMAX} bytes)",
     )
@@ -63,7 +63,7 @@ class DeveloperMixIn(RSCMixIn):
         latest_log_path = None
         root_logger = logging.getLogger()
         for fh in root_logger.handlers:
-            if not isinstance(fh, logging.handlers.RotatingFileHandler):
+            if not isinstance(fh, logging.handlers.RotatingFileHandler):  # type: ignore
                 log.debug("Not a file handler...")
                 continue
             if fh.baseStem == "latest":

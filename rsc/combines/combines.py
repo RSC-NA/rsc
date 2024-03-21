@@ -72,7 +72,7 @@ class CombineMixIn(RSCMixIn):
         default_permissions=discord.Permissions(manage_guild=True),
     )
 
-    @_combines.command(name="settings", description="Display combine settings")
+    @_combines.command(name="settings", description="Display combine settings")  # type: ignore
     async def _combines_settings(self, interaction: discord.Interaction):
         guild = interaction.guild
         if not guild:
@@ -92,7 +92,7 @@ class CombineMixIn(RSCMixIn):
         embed.add_field(name="Public", value=public, inline=False)
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-    @_combines.command(
+    @_combines.command(  # type: ignore
         name="public",
         description='Toggle combine rooms publicity (Private rooms require "League" role)',
     )
@@ -113,7 +113,7 @@ class CombineMixIn(RSCMixIn):
             ephemeral=True,
         )
 
-    @_combines.command(
+    @_combines.command(  # type: ignore
         name="capacity",
         description="Define the combine room max capacity (Default: 10)",
     )
@@ -134,7 +134,7 @@ class CombineMixIn(RSCMixIn):
 
     # Commands
 
-    @_combines.command(
+    @_combines.command(  # type: ignore
         name="start", description="Begin RSC combines and create channels"
     )
     async def _combines_start(self, interaction: discord.Interaction):
@@ -173,7 +173,7 @@ class CombineMixIn(RSCMixIn):
             )
         )
 
-    @_combines.command(name="stop", description="End RSC combines and delete channels")
+    @_combines.command(name="stop", description="End RSC combines and delete channels")  # type: ignore
     async def _combines_stop(self, interaction: discord.Interaction):
         if not interaction.guild:
             return
@@ -192,7 +192,7 @@ class CombineMixIn(RSCMixIn):
             )
         )
 
-    @_combines.command(
+    @_combines.command(  # type: ignore
         name="overview", description="Get overview of current combine channels"
     )
     async def _combines_overview(self, interaction: discord.Interaction):

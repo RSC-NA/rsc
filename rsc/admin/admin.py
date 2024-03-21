@@ -81,7 +81,7 @@ class AdminMixIn(RSCMixIn):
 
     # Member Commands
 
-    @_members.command(name="changename", description="Change RSC name for a member")
+    @_members.command(name="changename", description="Change RSC name for a member")  # type: ignore
     @app_commands.describe(
         member="RSC discord member",
         name="New player name",
@@ -125,7 +125,7 @@ class AdminMixIn(RSCMixIn):
             )
         )
 
-    @_members.command(name="create", description="Create an RSC member in the API")
+    @_members.command(name="create", description="Create an RSC member in the API")  # type: ignore
     @app_commands.describe(
         member="Discord member being added",
         rsc_name="RSC player name (Defaults to members display name)",
@@ -162,7 +162,7 @@ class AdminMixIn(RSCMixIn):
             ephemeral=True,
         )
 
-    @_members.command(name="delete", description="Delete an RSC member in the API")
+    @_members.command(name="delete", description="Delete an RSC member in the API")  # type: ignore
     @app_commands.describe(member="RSC discord member")
     async def _member_delete(
         self, interaction: discord.Interaction, member: discord.Member
@@ -184,7 +184,7 @@ class AdminMixIn(RSCMixIn):
             ephemeral=True,
         )
 
-    @_members.command(
+    @_members.command(  # type: ignore
         name="list", description="Fetch a list of members based on specified criteria."
     )
     @app_commands.describe(
@@ -286,7 +286,7 @@ class AdminMixIn(RSCMixIn):
 
     # Validate Commands
 
-    @_sync.command(
+    @_sync.command(  # type: ignore
         name="requiredroles",
         description="Check if all base required roles exist. If not, create them.",
     )
@@ -476,7 +476,7 @@ class AdminMixIn(RSCMixIn):
         )
         await interaction.followup.send(embed=embed, ephemeral=True)
 
-    @_sync.command(
+    @_sync.command(  # type: ignore
         name="tiers",
         description="Check if all tier roles and channels exist. If not, create them.",
     )
@@ -677,7 +677,7 @@ class AdminMixIn(RSCMixIn):
 
         await interaction.followup.send(embed=embed, ephemeral=True)
 
-    @_sync.command(
+    @_sync.command(  # type: ignore
         name="transactionchannels",
         description="Check if all franchise transaction channels. If not, create them.",
     )
@@ -800,7 +800,7 @@ class AdminMixIn(RSCMixIn):
 
         await interaction.edit_original_response(embed=embed)
 
-    @_sync.command(
+    @_sync.command(  # type: ignore
         name="franchiseroles",
         description="Check if all franchise roles exist. If not, create them.",
     )
@@ -874,9 +874,9 @@ class AdminMixIn(RSCMixIn):
 
     # Franchise
 
-    @_franchise.command(name="logo", description="Upload a logo for the franchise")
+    @_franchise.command(name="logo", description="Upload a logo for the franchise")  # type: ignore
     @app_commands.describe(franchise="Franchise name", logo="Franchise logo file (PNG)")
-    @app_commands.autocomplete(franchise=FranchiseMixIn.franchise_autocomplete)
+    @app_commands.autocomplete(franchise=FranchiseMixIn.franchise_autocomplete)  # type: ignore
     async def _franchise_logo(
         self, interaction: discord.Interaction, franchise: str, logo: discord.Attachment
     ):
@@ -1055,8 +1055,8 @@ class AdminMixIn(RSCMixIn):
         embed.set_thumbnail(url=logo.url)
         await interaction.followup.send(embed=embed, view=logo_view, ephemeral=True)
 
-    @_franchise.command(name="rebrand", description="Rebrand a franchise")
-    @app_commands.autocomplete(franchise=FranchiseMixIn.franchise_autocomplete)
+    @_franchise.command(name="rebrand", description="Rebrand a franchise")  # type: ignore
+    @app_commands.autocomplete(franchise=FranchiseMixIn.franchise_autocomplete)  # type: ignore
     @app_commands.describe(
         franchise="Franchise to rebrand", override="Admin only override"
     )
@@ -1178,9 +1178,9 @@ class AdminMixIn(RSCMixIn):
         )
         await rebrand_modal.interaction.edit_original_response(embed=embed, view=None)
 
-    @_franchise.command(name="delete", description="Delete a franchise")
+    @_franchise.command(name="delete", description="Delete a franchise")  # type: ignore
     @app_commands.describe(franchise="Franchise name")
-    @app_commands.autocomplete(franchise=FranchiseMixIn.franchise_autocomplete)
+    @app_commands.autocomplete(franchise=FranchiseMixIn.franchise_autocomplete)  # type: ignore
     async def _franchise_delete(
         self,
         interaction: discord.Interaction,
@@ -1278,7 +1278,7 @@ class AdminMixIn(RSCMixIn):
             view=None,
         )
 
-    @_franchise.command(
+    @_franchise.command(  # type: ignore
         name="create", description="Create a new franchise in the league"
     )
     @app_commands.describe(
@@ -1333,11 +1333,11 @@ class AdminMixIn(RSCMixIn):
         embed.add_field(name="GM", value=gm.mention, inline=True)
         await interaction.edit_original_response(embed=embed, view=None)
 
-    @_franchise.command(
+    @_franchise.command(  # type: ignore
         name="transfer", description="Transfer ownership of a franchise"
     )
     @app_commands.describe(franchise="Franchise name", gm="General Manager")
-    @app_commands.autocomplete(franchise=FranchiseMixIn.franchise_autocomplete)
+    @app_commands.autocomplete(franchise=FranchiseMixIn.franchise_autocomplete)  # type: ignore
     async def _franchise_transfer(
         self,
         interaction: discord.Interaction,
@@ -1411,7 +1411,7 @@ class AdminMixIn(RSCMixIn):
 
     # Other Group Commands
 
-    @_admin.command(name="dates", description="Configure the dates command output")
+    @_admin.command(name="dates", description="Configure the dates command output")  # type: ignore
     async def _admin_set_dates(self, interaction: discord.Interaction):
         if not interaction.guild:
             return

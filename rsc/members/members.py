@@ -46,7 +46,7 @@ class MemberMixIn(RSCMixIn):
 
     # App Commands
 
-    @app_commands.command(name="signup", description="Sign up for the next RSC season")
+    @app_commands.command(name="signup", description="Sign up for the next RSC season")  # type: ignore
     @app_commands.guild_only
     async def _member_signup(self, interaction: discord.Interaction):
         guild = interaction.guild
@@ -136,7 +136,7 @@ class MemberMixIn(RSCMixIn):
         )
         await interaction.edit_original_response(embed=success_embed, view=None)
 
-    @app_commands.command(
+    @app_commands.command(  # type: ignore
         name="intenttoplay", description="Declare your intent for the next RSC season"
     )
     @app_commands.guild_only
@@ -205,7 +205,7 @@ class MemberMixIn(RSCMixIn):
         )
         await interaction.edit_original_response(embed=embed, view=None)
 
-    @app_commands.command(
+    @app_commands.command(  # type: ignore
         name="playerinfo", description="Display league information about a player"
     )
     @app_commands.describe(player="Player discord name to query")
@@ -275,11 +275,11 @@ class MemberMixIn(RSCMixIn):
             embed.set_thumbnail(url=flogo)
         await interaction.followup.send(embed=embed)
 
-    @app_commands.command(
+    @app_commands.command(  # type: ignore
         name="waivers", description="Display players currently on waivers"
     )
     @app_commands.describe(tier='Waiver tier name (Ex: "Elite")')
-    @app_commands.autocomplete(tier=TierMixIn.tier_autocomplete)
+    @app_commands.autocomplete(tier=TierMixIn.tier_autocomplete)  # type: ignore
     @app_commands.guild_only
     async def _waivers(self, interaction: discord.Interaction, tier: str):
         guild = interaction.guild

@@ -32,13 +32,17 @@ class TrackerMixIn(RSCMixIn):
 
     # App Commands
 
-    @_trackers.command(name="list", description="List the trackers")
+    @_trackers.command(name="list", description="List the trackers")  # type: ignore
     @app_commands.describe(player="RSC Discord Member")
     async def _trackers_list(
         self, interaction: discord.Interaction, player: discord.Member
     ):
+        guild = interaction.guild
+        if not guild:
+            return
+
         await interaction.response.defer(ephemeral=True)
-        trackers = await self.trackers(interaction.guild, player=player.id)
+        trackers = await self.trackers(guild, player=player.id)
 
         embed = YellowEmbed(title=f"{player.display_name} Trackers")
         if not trackers:
@@ -62,15 +66,19 @@ class TrackerMixIn(RSCMixIn):
             )
         await interaction.followup.send(embed=embed, ephemeral=True)
 
-    @_trackers.command(name="recent", description="Show most recent RL tracker pulls")
+    @_trackers.command(name="recent", description="Show most recent RL tracker pulls")  # type: ignore
     @app_commands.describe(status="Tracker status to query (Default: Pulled)")
     async def _trackers_recent_pull(
         self,
         interaction: discord.Interaction,
         status: TrackerLinksStatus = TrackerLinksStatus.PULLED,
     ):
+        guild = interaction.guild
+        if not guild:
+            return
+
         await interaction.response.defer()
-        trackers = await self.trackers(interaction.guild, status)
+        trackers = await self.trackers(guild, status)
         trackers.sort(key=lambda x: x.last_updated, reverse=True)
 
         embed = YellowEmbed(
@@ -94,13 +102,17 @@ class TrackerMixIn(RSCMixIn):
         )
         await interaction.followup.send(embed=embed)
 
-    @_trackers.command(name="stats", description="Display RSC tracker link stats")
+    @_trackers.command(name="stats", description="Display RSC tracker link stats")  # type: ignore
     async def _trackers_stats(
         self,
         interaction: discord.Interaction,
     ):
+        guild = interaction.guild
+        if not guild:
+            return
+
         await interaction.response.defer()
-        stats = await self.tracker_stats(interaction.guild)
+        stats = await self.tracker_stats(guild)
 
         embed = YellowEmbed(
             title="RSC Tracker Stats",
@@ -117,7 +129,7 @@ class TrackerMixIn(RSCMixIn):
         )
         await interaction.followup.send(embed=embed)
 
-    @_trackers.command(
+    @_trackers.command(  # type: ignore
         name="old", description="Display number of outdated RSC tracker links"
     )
     @app_commands.describe(
@@ -130,13 +142,17 @@ class TrackerMixIn(RSCMixIn):
         status: TrackerLinksStatus = TrackerLinksStatus.PULLED,
         days: int = 90,
     ):
+        guild = interaction.guild
+        if not guild:
+            return
+
         await interaction.response.defer()
 
-        tz = await self.timezone(interaction.guild)
+        tz = await self.timezone(guild)
         date_cutoff = datetime.now(tz) - timedelta(days=days)
 
         log.debug(f"Getting tracker data older than {date_cutoff.date()}")
-        trackers = await self.trackers(interaction.guild, status)
+        trackers = await self.trackers(guild, status)
 
         log.debug("Removing recently updated trackers")
         old_trackers = []
@@ -158,7 +174,7 @@ class TrackerMixIn(RSCMixIn):
 
     # Non-Group Commands
 
-    @app_commands.command(
+    @app_commands.command(  # type: ignore
         name="accounts",
         description="Display rocket league accounts associated with a player",
     )

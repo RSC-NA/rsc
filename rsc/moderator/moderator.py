@@ -28,14 +28,14 @@ class ModeratorMixIn(RSCMixIn):
 
     # Mod Commands
 
-    @_mod.command(name="notify", description="Notify a user via direct message")
+    @_mod.command(name="notify", description="Notify a user via direct message")  # type: ignore
     @app_commands.describe(member="Discord member to notify")
     async def _mod_notify(
         self, interaction: discord.Interaction, member: discord.Member
     ):
         await utils.not_implemented(interaction)
 
-    @_mod.command(
+    @_mod.command(  # type: ignore
         name="mute",
         description="Mute a player for a period of time (Default: 30 minutes)",
     )
@@ -55,12 +55,12 @@ class ModeratorMixIn(RSCMixIn):
     ):
         await utils.not_implemented(interaction)
 
-    @_mod.command(name="kick", description="Kick a player from the RSC discord server")
+    @_mod.command(name="kick", description="Kick a player from the RSC discord server")  # type: ignore
     @app_commands.describe(member="Discord member to kick from server")
     async def _mod_kick(self, interaction: discord.Interaction, member: discord.Member):
         await utils.not_implemented(interaction)
 
-    @_mod.command(name="ban", description="Ban a player from the RSC discord server")
+    @_mod.command(name="ban", description="Ban a player from the RSC discord server")  # type: ignore
     @app_commands.describe(
         member="Discord member to ban from server",
         days="Number of days",
@@ -77,7 +77,7 @@ class ModeratorMixIn(RSCMixIn):
     ):
         await utils.not_implemented(interaction)
 
-    @_mod.command(name="strike", description="Issue a strike to a player")
+    @_mod.command(name="strike", description="Issue a strike to a player")  # type: ignore
     @app_commands.describe(
         member="Discord member to strike",
         rule="Strike rule #",
@@ -98,7 +98,7 @@ class ModeratorMixIn(RSCMixIn):
     ):
         await utils.not_implemented(interaction)
 
-    @_mod.command(
+    @_mod.command(  # type: ignore
         name="history",
         description="Display mod action history for a player (Default: Last 90 days)",
     )
@@ -111,7 +111,7 @@ class ModeratorMixIn(RSCMixIn):
     ):
         await utils.not_implemented(interaction)
 
-    @_mod.command(
+    @_mod.command(  # type: ignore
         name="recent",
         description="Display all recent moderator actions (Default: Last 30 days)",
     )
@@ -119,6 +119,6 @@ class ModeratorMixIn(RSCMixIn):
     async def _mod_recent(self, interaction: discord.Interaction, days: int = 30):
         await utils.not_implemented(interaction)
 
-    @_mod.command(name="rules", description="Display list of RSC rules")
+    @_mod.command(name="rules", description="Display list of RSC rules")  # type: ignore
     async def _mod_rules(self, interaction: discord.Interaction):
         await utils.not_implemented(interaction)

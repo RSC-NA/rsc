@@ -57,7 +57,7 @@ class TeamMixIn(RSCMixIn):
 
     # Commands
 
-    @app_commands.command(
+    @app_commands.command(  # type: ignore
         name="teams", description="Get a list of teams for a franchise or tier"
     )
     @app_commands.autocomplete(
@@ -138,9 +138,9 @@ class TeamMixIn(RSCMixIn):
                 embed.set_thumbnail(url=guild.icon.url)
             await interaction.followup.send(embed=embed)
 
-    @app_commands.command(name="roster", description="Get roster for a team")
+    @app_commands.command(name="roster", description="Get roster for a team")  # type: ignore
     @app_commands.describe(team="Team name to search")
-    @app_commands.autocomplete(team=teams_autocomplete)
+    @app_commands.autocomplete(team=teams_autocomplete)  # type: ignore
     @app_commands.guild_only
     async def _roster(
         self,
@@ -267,8 +267,8 @@ class TeamMixIn(RSCMixIn):
         name="captains", description="Get information on team captains", guild_only=True
     )
 
-    @_captains.command(name="team", description="Team to query")
-    @app_commands.autocomplete(team=teams_autocomplete)
+    @_captains.command(name="team", description="Team to query")  # type: ignore
+    @app_commands.autocomplete(team=teams_autocomplete)  # type: ignore
     async def _captains_team(
         self,
         interaction: discord.Interaction,
@@ -310,11 +310,11 @@ class TeamMixIn(RSCMixIn):
         )
         await interaction.followup.send(embed=embed)
 
-    @_captains.command(
+    @_captains.command(  # type: ignore
         name="tier", description="Display captains of all teams in a tier"
     )
     @app_commands.describe(tier="Tier to query")
-    @app_commands.autocomplete(tier=TierMixIn.tier_autocomplete)
+    @app_commands.autocomplete(tier=TierMixIn.tier_autocomplete)  # type: ignore
     async def _captains_tier(self, interaction: discord.Interaction, tier: str):
         """Get a list of captains by search criteria"""
         guild = interaction.guild
@@ -364,11 +364,11 @@ class TeamMixIn(RSCMixIn):
         )
         await interaction.followup.send(embed=embed)
 
-    @_captains.command(
+    @_captains.command(  # type: ignore
         name="franchise", description="Display captains of all teams in a franchise"
     )
     @app_commands.describe(franchise="Franchise name")
-    @app_commands.autocomplete(franchise=FranchiseMixIn.franchise_autocomplete)
+    @app_commands.autocomplete(franchise=FranchiseMixIn.franchise_autocomplete)  # type: ignore
     async def _captains_franchise(
         self,
         interaction: discord.Interaction,
