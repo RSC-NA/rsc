@@ -224,11 +224,14 @@ class StatsMixIn(RSCMixIn):
         await interaction.followup.send(embed=embed)
 
     async def create_stats_embed(
-        self, stats: PlayerSeasonStats | TeamSeasonStats, postseason: bool = False
+        self,
+        stats: PlayerSeasonStats | TeamSeasonStats,
+        postseason: bool = False,
+        thumbnail_url: str | None = None,
     ) -> discord.Embed:
         # Fix this when season is added to team stats serializer
         if isinstance(stats, TeamSeasonStats):
-            desc = "Displaying postseason stats for current season"
+            desc = "Displaying team stats for current season"
         else:
             if postseason:
                 desc = f"Displaying post season stats for RSC S{stats.season}"
@@ -248,9 +251,9 @@ class StatsMixIn(RSCMixIn):
             points_per_game = 0
 
         if isinstance(stats, TeamSeasonStats):
-            embed = BlueEmbed(title=f"{stats.team} Stats", description=desc)
+            embed = BlueEmbed(title=f"{stats.team} Team Stats", description=desc)
         else:
-            embed = BlueEmbed(title=f"{stats.player} Stats", description=desc)
+            embed = BlueEmbed(title=f"{stats.player} Player Stats", description=desc)
 
         embed.add_field(name="Played", value=str(games_played), inline=True)
         embed.add_field(name="Wins", value=str(stats.games_won), inline=True)

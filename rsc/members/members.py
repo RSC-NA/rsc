@@ -324,7 +324,7 @@ class MemberMixIn(RSCMixIn):
 
         await interaction.followup.send(embed=embed)
 
-    @app_commands.command(name="staff", description="Display RSC Committees and Staff")
+    @app_commands.command(name="staff", description="Display RSC Committees and Staff")  # type: ignore
     @app_commands.guild_only
     async def _staff_cmd(self, interaction: discord.Interaction):
         await utils.not_implemented(interaction)

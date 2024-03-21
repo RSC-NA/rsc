@@ -267,7 +267,7 @@ class AdminMixIn(RSCMixIn):
             description="The following members matched the specified criteria",
         )
         embed.add_field(
-            name="Member", value="\n".join([x[0] for x in m_fmt]), inline=True
+            name="Member", value="\n".join([str(x[0]) for x in m_fmt]), inline=True
         )
         embed.add_field(
             name="ID", value="\n".join([str(x[1]) for x in m_fmt]), inline=True
@@ -316,7 +316,7 @@ class AdminMixIn(RSCMixIn):
             result = await guild.create_role(
                 name=const.LEAGUE_ROLE,
                 hoist=False,
-                display_icon=guild_icon if icons_allowed else None,
+                display_icon=guild_icon if icons_allowed else None,  # type: ignore
                 permissions=const.GENERIC_ROLE_PERMS,
                 reason="Syncing required roles.",
             )
@@ -328,7 +328,7 @@ class AdminMixIn(RSCMixIn):
             result = await guild.create_role(
                 name=const.GM_ROLE,
                 hoist=False,
-                display_icon=guild_icon if icons_allowed else None,
+                display_icon=guild_icon if icons_allowed else None,  # type: ignore
                 permissions=const.GENERIC_ROLE_PERMS,
                 color=0x00D9FF,
                 reason="Syncing required roles.",
@@ -353,7 +353,7 @@ class AdminMixIn(RSCMixIn):
             result = await guild.create_role(
                 name=const.FREE_AGENT_ROLE,
                 hoist=False,
-                display_icon=guild_icon if icons_allowed else None,
+                display_icon=guild_icon if icons_allowed else None,  # type: ignore
                 permissions=const.GENERIC_ROLE_PERMS,
                 reason="Syncing required roles.",
             )
@@ -549,7 +549,7 @@ class AdminMixIn(RSCMixIn):
                 farole = await guild.create_role(
                     name=f"{t.name}FA",
                     hoist=False,
-                    display_icon=fa_icon,
+                    display_icon=fa_icon,  # type: ignore
                     permissions=const.GENERIC_ROLE_PERMS,
                     color=t.color or discord.Color.default(),
                     reason="Syncing tier roles from API.",
@@ -609,7 +609,7 @@ class AdminMixIn(RSCMixIn):
                     schannel = await guild.create_text_channel(
                         name=f"{t.name}-score-reporting".lower(),
                         category=scorecategory,
-                        overwrites=s_overwrites,
+                        overwrites=s_overwrites,  # type: ignore
                         reason="Syncing tier channels from API",
                     )
                 else:
@@ -653,7 +653,7 @@ class AdminMixIn(RSCMixIn):
                     tchannel = await guild.create_text_channel(
                         name=f"{t.name}-chat".lower(),
                         category=chatcategory,
-                        overwrites=t_overwrites,
+                        overwrites=t_overwrites,  # type: ignore
                         reason="Syncing tier channels from API",
                     )
                 else:
@@ -842,7 +842,7 @@ class AdminMixIn(RSCMixIn):
                 nrole = await guild.create_role(
                     name=fname,
                     hoist=True,
-                    display_icon=f.logo if icons_allowed else None,
+                    display_icon=f.logo if icons_allowed else None,  # type: ignore
                     permissions=const.FRANCHISE_ROLE_PERMS,
                     reason="Syncing franchise roles from API",
                 )
@@ -1233,7 +1233,7 @@ class AdminMixIn(RSCMixIn):
         frole = await utils.franchise_role_from_name(guild, fdata.name)
 
         # Transaction Channel
-        tchan: discord.TextChannel = await self._trans_channel(guild)
+        tchan = await self._trans_channel(guild)
 
         # Edit GM
         gm = guild.get_member(fdata.gm.discord_id)

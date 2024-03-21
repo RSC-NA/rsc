@@ -77,7 +77,7 @@ class BallchasingMixIn(RSCMixIn):
         guild_only=True,
     )
 
-    @_ballchasing.command(
+    @_ballchasing.command(  # type: ignore
         name="settings",
         description="Display settings for ballchasing replay management",
     )
@@ -131,7 +131,7 @@ class BallchasingMixIn(RSCMixIn):
 
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-    @_ballchasing.command(
+    @_ballchasing.command(  # type: ignore
         name="key", description="Configure the Ballchasing API key for the server"
     )
     @app_commands.checks.has_permissions(manage_guild=True)
@@ -146,7 +146,7 @@ class BallchasingMixIn(RSCMixIn):
             ephemeral=True,
         )
 
-    @_ballchasing.command(
+    @_ballchasing.command(  # type: ignore
         name="manager",
         description="Configure the ballchasing management role (Ex: @Stats Committee)",
     )
@@ -164,7 +164,7 @@ class BallchasingMixIn(RSCMixIn):
             ephemeral=True,
         )
 
-    @_ballchasing.command(
+    @_ballchasing.command(  # type: ignore
         name="log",
         description="Configure the logging channel for Ballchasing commands (Ex: #stats-committee)",
     )
@@ -182,7 +182,7 @@ class BallchasingMixIn(RSCMixIn):
             ephemeral=True,
         )
 
-    @_ballchasing.command(
+    @_ballchasing.command(  # type: ignore
         name="category",
         description="Configure the score reporting category for the server",
     )
@@ -190,6 +190,9 @@ class BallchasingMixIn(RSCMixIn):
     async def _bc_score_category(
         self, interaction: discord.Interaction, category: discord.CategoryChannel
     ):
+        if not interaction.guild:
+            return
+
         await self._save_score_reporting_category(interaction.guild, category)
         await interaction.response.send_message(
             embed=SuccessEmbed(
@@ -198,7 +201,7 @@ class BallchasingMixIn(RSCMixIn):
             ephemeral=True,
         )
 
-    @_ballchasing.command(
+    @_ballchasing.command(  # type: ignore
         name="toplevelgroup",
         description="Configure the top level ballchasing group for RSC",
     )
@@ -220,7 +223,7 @@ class BallchasingMixIn(RSCMixIn):
 
     # Commands
 
-    @_ballchasing.command(
+    @_ballchasing.command(  # type: ignore
         name="reportall",
         description="Find and report all matches for the day on ballchasing",
     )
@@ -469,11 +472,11 @@ class BallchasingMixIn(RSCMixIn):
             # else:
             #     log.error("Failed to retrieve or create a ballchasing group for match.")
 
-    @_ballchasing.command(
+    @_ballchasing.command(  # type: ignore
         name="reporttier",
         description="Report a specific tier on ballchasing",
     )
-    @app_commands.autocomplete(tier=TierMixIn.tier_autocomplete)
+    @app_commands.autocomplete(tier=TierMixIn.tier_autocomplete)  # type: ignore
     @app_commands.describe(
         tier="Tier name to report",
         matchday="Match day to report (Optional: Defaults to current match day)",
@@ -536,7 +539,7 @@ class BallchasingMixIn(RSCMixIn):
             return
         # TODO need monty to add tier search
 
-    @_ballchasing.command(
+    @_ballchasing.command(  # type: ignore
         name="reportmatch",
         description="Report a specific match on ballchasing",
     )
@@ -712,7 +715,7 @@ class BallchasingMixIn(RSCMixIn):
 
         await interaction.edit_original_response(embed=embed)
 
-    @_ballchasing.command(
+    @_ballchasing.command(  # type: ignore
         name="scanmissing",
         description="Find missing matches in ballchasing",
     )
@@ -728,7 +731,7 @@ class BallchasingMixIn(RSCMixIn):
     ):
         await utils.not_implemented(interaction)
 
-    @app_commands.command(
+    @app_commands.command(  # type: ignore
         name="reportmatch",
         description="Report the results of your RSC match",
     )
