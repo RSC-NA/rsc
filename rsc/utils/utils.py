@@ -365,6 +365,11 @@ async def franchise_role_from_league_player(
     guild: discord.Guild, player: LeaguePlayer
 ) -> discord.Role:
     """Return a franchise discord.Role from `LeaguePlayer` object"""
+    if not (player.team and player.team.franchise):
+        raise AttributeError(
+            f"{player.player.name} LeaguePlayer object has no team or franchise data."
+        )
+
     rname = f"{player.team.franchise.name} ({player.team.franchise.gm.rsc_name})"
     r = discord.utils.get(guild.roles, name=rname)
     if not r:
@@ -483,7 +488,7 @@ class UtilsMixIn(RSCMixIn):
         log.debug("Initializing UtilsMixIn")
         super().__init__()
 
-    @app_commands.command(
+    @app_commands.command(  # type: ignore
         name="getmassid",
         description="Mass lookup version of /getid.",
     )
@@ -504,7 +509,7 @@ class UtilsMixIn(RSCMixIn):
 
         await interaction.response.send_message(content=desc, ephemeral=True)
 
-    @app_commands.command(
+    @app_commands.command(  # type: ignore
         name="getid",
         description="Lookup discord member account identifiers",
     )
@@ -517,7 +522,7 @@ class UtilsMixIn(RSCMixIn):
             ephemeral=True,
         )
 
-    @app_commands.command(
+    @app_commands.command(  # type: ignore
         name="userinfo",
         description="Display discord user information for a user",
     )
@@ -649,7 +654,7 @@ class UtilsMixIn(RSCMixIn):
 
         await interaction.response.send_message(embed=data)
 
-    @app_commands.command(
+    @app_commands.command(  # type: ignore
         name="serverinfo",
         description="Display information about the discord server",
     )
@@ -689,11 +694,14 @@ class UtilsMixIn(RSCMixIn):
             data.add_field(name="Voice Channels", value=voice_channels)
             data.add_field(name="Roles", value=str(len(guild.roles)))
             data.add_field(name="Owner", value=str(guild.owner))
-            data.set_footer(
-                text="Server ID: "
-                + str(guild.id)
-                + f"  •  Use /{interaction.command.name} details for more info on the server."
-            )
+            if interaction.command:
+                data.set_footer(
+                    text=f"Server ID: {str(guild.id)}"
+                    + f"  •  Use /{interaction.command.name} details for more info on the server."
+                )
+            else:
+                data.set_footer(text=f"Server ID: {str(guild.id)}")
+
             if guild.icon:
                 data.set_author(name=guild.name, url=guild.icon)
                 data.set_thumbnail(url=guild.icon)
@@ -761,11 +769,13 @@ class UtilsMixIn(RSCMixIn):
                 "highest": "4 - Highest",
             }
 
-            joined_on = "{bot_name} joined this server on {bot_join}. That's over {since_join} days ago!".format(
-                bot_name=guild.me.display_name,
-                bot_join=guild.me.joined_at.strftime("%d %b %Y %H:%M:%S"),
-                since_join=str((interaction.created_at - guild.me.joined_at).days),
-            )
+            joined_on = None
+            if guild.me.joined_at and interaction.created_at:
+                joined_on = "{bot_name} joined this server on {bot_join}. That's over {since_join} days ago!".format(
+                    bot_name=guild.me.display_name,
+                    bot_join=guild.me.joined_at.strftime("%d %b %Y %H:%M:%S"),
+                    since_join=str((interaction.created_at - guild.me.joined_at).days),
+                )
 
             data = OrangeEmbed(
                 description=(f"{guild.description}\n\n" if guild.description else "")
@@ -876,7 +886,7 @@ class UtilsMixIn(RSCMixIn):
 
         await interaction.response.send_message(embed=data)
 
-    @app_commands.command(
+    @app_commands.command(  # type: ignore
         name="getallwithrole",
         description="Get all users with the specified role(s). (Max 3 roles)",
     )
@@ -936,7 +946,7 @@ class UtilsMixIn(RSCMixIn):
             embed.set_footer(text=f"Found {len(results)} matching player(s).")
             await interaction.response.send_message(embed=embed, ephemeral=True)
 
-    @app_commands.command(
+    @app_commands.command(  # type: ignore
         name="addrole", description="Add a role to the specified user"
     )
     @app_commands.describe(role="Discord role to add", member="Player discord name")
@@ -966,7 +976,7 @@ class UtilsMixIn(RSCMixIn):
                 ephemeral=True,
             )
 
-    @app_commands.command(
+    @app_commands.command(  # type: ignore
         name="bulkaddrole", description="Add a role a list of user(s) or another role"
     )
     @app_commands.describe(
@@ -1025,7 +1035,7 @@ class UtilsMixIn(RSCMixIn):
             )
         await interaction.edit_original_response(embed=embed, view=None)
 
-    @app_commands.command(
+    @app_commands.command(  # type: ignore
         name="removerole", description="Remove a role to the specified user"
     )
     @app_commands.describe(role="Discord role to remove", member="Player discord name")
@@ -1055,7 +1065,7 @@ class UtilsMixIn(RSCMixIn):
                 ephemeral=True,
             )
 
-    @app_commands.command(
+    @app_commands.command(  # type: ignore
         name="bulkremoverole", description="Remove a role a list of user(s)"
     )
     @app_commands.describe(
