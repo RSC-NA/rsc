@@ -298,7 +298,9 @@ class TeamMixIn(RSCMixIn):
             )
 
         # Get Logo
-        flogo = await self.franchise_logo(guild, players[0].team.franchise.id)
+        flogo = None
+        if players[0].team.franchise.id:
+            flogo = await self.franchise_logo(guild, players[0].team.franchise.id)
         if flogo:
             embed.set_thumbnail(url=flogo)
         elif guild.icon:
@@ -334,7 +336,14 @@ class TeamMixIn(RSCMixIn):
             )
             return
 
-        if not (captain.team and captain.team.franchise):
+        if not (
+            captain.team
+            and captain.team.franchise
+            and captain.team.franchise.name
+            and captain.tier
+            and captain.tier.name
+            and captain.player.discord_id
+        ):
             raise ValueError("Malformed player data received from API")
 
         tier_color = await utils.tier_color_by_name(guild, captain.tier.name)
@@ -369,7 +378,7 @@ class TeamMixIn(RSCMixIn):
         captains = await self.tier_captains(guild, tier)
 
         fteams = await self.teams(guild, tier=tier)
-        fteams.sort(key=lambda x: x.name)
+        fteams.sort(key=lambda x: cast(str, x.name))
 
         if not fteams:
             await interaction.followup.send(
@@ -382,14 +391,28 @@ class TeamMixIn(RSCMixIn):
 
         cpt_fmt: list[tuple[str, str, str]] = []
         for t in fteams:
+            if not (t.name and t.franchise and t.franchise.name):
+                return await interaction.followup.send(
+                    embed=ErrorEmbed(
+                        description=f"Team {t.id} has no name or franchise data. Please open a modmail ticket."
+                    )
+                )
             # Match captain to team
-            captain = next((c for c in captains if c.team.name == t.name), None)
+            captain = next(
+                (c for c in captains if c.team and c.team.name == t.name), None
+            )
+            pname = "None"
             if captain:
                 # Fetch discord.Member
+                if not (captain.player and captain.player.discord_id):
+                    return await interaction.followup.send(
+                        embed=ErrorEmbed(
+                            description=f"{captain.id} has no discord ID attached. Please open a modmail ticket."
+                        )
+                    )
                 m = guild.get_member(captain.player.discord_id)
                 pname = m.mention if m else captain.player.name
-            else:
-                pname = "None"
+
             cpt_fmt.append((pname, t.name, t.franchise.name))
 
         tier_color = await utils.tier_color_by_name(guild, tier)
@@ -423,29 +446,55 @@ class TeamMixIn(RSCMixIn):
         if not guild:
             return
         await interaction.response.defer()
+
         captains = await self.franchise_captains(guild, franchise)
         if not captains:
-            await interaction.followup.send(
+            return await interaction.followup.send(
                 embed=ErrorEmbed(
                     description=f"**{franchise}** is not a valid franchise or no captains have been elected."
                 ),
                 ephemeral=True,
             )
-            return
+
+        if not (
+            captains[0].team
+            and captains[0].team.franchise
+            and captains[0].team.franchise.name
+        ):
+            return await interaction.followup.send(
+                embed=ErrorEmbed(
+                    description=f"Captain **{captains[0].id}** is missing team or franchise data. Please open a modmail ticket."
+                ),
+                ephemeral=True,
+            )
 
         # Get Franchise Team names
         fteams = await self.teams(guild, franchise=captains[0].team.franchise.name)
 
         cpt_fmt: list[tuple[str, str, str]] = []
         for t in fteams:
+            if not (t.name and t.tier and t.tier.name):
+                return await interaction.followup.send(
+                    embed=ErrorEmbed(
+                        description=f"Team {t.id} has no name or tier data. Please open a modmail ticket."
+                    )
+                )
             # Match captain to team
-            captain = next((c for c in captains if c.tier.id == t.tier.id), None)
+            captain = next(
+                (c for c in captains if c.tier and c.tier.id == t.tier.id), None
+            )
+            pname = "None"
             if captain:
+                if not (captain.player and captain.player.discord_id):
+                    return await interaction.followup.send(
+                        embed=ErrorEmbed(
+                            description=f"{captain.id} has no discord ID attached. Please open a modmail ticket."
+                        )
+                    )
                 # Fetch discord.Member
                 m = guild.get_member(captain.player.discord_id)
                 pname = m.mention if m else captain.player.name
-            else:
-                pname = "None"
+
             cpt_fmt.append((pname, t.name, t.tier.name))
 
         frole = await utils.franchise_role_from_name(
@@ -504,9 +553,14 @@ class TeamMixIn(RSCMixIn):
         if not players:
             return []
 
-        captains = [x for x in players if x.captain]
-        log.debug(captains)
-        captains.sort(key=lambda x: x.team.name)
+        captains = [x for x in players if x.captain if x.tier and x.tier.position]
+        for c in captains:
+            if not (c.team and c.team.name):
+                raise AttributeError(
+                    f"LeaguePlayer {c.id} captain is missing tier data."
+                )
+
+        captains.sort(key=lambda c: cast(str, c.team.name))
         return captains
 
     async def franchise_captains(
@@ -519,8 +573,14 @@ class TeamMixIn(RSCMixIn):
         if not players:
             return []
 
-        captains = [x for x in players if x.captain]
-        captains.sort(key=lambda x: x.tier.position, reverse=True)
+        captains = [x for x in players if x.captain if x.tier and x.tier.position]
+        for c in captains:
+            if not (c.tier and c.tier.position):
+                raise AttributeError(
+                    f"LeaguePlayer {c.id} captain is missing tier data."
+                )
+
+        captains.sort(key=lambda c: cast(int, c.tier.position), reverse=True)
         return captains
 
     # API

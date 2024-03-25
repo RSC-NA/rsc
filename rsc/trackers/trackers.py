@@ -1,5 +1,6 @@
 import logging
 from datetime import datetime, timedelta
+from typing import cast
 
 import discord
 from redbot.core import app_commands
@@ -50,19 +51,20 @@ class TrackerMixIn(RSCMixIn):
         else:
             tdata = []
             for t in trackers:
-                tdata.append(
-                    (t.name or t.platform_id, t.status, str(t.last_updated.date()))
-                )
-            tdata.sort(key=lambda x: x[1])
+                date = t.last_updated.date() if t.last_updated else "None"
+                tdata.append((t.name or t.platform_id, t.status, date))
+            tdata.sort(key=lambda x: cast(int, x[1]))
             embed.description = "List of associated RSC trackers. Account is tracker name or platform id."
             embed.add_field(
-                name="Account", value="\n".join([x[0] for x in tdata]), inline=True
+                name="Account", value="\n".join([str(x[0]) for x in tdata]), inline=True
             )
             embed.add_field(
-                name="Status", value="\n".join([x[1] for x in tdata]), inline=True
+                name="Status", value="\n".join([str(x[1]) for x in tdata]), inline=True
             )
             embed.add_field(
-                name="Last Pull", value="\n".join([x[2] for x in tdata]), inline=True
+                name="Last Pull",
+                value="\n".join([str(x[2]) for x in tdata]),
+                inline=True,
             )
         await interaction.followup.send(embed=embed, ephemeral=True)
 
@@ -79,7 +81,12 @@ class TrackerMixIn(RSCMixIn):
 
         await interaction.response.defer()
         trackers = await self.trackers(guild, status)
-        trackers.sort(key=lambda x: x.last_updated, reverse=True)
+        trackers.sort(key=lambda x: cast(datetime, x.last_updated), reverse=True)
+
+        dates = []
+        for x in trackers:
+            date_fmt = str(x.last_updated.date()) if x.last_updated else "None"
+            dates.append(date_fmt)
 
         embed = YellowEmbed(
             title="Recent Trackers",
@@ -87,17 +94,17 @@ class TrackerMixIn(RSCMixIn):
         )
         embed.add_field(
             name="RSC ID",
-            value="\n".join([x.rscid for x in trackers[:25]]),
+            value="\n".join([str(x.rscid) for x in trackers[:25]]),
             inline=True,
         )
         embed.add_field(
             name="Name",
-            value="\n".join([x.member_name for x in trackers[:25]]),
+            value="\n".join([str(x.member_name) for x in trackers[:25]]),
             inline=True,
         )
         embed.add_field(
             name="Date",
-            value="\n".join([str(x.last_updated.date()) for x in trackers[:25]]),
+            value="\n".join(dates[:25]),
             inline=True,
         )
         await interaction.followup.send(embed=embed)
@@ -159,6 +166,8 @@ class TrackerMixIn(RSCMixIn):
         for t in trackers:
             if not t.last_updated:
                 old_trackers.append(t)
+                continue
+
             if t.last_updated.date() < date_cutoff.date():
                 old_trackers.append(t)
         log.debug("Finished iterating tracker list")

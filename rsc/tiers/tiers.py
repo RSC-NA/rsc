@@ -1,4 +1,5 @@
 import logging
+from typing import cast
 
 import discord
 from redbot.core import app_commands
@@ -7,6 +8,7 @@ from rscapi.exceptions import ApiException
 from rscapi.models.tier import Tier
 
 from rsc.abc import RSCMixIn
+from rsc.embeds import BlueEmbed, ErrorEmbed
 from rsc.exceptions import RscException
 
 log = logging.getLogger("red.rsc.tiers")
@@ -53,13 +55,19 @@ class TierMixIn(RSCMixIn):
         # Get roles from guild and additional data
         tier_roles = []
         for t in tiers:
-            tier_roles.append(discord.utils.get(guild.roles, name=t.name))
+            role = discord.utils.get(guild.roles, name=t.name)
+            if not role:
+                return await interaction.response.send_message(
+                    embed=ErrorEmbed(
+                        description=f"{t.name} does not have a role in the guild. Please open a modmail ticket."
+                    )
+                )
+            tier_roles.append(role)
             # Fetch teams from each tier
 
-        embed = discord.Embed(
+        embed = BlueEmbed(
             title=f"{interaction.guild} Tiers",
             description="\n".join([r.mention for r in tier_roles]),
-            color=discord.Color.blue(),
         )
         if guild.icon:
             embed.set_thumbnail(url=guild.icon.url)
@@ -84,7 +92,7 @@ class TierMixIn(RSCMixIn):
             r = discord.utils.get(guild.roles, name=f"{t.name}FA")
             if r:
                 roles.append(r)
-        return r
+        return roles
 
     # API
 
@@ -99,16 +107,20 @@ class TierMixIn(RSCMixIn):
         async with ApiClient(self._api_conf[guild.id]) as client:
             api = TiersApi(client)
             tiers = await api.tiers_list(name=name, league=self._league[guild.id])
-            tiers.sort(key=lambda t: t.position, reverse=True)
+            tiers.sort(key=lambda t: cast(int, t.position), reverse=True)
 
             # Populate cache
             if tiers:
+                if not all(t.name for t in tiers):
+                    raise AttributeError("API returned a franchise with no name.")
+
                 if self._tier_cache.get(guild.id):
                     cached = set(self._tier_cache[guild.id])
-                    different = {t.name for t in tiers} - cached
-                    self._tier_cache[guild.id] += list(different)
+                    different = {t.name for t in tiers if t.name} - cached
+                    if different:
+                        self._tier_cache[guild.id] += list(different)
                 else:
-                    self._tier_cache[guild.id] = [t.name for t in tiers]
+                    self._tier_cache[guild.id] = [t.name for t in tiers if t.name]
             return tiers
 
     async def create_tier(
