@@ -46,9 +46,9 @@ class DevLeagueMixIn(RSCMixIn):
         await interaction.response.defer(ephemeral=True)
         try:
             result = await api.dev_league_status(interaction.user)
-        except ClientConnectionError as exc:
+        except ClientConnectionError:
             return await interaction.followup.send(
-                embed=ErrorEmbed(description=f"{exc.args[1]}")
+                embed=ErrorEmbed(description="Error connecting to dev league API")
             )
 
         if result.error:
@@ -86,9 +86,9 @@ class DevLeagueMixIn(RSCMixIn):
         await interaction.response.defer(ephemeral=True)
         try:
             result = await api.dev_league_check_in(interaction.user)
-        except ClientConnectionError as exc:
+        except ClientConnectionError:
             return await interaction.followup.send(
-                embed=ErrorEmbed(description=f"{exc.args[1]}")
+                embed=ErrorEmbed(description="Error connecting to dev league API")
             )
 
         if result.error:
@@ -121,9 +121,9 @@ class DevLeagueMixIn(RSCMixIn):
 
         try:
             result = await api.dev_league_check_out(interaction.user)
-        except ClientConnectionError as exc:
+        except ClientConnectionError:
             return await interaction.followup.send(
-                embed=ErrorEmbed(description=f"{exc.args[1]}")
+                embed=ErrorEmbed(description="Error connecting to dev league API")
             )
 
         if result.error:
