@@ -1,7 +1,7 @@
 import logging
 
 import discord
-from aiohttp.client_exceptions import ClientResponseError
+from aiohttp.client_exceptions import ClientConnectionError
 from redbot.core import app_commands
 
 from rsc.abc import RSCMixIn
@@ -46,7 +46,7 @@ class DevLeagueMixIn(RSCMixIn):
         await interaction.response.defer(ephemeral=True)
         try:
             result = await api.dev_league_status(interaction.user)
-        except ClientResponseError as exc:
+        except ClientConnectionError as exc:
             return await interaction.followup.send(
                 embed=ErrorEmbed(description=f"{exc.args[1]}")
             )
@@ -86,7 +86,7 @@ class DevLeagueMixIn(RSCMixIn):
         await interaction.response.defer(ephemeral=True)
         try:
             result = await api.dev_league_check_in(interaction.user)
-        except ClientResponseError as exc:
+        except ClientConnectionError as exc:
             return await interaction.followup.send(
                 embed=ErrorEmbed(description=f"{exc.args[1]}")
             )
@@ -121,7 +121,7 @@ class DevLeagueMixIn(RSCMixIn):
 
         try:
             result = await api.dev_league_check_out(interaction.user)
-        except ClientResponseError as exc:
+        except ClientConnectionError as exc:
             return await interaction.followup.send(
                 embed=ErrorEmbed(description=f"{exc.args[1]}")
             )
