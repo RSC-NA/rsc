@@ -658,6 +658,13 @@ class BallchasingMixIn(RSCMixIn):
 
         log.debug(f"Match ID: {match.id}")
 
+        if not match.var_date:
+            return await interaction.followup.send(
+                embed=ErrorEmbed(
+                    description="Match API data is missing a date. Please open a modmail ticket.",
+                )
+            )
+
         # Send "working" message
         await interaction.followup.send(
             embed=YellowEmbed(
@@ -826,7 +833,7 @@ class BallchasingMixIn(RSCMixIn):
         # Check if match is already complete
         if await self.match_already_complete(match):
             bc_view = discord.ui.View()
-            if match.results.ballchasing_group:
+            if match.results and match.results.ballchasing_group:
                 bc_view.add_item(
                     LinkButton(
                         label="Ballchasing Link",
@@ -1354,7 +1361,7 @@ class BallchasingMixIn(RSCMixIn):
         if tracker.platform == "STEAM":
             log.debug(f"Searching tracker: {tracker.platform_id}")
             async for r in bapi.get_replays(
-                playlist=ballchasing.Playlist.PRIVATE,
+                playlist=[ballchasing.Playlist.PRIVATE],
                 sort_by=ballchasing.ReplaySortBy.REPLAY_DATE,
                 sort_dir=ballchasing.SortDir.ASCENDING,
                 replay_after=after,
@@ -1374,7 +1381,7 @@ class BallchasingMixIn(RSCMixIn):
 
             log.debug(f"Searching {tracker.platform} tracker: {tracker.name}")
             async for r in bapi.get_replays(
-                playlist=ballchasing.Playlist.PRIVATE,
+                playlist=[ballchasing.Playlist.PRIVATE],
                 sort_by=ballchasing.ReplaySortBy.REPLAY_DATE,
                 sort_dir=ballchasing.SortDir.ASCENDING,
                 replay_after=after,
@@ -1446,8 +1453,11 @@ class BallchasingMixIn(RSCMixIn):
         if not await self.validate_team_names(match, replay):
             return False
         # Duration >= 300 seconds (5 minute game)
-        if replay.duration < 280:
+        if replay.duration and replay.duration < 280:
             log.debug(f"Bad replay duration: {replay.duration}")
+            return False
+        if not (replay.blue and replay.orange):
+            log.debug("No data for blue or orange team in replay")
             return False
         # Deep relay search should return stats
         if not (replay.blue.stats and replay.orange.stats):
@@ -1525,6 +1535,18 @@ class BallchasingMixIn(RSCMixIn):
         home_name = match.home_team.name.lower()
         away_name = match.away_team.name.lower()
         for r in replays:
+            if not (r.blue and r.orange):
+                raise AttributeError(
+                    f"Replay {r.id} is missing team data for blue or orange"
+                )
+            if not (r.blue.stats and r.orange.stats):
+                raise AttributeError(
+                    f"Replay {r.id} is missing stats data for blue or orange"
+                )
+            if not (r.blue.name and r.orange.name):
+                raise AttributeError(
+                    f"Replay {r.id} is missing team name data for blue or orange"
+                )
             if r.blue.stats.core.goals > r.orange.stats.core.goals:
                 if home_name == r.blue.name.lower():
                     home_wins += 1

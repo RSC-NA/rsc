@@ -1,4 +1,5 @@
 import time
+from typing import cast
 
 import discord
 from rscapi.models.match import Match
@@ -38,7 +39,7 @@ class BallchasingProcessingView(AuthorOnlyView):
         self.totals: dict[str, int] = {}
         self.add_item(CancelButton())
 
-        self.tiers.sort(key=lambda x: x.position, reverse=True)
+        self.tiers.sort(key=lambda x: cast(int, x.position), reverse=True)
 
         for m in self.matches:
             tier = m.home_team.tier
@@ -131,20 +132,25 @@ class BallchasingProcessingView(AuthorOnlyView):
         await self.prompt()
 
     async def prompt(self):
-        view = None
+        bc_view = None
         embed = await self.build_embed()
 
         if self.role:
             content = self.role.mention
 
         if not (self.completed or self.cancelled):
-            view = self
+            bc_view = self
 
         if self.msg:
-            await self.msg.edit(embed=embed, view=view)
+            await self.msg.edit(embed=embed, view=bc_view)
         else:
             content = self.role.mention if self.role else ""
-            self.msg = await self.channel.send(content=content, embed=embed, view=view)
+            if bc_view:
+                self.msg = await self.channel.send(
+                    content=content, embed=embed, view=bc_view
+                )
+            else:
+                self.msg = await self.channel.send(content=content, embed=embed)
 
     async def finished(self):
         self.next = []
