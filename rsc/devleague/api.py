@@ -8,7 +8,7 @@ from rsc.devleague import models
 
 log = logging.getLogger("red.rsc.devleague")
 
-DEVLEAGUE_API_URL = "https://devleague.rscna.com"
+DEVLEAGUE_API_URL = "http://devleague.rscna.com"
 
 
 async def dev_league_status(player: discord.Member) -> models.DevLeagueStatus:
