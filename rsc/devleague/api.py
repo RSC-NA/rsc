@@ -12,7 +12,7 @@ DEVLEAGUE_API_URL = "https://devleague.rscna.com"
 
 
 async def dev_league_status(player: discord.Member) -> models.DevLeagueStatus:
-    async with aiohttp.ClientSession() as session:
+    async with aiohttp.ClientSession(trust_env=True) as session:
         url = urljoin(DEVLEAGUE_API_URL, "/api/status")
         log.debug(f"URL: {url}")
         params = {"discord_id": player.id}
@@ -22,7 +22,7 @@ async def dev_league_status(player: discord.Member) -> models.DevLeagueStatus:
 
 
 async def dev_league_check_in(player: discord.Member) -> models.DevLeagueCheckInOut:
-    async with aiohttp.ClientSession() as session:
+    async with aiohttp.ClientSession(trust_env=True) as session:
         url = urljoin(DEVLEAGUE_API_URL, "/api/check_in")
         log.debug(f"URL: {url}")
         params = {"discord_id": player.id}
@@ -32,7 +32,7 @@ async def dev_league_check_in(player: discord.Member) -> models.DevLeagueCheckIn
 
 
 async def dev_league_check_out(player: discord.Member) -> models.DevLeagueCheckInOut:
-    async with aiohttp.ClientSession() as session:
+    async with aiohttp.ClientSession(trust_env=True) as session:
         url = urljoin(DEVLEAGUE_API_URL, "/api/check_out")
         log.debug(f"URL: {url}")
         params = {"discord_id": player.id}
