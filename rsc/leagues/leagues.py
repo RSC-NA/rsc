@@ -43,7 +43,9 @@ class LeagueMixIn(RSCMixIn):
         )
         embed.add_field(
             name="Game Mode",
-            value="\n".join(league.league_data.game_mode for league in leagues),
+            value="\n".join(
+                league.league_data.game_mode or "None" for league in leagues
+            ),
             inline=True,
         )
 

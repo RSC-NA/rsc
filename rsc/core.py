@@ -16,6 +16,7 @@ from rsc.admin import AdminMixIn
 from rsc.ballchasing import BallchasingMixIn
 from rsc.combines import CombineMixIn
 from rsc.developer import DeveloperMixIn
+from rsc.devleague import DevLeagueMixIn
 from rsc.embeds import BlueEmbed, ErrorEmbed, SuccessEmbed
 from rsc.enums import LogLevel
 from rsc.extras import ExtrasMixIn
@@ -55,6 +56,7 @@ class RSC(
     FranchiseMixIn,
     LeagueMixIn,
     DeveloperMixIn,
+    DevLeagueMixIn,
     ExtrasMixIn,
     FreeAgentMixIn,
     MemberMixIn,

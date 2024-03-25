@@ -252,6 +252,8 @@ class CombineMixIn(RSCMixIn):
         public = await self._get_publicity(guild)
         for t in tiers:
             log.debug(f"[{guild}] Creating combine channels for {t.name}")
+            if not t.name:
+                raise AttributeError(f"Tier has no name: {t.id}")
             c = await self.create_combine_category(guild, t.name, public=public)
             self._combine_cache[guild].append(c.id)
 
@@ -293,7 +295,7 @@ class CombineMixIn(RSCMixIn):
         category = await guild.create_category(
             name=f"{tier_name} Combines",
             position=len(guild.channels),
-            overwrites=overwrites,
+            overwrites=overwrites,  # type: ignore
             reason="Starting combines",
         )
         log.debug(f"[{guild} Created combine category: {category.name}]")

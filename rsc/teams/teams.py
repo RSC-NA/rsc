@@ -1,4 +1,5 @@
 import logging
+from typing import cast
 
 import discord
 from redbot.core import app_commands
@@ -99,18 +100,47 @@ class TeamMixIn(RSCMixIn):
             await interaction.followup.send(content="No results found.", ephemeral=True)
             return
 
-        embed = BlueEmbed()
+        # Validate API data
+        for t in teams:
+            if not t.name:
+                return await interaction.followup.send(
+                    embed=ErrorEmbed(
+                        description=f"`Team {t.id}` has no name. Please open a modmail ticket."
+                    )
+                )
+            if not t.tier:
+                return await interaction.followup.send(
+                    embed=ErrorEmbed(
+                        description=f"`Team {t.id}` has no tier. Please open a modmail ticket."
+                    )
+                )
+            if not t.tier.name:
+                return await interaction.followup.send(
+                    embed=ErrorEmbed(
+                        description=f"`Team {t.id}` has no tier name. Please open a modmail ticket."
+                    )
+                )
 
+        embed = BlueEmbed()
         if franchise:
             embed.title = f"{franchise} Teams"
             embed.add_field(
-                name="Team", value="\n".join([t.name for t in teams]), inline=True
+                name="Team",
+                value="\n".join([t.name or "Error" for t in teams]),
+                inline=True,
             )
             embed.add_field(
-                name="Tier", value="\n".join([t.tier.name for t in teams]), inline=True
+                name="Tier",
+                value="\n".join(
+                    [str(t.tier.name) if t.tier else "Error" for t in teams]
+                ),
+                inline=True,
             )
 
-            flogo = await self.franchise_logo(guild, teams[0].franchise.id)
+            flogo = None
+            if teams[0].franchise.id:
+                flogo = await self.franchise_logo(guild, teams[0].franchise.id)
+
             if flogo:
                 embed.set_thumbnail(url=flogo)
             elif guild.icon:
@@ -119,10 +149,12 @@ class TeamMixIn(RSCMixIn):
             await interaction.followup.send(embed=embed)
         elif tier:
             # Sort by Team Name
-            teams.sort(key=lambda x: x.name)
+            teams.sort(key=lambda x: cast(str, x.name))
             embed.title = f"{tier} Teams"
             embed.add_field(
-                name="Team", value="\n".join([t.name for t in teams]), inline=True
+                name="Team",
+                value="\n".join([t.name or "Error" for t in teams]),
+                inline=True,
             )
             embed.add_field(
                 name="Franchise",
@@ -167,7 +199,9 @@ class TeamMixIn(RSCMixIn):
             if not (p.team and p.team.name):
                 raise ValueError("Malformed roster data received from API")
             if p.team.name != team:
-                teams_found: set[str] = {p.team.name for p in players}
+                teams_found: set[str] = {
+                    str(p.team.name) if p.team else "Error" for p in players
+                }
                 names = ", ".join(list(teams_found))
                 await interaction.followup.send(
                     content=f"Found multiple results for team name.\n\n **{names}**",
@@ -187,7 +221,9 @@ class TeamMixIn(RSCMixIn):
         ir = []
         insertTop = False
         for p in players:
-            m = guild.get_member(p.player.discord_id)
+            m = None
+            if p.player.discord_id:
+                m = guild.get_member(p.player.discord_id)
             name = m.display_name if m else p.player.name
 
             # Check GM/Capatain
@@ -224,6 +260,14 @@ class TeamMixIn(RSCMixIn):
                         roster.append(name)
                 case _:
                     roster.append(name)
+
+        # Validate API data
+        if not (players[0].tier and players[0].tier.name):
+            return await interaction.followup.send(
+                embed=ErrorEmbed(
+                    description="Player has no tier or tier name. Please open a modmail ticket."
+                )
+            )
 
         roster_str = "\n".join(roster)
         tier_color = await utils.tier_color_by_name(guild, players[0].tier.name)
@@ -501,15 +545,21 @@ class TeamMixIn(RSCMixIn):
             )
             # Populate cache
             if teams:
+                if not all(t.name for t in teams):
+                    raise AttributeError("API returned a franchise with no name.")
+
                 if self._team_cache.get(guild.id):
                     log.debug(f"[{guild.name}] Adding new teams to cache")
                     cached = set(self._team_cache[guild.id])
-                    different = {t.name for t in teams} - cached
-                    log.debug(f"[{guild.name}] Teams being added to cache: {different}")
-                    self._team_cache[guild.id] += list(different)
+                    different = {t.name for t in teams if t.name} - cached
+                    if different:
+                        log.debug(
+                            f"[{guild.name}] Teams being added to cache: {different}"
+                        )
+                        self._team_cache[guild.id] += list(different)
                 else:
                     log.debug(f"[{guild.name}] Starting fresh teams cache")
-                    self._team_cache[guild.id] = [t.name for t in teams]
+                    self._team_cache[guild.id] = [t.name for t in teams if t.name]
                 self._team_cache[guild.id].sort()
             return teams
 
@@ -554,7 +604,7 @@ class TeamMixIn(RSCMixIn):
             matches = await api.teams_season_matches(
                 id, preseason=preseason, season=season
             )
-            matches.sort(key=lambda x: x.day)
+            matches.sort(key=lambda x: cast(int, x.day))
             return matches
 
     async def team_stats(

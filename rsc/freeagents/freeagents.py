@@ -94,18 +94,23 @@ class FreeAgentMixIn(RSCMixIn):
         free_agents = await self.free_agents(guild, tier)
         free_agents.extend(await self.permanent_free_agents(guild, tier))
 
-        data: list[str] = []
+        fa_fmt_list: list[str] = []
         for fa in free_agents:
             log.debug(fa.player)
-            fmember = None
-            if hasattr(fa.player, "discord_id"):
-                log.debug("Found discord_id for free agent")
-                fmember = guild.get_member(fa.player.discord_id)
-            fstr = fmember.display_name if fmember else fa.player.name
+            if not fa.player.discord_id:
+                log.warning(f"FA player has no discord_id: {fa.id}")
+                continue
+
+            # Skip if they aren't in the guild. Could retire...
+            fmember = guild.get_member(fa.player.discord_id)
+            if not fmember:
+                continue
+
+            fstr = fmember.display_name
             if fa.status == Status.PERM_FA:
                 fstr += " (Permanent FA)"
-            data.append(fstr)
-        data = "\n".join(data)
+            fa_fmt_list.append(fstr)
+        data = "\n".join(fa_fmt_list)
 
         tier_role = await utils.role_by_name(guild, tier)
 
@@ -117,7 +122,7 @@ class FreeAgentMixIn(RSCMixIn):
 
         await interaction.followup.send(embed=embed)
 
-    @app_commands.command(
+    @app_commands.command(  # type: ignore
         name="checkin",
         description="Check in as an available free agent for the current match day",
     )
@@ -129,24 +134,22 @@ class FreeAgentMixIn(RSCMixIn):
 
         # Check if this player already checked in
         if await self.is_checked_in(interaction.user):
-            await interaction.response.send_message(
+            return await interaction.response.send_message(
                 embed=ErrorEmbed(
                     title="Check In Error",
                     description="You are already checked in for today",
                 ),
                 ephemeral=True,
             )
-            return
 
         # Check if match day
         if not await self.is_match_day(guild):
-            await interaction.response.send_message(
+            return await interaction.response.send_message(
                 embed=ErrorEmbed(
                     title="Check In Error", description="There are no matches today!"
                 ),
                 ephemeral=True,
             )
-            return
 
         # Check if player is an FA in the guilds league
         players = await self.players(
@@ -157,27 +160,35 @@ class FreeAgentMixIn(RSCMixIn):
 
         # Check if member exists in RSC
         if not players:
-            await interaction.response.send_message(
+            return await interaction.response.send_message(
                 embed=ErrorEmbed(
                     title="Check In Error",
                     description="You are not currently a member of this RSC league",
                 ),
                 ephemeral=True,
             )
-            return
 
         player: LeaguePlayer = players[0]
 
         # Check if player is a Free Agent or PermFA
         if not (player.status == Status.FREE_AGENT or player.status == Status.PERM_FA):
-            await interaction.response.send_message(
+            return await interaction.response.send_message(
                 embed=ErrorEmbed(
                     title="Check In Error",
                     description="You are not a free agent.",
                 ),
                 ephemeral=True,
             )
-            return
+
+        # More player validation
+        if not (player.tier and player.tier.name):
+            return await interaction.response.send_message(
+                embed=ErrorEmbed(
+                    title="Check In Error",
+                    description="API does not have a tier associated with you. Please open a modmail.",
+                ),
+                ephemeral=True,
+            )
 
         # Tier
         tier_role = await utils.role_by_name(guild, player.tier.name)

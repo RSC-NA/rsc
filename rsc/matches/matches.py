@@ -123,6 +123,16 @@ class MatchMixIn(RSCMixIn):
             )
             matches.extend([s for s in schedule if s.match_type == MatchType.FINALS])
 
+        if not (
+            all(m.home_team.name for m in matches)
+            and all(m.away_team.name for m in matches)
+        ):
+            return await interaction.followup.send(
+                embed=ErrorEmbed(
+                    description="Schedule data has a missing home or away team name. Please open a modmail ticket."
+                )
+            )
+
         embed = discord.Embed(
             title=title,
             description="Full schedule for the current season",
@@ -136,12 +146,12 @@ class MatchMixIn(RSCMixIn):
         )
         embed.add_field(
             name="Home",
-            value="\n".join([m.home_team.name for m in matches]),
+            value="\n".join([str(m.home_team.name) for m in matches]),
             inline=True,
         )
         embed.add_field(
             name="Away",
-            value="\n".join([m.away_team.name for m in matches]),
+            value="\n".join([str(m.away_team.name) for m in matches]),
             inline=True,
         )
 
@@ -233,13 +243,15 @@ class MatchMixIn(RSCMixIn):
         self, match: Match, member: discord.Member
     ) -> MatchTeamEnum:
         """Determine if the user is on the home or away team"""
-        for p in match.home_team.players:
-            if p.discord_id == member.id:
-                return MatchTeamEnum.HOME
+        if match.home_team.players:
+            for p in match.home_team.players:
+                if p.discord_id == member.id:
+                    return MatchTeamEnum.HOME
 
-        for p in match.away_team.players:
-            if p.discord_id == member.id:
-                return MatchTeamEnum.AWAY
+        if match.away_team.players:
+            for p in match.away_team.players:
+                if p.discord_id == member.id:
+                    return MatchTeamEnum.AWAY
         raise ValueError(f"{member.display_name} is not a valid player in this match")
 
     async def build_match_embed(
@@ -262,6 +274,8 @@ class MatchMixIn(RSCMixIn):
             md = f"Post-season match {match.day}"
 
         # Format Date
+        if not match.var_date:
+            raise AttributeError("Match does not contain a valid DateTime object")
         date_str = match.var_date.strftime("%B %-m, %Y")
 
         # Description
@@ -306,6 +320,9 @@ class MatchMixIn(RSCMixIn):
         """Return formatted roster string from Match"""
         home_players: list[str] = []
         away_players: list[str] = []
+
+        if not (match.home_team.players and match.away_team.players):
+            raise AttributeError("Match is missing players on home or away team.")
 
         # Home
         for p in match.home_team.players:

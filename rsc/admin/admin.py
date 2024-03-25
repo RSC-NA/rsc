@@ -497,6 +497,15 @@ class AdminMixIn(RSCMixIn):
         await interaction.response.defer(ephemeral=True)
         tiers = await self.tiers(guild)
 
+        # Validate response tier data
+        if any(not t.name for t in tiers):
+            return await interaction.followup.send(
+                embed=ErrorEmbed(
+                    description="API returned malformed tier data. One or more tiers have no name."
+                ),
+                ephemeral=True,
+            )
+
         # Check feature list
         icons_allowed = "ROLE_ICONS" in guild.features
 
@@ -667,7 +676,7 @@ class AdminMixIn(RSCMixIn):
             description="Synced all tier roles and created associated channels",
         )
         embed.add_field(
-            name="Name", value="\n".join([t.name for t in tiers]), inline=True
+            name="Name", value="\n".join([t.name for t in tiers]), inline=True  # type: ignore
         )
 
         role_fmt = []
@@ -827,6 +836,13 @@ class AdminMixIn(RSCMixIn):
         log.debug(f"Guild Feature: {guild.features}")
         icons_allowed = "ROLE_ICONS" in guild.features
         for f in franchises:
+            if not (f.name and f.gm):
+                return await interaction.edit_original_response(
+                    embed=ErrorEmbed(
+                        description=f"API returned no franchise name or GM name for ID: {f.id}"
+                    )
+                )
+
             fname = f"{f.name} ({f.gm.rsc_name})"
             frole = await utils.franchise_role_from_name(guild, f.name)
             if frole:
@@ -1080,24 +1096,48 @@ class AdminMixIn(RSCMixIn):
 
         # Validate original franchise exists
         if not fl:
-            await rebrand_modal.interaction.response.send_message(
+            return await rebrand_modal.interaction.response.send_message(
                 embed=ErrorEmbed(description="No franchise found with that name."),
                 ephemeral=True,
             )
-            return
         if len(fl) > 1:
-            await rebrand_modal.interaction.response.send_message(
+            return await rebrand_modal.interaction.response.send_message(
                 embed=ErrorEmbed(
                     description="Found multiple franchises matching that name... Please be more specific."
                 ),
                 ephemeral=True,
             )
-            return
 
         fdata = fl.pop()
 
+        if not fdata.id:
+            return await rebrand_modal.interaction.response.send_message(
+                embed=ErrorEmbed(
+                    description="API returned franchise without an ID attached."
+                ),
+                ephemeral=True,
+            )
+
+        if not (fdata.gm and fdata.gm.rsc_name):
+            return await rebrand_modal.interaction.response.send_message(
+                embed=ErrorEmbed(
+                    description="API returned franchise without a GM or GM name."
+                ),
+                ephemeral=True,
+            )
+
+        # Validate type but allow empty tier list
+        if not isinstance(fdata.tiers, list):
+            return await rebrand_modal.interaction.response.send_message(
+                embed=ErrorEmbed(
+                    description=f"API returned non-list type for franchise tiers. Franchise ID: {fdata.id}"
+                ),
+                ephemeral=True,
+            )
+
+        # Number of rebranded teams must match number of franchise tiers
         if len(rebrand_modal.teams) != len(fdata.tiers):
-            await rebrand_modal.interaction.response.send_message(
+            return await rebrand_modal.interaction.response.send_message(
                 embed=ErrorEmbed(
                     description=(
                         "Number of team names does not match number of tiers in franchise.\n\n"
@@ -1107,7 +1147,6 @@ class AdminMixIn(RSCMixIn):
                 ),
                 ephemeral=True,
             )
-            return
 
         # Match teams to tiers
         rebrands = []
@@ -1150,10 +1189,9 @@ class AdminMixIn(RSCMixIn):
             )
             log.debug(new_fdata)
         except RscException as exc:
-            await rebrand_modal.interaction.edit_original_response(
+            return await rebrand_modal.interaction.edit_original_response(
                 embed=ApiExceptionErrorEmbed(exc), view=None
             )
-            return
 
         # Update franchise role
         frole = await utils.franchise_role_from_name(guild, franchise)
@@ -1161,12 +1199,11 @@ class AdminMixIn(RSCMixIn):
             log.error(
                 f"[{interaction.guild}] Unable to find franchise role for rebrand: {franchise}"
             )
-            await rebrand_modal.interaction.edit_original_response(
+            return await rebrand_modal.interaction.edit_original_response(
                 embed=ErrorEmbed(
                     description="Franchise was rebranded but franchise role was not found."
                 )
             )
-            return
 
         await frole.edit(name=f"{rebrand_modal.name} ({fdata.gm.rsc_name})")
 
@@ -1193,22 +1230,28 @@ class AdminMixIn(RSCMixIn):
         await interaction.response.defer(ephemeral=True)
         fl = await self.franchises(guild, name=franchise)
         if not fl:
-            await interaction.followup.send(
+            return await interaction.followup.send(
                 embed=ErrorEmbed(description=f"**{franchise}** does not exist."),
                 ephemeral=True,
             )
-            return
         if len(fl) > 1:
-            await interaction.followup.send(
+            return await interaction.followup.send(
                 embed=ErrorEmbed(
                     description=f"**{franchise}** matches more than one franchise name."
                 ),
                 ephemeral=True,
             )
-            return
 
         delete_view = DeleteFranchiseView(interaction, name=franchise)
         await delete_view.prompt()
+
+        if not fl[0].id:
+            return await interaction.followup.send(
+                embed=ErrorEmbed(
+                    description="API did not return a franchise ID attached to franchise data."
+                ),
+                ephemeral=True,
+            )
 
         # Get detailed information on players
         fdata = await self.franchise_by_id(guild, fl[0].id)
@@ -1216,6 +1259,31 @@ class AdminMixIn(RSCMixIn):
 
         if not delete_view.result:
             return
+
+        if not fdata:
+            return await interaction.followup.send(
+                embed=ErrorEmbed(
+                    description=f"No franchise data returned for ID: {fl[0].id}"
+                ),
+                ephemeral=True,
+            )
+
+        # Validate franchise data
+        if not fdata.id:
+            return await interaction.followup.send(
+                embed=ErrorEmbed(
+                    description="API did not return a franchise ID attached to franchise data."
+                ),
+                ephemeral=True,
+            )
+
+        if not fdata.id:
+            return await interaction.followup.send(
+                embed=ErrorEmbed(
+                    description="API did not return a franchise ID attached to franchise data."
+                ),
+                ephemeral=True,
+            )
 
         # Delete franchise in API
         try:
@@ -1242,23 +1310,24 @@ class AdminMixIn(RSCMixIn):
             await gm.add_roles(former_gm_role)
 
         # Edit roles and prefix
-        for t in fdata.teams:
-            tier = t.tier
-            tier_fa_role = await utils.get_tier_fa_role(guild, tier)
-            for p in t.players:
-                m = guild.get_member(p.discord_id)
-                if not m:
-                    continue
+        if fdata.teams:
+            for t in fdata.teams:
+                tier = t.tier
+                tier_fa_role = await utils.get_tier_fa_role(guild, tier)
+                for p in t.players:
+                    m = guild.get_member(p.discord_id)
+                    if not m:
+                        continue
 
-                await utils.give_fa_prefix(gm)
-                await m.add_roles(fa_role, tier_fa_role)
-                if tchan:
-                    await tchan.send(
-                        f"{p.mention} has been released to Free Agency ({tier})",
-                        allowed_mentions=discord.AllowedMentions(users=True),
-                    )
+                    await utils.give_fa_prefix(m)
+                    await m.add_roles(fa_role, tier_fa_role)
+                    if tchan:
+                        await tchan.send(
+                            f"{p.mention} has been released to Free Agency ({tier})",
+                            allowed_mentions=discord.AllowedMentions(users=True),
+                        )
 
-        # Check if GM wasn't a league player
+        # Don't give FA prefix to non-playing GM
         if gm and not gm.display_name.startswith("FA |"):
             new_nick = await utils.remove_prefix(gm)
             await gm.edit(nick=new_nick)
@@ -1304,6 +1373,13 @@ class AdminMixIn(RSCMixIn):
         if not create_view.result:
             return
 
+        # GM role
+        gm_role = discord.utils.get(guild.roles, name=const.GM_ROLE)
+        if not gm_role:
+            return await interaction.edit_original_response(
+                embed=ErrorEmbed(description="General Manager role not found in guild.")
+            )
+
         try:
             log.debug(f"Creating franchise: {name}")
             f: Franchise = await self.create_franchise(guild, name, prefix, gm)
@@ -1318,9 +1394,6 @@ class AdminMixIn(RSCMixIn):
         frole = await guild.create_role(
             name=f"{name} ({f.gm.rsc_name})", reason="New franchise created"
         )
-
-        # GM role
-        gm_role = discord.utils.get(guild.roles, name=const.GM_ROLE)
 
         await gm.add_roles(frole, gm_role)
 
@@ -1355,34 +1428,37 @@ class AdminMixIn(RSCMixIn):
         await transfer_view.wait()
 
         if not fl:
-            await interaction.edit_original_response(
+            return await interaction.edit_original_response(
                 embed=ErrorEmbed(
                     description="No franchises found with the name **{franchise}**"
                 )
             )
-            return
         if len(fl) > 1:
-            await interaction.edit_original_response(
+            return await interaction.edit_original_response(
                 embed=ErrorEmbed(
                     description="Multiple franchises found with the name **{franchise}**"
                 )
             )
-            return
-
-        fdata = fl.pop()
 
         if not transfer_view.result:
             return
+
+        fdata = fl.pop()
+        if not fdata.id:
+            return await interaction.edit_original_response(
+                embed=ErrorEmbed(
+                    description="API did not return a franchise ID attached to franchise data."
+                )
+            )
 
         try:
             log.debug(f"Transfering {franchise} to {gm.id}")
             f: Franchise = await self.transfer_franchise(guild, fdata.id, gm)
         except RscException as exc:
-            await interaction.edit_original_response(
+            return await interaction.edit_original_response(
                 embed=ApiExceptionErrorEmbed(exc),
                 view=None,
             )
-            return
 
         # Remove old franchise role if it exists
         old_frole = await utils.franchise_role_from_disord_member(gm)
@@ -1393,12 +1469,11 @@ class AdminMixIn(RSCMixIn):
         # Update franchise role
         frole = await utils.franchise_role_from_name(guild, franchise)
         if not frole:
-            await interaction.edit_original_response(
+            return await interaction.edit_original_response(
                 embed=ErrorEmbed(
-                    description=f"Franchise was trasnferred to {gm.mention} but franchise role was not found."
+                    description=f"Franchise was transferred to {gm.mention} but franchise role was not found."
                 )
             )
-            return
 
         await frole.edit(name=f"{f.name} ({f.gm.rsc_name})")
         await gm.add_roles(frole)

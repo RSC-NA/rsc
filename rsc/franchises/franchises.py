@@ -1,5 +1,6 @@
 import logging
 from os import PathLike
+from typing import cast
 from urllib.parse import urljoin
 
 import discord
@@ -8,6 +9,7 @@ from rscapi import ApiClient, FranchisesApi
 from rscapi.exceptions import ApiException
 from rscapi.models.franchise import Franchise
 from rscapi.models.franchise_gm import FranchiseGM
+from rscapi.models.franchise_league import FranchiseLeague
 from rscapi.models.franchise_list import FranchiseList
 from rscapi.models.rebrand_a_franchise import RebrandAFranchise
 from rscapi.models.transfer_franchise import TransferFranchise
@@ -68,6 +70,9 @@ class FranchiseMixIn(RSCMixIn):
 
         gm_names = []
         for f in franchises:
+            if not (f.gm and f.gm.rsc_name):
+                gm_names.append("None")
+                continue
             member = guild.get_member(f.gm.discord_id)
             if member:
                 gm_names.append(member.mention)
@@ -76,10 +81,14 @@ class FranchiseMixIn(RSCMixIn):
 
         embed = BlueEmbed(title=f"{guild.name} Franchises")
         embed.add_field(
-            name="Prefix", value="\n".join([f.prefix for f in franchises]), inline=True
+            name="Prefix",
+            value="\n".join([f.prefix or "None" for f in franchises]),
+            inline=True,
         )
         embed.add_field(
-            name="Franchise", value="\n".join([f.name for f in franchises]), inline=True
+            name="Franchise",
+            value="\n".join([f.name or "Error" for f in franchises]),
+            inline=True,
         )
         embed.add_field(
             name="General Manager",
@@ -99,7 +108,10 @@ class FranchiseMixIn(RSCMixIn):
         if not franchise:
             return 0
 
-        return franchise[0].id
+        fId = franchise[0].id
+        if not fId:
+            raise AttributeError("Franchise data has no ID attached.")
+        return fId
 
     async def delete_franchise_by_name(self, guild: discord.Guild, franchise_name: str):
         flist = await self.franchises(guild, name=franchise_name)
@@ -108,8 +120,9 @@ class FranchiseMixIn(RSCMixIn):
 
         if len(flist) > 1:
             raise ValueError(f"{franchise_name} matches more than one franchise name")
-
         f = flist.pop()
+        if not f.id:
+            raise AttributeError("Franchise data has no ID attached.")
         await self.delete_franchise(guild, f.id)
 
     async def full_logo_url(self, guild: discord.Guild, logo_url: str) -> str:
@@ -144,10 +157,13 @@ class FranchiseMixIn(RSCMixIn):
 
             # Populate cache
             if flist:
-                flist.sort(key=lambda f: f.name)
+                if not all(f.name for f in flist):
+                    raise AttributeError("API returned a franchise with no name.")
+
+                flist.sort(key=lambda f: cast(str, f.name))
                 if self._franchise_cache.get(guild.id):
                     cached = set(self._franchise_cache[guild.id])
-                    different = {f.name for f in flist} - cached
+                    different = {f.name for f in flist if f.name} - cached
                     if different:
                         log.debug(
                             f"[{guild.name}] Franchises being added to cache: {different}"
@@ -155,7 +171,7 @@ class FranchiseMixIn(RSCMixIn):
                         self._franchise_cache[guild.id] += list(different)
                 else:
                     log.debug(f"[{guild.name}] Starting fresh franchises cache")
-                    self._franchise_cache[guild.id] = [f.name for f in flist]
+                    self._franchise_cache[guild.id] = [f.name for f in flist if f.name]
                 self._franchise_cache[guild.id].sort()
             return flist
 
@@ -186,15 +202,11 @@ class FranchiseMixIn(RSCMixIn):
     ) -> Franchise:
         async with ApiClient(self._api_conf[guild.id]) as client:
             api = FranchisesApi(client)
-            league = await self.league(guild)
-            if not league:
-                raise RuntimeError(
-                    "Unable to get league from API for guild: {guild.name}"
-                )
 
+            fleague = FranchiseLeague(id=self._league[guild.id], guild_id=guild.id)
             data = Franchise(
                 name=name,
-                league=league,
+                league=fleague,
                 prefix=prefix,
                 gm=FranchiseGM(discord_id=gm.id),
             )

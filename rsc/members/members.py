@@ -65,7 +65,8 @@ class MemberMixIn(RSCMixIn):
                 guild, interaction.user, rsc_name=interaction.user.display_name
             )
         except RscException as exc:
-            log.exception(f"Member create exception: {exc}", exc_info=exc)
+            log.warning(f"MemberCreate exception during sign-up: {exc.response.body}")
+            pass
 
         # Wait for embed finish.
         await signup_view.wait()
@@ -132,6 +133,101 @@ class MemberMixIn(RSCMixIn):
             description=(
                 "You have successfully signed up for the next season of RSC!\n\n"
                 "Please keep up to date with league notices for information on the upcoming Draft and Combines."
+            )
+        )
+        await interaction.edit_original_response(embed=success_embed, view=None)
+
+    @app_commands.command(name="permfa", description="Sign up as an RSC permanent free agent")  # type: ignore
+    @app_commands.guild_only
+    async def _member_permfa_signup(self, interaction: discord.Interaction):
+        guild = interaction.guild
+        if not guild or not isinstance(interaction.user, discord.Member):
+            return
+
+        log.debug(f"{interaction.user} is signing up as PermFA")
+
+        # User prompts
+        signup_view = SignupView(interaction)
+        await signup_view.prompt()
+
+        # Create a member just in case
+        try:
+            await self.create_member(
+                guild, interaction.user, rsc_name=interaction.user.display_name
+            )
+        except RscException as exc:
+            log.warning(
+                f"MemberCreate exception during PermFA sign-up: {exc.response.body}"
+            )
+            pass
+
+        # Wait for embed finish.
+        await signup_view.wait()
+
+        if signup_view.state == SignupState.CANCELLED:
+            embed = ErrorEmbed(
+                title="Signup Cancelled",
+                description="You have cancelled signing up for RSC. Please try again if this was a mistake.",
+            )
+            await interaction.edit_original_response(embed=embed, view=None)
+            return
+        if signup_view.state != SignupState.FINISHED:
+            embed = ErrorEmbed(
+                title="Signup Failed",
+                description=(
+                    "Signup failed for an unknown reason."
+                    " Please try again, if the issue persists contact a staff member."
+                ),
+            )
+            await interaction.edit_original_response(embed=embed, view=None)
+            return
+
+        # Filter empty new lines
+        tracker_list = list(filter(None, signup_view.trackers))
+
+        # Process signup if state is finished
+        try:
+            result = await self.permfa_signup(
+                guild=guild,
+                member=interaction.user,
+                rsc_name=signup_view.rsc_name,
+                trackers=tracker_list,
+                player_type=signup_view.player_type,
+                platform=signup_view.platform,
+                referrer=signup_view.referrer,
+                region_preference=signup_view.region,
+                accepted_rules=True,
+                accepted_match_nights=True,
+            )
+            log.debug(f"Signup result: {result}")
+        except RscException as exc:
+            match exc.status:
+                case 409:
+                    await interaction.edit_original_response(
+                        embed=YellowEmbed(
+                            title="RSC PermFA Sign-up",
+                            description="You are already signed up for the league. Please use `/intenttoplay` to declare your intent for next season.",
+                        ),
+                        view=None,
+                    )
+                case 405:
+                    await interaction.edit_original_response(
+                        embed=YellowEmbed(
+                            title="RSC PermFA Sign-up", description=exc.reason
+                        ),
+                        view=None,
+                    )
+                case _:
+                    await interaction.edit_original_response(
+                        embed=ApiExceptionErrorEmbed(exc),
+                        view=None,
+                    )
+            return
+
+        success_embed = SuccessEmbed(
+            description=(
+                "You have successfully signed up as a permenent free agent in RSC!\n\n"
+                "Please be patient while we process your request."
             )
         )
         await interaction.edit_original_response(embed=success_embed, view=None)
@@ -263,6 +359,27 @@ class MemberMixIn(RSCMixIn):
             await interaction.response.send_message(embed=embed)
             return
 
+        if not p.team.franchise:
+            return await interaction.followup.send(
+                embed=ErrorEmbed(
+                    description="Player team has no associated franchise. Please submit a modmail ticket."
+                )
+            )
+
+        if not p.team.franchise.id:
+            return await interaction.followup.send(
+                embed=ErrorEmbed(
+                    description="Player franchise has no ID assocaited with it. Please submit a modmail ticket."
+                )
+            )
+
+        if not p.team.franchise.name:
+            return await interaction.followup.send(
+                embed=ErrorEmbed(
+                    description="Player franchise has no name. Please submit a modmail ticket."
+                )
+            )
+
         frole = await utils.franchise_role_from_name(guild, p.team.franchise.name)
         f_fmt = frole.mention if frole else p.team.franchise.name
 
@@ -306,7 +423,9 @@ class MemberMixIn(RSCMixIn):
         waiver_dates = []
         members = []
         for p in players:
-            m = guild.get_member(p.player.discord_id)
+            m = None
+            if p.player.discord_id:
+                m = guild.get_member(p.player.discord_id)
             pstr = m.mention if m else p.player.name
             members.append(pstr)
             if p.waiver_period_end_date:
@@ -486,5 +605,41 @@ class MemberMixIn(RSCMixIn):
             try:
                 log.debug(f"Intent Data: {data}")
                 return await api.members_intent_to_play(member.id, data)
+            except ApiException as exc:
+                raise RscException(response=exc)
+
+    async def permfa_signup(
+        self,
+        guild: discord.Guild,
+        member: discord.Member,
+        rsc_name: str,
+        trackers: list[str],
+        region_preference: RegionPreference | None = None,
+        player_type: PlayerType | None = None,
+        platform: Platform | None = None,
+        referrer: Referrer | None = None,
+        accepted_rules: bool = True,
+        accepted_match_nights: bool = True,
+        executor: discord.Member | None = None,
+        override: bool = False,
+    ) -> LeaguePlayer:
+        async with ApiClient(self._api_conf[guild.id]) as client:
+            api = MembersApi(client)
+            data = PlayerSignupSchema(
+                league=self._league[guild.id],
+                rsc_name=rsc_name,
+                tracker_links=trackers,
+                new_or_returning=str(player_type),
+                platform=str(platform),
+                referrer=str(referrer),
+                region_preference=str(region_preference),
+                accepted_rules=accepted_rules,
+                accepted_match_nights=accepted_match_nights,
+                executor=executor.id if executor else None,
+                admin_override=override,
+            )
+            try:
+                log.debug(f"PermFA Signup Data: {data}")
+                return await api.members_permfa_signup(member.id, data)
             except ApiException as exc:
                 raise RscException(response=exc)
