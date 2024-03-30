@@ -72,6 +72,10 @@ class RscException(Exception):
 # Generic
 
 
+class LeagueNotConfigured(RscException):
+    """Guild does not have a league configured"""
+
+
 class InternalServerError(RscException):
     """Server returned 500 Internal Server Error"""
 

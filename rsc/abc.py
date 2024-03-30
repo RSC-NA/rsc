@@ -310,14 +310,23 @@ class RSCMixIn(ABC):
 
     @abstractmethod
     async def player_intents(
-        self, guild: discord.Guild, season_id: int
-    ) -> IntentToPlay:
+        self,
+        guild: discord.Guild,
+        season_id: int,
+        player: discord.Member | None = None,
+        returning: bool | None = None,
+        missing: bool | None = None,
+    ) -> list[IntentToPlay]:
         ...
 
     @abstractmethod
     async def franchise_standings(
         self, guild: discord.Guild, season_id: int
     ) -> list[FranchiseStandings]:
+        ...
+
+    @abstractmethod
+    async def next_season(self, guild: discord.Guild) -> Season | None:
         ...
 
     # Teams

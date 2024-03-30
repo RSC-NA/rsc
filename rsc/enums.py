@@ -97,7 +97,10 @@ class Status(StrEnum):
     BANNED = "BN"  # Banned
     UNSIGNED_GM = "UG"  # GM (Unsigned)
     PERM_FA = "PF"  # Permanent Free Agent
+    PERMFA_W = "PW"  # Permanent FA in Waiting
     WAIVER_CLAIM = "WC"  # Waiver Claim
+    WAIVER_RELEASE = "WR"  # Waiver Release
+    RENEWED = "RN"  # Renewed
 
     @property
     def full_name(self) -> str:
@@ -122,8 +125,14 @@ class Status(StrEnum):
                 return "Unsigned GM"
             case Status.PERM_FA:
                 return "Permanent FA"
+            case Status.PERMFA_W:
+                return "Permanent FA (Waiting)"
             case Status.WAIVER_CLAIM:
                 return "Waiver Claim"
+            case Status.WAIVER_RELEASE:
+                return "Waiver Release"
+            case Status.RENEWED:
+                return "Renewed"
             case _:
                 return "Unknown"
 

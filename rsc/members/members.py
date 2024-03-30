@@ -13,10 +13,20 @@ from rscapi.models.player_signup_schema import PlayerSignupSchema
 from rscapi.models.update_member_rsc_name import UpdateMemberRSCName
 
 from rsc.abc import RSCMixIn
-from rsc.embeds import ApiExceptionErrorEmbed, ErrorEmbed, SuccessEmbed, YellowEmbed
+from rsc.embeds import (
+    ApiExceptionErrorEmbed,
+    BlueEmbed,
+    ErrorEmbed,
+    GreenEmbed,
+    OrangeEmbed,
+    SuccessEmbed,
+    YellowEmbed,
+)
 from rsc.enums import Platform, PlayerType, Referrer, RegionPreference, Status
-from rsc.exceptions import RscException
+from rsc.exceptions import LeagueNotConfigured, RscException
+from rsc.franchises import FranchiseMixIn
 from rsc.members.views import IntentState, IntentToPlayView, SignupState, SignupView
+from rsc.teams import TeamMixIn
 from rsc.tiers import TierMixIn
 from rsc.utils import utils
 
@@ -44,7 +54,393 @@ class MemberMixIn(RSCMixIn):
             log.debug(f"{member} already exists. Changing nickname to {m.rsc_name}")
             await member.edit(nick=m.rsc_name)
 
+    # App Groups
+
+    _intent = app_commands.Group(
+        name="intent",
+        description="Declare or check status of player intent to play",
+        guild_only=True,
+    )
+
     # App Commands
+
+    @app_commands.command(name="signupstatus", description="Check your status for the next RSC season")  # type: ignore
+    @app_commands.guild_only
+    async def _member_signup_status(self, interaction: discord.Interaction):
+        guild = interaction.guild
+        if not guild:
+            return
+
+        if not isinstance(interaction.user, discord.Member):
+            return
+
+        player = interaction.user
+
+        await interaction.response.defer(ephemeral=True)
+
+        try:
+            next_season = await self.next_season(guild)
+        except LeagueNotConfigured:
+            return await interaction.followup.send(
+                embed=YellowEmbed(
+                    title="Not Configured",
+                    description="League ID has not been configured for this guild.",
+                )
+            )
+        except RscException as exc:
+            return await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc))
+
+        if not next_season:
+            return await interaction.followup.send(
+                embed=YellowEmbed(
+                    title="Intent To Play Status",
+                    description="The next season of RSC has not started yet.",
+                )
+            )
+
+        if not next_season.id:
+            return await interaction.followup.send(
+                embed=ErrorEmbed(
+                    description="API returned a Season without an ID. Please open a modmail ticket."
+                )
+            )
+
+        log.debug(f"Player: {player.display_name} Discord ID: {player.id}")
+        lp_list = await self.players(
+            guild=guild, season=next_season.id, discord_id=player.id, limit=1
+        )
+        if not lp_list:
+            return await interaction.followup.send(
+                embed=YellowEmbed(
+                    title="Sign-up Status",
+                    description="You are currently **not** signed up for the league.",
+                )
+            )
+
+        lp = lp_list.pop(0)
+
+        log.debug(f"Player Status: {lp.status}")
+
+        if lp.status in (
+            Status.FREE_AGENT,
+            Status.ROSTERED,
+            Status.UNSIGNED_GM,
+            Status.IR,
+            Status.AGMIR,
+            Status.RENEWED,
+        ):
+            return await interaction.followup.send(
+                embed=YellowEmbed(
+                    title="Sign-up Status",
+                    description="You are already in the league. Please declare your intent to play instead.",
+                )
+            )
+
+        if lp.status != Status.DRAFT_ELIGIBLE:
+            return await interaction.followup.send(
+                embed=YellowEmbed(
+                    title="Sign-up Status",
+                    description="You are currently **not** signed up for the league.",
+                )
+            )
+
+        await interaction.followup.send(
+            embed=GreenEmbed(
+                title="Sign-up Status",
+                description="You are **signed up** for the next season of RSC.",
+            )
+        )
+
+    @_intent.command(name="status", description="Display intent to play status for next season")  # type: ignore
+    @app_commands.guild_only
+    async def _intents_status_cmd(self, interaction: discord.Interaction):
+        guild = interaction.guild
+        if not guild:
+            return
+        if not isinstance(interaction.user, discord.Member):
+            return
+
+        await interaction.response.defer(ephemeral=True)
+
+        try:
+            next_season = await self.next_season(guild)
+        except LeagueNotConfigured:
+            return await interaction.followup.send(
+                embed=YellowEmbed(
+                    title="Not Configured",
+                    description="League ID has not been configured for this guild.",
+                )
+            )
+        except RscException as exc:
+            return await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc))
+
+        if not next_season:
+            return await interaction.followup.send(
+                embed=YellowEmbed(
+                    title="Intent To Play Status",
+                    description="The next season of RSC has not started yet.",
+                )
+            )
+
+        if not next_season.id:
+            return await interaction.followup.send(
+                embed=ErrorEmbed(
+                    description="API returned a Season without an ID. Please open a modmail ticket."
+                )
+            )
+
+        intent_list = await self.player_intents(
+            guild, season_id=next_season.id, player=interaction.user
+        )
+
+        if not intent_list:
+            return await interaction.followup.send(
+                embed=OrangeEmbed(
+                    title="Intent Not Found",
+                    description="You are not currently a league player or no intent information was found. Did you mean to sign up instead?",
+                )
+            )
+
+        intent = intent_list.pop(0)
+
+        embed = BlueEmbed(title="Intent to Play Status")
+        if intent.returning:
+            embed.description = "You are **returning** to the league next season"
+        elif not intent.returning and not intent.missing:
+            embed.description = "You are **not returning** to the league next season"
+        else:
+            embed.description = (
+                "You have **not submitted** your intent status for next season"
+            )
+            embed.colour = discord.Color.yellow()
+
+        await interaction.followup.send(embed=embed)
+
+    @_intent.command(name="search", description="Search for intent to play status (Limit: 50)")  # type: ignore
+    @app_commands.autocomplete(
+        franchise=FranchiseMixIn.franchise_autocomplete,
+        team=TeamMixIn.teams_autocomplete,
+    )
+    @app_commands.describe(
+        player="Discord member to search",
+        missing="Display missing intents",
+        returning="Display returning or not intents",
+        franchise="Filter by franchise name",
+        team="Filter by team name",
+    )
+    @app_commands.guild_only
+    async def _intents_search_cmd(
+        self,
+        interaction: discord.Interaction,
+        player: discord.Member | None = None,
+        missing: bool | None = None,
+        returning: bool | None = None,
+        franchise: str | None = None,
+        team: str | None = None,
+    ):
+        guild = interaction.guild
+        if not guild:
+            return
+        if not isinstance(interaction.user, discord.Member):
+            return
+
+        if not (player or missing is None or returning is None or franchise or team):
+            return await interaction.response.send_message(
+                embed=ErrorEmbed(description="You must provide one search option."),
+                ephemeral=True,
+            )
+
+        await interaction.response.defer(ephemeral=True)
+
+        try:
+            next_season = await self.next_season(guild)
+        except LeagueNotConfigured:
+            return await interaction.followup.send(
+                embed=YellowEmbed(
+                    title="Not Configured",
+                    description="League ID has not been configured for this guild.",
+                )
+            )
+        except RscException as exc:
+            return await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc))
+
+        if not next_season:
+            return await interaction.followup.send(
+                embed=YellowEmbed(
+                    title="Intent To Play Results",
+                    description="The next season of RSC has not started yet.",
+                )
+            )
+
+        if not next_season.id:
+            return await interaction.followup.send(
+                embed=ErrorEmbed(
+                    description="API returned a Season without an ID. Please open a modmail ticket."
+                )
+            )
+
+        intent_list = await self.player_intents(
+            guild,
+            season_id=next_season.id,
+            player=player,
+            returning=returning,
+            missing=missing,
+        )
+        log.debug(f"Intent Length: {len(intent_list)}")
+
+        if not intent_list:
+            return await interaction.followup.send(
+                embed=YellowEmbed(
+                    title="Intent to Play Results",
+                    description="No intent to play data found for criteria.",
+                )
+            )
+
+        # Filter by franchise
+        intents = intent_list
+        if franchise:
+            intents = [
+                i
+                for i in intents
+                if i.player
+                and i.player.franchise
+                and i.player.franchise.lower() == franchise.lower()
+            ]
+
+        # Filter by team
+        if team:
+            intents = [
+                i
+                for i in intents
+                if i.player and i.player.team and i.player.team.lower() == team.lower()
+            ]
+
+        # Filter by returning value
+        if returning is True or returning is False:
+            intents = [i for i in intents if i.returning == returning]
+
+        # Filter by missing value
+        if missing is True or missing is False:
+            intents = [i for i in intents if i.missing == missing]
+
+        if not intents:
+            return await interaction.followup.send(
+                embed=YellowEmbed(
+                    title="Intent to Play Results",
+                    description="No intent to play data found for criteria.",
+                )
+            )
+
+        # Limit to max of 50
+        intents = intents[:50]
+        log.debug(f"Filtered Intent Length: {len(intents)}")
+
+        intent_dict = {}
+        for i in intents:
+            # Fetch member
+            if not (i.player and i.player.player.discord_id):
+                log.debug("Player has no name or discord ID")
+                continue
+            m = guild.get_member(i.player.player.discord_id)
+            if not m:
+                log.debug(
+                    f"Couldn't find member in guild: {i.player.player.rsc_name} ({i.player.player.discord_id})"
+                )
+                continue
+
+            if i.returning:
+                intent_dict[m.mention] = "Returning"
+            elif not i.returning and not i.missing:
+                intent_dict[m.mention] = "Not Returning"
+            elif i.missing:
+                intent_dict[m.mention] = "Missing"
+            else:
+                log.warning(
+                    f"Unknown intent status for player: {i.player.player.discord_id}"
+                )
+
+        embed = BlueEmbed(
+            title="Intent to Play Results",
+            description="Displaying intent to play status for specified criteria.",
+        )
+
+        embed.add_field(name="Player", value="\n".join(intent_dict.keys()), inline=True)
+        embed.add_field(
+            name="Status",
+            value="\n".join(intent_dict.values()),
+            inline=True,
+        )
+
+        embed.set_footer(text=f"Displaying 0/{len(intent_list)} results")
+
+        await interaction.followup.send(embed=embed)
+
+    @_intent.command(name="declare", description="Declare your intent to play next season of RSC")  # type: ignore
+    @app_commands.guild_only
+    async def _intents_declare_cmd(self, interaction: discord.Interaction):
+        guild = interaction.guild
+        if not guild or not isinstance(interaction.user, discord.Member):
+            return
+
+        log.debug(f"{interaction.user} is signing up for the league")
+        # User prompts
+        intent_view = IntentToPlayView(interaction)
+        await intent_view.prompt()
+        await intent_view.wait()
+
+        match intent_view.state:
+            case IntentState.CANCELLED:
+                return
+            case IntentState.FINISHED:
+                log.debug("Intent view is in finished state.")
+            case _:
+                await interaction.edit_original_response(
+                    embed=ErrorEmbed(
+                        description="Something went wrong declaring your intent to play. Please submit a modmail for assistance."
+                    ),
+                    view=None,
+                )
+                return
+
+        # Process intent if state is finished
+        try:
+            result = await self.declare_intent(
+                guild=guild,
+                member=interaction.user,
+                returning=intent_view.result,
+            )
+            log.debug(f"Intent Result: {result}")
+        except RscException as exc:
+            if exc.status == 409:
+                await interaction.edit_original_response(
+                    embed=YellowEmbed(title="Intent to Play", description=exc.reason),
+                    view=None,
+                )
+                return
+
+            await interaction.edit_original_response(
+                embed=ApiExceptionErrorEmbed(exc),
+                view=None,
+            )
+            return
+
+        if intent_view.result:
+            desc = (
+                "You have successfully declared your intent."
+                " We are excited to have you back next season!\n\n"
+                "If your situation changes before next season, please redeclare your intent."
+            )
+        else:
+            desc = (
+                "You have successfully declared your intent."
+                " We are sorry to see you go and hope you return to the league soon!\n\n"
+                "If you change your mind, please redeclare your intent."
+            )
+
+        embed: discord.Embed = SuccessEmbed(
+            title="Intent to Play Declared", description=desc
+        )
+        await interaction.edit_original_response(embed=embed, view=None)
 
     @app_commands.command(name="signup", description="Sign up for the next RSC season")  # type: ignore
     @app_commands.guild_only
