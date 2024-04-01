@@ -1864,9 +1864,16 @@ class AdminMixIn(RSCMixIn):
                 )
             )
 
+        # Clear out original users in role so we don't ping them again
+        for rmember in intent_role.members:
+            await rmember.remove_roles(intent_role)
+
         # Loop through intents and add roles
         count = 0
         for i in intents:
+            if not (i.player and i.player.player):
+                continue
+
             pid = i.player.player.discord_id
             if not pid:
                 continue
