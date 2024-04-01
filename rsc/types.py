@@ -92,6 +92,13 @@ class Accolades:
         return NotImplemented
 
 
+class AdminSettings(TypedDict):
+    Dates: str | None
+    IntentChannel: discord.TextChannel | None
+    IntentMissingRole: discord.Role | None
+    IntentMissingMsg: str | None
+
+
 class TransactionSettings(TypedDict):
     TransChannel: discord.TextChannel | None
     TransDMs: bool

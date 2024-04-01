@@ -21,6 +21,21 @@ class LeagueDatesModal(discord.ui.Modal, title="Import League Dates"):
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
+class IntentMissingModal(discord.ui.Modal, title="Missing Intent to Play Message"):
+    intent_msg: TextInput = TextInput(
+        label="Message to missing players",
+        style=discord.TextStyle.paragraph,
+        placeholder="Enter the message to ping missing intent players here...",
+        required=True,
+    )
+
+    async def on_submit(self, interaction: discord.Interaction):
+        embed = SuccessEmbed(
+            description="Missing intent ping message has been configured."
+        )
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+
 class FranchiseRebrandModal(discord.ui.Modal, title="Franchise Rebrand"):
     name_input: TextInput = TextInput(
         label="Name",

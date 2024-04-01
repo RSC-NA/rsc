@@ -332,6 +332,7 @@ class MemberMixIn(RSCMixIn):
             )
 
         # Limit to max of 50
+        total_results = len(intents)
         intents = intents[:50]
         log.debug(f"Filtered Intent Length: {len(intents)}")
 
@@ -371,7 +372,7 @@ class MemberMixIn(RSCMixIn):
             inline=True,
         )
 
-        embed.set_footer(text=f"Displaying 0/{len(intent_list)} results")
+        embed.set_footer(text=f"Displaying {len(intents)}/{total_results} results")
 
         await interaction.followup.send(embed=embed)
 
