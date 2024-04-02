@@ -1,0 +1,59 @@
+{
+    "81": {
+        "id": 81,
+        "lobby_user": "zsr499",
+        "lobby_pass": "wrx",
+        "home_wins": 0,
+        "away_wins": 0,
+        "reported_rsc_id": null,
+        "confirmed_rsc_id": null,
+        "completed": 0,
+        "cancelled": 0,
+        "home": [
+            {
+                "discord_id": "138778232802508801",
+                "rsc_id": "RSC002050",
+                "match_id": 81,
+                "team": "home",
+                "name": "nickm"
+            },
+            {
+                "discord_id": "352600418062303244",
+                "rsc_id": "RSC003169",
+                "match_id": 81,
+                "team": "home",
+                "name": "monty"
+            },
+            {
+                "discord_id": "207266416355835904",
+                "rsc_id": "RSC006911",
+                "match_id": 81,
+                "team": "home",
+                "name": "tehblister"
+            }
+        ],
+        "away": [
+            {
+                "discord_id": "90000134712090624",
+                "rsc_id": "RSC002050",
+                "match_id": 81,
+                "team": "away",
+                "name": "Array"
+            },
+            {
+                "discord_id": "186600667094188042",
+                "rsc_id": "RSC003169",
+                "match_id": 81,
+                "team": "away",
+                "name": "Naro"
+            },
+            {
+                "discord_id": "181204305993400321",
+                "rsc_id": "RSC006911",
+                "match_id": 81,
+                "team": "away",
+                "name": "(P|F)ineapple"
+            }
+        ]
+    }
+}

@@ -99,6 +99,12 @@ class AdminSettings(TypedDict):
     IntentMissingMsg: str | None
 
 
+class CombineSettings(TypedDict):
+    Active: bool
+    CombinesApi: str | None
+    CombinesCategory: discord.CategoryChannel | None
+
+
 class TransactionSettings(TypedDict):
     TransChannel: discord.TextChannel | None
     TransDMs: bool

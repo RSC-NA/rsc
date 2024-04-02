@@ -3,6 +3,7 @@ from functools import wraps
 import discord
 
 from rsc.abc import RSCMixIn
+from rsc.embeds import ErrorEmbed
 
 
 def apicall(f):
@@ -17,3 +18,24 @@ def apicall(f):
         return f(self, *args, **kwargs)
 
     return wrapper
+
+
+def active_combines(f):
+    @wraps(f)
+    async def combine_wrapper(
+        cls: RSCMixIn, interaction: discord.Interaction, *args, **kwargs
+    ):
+        if not interaction.guild:
+            return
+
+        active = await cls._get_combines_active(interaction.guild)
+        print(f"{'=' * 20} Active: {active}")
+        if not active:
+            return await interaction.response.send_message(
+                embed=ErrorEmbed(description="Combines are not currently active."),
+                ephemeral=True,
+            )
+
+        return f(cls, *args, **kwargs)
+
+    return combine_wrapper

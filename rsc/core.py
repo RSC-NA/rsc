@@ -104,10 +104,16 @@ class RSC(
         self.expire_sub_contract_loop.cancel()
         self.expire_free_agent_checkins_loop.cancel()
         await self.close_ballchasing_sessions()
+        await self._combines_runner.cleanup()
 
     async def setup(self):
         """Prepare the bot API and caches. Requires API configuration"""
         log.info("Preparing API connector and local caches")
+
+        # Start runners
+        await self.start_combines_runner()
+
+        # Per guild setup
         for guild in self.bot.guilds:
             log.debug(f"[{guild}] Preparing RSC API configuration")
             await self.prepare_api(guild)
@@ -120,7 +126,7 @@ class RSC(
                         tg.create_task(self.tiers(guild))
                         tg.create_task(self.franchises(guild))
                         tg.create_task(self.teams(guild))
-                        tg.create_task(self._populate_combines_cache(guild))
+                        # tg.create_task(self._populate_combines_cache(guild))
                         tg.create_task(self._populate_free_agent_cache(guild))
                         tg.create_task(self.prepare_ballchasing(guild))
                 except* ApiException as eg:

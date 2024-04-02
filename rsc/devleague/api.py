@@ -6,9 +6,9 @@ import discord
 
 from rsc.devleague import models
 
-log = logging.getLogger("red.rsc.devleague")
+log = logging.getLogger("red.rsc.devleague.api")
 
-DEVLEAGUE_API_URL = "http://devleague.rscna.com"
+DEVLEAGUE_API_URL = "https://devleague.rscna.com"
 
 
 async def dev_league_status(player: discord.Member) -> models.DevLeagueStatus:
@@ -32,7 +32,7 @@ async def dev_league_check_in(player: discord.Member) -> models.DevLeagueCheckIn
 
 
 async def dev_league_check_out(player: discord.Member) -> models.DevLeagueCheckInOut:
-    async with aiohttp.ClientSession(trust_env=True) as session:
+    async with aiohttp.ClientSession() as session:
         url = urljoin(DEVLEAGUE_API_URL, "/api/check_out")
         log.debug(f"URL: {url}")
         params = {"discord_id": player.id}

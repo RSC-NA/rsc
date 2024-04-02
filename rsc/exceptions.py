@@ -80,6 +80,14 @@ class InternalServerError(RscException):
     """Server returned 500 Internal Server Error"""
 
 
+class BadGateway(RscException):
+    """Server returned 502 Bad Gateway"""
+
+
+class CombinesError(RscException):
+    """Combines returned error status message"""
+
+
 # Member
 
 

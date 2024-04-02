@@ -917,7 +917,7 @@ class UtilsMixIn(RSCMixIn):
         ids = "\n".join(str(r.id) for r in results)
 
         if len(nicks) > 1024 or len(usernames) > 1024 or len(ids) > 1024:
-            msg = "\n".join([f"{p.display_name}:{p.name}:{p.id}" for p in members])
+            msg = "\n".join([f"{p.display_name}:{p.name}:{p.id}" for p in results])
             if len(msg) > 6000:
                 await interaction.response.send_message(
                     content="Total results exceed 6000 characters. Please be more specific.",
