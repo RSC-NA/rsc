@@ -159,6 +159,18 @@ async def get_captain_role(guild: discord.Guild) -> discord.Role:
     return r
 
 
+async def get_former_player_role(guild: discord.Guild) -> discord.Role:
+    r = discord.utils.get(guild.roles, name=const.FORMER_PLAYER_ROLE)
+    if not r:
+        log.error(
+            f"[{guild.name}] Expected role does not exist: {const.FORMER_PLAYER_ROLE}"
+        )
+        raise ValueError(
+            f"[{guild.name}] Expected role does not exist: {const.FORMER_PLAYER_ROLE}"
+        )
+    return r
+
+
 async def get_spectator_role(guild: discord.Guild) -> discord.Role:
     r = discord.utils.get(guild.roles, name=const.SPECTATOR_ROLE)
     if not r:

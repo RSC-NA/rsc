@@ -373,13 +373,12 @@ class TransactionMixIn(RSCMixIn):
                 embed=settings_embed, ephemeral=True
             )
         else:
-            await interaction.response.send_message(
-                embed=settings_embed, ephemeral=True
-            )
             cut_embed = discord.Embed(
                 title="Cut Message", description=cut_msg, color=discord.Color.blue()
             )
-            await interaction.response.send_message(embed=cut_embed, ephemeral=True)
+            await interaction.response.send_message(
+                embeds=[settings_embed, cut_embed], ephemeral=True
+            )
 
     @_transactions.command(  # type: ignore
         name="notifications", description="Toggle channel notifications on or off"
@@ -1482,15 +1481,30 @@ class TransactionMixIn(RSCMixIn):
         old_tier_role = None
         franchise_role = None
         league_role = await utils.get_league_role(guild)
+        captain_role = await utils.get_captain_role(guild)
+        fa_role = await utils.get_free_agent_role(guild)
+        former_player_role = await utils.get_former_player_role(guild)
+        spectator_role = await utils.get_spectator_role(guild)
+
         if fname:
             franchise_role = await utils.franchise_role_from_name(guild, fname)
         if ptu.old_team:
+            log.debug(f"Old Team Tier: {ptu.old_team.tier}")
             old_tier_role = await utils.get_tier_role(guild, ptu.old_team.tier)
 
         roles_to_remove = []
 
         if old_tier_role:
             roles_to_remove.append(old_tier_role)
+            tier_fa_role = await utils.get_tier_fa_role(
+                guild, f"{old_tier_role.name}FA"
+            )
+            if tier_fa_role:
+                log.debug(f"Tier FA role: {tier_fa_role}")
+                roles_to_remove.append(tier_fa_role)
+
+        if fa_role:
+            roles_to_remove.append(fa_role)
 
         if league_role:
             roles_to_remove.append(league_role)
@@ -1498,12 +1512,17 @@ class TransactionMixIn(RSCMixIn):
         if franchise_role:
             roles_to_remove.append(franchise_role)
 
+        if captain_role:
+            roles_to_remove.append(captain_role)
+
         if roles_to_remove:
             await player.remove_roles(*roles_to_remove)
 
-        spectator_role = await utils.get_spectator_role(guild)
         if spectator_role:
             await player.add_roles(spectator_role)
+
+        if former_player_role:
+            await player.add_roles(former_player_role)
 
         embed, files = await self.build_transaction_embed(
             guild=guild, response=result, player_in=player
