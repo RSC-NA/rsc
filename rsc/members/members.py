@@ -753,7 +753,7 @@ class MemberMixIn(RSCMixIn):
         embed.add_field(name="Status", value=Status(p.status).full_name, inline=True)
 
         if not p.team:
-            await interaction.response.send_message(embed=embed)
+            await interaction.followup.send(embed=embed)
             return
 
         if not p.team.franchise:

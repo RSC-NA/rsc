@@ -587,6 +587,10 @@ class TransactionMixIn(RSCMixIn):
                 )
             )
 
+        # Remove captain
+        captain_role = await utils.get_captain_role(guild)
+        await player.remove_roles(captain_role)
+
         # Update tier role, handle promotion case
         log.debug(f"[{guild.name}] Updating tier roles for {player.id}")
         old_tier_role = await utils.get_tier_role(guild, ptu.old_team.tier)
