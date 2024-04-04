@@ -1494,9 +1494,16 @@ class AdminMixIn(RSCMixIn):
 
         if not transfer_view.result:
             return
-
-        await interaction.edit_original_response(view=None)
         log.debug("GM transfer confirmed.")
+
+        # Display working screen
+        await interaction.edit_original_response(
+            embed=YellowEmbed(
+                title="Transfering Franchise",
+                description="Please wait while the GM transfer is processed...",
+            ),
+            view=None,
+        )
 
         fdata = fl.pop()
         if not fdata.id:
