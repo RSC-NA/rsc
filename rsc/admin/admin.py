@@ -1542,6 +1542,15 @@ class AdminMixIn(RSCMixIn):
                 )
             )
 
+        # Get AGM role
+        agm_role = await utils.get_agm_role(guild)
+        if not agm_role:
+            return await interaction.edit_original_response(
+                embed=ErrorEmbed(
+                    description=f"Franchise was transferred to {gm.mention} but AGM role was not found."
+                )
+            )
+
         # Get captain role
         captain_role = await utils.get_captain_role(guild)
         if not captain_role:
@@ -1563,7 +1572,7 @@ class AdminMixIn(RSCMixIn):
         # Update new GM roles and name
         log.debug(f"Adding GM role to {gm.id}")
         await gm.add_roles(gm_role, frole, reason="Promoted to GM")
-        await gm.remove_roles(fa_role, captain_role, reason="Promoted to GM")
+        await gm.remove_roles(fa_role, captain_role, agm_role, reason="Promoted to GM")
         await gm.edit(nick=await utils.format_discord_prefix(gm, prefix=f.prefix))
 
         # Remove TierFA role if it exists on new GM
