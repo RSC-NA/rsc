@@ -100,7 +100,7 @@ class PlayerTypeSelect(discord.ui.Select):
 
 class IntentSelect(discord.ui.Select):
     def __init__(self):
-        super().__init__(placeholder="What is your intent?")
+        super().__init__(placeholder="What is your intent?", min_values=1, max_values=1)
         self.add_option(label="Returning next season", value="yes")
         self.add_option(label="Not returning next season", value="no")
 
@@ -116,7 +116,8 @@ class IntentToPlayView(AuthorOnlyView):
         super().__init__(interaction=interaction, timeout=timeout)
         self.state = IntentState.DECLARE
         self.result = False
-        self.add_item(IntentSelect())
+        self.selectbox = IntentSelect()
+        self.add_item(self.selectbox)
         self.add_item(ConfirmButton())
         self.add_item(CancelButton())
 
@@ -157,6 +158,12 @@ class IntentToPlayView(AuthorOnlyView):
 
     async def confirm(self, interaction: discord.Interaction):
         """User pressed Yes Button"""
+        log.debug(f"Select Values: {self.selectbox.values}")
+        if not self.selectbox.values:
+            return await interaction.response.send_message(
+                content="Please select returning or not returning in the drop down.",
+                ephemeral=True,
+            )
         log.debug(f"[INTENT] User agreed to {self.state.name}")
         self.state = IntentState(self.state + 1)
         await self.prompt()
