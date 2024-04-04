@@ -449,6 +449,24 @@ async def devleague_count(member: discord.Member) -> int:
     return member.display_name.count(const.DEV_LEAGUE_EMOJI)
 
 
+async def format_discord_prefix(member: discord.Member, prefix: str) -> str:
+    accolades = await member_accolades(member)
+    no_pfx = await remove_prefix(member)
+    name = await strip_discord_accolades(no_pfx)
+    if prefix:
+        new_nick = f"{prefix} | {name} {accolades}".strip()
+    else:
+        new_nick = f"{name} {accolades}".strip()
+    return new_nick
+
+
+async def strip_discord_accolades(value: str) -> str:
+    final = value.replace(const.TROPHY_EMOJI, "")
+    final = final.replace(const.STAR_EMOJI, "")
+    final = final.replace(const.DEV_LEAGUE_EMOJI, "")
+    return final.strip()
+
+
 async def member_accolades(member: discord.Member) -> Accolades:
     return Accolades(
         trophy=await trophy_count(member),

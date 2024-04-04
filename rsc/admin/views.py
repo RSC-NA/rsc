@@ -247,6 +247,7 @@ class TransferFranchiseView(AuthorOnlyView):
     async def confirm(self, interaction: discord.Interaction):
         log.debug("User confirmed franchise transfer")
         self.result = True
+        await interaction.response.defer(ephemeral=True)
         self.stop()
 
     async def decline(self, interaction: discord.Interaction):

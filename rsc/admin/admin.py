@@ -152,9 +152,9 @@ class AdminMixIn(RSCMixIn):
         await interaction.response.defer(ephemeral=True)
 
         try:
-            await self.change_member_name(interaction.guild, id=member.id, name=name)
             if tracker:
                 await self.add_tracker(interaction.guild, member, tracker)
+            await self.change_member_name(interaction.guild, id=member.id, name=name)
         except RscException as exc:
             await interaction.followup.send(
                 embed=ApiExceptionErrorEmbed(exc), ephemeral=True
@@ -1495,6 +1495,9 @@ class AdminMixIn(RSCMixIn):
         if not transfer_view.result:
             return
 
+        await interaction.edit_original_response(view=None)
+        log.debug("GM transfer confirmed.")
+
         fdata = fl.pop()
         if not fdata.id:
             return await interaction.edit_original_response(
@@ -1512,13 +1515,7 @@ class AdminMixIn(RSCMixIn):
                 view=None,
             )
 
-        # Remove old franchise role if it exists
-        old_frole = await utils.franchise_role_from_disord_member(gm)
-        if old_frole:
-            log.debug(f"Removing old franchise role: {old_frole.name}")
-            await gm.remove_roles(old_frole)
-
-        # Update franchise role
+        # Get franchise role
         frole = await utils.franchise_role_from_name(guild, franchise)
         if not frole:
             return await interaction.edit_original_response(
@@ -1527,13 +1524,90 @@ class AdminMixIn(RSCMixIn):
                 )
             )
 
+        # Get GM role
+        gm_role = await utils.get_gm_role(guild)
+        if not gm_role:
+            return await interaction.edit_original_response(
+                embed=ErrorEmbed(
+                    description=f"Franchise was transferred to {gm.mention} but GM role was not found."
+                )
+            )
+
+        # Get FA role
+        fa_role = await utils.get_free_agent_role(guild)
+        if not fa_role:
+            return await interaction.edit_original_response(
+                embed=ErrorEmbed(
+                    description=f"Franchise was transferred to {gm.mention} but FA role was not found."
+                )
+            )
+
+        # Get captain role
+        captain_role = await utils.get_captain_role(guild)
+        if not captain_role:
+            return await interaction.edit_original_response(
+                embed=ErrorEmbed(
+                    description=f"Franchise was transferred to {gm.mention} but Captain role was not found."
+                )
+            )
+
+        # Update franchise role to new GM
+        log.debug("Updating Franchise Role")
         await frole.edit(name=f"{f.name} ({f.gm.rsc_name})")
-        await gm.add_roles(frole)
+
+        # Remove old franchise role from new GM if it exist
+        new_gm_old_frole = await utils.franchise_role_from_disord_member(gm)
+        if new_gm_old_frole:
+            await gm.remove_roles(new_gm_old_frole)
+
+        # Update new GM roles and name
+        log.debug(f"Adding GM role to {gm.id}")
+        await gm.add_roles(gm_role, frole, reason="Promoted to GM")
+        await gm.remove_roles(fa_role, captain_role, reason="Promoted to GM")
+        await gm.edit(nick=await utils.format_discord_prefix(gm, prefix=f.prefix))
+
+        # Remove TierFA role if it exists on new GM
+        for role in gm.roles:
+            log.debug(f"GM Role: {role.name}")
+            if role.name.endswith("FA"):
+                log.debug(f"Removing new GM tier FA role: {role}")
+                await gm.remove_roles(role, reason="Promoted to GM")
+                break
+
+        # Get old gm discord reference
+        old_gm = None
+        if fdata.gm:
+            old_gm = guild.get_member(fdata.gm.discord_id)
+
+        # Update old GM roles and name
+        if old_gm:
+            await old_gm.remove_roles(
+                frole, gm_role, captain_role, reason="Removed from GM"
+            )
+            await old_gm.edit(
+                nick=f"FA | {await utils.remove_prefix(old_gm)}",
+                reason="Removed from GM",
+            )
+
+            # Fetch tier and add tier FA roles
+            old_gm_plist = await self.players(guild, discord_id=old_gm.id, limit=1)
+            if old_gm_plist:
+                old_gm_lp = old_gm_plist.pop(0)
+                if old_gm_lp.tier and old_gm_lp.tier.name:
+                    await old_gm.add_roles(fa_role, reason="Removed from GM")
+                    old_gm_tier = old_gm_lp.tier.name
+                    log.debug(f"Old GM Tier: {old_gm_tier}")
+                    old_gm_tierfa_role = await utils.get_tier_fa_role(
+                        guild, old_gm_tier
+                    )
+                    log.debug(f"Old GM Tier Role: {old_gm_tierfa_role}")
+                    await old_gm.add_roles(old_gm_tierfa_role, reason="Removed from GM")
 
         await interaction.edit_original_response(
             embed=SuccessEmbed(
                 description=f"**{franchise}** has been transferred to {gm.mention}"
-            )
+            ),
+            view=None,
         )
 
     @_stats.command(name="intents", description="Intent to Play statistics")  # type: ignore

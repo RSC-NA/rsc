@@ -33,6 +33,38 @@ class TrackerMixIn(RSCMixIn):
 
     # App Commands
 
+    @_trackers.command(name="add", description="Add a new player tracker")  # type: ignore
+    @app_commands.describe(
+        player="RSC Discord Member", tracker="Rocket League tracker link"
+    )
+    @app_commands.checks.has_permissions(manage_guild=True)
+    async def _trackers_add_cmd(
+        self, interaction: discord.Interaction, player: discord.Member, tracker: str
+    ):
+        guild = interaction.guild
+        if not guild:
+            return
+
+        await interaction.response.defer(ephemeral=True)
+
+        try:
+            await self.add_tracker(guild, player, tracker)
+        except RscException as exc:
+            return await interaction.followup.send(
+                embed=ApiExceptionErrorEmbed(exc), ephemeral=True
+            )
+
+        tracker_view = discord.ui.View()
+        tracker_view.add_item(LinkButton(label="Tracker Link", url=tracker))
+
+        embed = BlueEmbed(
+            title="Tracker Added",
+            description=f"Added tracker link to {player.mention}",
+        )
+
+        embed.add_field(name="Tracker", value=tracker, inline=False)
+        await interaction.followup.send(embed=embed, view=tracker_view, ephemeral=True)
+
     @_trackers.command(name="list", description="List the trackers")  # type: ignore
     @app_commands.describe(player="RSC Discord Member")
     async def _trackers_list(
@@ -43,7 +75,12 @@ class TrackerMixIn(RSCMixIn):
             return
 
         await interaction.response.defer(ephemeral=True)
-        trackers = await self.trackers(guild, player=player.id)
+        try:
+            trackers = await self.trackers(guild, player=player.id)
+        except RscException as exc:
+            return await interaction.followup.send(
+                embed=ApiExceptionErrorEmbed(exc), ephemeral=True
+            )
 
         embed = YellowEmbed(title=f"{player.display_name} Trackers")
         if not trackers:
@@ -52,7 +89,10 @@ class TrackerMixIn(RSCMixIn):
             tdata = []
             for t in trackers:
                 date = t.last_updated.date() if t.last_updated else "None"
-                tdata.append((t.name or t.platform_id, t.status, date))
+                status = None
+                if t.status:
+                    status = TrackerLinksStatus(t.status).full_name
+                tdata.append((t.name or t.platform_id, status, date))
             tdata.sort(key=lambda x: cast(int, x[1]))
             embed.description = "List of associated RSC trackers. Account is tracker name or platform id."
             embed.add_field(
@@ -80,7 +120,13 @@ class TrackerMixIn(RSCMixIn):
             return
 
         await interaction.response.defer()
-        trackers = await self.trackers(guild, status)
+        try:
+            trackers = await self.trackers(guild, status)
+        except RscException as exc:
+            return await interaction.followup.send(
+                embed=ApiExceptionErrorEmbed(exc), ephemeral=True
+            )
+
         trackers.sort(key=lambda x: cast(datetime, x.last_updated), reverse=True)
 
         dates = []
@@ -119,7 +165,12 @@ class TrackerMixIn(RSCMixIn):
             return
 
         await interaction.response.defer()
-        stats = await self.tracker_stats(guild)
+        try:
+            stats = await self.tracker_stats(guild)
+        except RscException as exc:
+            return await interaction.followup.send(
+                embed=ApiExceptionErrorEmbed(exc), ephemeral=True
+            )
 
         embed = YellowEmbed(
             title="RSC Tracker Stats",
@@ -159,7 +210,12 @@ class TrackerMixIn(RSCMixIn):
         date_cutoff = datetime.now(tz) - timedelta(days=days)
 
         log.debug(f"Getting tracker data older than {date_cutoff.date()}")
-        trackers = await self.trackers(guild, status)
+        try:
+            trackers = await self.trackers(guild, status)
+        except RscException as exc:
+            return await interaction.followup.send(
+                embed=ApiExceptionErrorEmbed(exc), ephemeral=True
+            )
 
         log.debug("Removing recently updated trackers")
         old_trackers = []
