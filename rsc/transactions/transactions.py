@@ -46,6 +46,7 @@ from rsc.exceptions import (
     translate_api_error,
 )
 from rsc.teams import TeamMixIn
+from rsc.transactions.modals import CutMsgModal
 from rsc.transactions.views import TradeAnnouncementModal
 from rsc.types import Substitute, TransactionSettings
 from rsc.utils import utils
@@ -496,27 +497,24 @@ class TransactionMixIn(RSCMixIn):
     @_transactions.command(  # type: ignore
         name="cutmsg", description="Configure the player cut message"
     )
-    @app_commands.describe(msg="Cut message string")
     @app_commands.checks.has_permissions(manage_guild=True)
-    async def _transactions_cutmsg(self, interaction: discord.Interaction, *, msg: str):
+    async def _transactions_cutmsg(self, interaction: discord.Interaction):
         """Set cut message (4096 characters max)"""
         if not interaction.guild:
             return
 
-        if len(msg) > 4096:
-            await interaction.response.send_message(
-                embed=ErrorEmbed(
-                    description=f"Cut message must be a maximum of 4096 characters. (Length: {len(msg)})"
-                )
-            )
-            return
+        cutmsg_modal = CutMsgModal()
+        await interaction.response.send_modal(cutmsg_modal)
+        await cutmsg_modal.wait()
 
-        await self._save_cut_message(interaction.guild, msg)
+        cutmsg = cutmsg_modal.cutmsg.value
+
+        await self._save_cut_message(interaction.guild, cutmsg)
         cut_embed = discord.Embed(
-            title="Cut Message", description=f"{msg}", color=discord.Color.green()
+            title="Cut Message", description=f"{cutmsg}", color=discord.Color.green()
         )
         cut_embed.set_footer(text="Successfully configured new cut message.")
-        await interaction.response.send_message(embed=cut_embed, ephemeral=True)
+        await interaction.followup.send(embed=cut_embed, ephemeral=True)
 
     # Committee Commands
 
