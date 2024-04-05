@@ -36,6 +36,6 @@ def active_combines(f):
                 ephemeral=True,
             )
 
-        return f(cls, *args, **kwargs)
+        return await f(cls, interaction, *args, **kwargs)
 
     return combine_wrapper
