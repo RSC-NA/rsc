@@ -37,6 +37,7 @@ from rsc.embeds import (
     ErrorEmbed,
     ExceptionErrorEmbed,
     SuccessEmbed,
+    YellowEmbed,
 )
 from rsc.enums import Status, TransactionType
 from rsc.exceptions import (
@@ -1557,6 +1558,7 @@ class TransactionMixIn(RSCMixIn):
         executor="Transaction Executor (Optional)",
         season='RSC Season Number. Example: "19" (Optional)',
         type="Transaction Type (Optional)",
+        limit="Max number of transactions to display (Default: 10)",
     )
     async def _transactions_history_cmd(
         self,
@@ -1565,6 +1567,7 @@ class TransactionMixIn(RSCMixIn):
         executor: discord.Member | None = None,
         season: int | None = None,
         type: TransactionType | None = None,
+        limit: app_commands.Range[int, 1, 20] = 10,
     ):
         guild = interaction.guild
         if not guild or not isinstance(interaction.user, discord.Member):
@@ -1573,7 +1576,12 @@ class TransactionMixIn(RSCMixIn):
         await interaction.response.defer(ephemeral=True)
         try:
             result = await self.transaction_history(
-                guild, player=player, executor=executor, season=season, trans_type=type
+                guild,
+                player=player,
+                executor=executor,
+                season=season,
+                trans_type=type,
+                limit=limit,
             )
             log.debug(f"Transaction History Result: {result}")
         except RscException as exc:
@@ -1581,6 +1589,50 @@ class TransactionMixIn(RSCMixIn):
                 embed=ApiExceptionErrorEmbed(exc), ephemeral=True
             )
             return
+
+        if not result:
+            return await interaction.followup.send(
+                embed=YellowEmbed(
+                    title="Transaction History",
+                    description="No results for specified criteria.",
+                ),
+                ephemeral=True,
+            )
+
+        fmt_list = []
+        for t in result:
+            date = None
+            if not t.var_date:
+                date = "None"
+            else:
+                date = str(t.var_date.date())
+
+            if not t.type:
+                trans_type = "Unknown"
+            else:
+                trans_type = TransactionType(t.type).full_name
+
+            # Get player informatioN?
+            # if not t.player_updates:
+            #     player = "Unknown"
+            # else:
+            #     player = t.player_updates
+
+            fmt_list.append((date, trans_type))
+
+        embed = BlueEmbed(
+            title="Transaction History",
+            description="List of transactions for specified criteria.",
+        )
+
+        embed.add_field(
+            name="Date", value="\n".join([x[0] for x in fmt_list]), inline=True
+        )
+        embed.add_field(
+            name="Type", value="\n".join([x[1] for x in fmt_list]), inline=True
+        )
+
+        await interaction.followup.send(embed=embed, ephemeral=True)
 
     # Functions
 
@@ -2353,23 +2405,40 @@ class TransactionMixIn(RSCMixIn):
         executor: discord.Member | None = None,
         season: int | None = None,
         trans_type: TransactionType | None = None,
+        limit: int = 0,
+        offset: int = 0,
     ) -> list[TransactionResponse]:
         """Fetch transaction history based on specified criteria"""
         async with ApiClient(self._api_conf[guild.id]) as client:
             api = TransactionsApi(client)
             player_id = player.id if player else None
             executor_id = executor.id if executor else None
+            t_type = str(trans_type) if trans_type else None
             log.debug(
                 f"Transaction History Query. Player: {player_id} Executor: {executor_id} Season: {season} Type: {trans_type}"
             )
             try:
-                return await api.transactions_history_list(
+                trans_list = await api.transactions_history_list(
                     league=self._league[guild.id],
                     player=player_id,
                     executor=executor_id,
-                    transaction_type=str(trans_type),
+                    transaction_type=t_type,
                     season_number=season,
+                    limit=limit,
+                    offset=offset,
                 )
+                return trans_list.results
+            except ApiException as exc:
+                raise RscException(response=exc)
+
+    async def transaction_history_by_id(
+        self, guild: discord.Guild, transaction_id: int
+    ) -> TransactionResponse:
+        """Fetch transaction history based on specified criteria"""
+        async with ApiClient(self._api_conf[guild.id]) as client:
+            api = TransactionsApi(client)
+            try:
+                return await api.transactions_history_read(id=transaction_id)
             except ApiException as exc:
                 raise RscException(response=exc)
 

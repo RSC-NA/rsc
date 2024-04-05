@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 
@@ -54,7 +55,7 @@ class CombineMixIn(RSCMixIn):
         self._combines_app = aiohttp.web.Application()
         self._combines_app.router.add_post("/combines_match", self.start_combines_game)
         self._combines_app.router.add_post(
-            "/combines_teardown", self.teardown_combines_lobby
+            "/combines_event", self.combines_event_handler
         )
         self._combines_runner = aiohttp.web.AppRunner(self._combines_app)
         await self._combines_runner.setup()
@@ -204,6 +205,14 @@ class CombineMixIn(RSCMixIn):
                 send_messages=False,
                 add_reactions=False,
             ),
+            league_role: discord.PermissionOverwrite(
+                view_channel=True,
+                read_messages=True,
+                connect=False,
+                speak=False,
+                send_messages=False,
+                add_reactions=False,
+            ),
         }
 
         combines_announce = discord.utils.get(
@@ -217,10 +226,10 @@ class CombineMixIn(RSCMixIn):
                 reason="Starting combines",
             )
 
-        combines_help = discord.utils.get(category.channels, name="combines-help")
-        if not combines_help:
-            combines_help = await guild.create_text_channel(
-                name="combines-help",
+        combines_lobbies = discord.utils.get(category.channels, name="combines-lobbies")
+        if not combines_lobbies:
+            combines_lobbies = await guild.create_text_channel(
+                name="combines-lobbies",
                 category=category,
                 overwrites=admin_overwrites,
                 reason="Starting combines",
@@ -240,12 +249,23 @@ class CombineMixIn(RSCMixIn):
                 connect=True,
                 speak=True,
                 send_messages=True,
+                read_messages=True,
                 add_reactions=True,
+                stream=True,
             ),
         }
         if muted_role:
             player_overwrites[muted_role] = discord.PermissionOverwrite(
                 view_channel=True, connect=False, speak=False
+            )
+
+        combines_help = discord.utils.get(category.channels, name="combines-help")
+        if not combines_help:
+            combines_help = await guild.create_text_channel(
+                name="combines-help",
+                category=category,
+                overwrites=player_overwrites,
+                reason="Starting combines",
             )
 
         # Make default channels
@@ -302,8 +322,8 @@ class CombineMixIn(RSCMixIn):
 
         await interaction.response.defer(ephemeral=True)
 
-        # tear down combine channels
-        await self.delete_combine_game_rooms(category)
+        # tear down combine category
+        await self.delete_combine_category(category)
 
         await self._set_combines_active(guild, active=False)
         await interaction.followup.send(
@@ -511,59 +531,6 @@ class CombineMixIn(RSCMixIn):
 
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-    @_combines.command(  # type: ignore
-        name="overview", description="Get overview of current combine channels"
-    )
-    async def _combines_overview(self, interaction: discord.Interaction):
-        if not interaction.guild:
-            return
-
-        if not await self._get_combines_active(interaction.guild):
-            await interaction.response.send_message(
-                embed=ErrorEmbed(description="Combines are not currently active."),
-                ephemeral=True,
-            )
-            return
-
-        categories = await self.get_combine_categories(interaction.guild)
-        if not categories:
-            await interaction.response.send_message(
-                embed=ErrorEmbed(
-                    description="Combines are active but there are no combine categories created."
-                ),
-                ephemeral=True,
-            )
-            return
-
-        overview: list[tuple[discord.CategoryChannel, int, int]] = []
-        for c in categories:
-            data = (
-                c,
-                len(c.voice_channels),
-                await self.total_players_in_combine_category(c),
-            )
-            overview.append(data)
-
-        embed = discord.Embed(
-            title=f"{interaction.guild} Combine Overview",
-            description="Overview of current combine channels.",
-            color=discord.Color.blue(),
-        )
-        embed.add_field(
-            name="Tier",
-            value="\n".join([o[0].name.removesuffix(" Combines") for o in overview]),
-            inline=True,
-        )
-        embed.add_field(
-            name="Channels", value="\n".join([str(o[1]) for o in overview]), inline=True
-        )
-        embed.add_field(
-            name="Total Players",
-            value="\n".join([str(o[2]) for o in overview]),
-            inline=True,
-        )
-        await interaction.response.send_message(embed=embed)
-
     # Functions
 
     async def get_combine_room_list(
@@ -576,6 +543,14 @@ class CombineMixIn(RSCMixIn):
                 categories.append(x)
         return categories
 
+    async def delete_combine_category(self, category: discord.CategoryChannel):
+        """Delete a combine category and it's associated channels"""
+        log.debug(f"[{category.guild}] Deleting combine category: {category.name}")
+        channels = category.channels
+        for c in channels:
+            await c.delete(reason="Combines have ended.")
+        await category.delete(reason="Combines have ended.")
+
     async def delete_combine_game_rooms(self, category: discord.CategoryChannel):
         """Delete a combine category and it's associated channels"""
         log.debug(f"[{category.guild}] Deleting combine category: {category.name}")
@@ -583,7 +558,7 @@ class CombineMixIn(RSCMixIn):
         for vc in vclist:
             if not isinstance(vc, discord.VoiceChannel):
                 continue
-            if vc.name.startswith("combines-"):
+            if vc.name.startswith("combine-"):
                 await vc.delete(reason="Combines have ended.")
 
     async def total_players_in_combine_category(
@@ -614,39 +589,248 @@ class CombineMixIn(RSCMixIn):
 
         return players
 
-    async def create_combine_lobby_channels(
+    async def create_combine_lobby_channel(
         self,
         guild: discord.Guild,
         lobby: models.CombinesLobby,
-        players: list[discord.Member],
     ) -> list[discord.VoiceChannel]:
-        pass
+        log.debug("Creating combine lobby channels.")
+        combine_category = await self._get_combines_category(guild)
+        if not combine_category:
+            log.error("Combine category not configured. Can't create game.")
+            return []
+
+        exists = discord.utils.get(guild.channels, name=f"combine-{lobby.id}-home")
+        if exists:
+            log.error(f"Combine lobby already exists: {exists.name}")
+            return []
+
+        players = await self.combine_players_from_lobby(guild, lobby)
+        log.debug(f"Players: {players}")
+
+        if not players:
+            log.error(f"Combine {lobby.id} has no players associated with it")
+            return []
+
+        # Check if category is full (Max: 50)
+        log.debug("Finding valid combine category")
+        if len(combine_category.channels) > 48:
+            for i in range(2, 5):
+                next_category = discord.utils.get(
+                    guild.channels, name=f"{combine_category.name}-2"
+                )
+
+                if not next_category:
+                    next_category = await guild.create_category(
+                        name=f"{combine_category.name}-{i}",
+                        reason="Combines channels have maxed out.",
+                    )
+                    combine_category = next_category
+                    break
+
+                if not isinstance(next_category, discord.CategoryChannel):
+                    log.warning(
+                        f"Combine category is already in use and not a category: {next_category}"
+                    )
+                    continue
+
+                if len(next_category.channels) <= 48:
+                    combine_category = next_category
+                    break
+        log.debug(f"Combine Category: {combine_category.name}")
+
+        # Set up channel permissions
+        muted_role = await utils.get_muted_role(guild)
+        league_role = await utils.get_league_role(guild)
+        if not league_role:
+            log.error("League role does not exist in guild.")
+            return []
+
+        player_overwrites = {
+            guild.default_role: discord.PermissionOverwrite(
+                view_channel=True,
+                connect=False,
+                speak=False,
+                send_messages=False,
+                add_reactions=False,
+            ),
+            league_role: discord.PermissionOverwrite(
+                view_channel=True,
+                connect=True,
+                speak=True,
+                send_messages=True,
+                read_messages=True,
+                add_reactions=True,
+                stream=True,
+            ),
+        }
+        if muted_role:
+            player_overwrites[muted_role] = discord.PermissionOverwrite(
+                view_channel=True, connect=False, speak=False
+            )
+
+        # Create Lobby
+        log.debug("Creating combine lobby voice channels")
+        home_channel = await combine_category.create_voice_channel(
+            name=f"combine-{lobby.id}-home",
+            overwrites=player_overwrites,
+            reason=f"Starting combine lobby {lobby.id}",
+        )
+        away_channel = await combine_category.create_voice_channel(
+            name=f"combine-{lobby.id}-away",
+            overwrites=player_overwrites,
+            reason=f"Starting combine lobby {lobby.id}",
+        )
+
+        # Announce
+        log.debug("Announcing combine lobby!")
+        await self.announce_combines_lobby(
+            guild, lobby=lobby, channels=[home_channel, away_channel]
+        )
+
+        return [home_channel, away_channel]
+
+    async def announce_combines_lobby(
+        self,
+        guild: discord.Guild,
+        lobby: models.CombinesLobby,
+        channels: list[discord.VoiceChannel],
+    ) -> discord.Message:
+        if len(channels) != 2:
+            raise ValueError(
+                "Must provide 2 voice channels to announce a combine lobby."
+            )
+
+        announce_channel = discord.utils.get(guild.channels, name="combines-lobbies")
+        if not announce_channel:
+            raise RuntimeError("Combine lobby announcement channel doesn't exit.")
+
+        if not isinstance(announce_channel, discord.TextChannel):
+            raise RuntimeError(
+                "Combine lobbies announcement channel is not of type `disord.TextChannel`"
+            )
+
+        home_fmt = []
+        for player in lobby.home:
+            m = guild.get_member(player.discord_id)
+            if not m:
+                home_fmt.append(player.name)
+            else:
+                home_fmt.append(m.mention)
+
+        away_fmt = []
+        for player in lobby.away:
+            m = guild.get_member(player.discord_id)
+            if not m:
+                away_fmt.append(player.name)
+            else:
+                away_fmt.append(m.mention)
+
+        players = await self.combine_players_from_lobby(guild, lobby)
+        players_fmt = " ".join([m.mention for m in players])
+
+        embed = BlueEmbed(
+            title="Lobby Ready!",
+            description=(
+                f"Home Channel: {channels[0].mention}\n"
+                f"Away Channel: {channels[1].mention}"
+            ),
+        )
+
+        embed.add_field(name="Home Team", value="\n".join(home_fmt), inline=True)
+        embed.add_field(name="Away Team", value="\n".join(away_fmt), inline=True)
+
+        if guild.icon:
+            embed.set_thumbnail(url=guild.icon.url)
+
+        msg = await announce_channel.send(content=players_fmt, embed=embed)
+
+        return msg
+
+    async def teardown_combine_lobby(self, guild: discord.Guild, lobby_id: int):
+        waiting_room = discord.utils.get(guild.channels, name="combines-waiting-room")
+        home_lobby = discord.utils.get(guild.channels, name=f"combine-{lobby_id}-home")
+        away_lobby = discord.utils.get(guild.channels, name=f"combine-{lobby_id}-away")
+
+        if not isinstance(home_lobby, discord.VoiceChannel):
+            raise RuntimeError(f"Combine lobby is not a voice channel: {home_lobby}")
+        if not isinstance(away_lobby, discord.VoiceChannel):
+            raise RuntimeError(f"Combine lobby is not a voice channel: {away_lobby}")
+
+        delete_msg = "Game has finished. Channels will be deleted in 30 seconds."
+
+        home_player_fmt = " ".join([m.mention for m in home_lobby.members])
+        await home_lobby.send(content=f"{home_player_fmt}\n\n{delete_msg}")
+
+        away_player_fmt = " ".join([m.mention for m in away_lobby.members])
+        await away_lobby.send(content=f"{away_player_fmt}\n\n{delete_msg}")
+
+        await asyncio.sleep(30)
+
+        # Move players to waiting room if it exists
+        if isinstance(waiting_room, discord.VoiceChannel):
+            log.debug("Moving combine lobby players to waiting room")
+            if isinstance(home_lobby, discord.VoiceChannel):
+                for m in home_lobby.members:
+                    await m.move_to(waiting_room, reason="Combine lobby has ended.")
+            if isinstance(away_lobby, discord.VoiceChannel):
+                for m in away_lobby.members:
+                    await m.move_to(waiting_room, reason="Combine lobby has ended.")
+
+        log.debug(f"Tearing down combine lobby: {lobby_id}")
+        await home_lobby.delete(reason="Combine lobby has finished.")
+        await away_lobby.delete(reason="Combine lobby has finished.")
 
     # Runner
 
-    async def teardown_combines_lobby(self, request):
-        log.debug("Received request to teardown combine game")
-
-        from pprint import pformat
+    async def combines_event_handler(self, request):
+        log.debug("Received combines event")
 
         try:
             data = await request.json()
+            from pprint import pformat
+
             log.debug(f"body:\n\n{pformat(data)}\n\n")
+            event = models.CombineEvent(**data)
         except json.JSONDecodeError:
             log.warning("Received combines webhook with no JSON data")
-            return
+            return aiohttp.web.Response(status=400)  # 400 Bad Request
+        except pydantic.ValidationError as exc:
+            log.exception("Error deserializing combine game lobby", exc_info=exc)
+            return aiohttp.web.Response(status=400)  # 400 Bad Request
+
+        # Only support RSC NA 3v3 right now
+        guild: discord.Guild | None = None
+        for g in self.bot.guilds:
+            if g.id == 991044575567179856:
+                guild = g
+                break
+
+        if not guild:
+            log.error("Bot is not in the configured combines guild")
+            return aiohttp.web.Response(status=503)  # 503 Service Unavailable
+
+        match event.message_type:
+            case models.CombineEventType.Finished:
+                if not event.match_id:
+                    log.warning("Received finished combine lobby but no lobby id.")
+                    return aiohttp.web.Response(status=400)  # 400 Bad Request
+                else:
+                    asyncio.create_task(
+                        self.teardown_combine_lobby(guild, lobby_id=event.match_id)
+                    )
+                    return aiohttp.web.Response(status=200)  # 200 OK
+            case _:
+                return aiohttp.web.Response(status=501)  # 400 Not Implemented
 
     async def start_combines_game(self, request):
         log.debug("Received request to create combine game")
 
-        from pprint import pformat
-
         try:
             data = await request.json()
-            log.debug(f"body:\n\n{pformat(data)}\n\n")
         except json.JSONDecodeError:
             log.warning("Received combines webhook with no JSON data")
-            return
+            return aiohttp.web.Response(status=400)  # 400 Bad Request
 
         guild: discord.Guild | None = None
         for g in self.bot.guilds:
@@ -656,41 +840,41 @@ class CombineMixIn(RSCMixIn):
 
         if not guild:
             log.error("Bot is not in the configured combines guild")
-            return
+            return aiohttp.web.Response(status=503)  # 503 Service Unavailable
+
+        # Check if active
+        active = await self._get_combines_active(guild)
+        if not active:
+            log.warning("Received combine match but combines are not active.")
+            return aiohttp.web.Response(status=503)  # 503 Service Unavailable
 
         category = await self._get_combines_category(guild)
         if not category:
             log.error(
                 "Received request to create combine game but combine category does not exist."
             )
-            return
+            return aiohttp.web.Response(status=400)  # 400 Bad Request
 
+        log.debug("Processing combine lobbies")
         lobby_list: list[models.CombinesLobby] = []
         try:
             for v in data.values():
                 lobby_list.append(models.CombinesLobby(**v))
         except pydantic.ValidationError as exc:
             log.exception("Error deserializing combine game lobby", exc_info=exc)
-            return
+            return aiohttp.web.Response(status=400)  # 400 Bad Request
 
         if not lobby_list:
             log.warning("Received combines HTTP request with no data")
-            return
+            return aiohttp.web.Response(status=400)  # 400 Bad Request
 
+        log.debug("Sending combine lobbies to creation")
         for lobby in lobby_list:
-            # Make sure lobby doesn't already exist
-            exists = False
-            for vc in category.voice_channels:
-                if vc.name.startswith(f"combines-{lobby.id}"):
-                    log.error(f"Combine lobby already exists: {vc.name}")
-                    exists = True
-                    break
+            await self.create_combine_lobby_channel(guild, lobby)
 
-            if exists:
-                continue
-
-            players = await self.combine_players_from_lobby(guild, lobby)
-            log.debug(f"Players: {players}")
+        # Send HTTP 200 OK
+        log.debug("Sending HTTP response.")
+        return aiohttp.web.Response(status=200)
 
     async def combines_runner_cleanup(self):
         await self._combines_runner.cleanup()

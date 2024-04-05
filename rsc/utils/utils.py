@@ -149,6 +149,16 @@ async def get_ir_role(guild: discord.Guild) -> discord.Role:
     return r
 
 
+async def get_muted_role(guild: discord.Guild) -> discord.Role:
+    r = discord.utils.get(guild.roles, name=const.MUTED_ROLE)
+    if not r:
+        log.error(f"[{guild.name}] Expected role does not exist: {const.MUTED_ROLE}")
+        raise ValueError(
+            f"[{guild.name}] Expected role does not exist: {const.MUTED_ROLE}"
+        )
+    return r
+
+
 async def get_captain_role(guild: discord.Guild) -> discord.Role:
     r = discord.utils.get(guild.roles, name=const.CAPTAIN_ROLE)
     if not r:
@@ -1014,10 +1024,10 @@ class UtilsMixIn(RSCMixIn):
         members='Space delimited discord IDs to apply role. (Example: "138778232802508801 352600418062303244") (Optional)',
         to_role="Add the role to everyone in this role. (Optional)",
     )
-    @app_commands.checks.has_permissions(manage_roles=True)
-    @app_commands.checks.bot_has_permissions(manage_roles=True)
     @app_commands.guild_only
-    async def _bulkaddrole(
+    @app_commands.checks.bot_has_permissions(manage_roles=True)
+    @app_commands.checks.has_permissions(manage_roles=True)
+    async def _bulkaddrole_cmd(
         self,
         interaction: discord.Interaction,
         role: discord.Role,

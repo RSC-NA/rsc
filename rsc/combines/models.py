@@ -1,6 +1,25 @@
 from datetime import datetime
+from enum import StrEnum
 
 from pydantic import BaseModel
+
+
+class CombineStatusType(StrEnum):
+    Success = "success"
+    Error = "error"
+
+
+class CombineEventType(StrEnum):
+    InvalidScore = "Invalid Score"
+    ScoreMismatch = "Score Report Mismatch"
+    Finished = "Finished Game"
+    ScoreReported = "Reported Score"
+    GameComplete = "Game Complete"
+
+
+class CombineActor(BaseModel):
+    nickname: str
+    discord_id: int
 
 
 class CombinesStatus(BaseModel):
@@ -44,3 +63,11 @@ class CombinesLobby(BaseModel):
     cancelled: bool
     home: list[CombinesPlayer]
     away: list[CombinesPlayer]
+
+
+class CombineEvent(BaseModel):
+    actor: CombineActor
+    status: str
+    message_type: CombineEventType
+    message: str
+    match_id: int | None
