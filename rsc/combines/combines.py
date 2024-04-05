@@ -267,6 +267,7 @@ class CombineMixIn(RSCMixIn):
                 overwrites=player_overwrites,
                 reason="Starting combines",
             )
+            # send help
 
         # Make default channels
         combines_chat = discord.utils.get(category.channels, name="combines-general")
@@ -802,7 +803,10 @@ class CombineMixIn(RSCMixIn):
         # Only support RSC NA 3v3 right now
         guild: discord.Guild | None = None
         for g in self.bot.guilds:
-            if g.id == 991044575567179856:
+            if g.id == 991044575567179856:  # nickmdev
+                guild = g
+                break
+            if g.id == 395806681994493964:  # RSC 3v3
                 guild = g
                 break
 
@@ -834,7 +838,10 @@ class CombineMixIn(RSCMixIn):
 
         guild: discord.Guild | None = None
         for g in self.bot.guilds:
-            if g.id == 991044575567179856:
+            if g.id == 991044575567179856:  # nickmdev
+                guild = g
+                break
+            if g.id == 395806681994493964:  # RSC 3v3
                 guild = g
                 break
 
