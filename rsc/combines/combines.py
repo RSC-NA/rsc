@@ -606,6 +606,11 @@ class CombineMixIn(RSCMixIn):
             log.error(f"Combine lobby already exists: {exists.name}")
             return []
 
+        exists = discord.utils.get(guild.channels, name=f"combine-{lobby.id}-away")
+        if exists:
+            log.error(f"Combine lobby already exists: {exists.name}")
+            return []
+
         players = await self.combine_players_from_lobby(guild, lobby)
         log.debug(f"Players: {players}")
 
@@ -676,11 +681,13 @@ class CombineMixIn(RSCMixIn):
             name=f"combine-{lobby.id}-home",
             overwrites=player_overwrites,
             reason=f"Starting combine lobby {lobby.id}",
+            user_limit=5,
         )
         away_channel = await combine_category.create_voice_channel(
             name=f"combine-{lobby.id}-away",
             overwrites=player_overwrites,
             reason=f"Starting combine lobby {lobby.id}",
+            user_limit=5,
         )
 
         # Announce
@@ -757,16 +764,6 @@ class CombineMixIn(RSCMixIn):
             raise RuntimeError(f"Combine lobby is not a voice channel: {home_lobby}")
         if not isinstance(away_lobby, discord.VoiceChannel):
             raise RuntimeError(f"Combine lobby is not a voice channel: {away_lobby}")
-
-        delete_msg = "Game has finished. Channels will be deleted in 30 seconds."
-
-        home_player_fmt = " ".join([m.mention for m in home_lobby.members])
-        await home_lobby.send(content=f"{home_player_fmt}\n\n{delete_msg}")
-
-        away_player_fmt = " ".join([m.mention for m in away_lobby.members])
-        await away_lobby.send(content=f"{away_player_fmt}\n\n{delete_msg}")
-
-        await asyncio.sleep(30)
 
         # Move players to waiting room if it exists
         if isinstance(waiting_room, discord.VoiceChannel):
