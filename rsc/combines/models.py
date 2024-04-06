@@ -15,6 +15,7 @@ class CombineEventType(StrEnum):
     Finished = "Finished Game"
     ScoreReported = "Reported Score"
     GameComplete = "Game Complete"
+    CheckIn = "Checked In"
 
 
 class CombineActor(BaseModel):
