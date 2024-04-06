@@ -5,11 +5,11 @@ import logging
 import aiohttp
 import discord
 import pydantic
-from redbot.core import app_commands, commands
+from redbot.core import app_commands
 
 from rsc.abc import RSCMixIn
 from rsc.combines import api, models
-from rsc.const import MUTED_ROLE
+from rsc.const import COMBINES_HELP_1, COMBINES_HELP_2, COMBINES_HELP_3, MUTED_ROLE
 from rsc.decorator import active_combines
 from rsc.embeds import BlueEmbed, ErrorEmbed, GreenEmbed, YellowEmbed
 from rsc.exceptions import BadGateway
@@ -40,13 +40,6 @@ class CombineMixIn(RSCMixIn):
         self.config.register_custom("Combines", **defaults_guild)
         super().__init__()
 
-    # Setup
-
-    # async def _populate_combines_cache(self, guild: discord.Guild):
-    #     self._combine_cache[guild] = [
-    #         c.id for c in await self.get_combine_categories(guild)
-    #     ]
-
     # Runners
 
     async def start_combines_runner(self):
@@ -64,17 +57,6 @@ class CombineMixIn(RSCMixIn):
         )
 
         self.combines_loop_task = self.bot.loop.create_task(self._combines_site.start())
-
-    # Listeners
-
-    @commands.Cog.listener("on_voice_state_update")
-    async def combines_on_voice_state_update(
-        self,
-        member: discord.Member,
-        before: discord.VoiceState,
-        after: discord.VoiceState,
-    ):
-        pass
 
     # Settings
 
@@ -226,15 +208,6 @@ class CombineMixIn(RSCMixIn):
                 reason="Starting combines",
             )
 
-        combines_lobbies = discord.utils.get(category.channels, name="combines-lobbies")
-        if not combines_lobbies:
-            combines_lobbies = await guild.create_text_channel(
-                name="combines-lobbies",
-                category=category,
-                overwrites=admin_overwrites,
-                reason="Starting combines",
-            )
-
         # Configure permissions
         player_overwrites = {
             guild.default_role: discord.PermissionOverwrite(
@@ -267,7 +240,9 @@ class CombineMixIn(RSCMixIn):
                 overwrites=player_overwrites,
                 reason="Starting combines",
             )
-            # send help
+
+        # Send help message
+        await self.send_combines_help_msg(combines_help)
 
         # Make default channels
         combines_chat = discord.utils.get(category.channels, name="combines-general")
@@ -709,7 +684,9 @@ class CombineMixIn(RSCMixIn):
                 "Must provide 2 voice channels to announce a combine lobby."
             )
 
-        announce_channel = discord.utils.get(guild.channels, name="combines-lobbies")
+        announce_channel = discord.utils.get(
+            guild.channels, name="combines-announcements"
+        )
         if not announce_channel:
             raise RuntimeError("Combine lobby announcement channel doesn't exit.")
 
@@ -737,16 +714,23 @@ class CombineMixIn(RSCMixIn):
         players = await self.combine_players_from_lobby(guild, lobby)
         players_fmt = " ".join([m.mention for m in players])
 
-        embed = BlueEmbed(
-            title="Lobby Ready!",
-            description=(
-                f"Home Channel: {channels[0].mention}\n"
-                f"Away Channel: {channels[1].mention}"
-            ),
+        game_info_fmt = (
+            f"Name: **{lobby.lobby_user}**\n" f"Password: **{lobby.lobby_pass}**"
         )
+
+        channel_fmt = f"Home: {channels[0].mention}\n" f"Away: {channels[1].mention}"
+
+        embed = BlueEmbed(title="Combine Ready!")
+
+        embed.add_field(name="Lobby Info", value=game_info_fmt, inline=False)
+        embed.add_field(name="Voice Channels", value=channel_fmt, inline=False)
 
         embed.add_field(name="Home Team", value="\n".join(home_fmt), inline=True)
         embed.add_field(name="Away Team", value="\n".join(away_fmt), inline=True)
+
+        embed.set_footer(
+            text="You can check your active game info with `/combines lobbyinfo`"
+        )
 
         if guild.icon:
             embed.set_thumbnail(url=guild.icon.url)
@@ -778,6 +762,11 @@ class CombineMixIn(RSCMixIn):
         log.debug(f"Tearing down combine lobby: {lobby_id}")
         await home_lobby.delete(reason="Combine lobby has finished.")
         await away_lobby.delete(reason="Combine lobby has finished.")
+
+    async def send_combines_help_msg(self, channel: discord.TextChannel):
+        await channel.send(content=COMBINES_HELP_1)
+        await channel.send(content=COMBINES_HELP_2)
+        await channel.send(content=COMBINES_HELP_3)
 
     # Runner
 
