@@ -225,6 +225,7 @@ class CombineMixIn(RSCMixIn):
                 read_messages=True,
                 add_reactions=True,
                 stream=True,
+                use_application_commands=True,
             ),
         }
         if muted_role:
@@ -751,6 +752,8 @@ class CombineMixIn(RSCMixIn):
             raise RuntimeError(f"Combine lobby is not a voice channel: {home_lobby}")
         if not isinstance(away_lobby, discord.VoiceChannel):
             raise RuntimeError(f"Combine lobby is not a voice channel: {away_lobby}")
+
+        await asyncio.sleep(15)
 
         # Move players to waiting room if it exists
         if isinstance(waiting_room, discord.VoiceChannel):
