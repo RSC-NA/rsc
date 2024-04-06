@@ -703,6 +703,9 @@ class CombineMixIn(RSCMixIn):
             else:
                 home_fmt.append(m.mention)
 
+        # Define who creates lobby
+        home_fmt[0] += " (Makes Lobby)"
+
         away_fmt = []
         for player in lobby.away:
             m = guild.get_member(player.discord_id)
@@ -720,7 +723,7 @@ class CombineMixIn(RSCMixIn):
 
         channel_fmt = f"Home: {channels[0].mention}\n" f"Away: {channels[1].mention}"
 
-        embed = BlueEmbed(title="Combine Ready!")
+        embed = BlueEmbed(title=f"Combine {lobby.id} Ready!")
 
         embed.add_field(name="Lobby Info", value=game_info_fmt, inline=False)
         embed.add_field(name="Voice Channels", value=channel_fmt, inline=False)
