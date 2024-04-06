@@ -233,7 +233,7 @@ class Platform(StrEnum):
     PLAYSTATION = "PS"
     XBOX = "XBOX"
     EPIC = "EPIC"
-    SWITCH = "SWITCH"
+    SWITCH = "SWTCH"
 
 
 class Referrer(StrEnum):
