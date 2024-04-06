@@ -1016,9 +1016,17 @@ class AdminMixIn(RSCMixIn):
                     buf.seek(0)
                     dFile = discord.File(filename="progress.jpeg", fp=buf)
 
-                await interaction.edit_original_response(
-                    embed=loading_embed, attachments=[dFile]
-                )
+                try:
+                    await interaction.edit_original_response(
+                        embed=loading_embed, attachments=[dFile]
+                    )
+                except discord.HTTPException as exc:
+                    log.warning(
+                        f"Recived {exc.status} (error code {exc.code}: {exc.text})"
+                    )
+                    if exc.code == 50027:
+                        # Try passing on Invalid Webhook Token (401)
+                        pass
 
         # Draw 100%
         drawProgressBar(
