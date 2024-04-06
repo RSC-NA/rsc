@@ -23,6 +23,7 @@ FORMER_ADMIN_ROLE = "Former Admin"
 FORMER_STAFF_ROLE = "Former Staff"
 SPECTATOR_ROLE = "Spectator"
 IR_ROLE = "IR"
+DRAFT_ELIGIBLE = "Draft Eligible"
 
 # Emoji
 TROPHY_EMOJI = "\U0001F3C6"  # :trophy:

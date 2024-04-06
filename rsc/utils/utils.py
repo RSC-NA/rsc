@@ -139,6 +139,18 @@ async def not_implemented(interaction: discord.Interaction, followup=False):
         )
 
 
+async def get_draft_eligible_role(guild: discord.Guild) -> discord.Role:
+    r = discord.utils.get(guild.roles, name=const.DRAFT_ELIGIBLE)
+    if not r:
+        log.error(
+            f"[{guild.name}] Expected role does not exist: {const.DRAFT_ELIGIBLE}"
+        )
+        raise ValueError(
+            f"[{guild.name}] Expected role does not exist: {const.DRAFT_ELIGIBLE}"
+        )
+    return r
+
+
 async def get_ir_role(guild: discord.Guild) -> discord.Role:
     r = discord.utils.get(guild.roles, name=const.IR_ROLE)
     if not r:

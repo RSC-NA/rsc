@@ -1,11 +1,14 @@
+import io
 import logging
 import tempfile
 
 import discord
+from PIL import Image, ImageDraw
 from redbot.core import app_commands
 from rscapi.models.franchise import Franchise
 from rscapi.models.rebrand_a_franchise import RebrandAFranchise
 from rscapi.models.team_details import TeamDetails
+from rscapi.models.tier import Tier
 
 from rsc import const
 from rsc.abc import RSCMixIn
@@ -31,6 +34,7 @@ from rsc.franchises import FranchiseMixIn
 from rsc.logs import GuildLogAdapter
 from rsc.types import AdminSettings, RebrandTeamDict
 from rsc.utils import utils
+from rsc.utils.images import drawProgressBar
 from rsc.views import LinkButton
 
 logger = logging.getLogger("red.rsc.admin")
@@ -862,6 +866,328 @@ class AdminMixIn(RSCMixIn):
         await interaction.edit_original_response(embed=embed)
 
     @_sync.command(  # type: ignore
+        name="freeagent",
+        description="Sync all free agent players in discord",
+    )
+    async def _sync_freeagent_cmd(
+        self,
+        interaction: discord.Interaction,
+    ):
+        guild = interaction.guild
+        if not guild:
+            return
+
+        sync_view = ConfirmSyncView(interaction)
+        await sync_view.prompt()
+        plist = await self.players(
+            guild, status=Status.FREE_AGENT, limit=10000, season=2
+        )
+        tier_list: list[Tier] = await self.tiers(guild)
+        # plist = await self.players(guild, status=Status.ROSTERED, limit=10000)
+        await sync_view.wait()
+
+        if not sync_view.result:
+            return
+
+        # Exit if no DE's exist
+        if not plist:
+            return await interaction.edit_original_response(
+                embed=BlueEmbed(
+                    title="Free Agent Sync",
+                    description="There are no free agent players to sync.",
+                )
+            )
+
+        # Make sure tiers exist
+        if not tier_list:
+            return await interaction.edit_original_response(
+                embed=BlueEmbed(
+                    title="Free Agent Sync",
+                    description="League has no tiers configured.",
+                )
+            )
+
+        tiers = []
+        for t in tier_list:
+            if t.name:
+                tiers.append(t.name.lower())
+
+        loading_embed = BlueEmbed(
+            title="Syncing Free Agents",
+            description="Free Agent player synchronziation in progress\nCHANGE BACK TO DE IDIOT",
+        )
+
+        total_de = len(plist)
+        log.debug(f"Total FA: {total_de}")
+
+        # Get Roles
+        league_role = await utils.get_league_role(guild)
+        captain_role = await utils.get_captain_role(guild)
+        fa_role = await utils.get_free_agent_role(guild)
+
+        # Send initial progress bar
+        progress_bar = Image.new("RGBA", (275, 50), (255, 255, 255))
+        progress_bar.putalpha(1)
+        base_image = ImageDraw.Draw(progress_bar)
+
+        drawProgressBar(
+            base_image,
+            x=10,
+            y=10,
+            w=225,
+            h=30,
+            progress=0.0,
+            progress_bounds=(0, total_de),
+        )
+
+        with io.BytesIO() as buf:
+            progress_bar.save(buf, format="PNG")
+            # byte_arr = buf.getvalue()
+            buf.seek(0)
+            dFile = discord.File(filename="progress.jpeg", fp=buf)
+
+        loading_embed.set_image(url="attachment://progress.jpeg")
+        await interaction.edit_original_response(
+            embed=loading_embed, attachments=[dFile]
+        )
+
+        for idx, player in enumerate(plist):
+            idx += 1
+            log.debug(f"Index: {idx}")
+
+            if not (player.player and player.player.discord_id):
+                continue
+
+            m = guild.get_member(player.player.discord_id)
+            if not m:
+                log.warning(
+                    f"Couldn't find FA in guild: {player.player.name} ({player.id})"
+                )
+                continue
+            log.debug(f"Updating FA: {m.display_name}")
+
+            roles_to_add = [fa_role, league_role]
+
+            # Remove captain role
+            await m.remove_roles(captain_role)
+
+            # Remove old tier if it exists
+            for r in m.roles:
+                if r.name.lower() in tiers:
+                    await m.remove_roles(r)
+
+            # Get tier and tier FA roles
+            if player.tier and player.tier.name:
+                tier_role = await utils.get_tier_role(guild, name=player.tier.name)
+                if tier_role:
+                    roles_to_add.append(tier_role)
+
+                tier_fa_role = await utils.get_tier_fa_role(
+                    guild, name=player.tier.name
+                )
+                if tier_fa_role:
+                    roles_to_add.append(tier_fa_role)
+
+            # Add roles
+            await m.add_roles(*roles_to_add)
+
+            # Remove franchise role if it exists
+            franchise_role = await utils.franchise_role_from_disord_member(m)
+            if franchise_role:
+                await m.remove_roles(franchise_role)
+
+            # Edit nickname
+            name = await utils.remove_prefix(m)
+            await m.edit(nick=f"FA | {name}")
+
+            # Update progress bar
+            if (idx % 10) == 0:
+                progress = idx / total_de
+
+                drawProgressBar(
+                    base_image,
+                    x=10,
+                    y=10,
+                    w=225,
+                    h=30,
+                    progress=progress,
+                    progress_bounds=(idx, total_de),
+                )
+
+                with io.BytesIO() as buf:
+                    progress_bar.save(buf, format="PNG")
+                    # byte_arr = buf.getvalue()
+                    buf.seek(0)
+                    dFile = discord.File(filename="progress.jpeg", fp=buf)
+
+                # loading_embed.set_image(url="attachment://progress.jpeg")
+                await interaction.edit_original_response(
+                    embed=loading_embed, attachments=[dFile]
+                )
+
+        # Draw 100%
+        drawProgressBar(
+            base_image,
+            x=10,
+            y=10,
+            w=225,
+            h=30,
+            progress=1.0,
+            progress_bounds=(total_de, total_de),
+        )
+
+        with io.BytesIO() as buf:
+            progress_bar.save(buf, format="PNG")
+            # byte_arr = buf.getvalue()
+            buf.seek(0)
+            dFile = discord.File(filename="progress.jpeg", fp=buf)
+
+        loading_embed.title = "Free Agent Sync"
+        loading_embed.description = "Successfully synchronized all free agent players."
+        await interaction.edit_original_response(
+            embed=loading_embed, attachments=[dFile]
+        )
+
+    @_sync.command(  # type: ignore
+        name="drafteligble",
+        description="Sync all draft eligibile players in discord",
+    )
+    async def _sync_drafteligible_cmd(
+        self,
+        interaction: discord.Interaction,
+    ):
+        guild = interaction.guild
+        if not guild:
+            return
+
+        sync_view = ConfirmSyncView(interaction)
+        await sync_view.prompt()
+        plist = await self.players(guild, status=Status.DRAFT_ELIGIBLE, limit=10000)
+        await sync_view.wait()
+
+        if not sync_view.result:
+            return
+
+        # Exit if no DE's exist
+        if not plist:
+            return await interaction.edit_original_response(
+                embed=BlueEmbed(
+                    title="Draft Eligible Sync",
+                    description="There are no draft eligibile players to sync.",
+                )
+            )
+
+        loading_embed = BlueEmbed(
+            title="Syncing Draft Eligble",
+            description="Draft eligible player synchronziation in progress",
+        )
+
+        total_de = len(plist)
+        log.debug(f"Total DE: {total_de}")
+
+        # Get Roles
+        de_role = await utils.get_draft_eligible_role(guild)
+        league_role = await utils.get_league_role(guild)
+
+        # Send initial progress bar
+        progress_bar = Image.new("RGBA", (275, 50), (255, 255, 255))
+        progress_bar.putalpha(1)
+        base_image = ImageDraw.Draw(progress_bar)
+
+        drawProgressBar(
+            base_image,
+            x=10,
+            y=10,
+            w=225,
+            h=30,
+            progress=0.0,
+            progress_bounds=(0, total_de),
+        )
+
+        with io.BytesIO() as buf:
+            progress_bar.save(buf, format="PNG")
+            # byte_arr = buf.getvalue()
+            buf.seek(0)
+            dFile = discord.File(filename="progress.jpeg", fp=buf)
+
+        loading_embed.set_image(url="attachment://progress.jpeg")
+        await interaction.edit_original_response(
+            embed=loading_embed, attachments=[dFile]
+        )
+
+        for idx, player in enumerate(plist):
+            idx += 1
+            log.debug(f"Index: {idx}")
+
+            if not (player.player and player.player.discord_id):
+                continue
+
+            m = guild.get_member(player.player.discord_id)
+            if not m:
+                log.warning(
+                    f"Couldn't find DE in guild: {player.player.name} ({player.id})"
+                )
+                continue
+            log.debug(f"Updating DE: {m.display_name}")
+
+            # Edit nickname
+            name = await utils.remove_prefix(m)
+            await m.edit(nick=f"DE | {name}")
+
+            # Add roles
+            await m.add_roles(de_role, league_role)
+
+            # Update progress bar
+            if (idx % 10) == 0:
+                progress = idx / total_de
+
+                drawProgressBar(
+                    base_image,
+                    x=10,
+                    y=10,
+                    w=225,
+                    h=30,
+                    progress=progress,
+                    progress_bounds=(idx, total_de),
+                )
+
+                with io.BytesIO() as buf:
+                    progress_bar.save(buf, format="PNG")
+                    # byte_arr = buf.getvalue()
+                    buf.seek(0)
+                    dFile = discord.File(filename="progress.jpeg", fp=buf)
+
+                # loading_embed.set_image(url="attachment://progress.jpeg")
+                await interaction.edit_original_response(
+                    embed=loading_embed, attachments=[dFile]
+                )
+
+        # Draw 100%
+        drawProgressBar(
+            base_image,
+            x=10,
+            y=10,
+            w=225,
+            h=30,
+            progress=1.0,
+            progress_bounds=(total_de, total_de),
+        )
+
+        with io.BytesIO() as buf:
+            progress_bar.save(buf, format="PNG")
+            # byte_arr = buf.getvalue()
+            buf.seek(0)
+            dFile = discord.File(filename="progress.jpeg", fp=buf)
+
+        loading_embed.title = "Draft Eligible Sync"
+        loading_embed.description = (
+            "Successfully synchronized all draft eligible players."
+        )
+        await interaction.edit_original_response(
+            embed=loading_embed, attachments=[dFile]
+        )
+
+    @_sync.command(  # type: ignore
         name="franchiseroles",
         description="Check if all franchise roles exist. If not, create them.",
     )
@@ -1203,11 +1529,14 @@ class AdminMixIn(RSCMixIn):
         # Match teams to tiers
         rebrands = []
         for t in fdata.tiers:
-            rebrands.append(
-                RebrandTeamDict(
-                    name=rebrand_modal.teams.pop(0), tier=t.name, tier_id=t.id
+            if t.name and t.id:
+                rebrands.append(
+                    RebrandTeamDict(
+                        name=rebrand_modal.teams.pop(0), tier=t.name, tier_id=t.id
+                    )
                 )
-            )
+            else:
+                raise RuntimeError("Franchise team has no name or ID.")
 
         rebrand_view = RebrandFranchiseView(
             rebrand_modal.interaction,
@@ -1375,7 +1704,7 @@ class AdminMixIn(RSCMixIn):
                     await m.add_roles(fa_role, tier_fa_role)
                     if tchan:
                         await tchan.send(
-                            f"{p.mention} has been released to Free Agency ({tier})",
+                            f"{m.mention} has been released to Free Agency ({tier})",
                             allowed_mentions=discord.AllowedMentions(users=True),
                         )
 
