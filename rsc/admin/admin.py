@@ -879,11 +879,8 @@ class AdminMixIn(RSCMixIn):
 
         sync_view = ConfirmSyncView(interaction)
         await sync_view.prompt()
-        plist = await self.players(
-            guild, status=Status.FREE_AGENT, limit=10000, season=2
-        )
+        plist = await self.players(guild, status=Status.FREE_AGENT, limit=10000)
         tier_list: list[Tier] = await self.tiers(guild)
-        # plist = await self.players(guild, status=Status.ROSTERED, limit=10000)
         await sync_view.wait()
 
         if not sync_view.result:
@@ -914,7 +911,7 @@ class AdminMixIn(RSCMixIn):
 
         loading_embed = BlueEmbed(
             title="Syncing Free Agents",
-            description="Free Agent player synchronziation in progress\nCHANGE BACK TO DE IDIOT",
+            description="Free Agent player synchronziation in progress",
         )
 
         total_de = len(plist)
@@ -1016,11 +1013,9 @@ class AdminMixIn(RSCMixIn):
 
                 with io.BytesIO() as buf:
                     progress_bar.save(buf, format="PNG")
-                    # byte_arr = buf.getvalue()
                     buf.seek(0)
                     dFile = discord.File(filename="progress.jpeg", fp=buf)
 
-                # loading_embed.set_image(url="attachment://progress.jpeg")
                 await interaction.edit_original_response(
                     embed=loading_embed, attachments=[dFile]
                 )
@@ -1106,7 +1101,6 @@ class AdminMixIn(RSCMixIn):
 
         with io.BytesIO() as buf:
             progress_bar.save(buf, format="PNG")
-            # byte_arr = buf.getvalue()
             buf.seek(0)
             dFile = discord.File(filename="progress.jpeg", fp=buf)
 
@@ -1153,11 +1147,9 @@ class AdminMixIn(RSCMixIn):
 
                 with io.BytesIO() as buf:
                     progress_bar.save(buf, format="PNG")
-                    # byte_arr = buf.getvalue()
                     buf.seek(0)
                     dFile = discord.File(filename="progress.jpeg", fp=buf)
 
-                # loading_embed.set_image(url="attachment://progress.jpeg")
                 await interaction.edit_original_response(
                     embed=loading_embed, attachments=[dFile]
                 )
@@ -1175,7 +1167,6 @@ class AdminMixIn(RSCMixIn):
 
         with io.BytesIO() as buf:
             progress_bar.save(buf, format="PNG")
-            # byte_arr = buf.getvalue()
             buf.seek(0)
             dFile = discord.File(filename="progress.jpeg", fp=buf)
 
