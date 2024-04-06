@@ -401,7 +401,7 @@ class CombineMixIn(RSCMixIn):
 
         if result.status == "error":
             return await interaction.response.send_message(
-                ErrorEmbed(description=result.message), ephemeral=True
+                embed=ErrorEmbed(description=result.message), ephemeral=True
             )
 
         await interaction.response.send_message(
