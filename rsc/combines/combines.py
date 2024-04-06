@@ -299,7 +299,7 @@ class CombineMixIn(RSCMixIn):
         await interaction.response.defer(ephemeral=True)
 
         # tear down combine category
-        await self.delete_combine_category(category)
+        await self.delete_combine_game_rooms(category)
 
         await self._set_combines_active(guild, active=False)
         await interaction.followup.send(
