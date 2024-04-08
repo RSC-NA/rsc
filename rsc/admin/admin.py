@@ -964,14 +964,12 @@ class AdminMixIn(RSCMixIn):
             log.debug(f"Updating FA: {m.display_name}")
 
             roles_to_add = [fa_role, league_role]
-
-            # Remove captain role
-            await m.remove_roles(captain_role)
+            roles_to_remove = [captain_role]
 
             # Remove old tier if it exists
             for r in m.roles:
                 if r.name.lower() in tiers:
-                    await m.remove_roles(r)
+                    roles_to_remove.append(r)
 
             # Get tier and tier FA roles
             if player.tier and player.tier.name:
@@ -985,13 +983,16 @@ class AdminMixIn(RSCMixIn):
                 if tier_fa_role:
                     roles_to_add.append(tier_fa_role)
 
-            # Add roles
-            await m.add_roles(*roles_to_add)
-
             # Remove franchise role if it exists
             franchise_role = await utils.franchise_role_from_disord_member(m)
             if franchise_role:
-                await m.remove_roles(franchise_role)
+                roles_to_remove.append(franchise_role)
+
+            # Add roles
+            await m.add_roles(*roles_to_add)
+
+            # Remove roles
+            await m.remove_roles(*roles_to_remove)
 
             # Edit nickname
             name = await utils.remove_prefix(m)
