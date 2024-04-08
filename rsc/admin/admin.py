@@ -1,3 +1,4 @@
+import asyncio
 import io
 import logging
 import tempfile
@@ -988,18 +989,23 @@ class AdminMixIn(RSCMixIn):
             if franchise_role:
                 roles_to_remove.append(franchise_role)
 
-            # Add roles
-            await m.add_roles(*roles_to_add)
-
-            # Remove roles
-            await m.remove_roles(*roles_to_remove)
-
-            # Edit nickname
             name = await utils.remove_prefix(m)
-            await m.edit(nick=f"FA | {name}")
+
+            # Send these as async tasks to speed up processing
+            try:
+                async with asyncio.TaskGroup() as tg:
+                    # Add roles
+                    tg.create_task(m.add_roles(*roles_to_add))
+                    # Remove roles
+                    tg.create_task(m.remove_roles(*roles_to_remove))
+                    # Edit nickname
+                    tg.create_task(m.edit(nick=f"FA | {name}"))
+            except* Exception as exc:
+                log.exception("Error processing DE", exc_info=exc)
 
             # Update progress bar
             if (idx % 10) == 0:
+                log.debug("Updating progress bar")
                 progress = idx / total_de
 
                 drawProgressBar(
@@ -1142,6 +1148,7 @@ class AdminMixIn(RSCMixIn):
 
             # Update progress bar
             if (idx % 10) == 0:
+                log.debug("Updating progress bar")
                 progress = idx / total_de
 
                 drawProgressBar(
