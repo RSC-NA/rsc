@@ -949,91 +949,93 @@ class AdminMixIn(RSCMixIn):
             embed=loading_embed, attachments=[dFile]
         )
 
-        for idx, player in enumerate(plist):
-            idx += 1
-            log.debug(f"Index: {idx}")
+        # Send these as async tasks to speed up processing
+        try:
+            async with asyncio.TaskGroup() as tg:
+                for idx, player in enumerate(plist):
+                    idx += 1
+                    log.debug(f"Index: {idx}")
 
-            if not (player.player and player.player.discord_id):
-                continue
+                    if not (player.player and player.player.discord_id):
+                        continue
 
-            m = guild.get_member(player.player.discord_id)
-            if not m:
-                log.warning(
-                    f"Couldn't find FA in guild: {player.player.name} ({player.id})"
-                )
-                continue
-            log.debug(f"Updating FA: {m.display_name}")
+                    m = guild.get_member(player.player.discord_id)
+                    if not m:
+                        log.warning(
+                            f"Couldn't find FA in guild: {player.player.name} ({player.id})"
+                        )
+                        continue
+                    log.debug(f"Updating FA: {m.display_name}")
 
-            roles_to_add = [fa_role, league_role]
-            roles_to_remove = [captain_role]
+                    roles_to_add = [fa_role, league_role]
+                    roles_to_remove = [captain_role]
 
-            # Remove old tier if it exists
-            for r in m.roles:
-                if r.name.lower() in tiers:
-                    roles_to_remove.append(r)
+                    # Remove old tier if it exists
+                    for r in m.roles:
+                        if r.name.lower() in tiers:
+                            roles_to_remove.append(r)
 
-            # Get tier and tier FA roles
-            if player.tier and player.tier.name:
-                tier_role = await utils.get_tier_role(guild, name=player.tier.name)
-                if tier_role:
-                    roles_to_add.append(tier_role)
+                    # Get tier and tier FA roles
+                    if player.tier and player.tier.name:
+                        tier_role = await utils.get_tier_role(
+                            guild, name=player.tier.name
+                        )
+                        if tier_role:
+                            roles_to_add.append(tier_role)
 
-                tier_fa_role = await utils.get_tier_fa_role(
-                    guild, name=player.tier.name
-                )
-                if tier_fa_role:
-                    roles_to_add.append(tier_fa_role)
+                        tier_fa_role = await utils.get_tier_fa_role(
+                            guild, name=player.tier.name
+                        )
+                        if tier_fa_role:
+                            roles_to_add.append(tier_fa_role)
 
-            # Remove franchise role if it exists
-            franchise_role = await utils.franchise_role_from_disord_member(m)
-            if franchise_role:
-                roles_to_remove.append(franchise_role)
+                    # Remove franchise role if it exists
+                    franchise_role = await utils.franchise_role_from_disord_member(m)
+                    if franchise_role:
+                        roles_to_remove.append(franchise_role)
 
-            name = await utils.remove_prefix(m)
+                    name = await utils.remove_prefix(m)
 
-            # Send these as async tasks to speed up processing
-            try:
-                async with asyncio.TaskGroup() as tg:
                     # Add roles
                     tg.create_task(m.add_roles(*roles_to_add))
                     # Remove roles
                     tg.create_task(m.remove_roles(*roles_to_remove))
                     # Edit nickname
                     tg.create_task(m.edit(nick=f"FA | {name}"))
-            except* Exception as exc:
-                log.exception("Error processing DE", exc_info=exc)
 
-            # Update progress bar
-            if (idx % 10) == 0:
-                log.debug("Updating progress bar")
-                progress = idx / total_de
+                    # Update progress bar
+                    if (idx % 10) == 0:
+                        log.debug("Updating progress bar")
+                        progress = idx / total_de
 
-                drawProgressBar(
-                    base_image,
-                    x=10,
-                    y=10,
-                    w=225,
-                    h=30,
-                    progress=progress,
-                    progress_bounds=(idx, total_de),
-                )
+                        drawProgressBar(
+                            base_image,
+                            x=10,
+                            y=10,
+                            w=225,
+                            h=30,
+                            progress=progress,
+                            progress_bounds=(idx, total_de),
+                        )
 
-                with io.BytesIO() as buf:
-                    progress_bar.save(buf, format="PNG")
-                    buf.seek(0)
-                    dFile = discord.File(filename="progress.jpeg", fp=buf)
+                        with io.BytesIO() as buf:
+                            progress_bar.save(buf, format="PNG")
+                            buf.seek(0)
+                            dFile = discord.File(filename="progress.jpeg", fp=buf)
 
-                try:
-                    await interaction.edit_original_response(
-                        embed=loading_embed, attachments=[dFile]
-                    )
-                except discord.HTTPException as exc:
-                    log.warning(
-                        f"Recived {exc.status} (error code {exc.code}: {exc.text})"
-                    )
-                    if exc.code == 50027:
-                        # Try passing on Invalid Webhook Token (401)
-                        pass
+                        try:
+                            await interaction.edit_original_response(
+                                embed=loading_embed, attachments=[dFile]
+                            )
+                        except discord.HTTPException as exc:
+                            log.warning(
+                                f"Recived {exc.status} (error code {exc.code}: {exc.text})"
+                            )
+                            if exc.code == 50027:
+                                # Try passing on Invalid Webhook Token (401)
+                                pass
+        except* Exception as exc:
+            log.exception("Error processing DE", exc_info=exc)
 
         # Draw 100%
         drawProgressBar(
@@ -1140,8 +1142,12 @@ class AdminMixIn(RSCMixIn):
             log.debug(f"Updating DE: {m.display_name}")
 
             # Edit nickname
-            name = await utils.remove_prefix(m)
-            await m.edit(nick=f"DE | {name}")
+
+            accolades = await utils.member_accolades(m)
+            if accolades:
+                await m.edit(nick=f"DE | {player.player.name} {accolades}")
+            else:
+                await m.edit(nick=f"DE | {player.player.name}")
 
             # Add roles
             await m.add_roles(de_role, league_role)
