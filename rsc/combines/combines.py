@@ -744,7 +744,6 @@ class CombineMixIn(RSCMixIn):
         return msg
 
     async def teardown_combine_lobby(self, guild: discord.Guild, lobby_id: int):
-        waiting_room = discord.utils.get(guild.channels, name="combines-waiting-room")
         home_lobby = discord.utils.get(guild.channels, name=f"combine-{lobby_id}-home")
         away_lobby = discord.utils.get(guild.channels, name=f"combine-{lobby_id}-away")
 
@@ -753,17 +752,7 @@ class CombineMixIn(RSCMixIn):
         if not isinstance(away_lobby, discord.VoiceChannel):
             raise RuntimeError(f"Combine lobby is not a voice channel: {away_lobby}")
 
-        await asyncio.sleep(15)
-
-        # Move players to waiting room if it exists
-        if isinstance(waiting_room, discord.VoiceChannel):
-            log.debug("Moving combine lobby players to waiting room")
-            if isinstance(home_lobby, discord.VoiceChannel):
-                for m in home_lobby.members:
-                    await m.move_to(waiting_room, reason="Combine lobby has ended.")
-            if isinstance(away_lobby, discord.VoiceChannel):
-                for m in away_lobby.members:
-                    await m.move_to(waiting_room, reason="Combine lobby has ended.")
+        await asyncio.sleep(30)
 
         log.debug(f"Tearing down combine lobby: {lobby_id}")
         await home_lobby.delete(reason="Combine lobby has finished.")
