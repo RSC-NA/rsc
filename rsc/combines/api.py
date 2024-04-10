@@ -32,21 +32,17 @@ async def combines_active(
 
             lobbies = []
             for v in data.values():
-                from pprint import pformat
-
-                log.debug(f"V:\n\n{pformat(v)}\n\n")
                 lobbies.append(models.CombinesLobby(**v))
             return lobbies
 
 
 async def combines_lobby(
     url: str, player: discord.Member
-) -> models.CombinesPlayerLobbyInfo | models.CombinesStatus:
+) -> models.CombinesLobby | models.CombinesStatus:
     async with aiohttp.ClientSession(trust_env=True) as session:
         url = urljoin(url, "lobby")
         log.debug(f"URL: {url}")
-        # params = {"discord_id": player.id}
-        params = {"discord_id": 326568135408746496}
+        params = {"discord_id": player.id}
         async with session.get(url, params=params) as resp:
             log.debug(f"Server Response: {resp.status}")
             if resp.status == 502:
@@ -56,7 +52,7 @@ async def combines_lobby(
             if data.get("status") and data.get("message"):
                 return models.CombinesStatus(**data)
             else:
-                return models.CombinesPlayerLobbyInfo(**data)
+                return models.CombinesLobby(**data)
 
 
 async def combines_check_in(url, player: discord.Member) -> models.CombinesStatus:
