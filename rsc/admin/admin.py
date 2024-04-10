@@ -1026,16 +1026,17 @@ class AdminMixIn(RSCMixIn):
             if franchise_role:
                 roles_to_remove.append(franchise_role)
 
-            name = await utils.remove_prefix(m)
-
             # Add roles
-            await m.add_roles(*roles_to_add)
+            if not all(x in m.roles for x in roles_to_add):
+                await m.add_roles(*roles_to_add)
 
             # Remove roles
             await m.remove_roles(*roles_to_remove)
 
             # Edit nickname
-            await m.edit(nick=f"FA | {name}")
+            name = await utils.remove_prefix(m)
+            if not m.name.startswith("FA |"):
+                await m.edit(nick=f"FA | {name}")
 
             # Update progress bar
             if (idx % 10) == 0:
@@ -1189,14 +1190,16 @@ class AdminMixIn(RSCMixIn):
 
             # Edit nickname
 
-            accolades = await utils.member_accolades(m)
-            if accolades:
-                await m.edit(nick=f"DE | {player.player.name} {accolades}")
-            else:
-                await m.edit(nick=f"DE | {player.player.name}")
+            if not m.name.startswith("DE |"):
+                accolades = await utils.member_accolades(m)
+                if accolades:
+                    await m.edit(nick=f"DE | {player.player.name} {accolades}")
+                else:
+                    await m.edit(nick=f"DE | {player.player.name}")
 
             # Add roles
-            await m.add_roles(de_role, league_role)
+            if not all(x in m.roles for x in (de_role, league_role)):
+                await m.add_roles(de_role, league_role)
 
             # Update progress bar
             if (idx % 10) == 0:
