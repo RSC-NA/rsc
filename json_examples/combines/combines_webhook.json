@@ -9,6 +9,7 @@
         "confirmed_rsc_id": null,
         "completed": 0,
         "cancelled": 0,
+        "tier": "veteran",
         "home": [
             {
                 "discord_id": "138778232802508801",

@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import re
 
 import aiohttp
 import discord
@@ -15,6 +16,7 @@ from rsc.embeds import BlueEmbed, ErrorEmbed, GreenEmbed, YellowEmbed
 from rsc.exceptions import BadGateway
 from rsc.types import CombineSettings
 from rsc.utils import utils
+from rsc.views import LinkButton
 
 log = logging.getLogger("red.rsc.combines")
 
@@ -243,7 +245,8 @@ class CombineMixIn(RSCMixIn):
             )
 
         # Send help message
-        await self.send_combines_help_msg(combines_help)
+        if isinstance(combines_help, discord.TextChannel):
+            await self.send_combines_help_msg(combines_help)
 
         # Make default channels
         combines_chat = discord.utils.get(category.channels, name="combines-general")
@@ -255,12 +258,24 @@ class CombineMixIn(RSCMixIn):
                 reason="Starting combines",
             )
 
+        # Waiting Room VC
         combines_waiting = discord.utils.get(
-            category.channels, name="combines-waiting-room"
+            category.channels, name="combines-waiting-room-1"
         )
         if not combines_waiting:
             combines_waiting = await guild.create_voice_channel(
-                name="combines-waiting-room",
+                name="combines-waiting-room-1",
+                category=category,
+                overwrites=player_overwrites,
+                reason="Starting combines",
+            )
+
+        combines_waiting2 = discord.utils.get(
+            category.channels, name="combines-waiting-room-2"
+        )
+        if not combines_waiting2:
+            combines_waiting2 = await guild.create_voice_channel(
+                name="combines-waiting-room-2",
                 category=category,
                 overwrites=player_overwrites,
                 reason="Starting combines",
@@ -531,12 +546,23 @@ class CombineMixIn(RSCMixIn):
     async def delete_combine_game_rooms(self, category: discord.CategoryChannel):
         """Delete a combine category and it's associated channels"""
         log.debug(f"[{category.guild}] Deleting combine category: {category.name}")
+
+        combine_vc_regex = re.compile(r"^\w+-\d+-(home|away)$", flags=re.IGNORECASE)
+
         vclist = category.channels
         for vc in vclist:
             if not isinstance(vc, discord.VoiceChannel):
                 continue
-            if vc.name.startswith("combine-"):
-                await vc.delete(reason="Combines have ended.")
+
+            if not vc.category:
+                continue
+
+            if not vc.category.name.lower().startswith("combines"):
+                continue
+
+            if combine_vc_regex.match(vc.name):
+                log.debug(f"Deleting {vc.name}")
+                await vc.delete(reason="Combine lobby has finished.")
 
     async def total_players_in_combine_category(
         self, category: discord.CategoryChannel
@@ -654,13 +680,13 @@ class CombineMixIn(RSCMixIn):
         # Create Lobby
         log.debug("Creating combine lobby voice channels")
         home_channel = await combine_category.create_voice_channel(
-            name=f"combine-{lobby.id}-home",
+            name=f"{lobby.tier}-{lobby.id}-home",
             overwrites=player_overwrites,
             reason=f"Starting combine lobby {lobby.id}",
             user_limit=5,
         )
         away_channel = await combine_category.create_voice_channel(
-            name=f"combine-{lobby.id}-away",
+            name=f"{lobby.tier}-{lobby.id}-away",
             overwrites=player_overwrites,
             reason=f"Starting combine lobby {lobby.id}",
             user_limit=5,
@@ -739,24 +765,41 @@ class CombineMixIn(RSCMixIn):
         if guild.icon:
             embed.set_thumbnail(url=guild.icon.url)
 
-        msg = await announce_channel.send(content=players_fmt, embed=embed)
+        match_link = LinkButton(
+            label="Match Link", url=f"https://devleague.rscna.com/combine/{lobby.id}"
+        )
+        link_view = discord.ui.View()
+        link_view.add_item(match_link)
+
+        msg = await announce_channel.send(
+            content=players_fmt, embed=embed, view=link_view
+        )
 
         return msg
 
     async def teardown_combine_lobby(self, guild: discord.Guild, lobby_id: int):
-        home_lobby = discord.utils.get(guild.channels, name=f"combine-{lobby_id}-home")
-        away_lobby = discord.utils.get(guild.channels, name=f"combine-{lobby_id}-away")
-
-        if not isinstance(home_lobby, discord.VoiceChannel):
-            raise RuntimeError(f"Combine lobby is not a voice channel: {home_lobby}")
-        if not isinstance(away_lobby, discord.VoiceChannel):
-            raise RuntimeError(f"Combine lobby is not a voice channel: {away_lobby}")
-
+        # Make teardown less abrupt for players
         await asyncio.sleep(30)
 
         log.debug(f"Tearing down combine lobby: {lobby_id}")
-        await home_lobby.delete(reason="Combine lobby has finished.")
-        await away_lobby.delete(reason="Combine lobby has finished.")
+
+        # Loop guild since we don't know the lobby tier
+        gchannels = guild.channels
+        for channel in gchannels:
+            if not channel.category:
+                continue
+
+            if not channel.category.name.lower().startswith("combines"):
+                continue
+
+            if channel.name.endswith(f"{lobby_id}-home"):
+                log.debug(f"Deleting {channel.name}")
+                await channel.delete(reason="Combine lobby has finished.")
+                continue
+
+            if channel.name.endswith(f"{lobby_id}-away"):
+                log.debug(f"Deleting {channel.name}")
+                await channel.delete(reason="Combine lobby has finished.")
 
     async def send_combines_help_msg(self, channel: discord.TextChannel):
         await channel.send(content=COMBINES_HELP_1)

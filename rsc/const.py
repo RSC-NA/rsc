@@ -52,7 +52,7 @@ FRANCHISE_ROLE_PERMS = discord.Permissions(
     embed_links=True,
     attach_files=True,
     add_reactions=True,
-    use_external_emojis=True,
+    use_external_emojis=False,
     read_message_history=True,
     connect=True,
     speak=True,
@@ -66,7 +66,7 @@ GM_ROLE_PERMS = discord.Permissions(
     embed_links=True,
     attach_files=True,
     add_reactions=True,
-    use_external_emojis=True,
+    use_external_emojis=False,
     read_message_history=True,
     connect=True,
     speak=True,
@@ -83,7 +83,7 @@ GENERIC_ROLE_PERMS = discord.Permissions(
     embed_links=True,
     attach_files=True,
     add_reactions=True,
-    use_external_emojis=True,
+    use_external_emojis=False,
     read_message_history=True,
     read_messages=True,
     connect=True,
@@ -124,7 +124,7 @@ SEASON_TITLE_REGEX = re.compile(r"^S\d+")
 COMBINES_HELP_1 = """
 # :test_tube: RSC Combines Beta Test :test_tube:
 ## A New Way To Ball :soccer:
-Historically, have been a mix of experiences for everyone. For some, it's their first time playing games and participating in RSC. For others, it's a casual time during the offseason to either scout around for future teammates or try to make a case for being a valuable player to draft. But due to limitations in our technology, we've always just created tons of empty 10-person voice-channels and let everyone come and go in lobbies throughout the night. This is great for the folks looking for some casual games, but for a new player trying to prove themselves, trying to play a serious game of RL in a 10-person VC with everyone chatting and goofing around isn't the best environment for showing off your skills. **We can do better!**
+Historically, combines have been a mix of experiences for everyone. For some, it's their first time playing games and participating in RSC. For others, it's a casual time during the offseason to either scout around for future teammates or try to make a case for being a valuable player to draft. But due to limitations in our technology, we've always just created tons of empty 10-person voice-channels and let everyone come and go in lobbies throughout the night. This is great for the folks looking for some casual games, but for a new player trying to prove themselves, trying to play a serious game of RL in a 10-person VC with everyone chatting and goofing around isn't the best environment for showing off your skills. **We can do better!**
 ## New Tech, New Options :desktop:
 By leveraging the Dev League software, we've created a new system for Combines that combines the best of Discord with the power of the RSC Numbers Committee and creates a new experience. Now, combines will be individual 4-game series that start in batches every 15-20 minutes every **Monday, Wednesday, and Friday** from **8PM ET** through to **11PM ET** (or when participation starts to dwindle).
 

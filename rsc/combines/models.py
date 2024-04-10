@@ -62,6 +62,7 @@ class CombinesLobby(BaseModel):
     confirmed_rsc_id: str | None
     completed: bool
     cancelled: bool
+    tier: str
     home: list[CombinesPlayer]
     away: list[CombinesPlayer]
 
