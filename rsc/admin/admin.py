@@ -1,4 +1,3 @@
-import asyncio
 import io
 import logging
 import tempfile
@@ -975,9 +974,6 @@ class AdminMixIn(RSCMixIn):
             embed=loading_embed, attachments=[dFile], view=progress_view
         )
 
-        # Send these as async tasks to speed up processing
-        import time
-
         for idx, player in enumerate(plist):
             # Check if cancelled
             if progress_view.cancelled:
@@ -990,9 +986,6 @@ class AdminMixIn(RSCMixIn):
                     embed=loading_embed, attachments=[dFile], view=None
                 )
 
-            await asyncio.sleep(0.5)
-
-            start = time.time()
             idx += 1
             log.debug(f"Index: {idx}")
 
@@ -1000,9 +993,6 @@ class AdminMixIn(RSCMixIn):
                 continue
 
             m = guild.get_member(player.player.discord_id)
-
-            log.debug(f"Member fetched: {time.time()-start} seconds")
-            start = time.time()
 
             if not m:
                 log.warning(
@@ -1019,9 +1009,6 @@ class AdminMixIn(RSCMixIn):
                 if r.name.lower() in tiers:
                     roles_to_remove.append(r)
 
-            log.debug(f"Remove old roles: {time.time()-start} seconds")
-            start = time.time()
-
             # Get tier and tier FA roles
             if player.tier and player.tier.name:
                 tier_role = await utils.get_tier_role(guild, name=player.tier.name)
@@ -1034,9 +1021,6 @@ class AdminMixIn(RSCMixIn):
                 if tier_fa_role:
                     roles_to_add.append(tier_fa_role)
 
-            log.debug(f"Player Tier: {time.time()-start} seconds")
-            start = time.time()
-
             # Remove franchise role if it exists
             franchise_role = await utils.franchise_role_from_disord_member(m)
             if franchise_role:
@@ -1046,21 +1030,12 @@ class AdminMixIn(RSCMixIn):
 
             # Add roles
             await m.add_roles(*roles_to_add)
-            log.debug(f"Roles Added: {time.time()-start} seconds")
-            start = time.time()
 
             # Remove roles
             await m.remove_roles(*roles_to_remove)
-            log.debug(f"Roles Removed: {time.time()-start} seconds")
-            start = time.time()
 
             # Edit nickname
             await m.edit(nick=f"FA | {name}")
-            log.debug(f"Name Changed: {time.time()-start} seconds")
-            start = time.time()
-
-            log.debug(f"Tasks Created: {time.time()-start} seconds")
-            start = time.time()
 
             # Update progress bar
             if (idx % 10) == 0:
@@ -1084,7 +1059,7 @@ class AdminMixIn(RSCMixIn):
 
                 try:
                     await interaction.edit_original_response(
-                        embed=loading_embed, attachments=[dFile]
+                        embed=loading_embed, attachments=[dFile], view=progress_view
                     )
                 except discord.HTTPException as exc:
                     log.warning(
@@ -1093,12 +1068,6 @@ class AdminMixIn(RSCMixIn):
                     if exc.code == 50027:
                         # Try passing on Invalid Webhook Token (401)
                         pass
-
-            # Sleep every so often to help with rate limit (15s)
-            if (idx % 50) == 0:
-                await asyncio.sleep(15)
-
-            log.debug(f"Done player: {time.time()-start:.4f} seconds")
 
         # Draw 100%
         drawProgressBar(

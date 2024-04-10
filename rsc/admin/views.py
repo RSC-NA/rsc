@@ -46,6 +46,7 @@ class ConfirmSyncView(AuthorOnlyView):
 
     async def confirm(self, interaction: discord.Interaction):
         self.result = True
+        await interaction.response.defer(ephemeral=True)
         await self.interaction.edit_original_response(
             embed=LoadingEmbed(title="Processing Sync"),
             view=None,

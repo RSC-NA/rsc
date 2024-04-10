@@ -211,8 +211,8 @@ class CancelView(AuthorOnlyView):
         self.add_item(CancelButton())
 
     async def decline(self, interaction: discord.Interaction):
-        self.cancelled = True
         await interaction.response.defer(ephemeral=True)
+        self.cancelled = True
 
 
 # RSC Setup Modal
