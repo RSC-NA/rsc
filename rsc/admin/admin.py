@@ -1028,12 +1028,12 @@ class AdminMixIn(RSCMixIn):
             if franchise_role:
                 roles_to_remove.append(franchise_role)
 
+            # Remove roles
+            await m.remove_roles(*roles_to_remove)
+
             # Add roles
             if not all(x in m.roles for x in roles_to_add):
                 await m.add_roles(*roles_to_add)
-
-            # Remove roles
-            await m.remove_roles(*roles_to_remove)
 
             # Edit nickname
             name = await utils.remove_prefix(m)
