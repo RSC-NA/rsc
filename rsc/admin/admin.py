@@ -973,9 +973,12 @@ class AdminMixIn(RSCMixIn):
         )
 
         # Send these as async tasks to speed up processing
+        import time
+
         try:
             async with asyncio.TaskGroup() as tg:
                 for idx, player in enumerate(plist):
+                    start = time.time()
                     idx += 1
                     log.debug(f"Index: {idx}")
 
@@ -983,6 +986,10 @@ class AdminMixIn(RSCMixIn):
                         continue
 
                     m = guild.get_member(player.player.discord_id)
+
+                    log.debug(f"Member fetched: {time.time()-start} seconds")
+                    start = time.time()
+
                     if not m:
                         log.warning(
                             f"Couldn't find FA in guild: {player.player.name} ({player.id})"
@@ -998,6 +1005,9 @@ class AdminMixIn(RSCMixIn):
                         if r.name.lower() in tiers:
                             roles_to_remove.append(r)
 
+                    log.debug(f"Remove old roles: {time.time()-start} seconds")
+                    start = time.time()
+
                     # Get tier and tier FA roles
                     if player.tier and player.tier.name:
                         tier_role = await utils.get_tier_role(
@@ -1012,6 +1022,9 @@ class AdminMixIn(RSCMixIn):
                         if tier_fa_role:
                             roles_to_add.append(tier_fa_role)
 
+                    log.debug(f"Player Tier: {time.time()-start} seconds")
+                    start = time.time()
+
                     # Remove franchise role if it exists
                     franchise_role = await utils.franchise_role_from_disord_member(m)
                     if franchise_role:
@@ -1025,6 +1038,9 @@ class AdminMixIn(RSCMixIn):
                     tg.create_task(m.remove_roles(*roles_to_remove))
                     # Edit nickname
                     tg.create_task(m.edit(nick=f"FA | {name}"))
+
+                    log.debug(f"Tasks Created: {time.time()-start} seconds")
+                    start = time.time()
 
                     # Update progress bar
                     if (idx % 10) == 0:
@@ -1057,6 +1073,9 @@ class AdminMixIn(RSCMixIn):
                             if exc.code == 50027:
                                 # Try passing on Invalid Webhook Token (401)
                                 pass
+
+                    log.debug(f"Done player: {time.time()-start:.4f} seconds")
+
         except* Exception as exc:
             log.exception("Error processing DE", exc_info=exc)
 
