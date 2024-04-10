@@ -42,7 +42,7 @@ from rsc.logs import GuildLogAdapter
 from rsc.types import AdminSettings, RebrandTeamDict
 from rsc.utils import utils
 from rsc.utils.images import drawProgressBar
-from rsc.views import LinkButton
+from rsc.views import CancelView, LinkButton
 
 logger = logging.getLogger("red.rsc.admin")
 log = GuildLogAdapter(logger)
@@ -967,117 +967,138 @@ class AdminMixIn(RSCMixIn):
             buf.seek(0)
             dFile = discord.File(filename="progress.jpeg", fp=buf)
 
+        # Progress View
+        progress_view = CancelView(interaction, timeout=0)
+
         loading_embed.set_image(url="attachment://progress.jpeg")
         await interaction.edit_original_response(
-            embed=loading_embed, attachments=[dFile]
+            embed=loading_embed, attachments=[dFile], view=progress_view
         )
 
         # Send these as async tasks to speed up processing
         import time
 
-        try:
-            async with asyncio.TaskGroup() as tg:
-                for idx, player in enumerate(plist):
-                    start = time.time()
-                    idx += 1
-                    log.debug(f"Index: {idx}")
+        for idx, player in enumerate(plist):
+            # Check if cancelled
+            if progress_view.cancelled:
+                loading_embed.title = "Sync Cancelled"
+                loading_embed.description = (
+                    "Cancelled synchronizing all free agent players."
+                )
+                loading_embed.colour = discord.Color.red()
+                return await interaction.edit_original_response(
+                    embed=loading_embed, attachments=[dFile], view=None
+                )
 
-                    if not (player.player and player.player.discord_id):
-                        continue
+            await asyncio.sleep(0.5)
 
-                    m = guild.get_member(player.player.discord_id)
+            start = time.time()
+            idx += 1
+            log.debug(f"Index: {idx}")
 
-                    log.debug(f"Member fetched: {time.time()-start} seconds")
-                    start = time.time()
+            if not (player.player and player.player.discord_id):
+                continue
 
-                    if not m:
-                        log.warning(
-                            f"Couldn't find FA in guild: {player.player.name} ({player.id})"
-                        )
-                        continue
-                    log.debug(f"Updating FA: {m.display_name}")
+            m = guild.get_member(player.player.discord_id)
 
-                    roles_to_add = [fa_role, league_role]
-                    roles_to_remove = [captain_role]
+            log.debug(f"Member fetched: {time.time()-start} seconds")
+            start = time.time()
 
-                    # Remove old tier if it exists
-                    for r in m.roles:
-                        if r.name.lower() in tiers:
-                            roles_to_remove.append(r)
+            if not m:
+                log.warning(
+                    f"Couldn't find FA in guild: {player.player.name} ({player.id})"
+                )
+                continue
+            log.debug(f"Updating FA: {m.display_name}")
 
-                    log.debug(f"Remove old roles: {time.time()-start} seconds")
-                    start = time.time()
+            roles_to_add = [fa_role, league_role]
+            roles_to_remove = [captain_role]
 
-                    # Get tier and tier FA roles
-                    if player.tier and player.tier.name:
-                        tier_role = await utils.get_tier_role(
-                            guild, name=player.tier.name
-                        )
-                        if tier_role:
-                            roles_to_add.append(tier_role)
+            # Remove old tier if it exists
+            for r in m.roles:
+                if r.name.lower() in tiers:
+                    roles_to_remove.append(r)
 
-                        tier_fa_role = await utils.get_tier_fa_role(
-                            guild, name=player.tier.name
-                        )
-                        if tier_fa_role:
-                            roles_to_add.append(tier_fa_role)
+            log.debug(f"Remove old roles: {time.time()-start} seconds")
+            start = time.time()
 
-                    log.debug(f"Player Tier: {time.time()-start} seconds")
-                    start = time.time()
+            # Get tier and tier FA roles
+            if player.tier and player.tier.name:
+                tier_role = await utils.get_tier_role(guild, name=player.tier.name)
+                if tier_role:
+                    roles_to_add.append(tier_role)
 
-                    # Remove franchise role if it exists
-                    franchise_role = await utils.franchise_role_from_disord_member(m)
-                    if franchise_role:
-                        roles_to_remove.append(franchise_role)
+                tier_fa_role = await utils.get_tier_fa_role(
+                    guild, name=player.tier.name
+                )
+                if tier_fa_role:
+                    roles_to_add.append(tier_fa_role)
 
-                    name = await utils.remove_prefix(m)
+            log.debug(f"Player Tier: {time.time()-start} seconds")
+            start = time.time()
 
-                    # Add roles
-                    tg.create_task(m.add_roles(*roles_to_add))
-                    # Remove roles
-                    tg.create_task(m.remove_roles(*roles_to_remove))
-                    # Edit nickname
-                    tg.create_task(m.edit(nick=f"FA | {name}"))
+            # Remove franchise role if it exists
+            franchise_role = await utils.franchise_role_from_disord_member(m)
+            if franchise_role:
+                roles_to_remove.append(franchise_role)
 
-                    log.debug(f"Tasks Created: {time.time()-start} seconds")
-                    start = time.time()
+            name = await utils.remove_prefix(m)
 
-                    # Update progress bar
-                    if (idx % 10) == 0:
-                        log.debug("Updating progress bar")
-                        progress = idx / total_de
+            # Add roles
+            await m.add_roles(*roles_to_add)
+            log.debug(f"Roles Added: {time.time()-start} seconds")
+            start = time.time()
 
-                        drawProgressBar(
-                            base_image,
-                            x=10,
-                            y=10,
-                            w=225,
-                            h=30,
-                            progress=progress,
-                            progress_bounds=(idx, total_de),
-                        )
+            # Remove roles
+            await m.remove_roles(*roles_to_remove)
+            log.debug(f"Roles Removed: {time.time()-start} seconds")
+            start = time.time()
 
-                        with io.BytesIO() as buf:
-                            progress_bar.save(buf, format="PNG")
-                            buf.seek(0)
-                            dFile = discord.File(filename="progress.jpeg", fp=buf)
+            # Edit nickname
+            await m.edit(nick=f"FA | {name}")
+            log.debug(f"Name Changed: {time.time()-start} seconds")
+            start = time.time()
 
-                        try:
-                            await interaction.edit_original_response(
-                                embed=loading_embed, attachments=[dFile]
-                            )
-                        except discord.HTTPException as exc:
-                            log.warning(
-                                f"Recived {exc.status} (error code {exc.code}: {exc.text})"
-                            )
-                            if exc.code == 50027:
-                                # Try passing on Invalid Webhook Token (401)
-                                pass
+            log.debug(f"Tasks Created: {time.time()-start} seconds")
+            start = time.time()
 
-                    log.debug(f"Done player: {time.time()-start:.4f} seconds")
+            # Update progress bar
+            if (idx % 10) == 0:
+                log.debug("Updating progress bar")
+                progress = idx / total_de
 
-        except* Exception as exc:
-            log.exception("Error processing DE", exc_info=exc)
+                drawProgressBar(
+                    base_image,
+                    x=10,
+                    y=10,
+                    w=225,
+                    h=30,
+                    progress=progress,
+                    progress_bounds=(idx, total_de),
+                )
+
+                with io.BytesIO() as buf:
+                    progress_bar.save(buf, format="PNG")
+                    buf.seek(0)
+                    dFile = discord.File(filename="progress.jpeg", fp=buf)
+
+                try:
+                    await interaction.edit_original_response(
+                        embed=loading_embed, attachments=[dFile]
+                    )
+                except discord.HTTPException as exc:
+                    log.warning(
+                        f"Recived {exc.status} (error code {exc.code}: {exc.text})"
+                    )
+                    if exc.code == 50027:
+                        # Try passing on Invalid Webhook Token (401)
+                        pass
+
+            # Sleep every so often to help with rate limit (15s)
+            if (idx % 50) == 0:
+                await asyncio.sleep(15)
+
+            log.debug(f"Done player: {time.time()-start:.4f} seconds")
 
         # Draw 100%
         drawProgressBar(
@@ -1099,7 +1120,7 @@ class AdminMixIn(RSCMixIn):
         loading_embed.title = "Free Agent Sync"
         loading_embed.description = "Successfully synchronized all free agent players."
         await interaction.edit_original_response(
-            embed=loading_embed, attachments=[dFile]
+            embed=loading_embed, attachments=[dFile], view=None
         )
 
     @_sync.command(  # type: ignore
@@ -1163,12 +1184,26 @@ class AdminMixIn(RSCMixIn):
             buf.seek(0)
             dFile = discord.File(filename="progress.jpeg", fp=buf)
 
+        # Progress View
+        progress_view = CancelView(interaction, timeout=0)
+
         loading_embed.set_image(url="attachment://progress.jpeg")
         await interaction.edit_original_response(
-            embed=loading_embed, attachments=[dFile]
+            embed=loading_embed, attachments=[dFile], view=progress_view
         )
 
         for idx, player in enumerate(plist):
+            # Check if cancelled
+            if progress_view.cancelled:
+                loading_embed.title = "Sync Cancelled"
+                loading_embed.description = (
+                    "Cancelled synchronizing all free agent players."
+                )
+                loading_embed.colour = discord.Color.red()
+                return await interaction.edit_original_response(
+                    embed=loading_embed, attachments=[dFile], view=None
+                )
+
             idx += 1
             log.debug(f"Index: {idx}")
 
@@ -1239,7 +1274,7 @@ class AdminMixIn(RSCMixIn):
             "Successfully synchronized all draft eligible players."
         )
         await interaction.edit_original_response(
-            embed=loading_embed, attachments=[dFile]
+            embed=loading_embed, attachments=[dFile], view=None
         )
 
     @_sync.command(  # type: ignore

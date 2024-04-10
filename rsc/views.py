@@ -200,6 +200,21 @@ class LeagueSelectView(AuthorOnlyView):
         self.stop()
 
 
+class CancelView(AuthorOnlyView):
+    def __init__(
+        self,
+        interaction: discord.Interaction,
+        timeout: float = DEFAULT_TIMEOUT,
+    ):
+        super().__init__(interaction=interaction, timeout=timeout)
+        self.cancelled = False
+        self.add_item(CancelButton())
+
+    async def decline(self, interaction: discord.Interaction):
+        self.cancelled = True
+        await interaction.response.defer(ephemeral=True)
+
+
 # RSC Setup Modal
 
 
