@@ -1,4 +1,5 @@
 import logging
+from typing import cast
 
 import discord
 from redbot.core import app_commands, commands
@@ -815,7 +816,7 @@ class MemberMixIn(RSCMixIn):
             await interaction.followup.send(embed=embed)
             return
 
-        players.sort(key=lambda x: x.current_mmr, reverse=True)
+        players.sort(key=lambda x: cast(int, x.current_mmr), reverse=True)
 
         waiver_dates = []
         members = []
