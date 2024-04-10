@@ -8,6 +8,19 @@ from rsc.embeds import SuccessEmbed
 log = logging.getLogger("red.rsc.franchises.modals")
 
 
+class AgmMessageModal(discord.ui.Modal, title="AGM Promotion Message"):
+    agm_msg: TextInput = TextInput(
+        label="Message to send",
+        style=discord.TextStyle.paragraph,
+        placeholder="Enter the AGM promotion message here...",
+        required=True,
+    )
+
+    async def on_submit(self, interaction: discord.Interaction):
+        embed = SuccessEmbed(description="AGM promotion message has been configured.")
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+
 class LeagueDatesModal(discord.ui.Modal, title="Import League Dates"):
     date_input: TextInput = TextInput(
         label="Date String",

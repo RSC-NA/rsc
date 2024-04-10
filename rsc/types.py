@@ -93,6 +93,7 @@ class Accolades:
 
 
 class AdminSettings(TypedDict):
+    AgmMessage: str | None
     Dates: str | None
     IntentChannel: discord.TextChannel | None
     IntentMissingRole: discord.Role | None

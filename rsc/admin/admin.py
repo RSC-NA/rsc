@@ -14,7 +14,12 @@ from rscapi.models.tier import Tier
 
 from rsc import const
 from rsc.abc import RSCMixIn
-from rsc.admin.modals import FranchiseRebrandModal, IntentMissingModal, LeagueDatesModal
+from rsc.admin.modals import (
+    AgmMessageModal,
+    FranchiseRebrandModal,
+    IntentMissingModal,
+    LeagueDatesModal,
+)
 from rsc.admin.views import (
     ConfirmSyncView,
     CreateFranchiseView,
@@ -43,7 +48,11 @@ logger = logging.getLogger("red.rsc.admin")
 log = GuildLogAdapter(logger)
 
 defaults_guild = AdminSettings(
-    Dates=None, IntentChannel=None, IntentMissingRole=None, IntentMissingMsg=None
+    Dates=None,
+    IntentChannel=None,
+    IntentMissingRole=None,
+    IntentMissingMsg=None,
+    AgmMessage=None,
 )
 
 
@@ -87,6 +96,13 @@ class AdminMixIn(RSCMixIn):
         guild_only=True,
         default_permissions=discord.Permissions(manage_guild=True),
     )
+    _agm = app_commands.Group(
+        name="agm",
+        description="Manage franchise AGMs",
+        parent=_admin,
+        guild_only=True,
+        default_permissions=discord.Permissions(manage_guild=True),
+    )
     _stats = app_commands.Group(
         name="stats",
         description="RSC League Stats",
@@ -113,6 +129,7 @@ class AdminMixIn(RSCMixIn):
         intent_channel = await self._get_intent_channel(guild)
         intent_missing_msg = await self._get_intent_missing_message(guild)
         dates = await self._get_dates(guild)
+        agm_msg = await self._get_agm_message(guild)
 
         intent_role_fmt = intent_role.mention if intent_role else "None"
         intent_channel_fmt = intent_channel.mention if intent_channel else "None"
@@ -131,10 +148,11 @@ class AdminMixIn(RSCMixIn):
             name="Intent Missing Message", value=intent_missing_msg, inline=False
         )
 
-        dates_embed = BlueEmbed(title="Admin Dates Setting", description=dates)
+        agm_msg_embed = BlueEmbed(title="Admin Dates Setting", description=dates)
+        dates_embed = BlueEmbed(title="Admin AGM Message", description=agm_msg)
 
         await interaction.response.send_message(
-            embeds=[intent_embed, dates_embed], ephemeral=True
+            embeds=[intent_embed, agm_msg_embed, dates_embed], ephemeral=True
         )
 
     # Member Commands
@@ -1973,6 +1991,155 @@ class AdminMixIn(RSCMixIn):
             view=None,
         )
 
+    @_agm.command(name="message", description="Configure the AGM promotion message")  # type: ignore
+    async def _agm_set_message_cmd(self, interaction: discord.Interaction):
+        if not interaction.guild:
+            return
+
+        agm_msg_modal = AgmMessageModal()
+        await interaction.response.send_modal(agm_msg_modal)
+        await agm_msg_modal.wait()
+
+        await self._set_agm_message(
+            interaction.guild, value=agm_msg_modal.agm_msg.value
+        )
+
+    @_agm.command(  # type: ignore
+        name="add", description="Add an Assistant GM to a franchise."
+    )
+    @app_commands.describe(franchise="Franchise name", agm="Player to promote to AGM")
+    @app_commands.autocomplete(franchise=FranchiseMixIn.franchise_autocomplete)  # type: ignore
+    async def _franchise_promote_agm_cmd(
+        self,
+        interaction: discord.Interaction,
+        franchise: str,
+        agm: discord.Member,
+    ):
+        guild = interaction.guild
+        if not guild:
+            return
+
+        await interaction.response.defer(ephemeral=True)
+
+        # Get AGM promotion message
+        agm_msg = await self._get_agm_message(guild)
+        if not agm_msg:
+            return await interaction.followup.send(
+                embed=ErrorEmbed(description="AGM promotion message is not configured.")
+            )
+
+        # Get AGM role
+        agm_role = await utils.get_agm_role(guild)
+
+        # Find transaction channel
+        franchise_fmt = franchise.lower().replace(" ", "-")
+        tchannel_name = f"{franchise_fmt}-transactions"
+        log.debug(f"Searching for transaction channel: {tchannel_name}")
+
+        tchannel = discord.utils.get(guild.channels, name=tchannel_name)
+        if not tchannel:
+            return await interaction.followup.send(
+                embed=ErrorEmbed(
+                    description=f"Unable to find transaction channel: **{tchannel_name}**"
+                )
+            )
+
+        if not isinstance(tchannel, discord.TextChannel):
+            return await interaction.followup.send(
+                embed=ErrorEmbed(
+                    description=f"Transaction channel is not a text channel: **{tchannel.mention}**"
+                )
+            )
+
+        # Add AGM role to player
+        await agm.add_roles(agm_role)
+
+        # Add AGM permissions to transaction channel
+        agm_overwrite = discord.PermissionOverwrite(
+            view_channel=True,
+            send_messages=True,
+            embed_links=True,
+            attach_files=True,
+            add_reactions=True,
+            use_external_emojis=False,
+            read_message_history=True,
+            read_messages=True,
+            use_application_commands=True,
+        )
+
+        await tchannel.set_permissions(
+            agm, overwrite=agm_overwrite, reason="Player was promoted to AGM"
+        )
+
+        # Send promotion message
+        await tchannel.send(
+            content=f"{agm.mention}\n\n{agm_msg}",
+            allowed_mentions=discord.AllowedMentions(users=True),
+        )
+
+        embed = BlueEmbed(
+            title="AGM Promoted",
+            description=f"{agm.mention} has been promoted to an AGM.",
+        )
+
+        embed.add_field(name="Franchise", value=franchise, inline=False)
+        embed.add_field(
+            name="Transaction Channel", value=tchannel.mention, inline=False
+        )
+
+        await interaction.followup.send(embed=embed, ephemeral=True)
+
+    @_agm.command(  # type: ignore
+        name="remove", description="Remove an Assistant GM to a franchise."
+    )
+    @app_commands.describe(franchise="Franchise name", agm="Player to remove from AGM")
+    @app_commands.autocomplete(franchise=FranchiseMixIn.franchise_autocomplete)  # type: ignore
+    async def _franchise_remove_agm_cmd(
+        self,
+        interaction: discord.Interaction,
+        franchise: str,
+        agm: discord.Member,
+    ):
+        guild = interaction.guild
+        if not guild:
+            return
+
+        await interaction.response.defer(ephemeral=True)
+
+        # Get AGM role
+        agm_role = await utils.get_agm_role(guild)
+
+        # Find transaction channel
+        franchise_fmt = franchise.lower().replace(" ", "-")
+        tchannel_name = f"{franchise_fmt}-transactions"
+        log.debug(f"Searching for transaction channel: {tchannel_name}")
+
+        tchannel = discord.utils.get(guild.channels, name=tchannel_name)
+        if not tchannel:
+            return await interaction.followup.send(
+                embed=ErrorEmbed(
+                    description=f"Unable to find transaction channel: **{tchannel_name}**"
+                )
+            )
+
+        # Add AGM role to player
+        await agm.remove_roles(agm_role)
+
+        await tchannel.set_permissions(
+            agm, overwrite=None, reason="Player was removed from AGM"
+        )
+
+        embed = BlueEmbed(
+            title="AGM Removed", description=f"{agm.mention} has been removed as AGM."
+        )
+
+        embed.add_field(name="Franchise", value=franchise, inline=False)
+        embed.add_field(
+            name="Transaction Channel", value=tchannel.mention, inline=False
+        )
+
+        await interaction.followup.send(embed=embed, ephemeral=True)
+
     @_stats.command(name="intents", description="Intent to Play statistics")  # type: ignore
     async def _intent_stats_cmd(self, interaction: discord.Interaction):
         guild = interaction.guild
@@ -2378,6 +2545,12 @@ class AdminMixIn(RSCMixIn):
         await self._set_dates(interaction.guild, value=dates_modal.date_input.value)
 
     # Config
+
+    async def _set_agm_message(self, guild: discord.Guild, value: str):
+        await self.config.custom("Admin", str(guild.id)).AgmMessage.set(value)
+
+    async def _get_agm_message(self, guild: discord.Guild) -> str:
+        return await self.config.custom("Admin", str(guild.id)).AgmMessage()
 
     async def _set_dates(self, guild: discord.Guild, value: str):
         await self.config.custom("Admin", str(guild.id)).Dates.set(value)
