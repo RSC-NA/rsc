@@ -2,6 +2,7 @@ import asyncio
 import json
 import logging
 import re
+from typing import MutableMapping
 
 import aiohttp
 import discord
@@ -181,7 +182,9 @@ class CombineMixIn(RSCMixIn):
             )
 
         # Admin only overwrites
-        admin_overwrites = {
+        admin_overwrites: MutableMapping[
+            discord.Member | discord.Role, discord.PermissionOverwrite
+        ] = {
             guild.default_role: discord.PermissionOverwrite(
                 view_channel=True,
                 connect=False,
@@ -211,7 +214,9 @@ class CombineMixIn(RSCMixIn):
             )
 
         # Configure permissions
-        player_overwrites = {
+        player_overwrites: MutableMapping[
+            discord.Member | discord.Role, discord.PermissionOverwrite
+        ] = {
             guild.default_role: discord.PermissionOverwrite(
                 view_channel=True,
                 connect=False,

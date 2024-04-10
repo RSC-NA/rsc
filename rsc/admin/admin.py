@@ -2,6 +2,7 @@ import asyncio
 import io
 import logging
 import tempfile
+from typing import MutableMapping
 
 import discord
 from PIL import Image, ImageDraw
@@ -625,7 +626,9 @@ class AdminMixIn(RSCMixIn):
 
             if scorecategory:
                 # Score Reporting Permissions
-                s_overwrites = {
+                s_overwrites: MutableMapping[
+                    discord.Member | discord.Role, discord.PermissionOverwrite
+                ] = {
                     guild.default_role: discord.PermissionOverwrite(
                         view_channel=False, send_messages=False, add_reactions=False
                     ),
@@ -675,15 +678,17 @@ class AdminMixIn(RSCMixIn):
                     schannel = await guild.create_text_channel(
                         name=f"{t.name}-score-reporting".lower(),
                         category=scorecategory,
-                        overwrites=s_overwrites,  # type: ignore
+                        overwrites=s_overwrites,
                         reason="Syncing tier channels from API",
                     )
-                else:
-                    await schannel.edit(overwrites=s_overwrites)
+                elif isinstance(schannel, discord.TextChannel):
+                    await schannel.edit(overwrites=s_overwrites)  # type: ignore
 
             if chatcategory:
                 # Tier Chat Permissions
-                t_overwrites = {
+                t_overwrites: MutableMapping[
+                    discord.Member | discord.Role, discord.PermissionOverwrite
+                ] = {
                     guild.default_role: discord.PermissionOverwrite(
                         view_channel=False, send_messages=False
                     ),
@@ -719,11 +724,11 @@ class AdminMixIn(RSCMixIn):
                     tchannel = await guild.create_text_channel(
                         name=f"{t.name}-chat".lower(),
                         category=chatcategory,
-                        overwrites=t_overwrites,  # type: ignore
+                        overwrites=t_overwrites,
                         reason="Syncing tier channels from API",
                     )
-                else:
-                    await tchannel.edit(overwrites=t_overwrites)
+                elif isinstance(tchannel, discord.TextChannel):
+                    await tchannel.edit(overwrites=t_overwrites)  # type: ignore
 
             # Store roles for response
             roles[t.name] = [trole, farole]
