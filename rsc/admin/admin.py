@@ -1012,6 +1012,8 @@ class AdminMixIn(RSCMixIn):
             # Get tier and tier FA roles
             if player.tier and player.tier.name:
                 tier_role = await utils.get_tier_role(guild, name=player.tier.name)
+                log.debug(f"Tier Name: {player.tier.name}")
+                log.debug(f"Tier Role: {tier_role}")
                 if tier_role:
                     roles_to_add.append(tier_role)
 
