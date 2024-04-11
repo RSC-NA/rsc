@@ -711,7 +711,7 @@ class MemberMixIn(RSCMixIn):
         if not guild:
             return
 
-        await interaction.response.defer()
+        await interaction.response.defer(ephemeral=True)
         players = await self.players(guild, discord_id=player.id, limit=1)
         if not players:
             await interaction.followup.send(

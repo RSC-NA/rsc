@@ -8,16 +8,14 @@ from rscapi.exceptions import ApiException
 from rscapi.models.player_mmr import PlayerMMR
 
 from rsc.abc import RSCMixIn
-from rsc.embeds import YellowEmbed
+from rsc.embeds import ApiExceptionErrorEmbed, BlueEmbed, GreenEmbed, YellowEmbed
 from rsc.exceptions import RscException
 from rsc.types import NumbersSettings
 
 log = logging.getLogger("red.rsc.transactions")
 
 
-defaults_guild = NumbersSettings(NumbersRoles=[])
-
-NUMBERS_ROLES = "Numbers Committee"
+defaults_guild = NumbersSettings(NumbersRole=None)
 
 
 class NumberMixIn(RSCMixIn):
@@ -30,7 +28,6 @@ class NumberMixIn(RSCMixIn):
 
     # Access Control
     async def has_numbers_perms(self, interaction: discord.Interaction):
-        # THIS DOESNT WORK BECAUSE ASYNC
         if not (interaction.guild and isinstance(interaction.user, discord.Member)):
             return False
 
@@ -38,11 +35,11 @@ class NumberMixIn(RSCMixIn):
             log.debug("Member has manage guild permissions")
             return True
 
-        roles = await self._get_numbers_roles(interaction.guild)
-        for r in interaction.user.roles:
-            if r in roles:
-                log.debug("Member in numbers committee")
-                return True
+        role = await self._get_numbers_role(interaction.guild)
+        if role in interaction.user.roles:
+            log.debug("Member in numbers committee")
+            return True
+        log.debug("Member NOT in numbers committee")
         return False
 
     # Top Level Group
@@ -56,21 +53,75 @@ class NumberMixIn(RSCMixIn):
     # App Commands
 
     @_numbers.command(  # type: ignore
+        name="settings", description="Configure numbers module settings"
+    )
+    @app_commands.checks.has_permissions(manage_guild=True)
+    async def _numbers_settings_cmd(self, interaction: discord.Interaction):
+        guild = interaction.guild
+        if not guild:
+            return
+
+        numbers_role = await self._get_numbers_role(guild)
+
+        embed = BlueEmbed(
+            title="Numbers Settings",
+            description="Displaying current settings for Numbers module.",
+        )
+
+        embed.add_field(
+            name="Numbers Committee Role",
+            value=numbers_role.mention if numbers_role else "None",
+            inline=False,
+        )
+
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+    @_numbers.command(  # type: ignore
+        name="role", description="Configure the Number Committee role"
+    )
+    @app_commands.checks.has_permissions(manage_guild=True)
+    async def _set_numbers_role_cmd(
+        self, interaction: discord.Interaction, role: discord.Role
+    ):
+        guild = interaction.guild
+        if not guild:
+            return
+
+        await self._set_numbers_role(guild, role)
+
+        embed = GreenEmbed(
+            title="Numbers Role Configured",
+            description=f"Numbers Committee role has been configured to {role.mention}",
+        )
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+    @_numbers.command(  # type: ignore
         name="fetch", description="Display list of MMR pulls for a player"
     )
     @app_commands.describe(player="RSC Discord Member")
-    @app_commands.checks.has_any_role(NUMBERS_ROLES)
-    async def _numbers_fetch(
+    async def _numbers_fetch_cmd(
         self, interaction: discord.Interaction, player: discord.Member
     ):
         if not interaction.guild:
             return None
 
-        pulls = await self.mmr_pulls(interaction.guild, player=player)
+        if not await self.has_numbers_perms(interaction):
+            return
+
+        await interaction.response.defer(ephemeral=True)
+
+        try:
+            pulls = await self.mmr_pulls(interaction.guild, player=player)
+        except RscException as exc:
+            await interaction.followup.send(
+                embed=ApiExceptionErrorEmbed(exc), ephemeral=True
+            )
+
+        log.debug(f"Total MMR pulls: {len(pulls)}")
         pulls.sort(key=lambda x: x.date_pulled, reverse=True)
         embed = YellowEmbed(
             title="Player MMR Pulls",
-            description=f"List of MMR pulls for {player.mention}. Peaks only.",
+            description=f"List of MMR pulls for {player.mention}",
         )
         embed.add_field(
             name="Date",
@@ -98,47 +149,51 @@ class NumberMixIn(RSCMixIn):
             ),
             inline=True,
         )
-        await interaction.response.send_message(embed=embed)
+        await interaction.followup.send(embed=embed)
+
+    # Functions
+
+    # async def
 
     # API
 
     async def mmr_pulls(
         self,
         guild: discord.Guild,
-        pulled: str | None = None,
+        pulled: datetime | None = None,
         pulled_before: datetime | None = None,
         pulled_after: datetime | None = None,
         player: discord.Member | None = None,
         rscid: str | None = None,
+        rscid_begin: str | None = None,
+        rscid_end: str | None = None,
+        psyonix_season: str | None = None,
     ) -> list[PlayerMMR]:
         """Get list of trackers ready to be updated"""
         async with ApiClient(self._api_conf[guild.id]) as client:
             api = NumbersApi(client)
             try:
                 return await api.numbers_mmr_list(
-                    pulled=pulled,
+                    pulled=pulled.isoformat() if pulled else None,
                     pulled_before=pulled_before.isoformat() if pulled_before else None,
                     pulled_after=pulled_after.isoformat() if pulled_after else None,
                     discord_id=player.id if player else None,
                     rscid=rscid,
+                    rscid_begin=rscid_begin,
+                    rscid_end=rscid_end,
+                    psyonix_season=psyonix_season,
                 )
             except ApiException as exc:
                 raise RscException(repsonse=exc)
 
     # Config
 
-    async def _get_numbers_roles(self, guild: discord.Guild) -> list[discord.Role]:
-        role_ids = await self.config.custom("Numbers", str(guild.id)).NumbersRoles()
-        roles = []
-        for id in role_ids:
-            r = guild.get_role(id)
-            if not r:
-                log.warning(f"Numbers roles contains invalid role id: {id}")
-                continue
-            roles.append(r)
-        return roles
+    async def _get_numbers_role(self, guild: discord.Guild) -> discord.Role | None:
+        role_id = await self.config.custom("Numbers", str(guild.id)).NumbersRole()
+        r = guild.get_role(role_id)
+        if not r:
+            return None
+        return r
 
-    async def _set_numbers_roles(self, guild: discord.Guild, roles: list[discord.Role]):
-        await self.config.custom("Transactions", str(guild.id)).NumbersRoles.set(
-            [r.id for r in roles]
-        )
+    async def _set_numbers_role(self, guild: discord.Guild, role: discord.Role):
+        await self.config.custom("Numbers", str(guild.id)).NumbersRole.set(role.id)

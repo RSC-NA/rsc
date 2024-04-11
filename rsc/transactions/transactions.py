@@ -1634,6 +1634,53 @@ class TransactionMixIn(RSCMixIn):
 
         await interaction.followup.send(embed=embed, ephemeral=True)
 
+    @_transactions.command(name="leaderboard", description="Display transaction committee leaderboard")  # type: ignore
+    @app_commands.describe(
+        season='RSC Season Number. Example: "20" (Optional)',
+    )
+    async def _transactions_leaderboard_cmd(
+        self,
+        interaction: discord.Interaction,
+        season: int | None = None,
+    ):
+        guild = interaction.guild
+        if not guild:
+            return
+
+        await interaction.response.defer(ephemeral=True)
+        history = await self.transaction_history(guild, season=season, limit=10000)
+        log.debug(f"History Length: {len(history)}")
+
+        leaders: dict[int, int] = {}
+        for t in history:
+            if not t.executor.discord_id:
+                log.warning("Transaction executor has no discord ID.")
+                continue
+            if not leaders.get(t.executor.discord_id):
+                leaders[t.executor.discord_id] = 1
+                continue
+            leaders[t.executor.discord_id] += 1
+
+        leader_fmt = sorted(leaders.items(), key=lambda i: i[1], reverse=True)
+
+        embed = BlueEmbed(
+            title="Transaction Leaderboard",
+            description="Your transaction is my command.",
+        )
+
+        embed.add_field(
+            name="Rank",
+            value="\n".join(str(i + 1) for i in range(len(leader_fmt))),
+            inline=True,
+        )
+        embed.add_field(
+            name="Name", value="\n".join(f"<@{x[0]}>" for x in leader_fmt), inline=True
+        )
+        embed.add_field(
+            name="Total", value="\n".join(str(x[1]) for x in leader_fmt), inline=True
+        )
+        await interaction.followup.send(embed=embed, ephemeral=True)
+
     # Functions
 
     async def announce_transaction(

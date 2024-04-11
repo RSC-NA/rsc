@@ -131,7 +131,7 @@ class ModThreadSettings(TypedDict):
 
 
 class NumbersSettings(TypedDict):
-    NumbersRoles: list[discord.Role]
+    NumbersRole: discord.Role | None
 
 
 class BallchasingResult(TypedDict):

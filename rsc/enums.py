@@ -169,6 +169,7 @@ class TransactionType(StrEnum):
 class MMRPullType(StrEnum):
     SEASON = "SN"  # Season
     HISTORY = "HS"  # Historical
+    DAILY = "DA"  # Daily
 
 
 class TrackerLinksStatus(StrEnum):
@@ -177,7 +178,7 @@ class TrackerLinksStatus(StrEnum):
     PULLED = "PLD"  # Pulled
     FAILED = "FLD"  # Failed
     MISSING = "MSG"  # "Missing"
-    REPULL = ("RPL",)  # "Repull Needed"
+    REPULL = "RPL"  # "Repull Needed"
 
     @property
     def full_name(self) -> str:
