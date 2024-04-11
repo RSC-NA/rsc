@@ -1674,7 +1674,7 @@ class TransactionMixIn(RSCMixIn):
             inline=True,
         )
         embed.add_field(
-            name="Name", value="\n".join(f"<@{x[0]}>" for x in leader_fmt), inline=True
+            name="Name", value="\n".join(f"<@!{x[0]}>" for x in leader_fmt), inline=True
         )
         embed.add_field(
             name="Total", value="\n".join(str(x[1]) for x in leader_fmt), inline=True
