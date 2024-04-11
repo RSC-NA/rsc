@@ -608,12 +608,12 @@ class CombineMixIn(RSCMixIn):
             log.error("Combine category not configured. Can't create game.")
             return []
 
-        exists = discord.utils.get(guild.channels, name=f"combine-{lobby.id}-home")
+        exists = discord.utils.get(guild.channels, name=f"{lobby.tier}-{lobby.id}-home")
         if exists:
             log.error(f"Combine lobby already exists: {exists.name}")
             return []
 
-        exists = discord.utils.get(guild.channels, name=f"combine-{lobby.id}-away")
+        exists = discord.utils.get(guild.channels, name=f"{lobby.tier}-{lobby.id}-away")
         if exists:
             log.error(f"Combine lobby already exists: {exists.name}")
             return []
