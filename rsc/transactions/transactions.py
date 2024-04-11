@@ -1661,8 +1661,15 @@ class TransactionMixIn(RSCMixIn):
                 continue
             leaders[t.executor.discord_id] += 1
 
-        leader_fmt = sorted(leaders.items(), key=lambda i: i[1], reverse=True)
+        leader_sort = dict(sorted(leaders.items(), key=lambda i: i[1], reverse=True))
 
+        member_list = []
+        for e in leader_sort.keys():
+            m = guild.get_member(e)
+            if not m:
+                member_list.append(f"<@{e}>")
+            else:
+                member_list.append(m.mention)
         embed = BlueEmbed(
             title="Transaction Leaderboard",
             description="Your transaction is my command.",
@@ -1670,14 +1677,14 @@ class TransactionMixIn(RSCMixIn):
 
         embed.add_field(
             name="Rank",
-            value="\n".join(str(i + 1) for i in range(len(leader_fmt))),
+            value="\n".join(str(i + 1) for i in range(len(member_list))),
             inline=True,
         )
+        embed.add_field(name="Name", value="\n".join(member_list), inline=True)
         embed.add_field(
-            name="Name", value="\n".join(f"<@!{x[0]}>" for x in leader_fmt), inline=True
-        )
-        embed.add_field(
-            name="Total", value="\n".join(str(x[1]) for x in leader_fmt), inline=True
+            name="Total",
+            value="\n".join(str(x) for x in leader_sort.values()),
+            inline=True,
         )
         await interaction.followup.send(embed=embed, ephemeral=True)
 
