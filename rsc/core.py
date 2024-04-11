@@ -424,7 +424,7 @@ class RSC(
             title="What Am I?",
             description=(
                 "I am a discord bot created to operate Rocket Soccar Confederation (RSC) discord servers.\n\n"
-                "I was designed and written by <@138778232802508801>."
+                "I was designed and written by <@!138778232802508801>."
             ),
         )
         await interaction.response.send_message(embed=embed)

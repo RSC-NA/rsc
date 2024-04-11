@@ -142,8 +142,8 @@ class TransactionMixIn(RSCMixIn):
                     m_in = guild.get_member(s["player_in"])
                     m_out = guild.get_member(s["player_out"])
 
-                    m_in_fmt = m_in.mention if m_in else f"<@{s['player_in']}>"
-                    m_out_fmt = m_out.mention if m_out else f"<@{s['player_out']}>"
+                    m_in_fmt = m_in.mention if m_in else f"<@!{s['player_in']}>"
+                    m_out_fmt = m_out.mention if m_out else f"<@!{s['player_out']}>"
 
                     log.debug(f"[{guild.name} Expiring Sub Contract: {s['player_in']}")
                     embed = discord.Embed(color=tier_color)
@@ -173,7 +173,7 @@ class TransactionMixIn(RSCMixIn):
 
                     # Send ping for player/GM then quickly remove it
                     if tchan and hasattr(tchan, "send"):
-                        pingstr = f"<@{s['player_in']}> <@{s['gm']}>"
+                        pingstr = f"<@!{s['player_in']}> <@!{s['gm']}>"
                         tmsg = await tchan.send(
                             content=pingstr,
                             embed=embed,
@@ -1222,7 +1222,7 @@ class TransactionMixIn(RSCMixIn):
         if trans_channel:
             str_fmt = (
                 f"{player.mention} was elected captain of {player_data.team.name}"
-                f" (<@{player_data.team.franchise.gm.discord_id}> - {player_data.tier.name})"
+                f" (<@!{player_data.team.franchise.gm.discord_id}> - {player_data.tier.name})"
             )
             await trans_channel.send(
                 content=str_fmt,
@@ -1302,11 +1302,11 @@ class TransactionMixIn(RSCMixIn):
                     name=f"{player.display_name} has finished temporary contract for {steam}",
                     icon_url=f"attachment://{fa_icon.filename}" if fa_icon else None,
                 )
-                embed.add_field(name="Player In", value=f"<@{p_out}>", inline=True)
-                embed.add_field(name="Player Out", value=f"<@{p_in}>", inline=True)
+                embed.add_field(name="Player In", value=f"<@!{p_out}>", inline=True)
+                embed.add_field(name="Player Out", value=f"<@!{p_in}>", inline=True)
                 embed.add_field(name="Franchise", value=f"{fname}", inline=True)
 
-                pingstr = f"{player.mention} <@{gm_id}>"
+                pingstr = f"{player.mention} <@!{gm_id}>"
 
                 tmsg = await tchan.send(
                     content=pingstr,
@@ -1339,10 +1339,10 @@ class TransactionMixIn(RSCMixIn):
         )
         sub_fmt = [(x["player_in"], x["player_out"], x["team"]) for x in subs]
         embed.add_field(
-            name="In", value="\n".join([f"<@{x[0]}>" for x in sub_fmt]), inline=True
+            name="In", value="\n".join([f"<@!{x[0]}>" for x in sub_fmt]), inline=True
         )
         embed.add_field(
-            name="Out", value="\n".join([f"<@{x[1]}>" for x in sub_fmt]), inline=True
+            name="Out", value="\n".join([f"<@!{x[1]}>" for x in sub_fmt]), inline=True
         )
         embed.add_field(
             name="Team", value="\n".join([x[2] for x in sub_fmt]), inline=True
@@ -1661,15 +1661,8 @@ class TransactionMixIn(RSCMixIn):
                 continue
             leaders[t.executor.discord_id] += 1
 
-        leader_sort = dict(sorted(leaders.items(), key=lambda i: i[1], reverse=True))
+        leader_fmt = sorted(leaders.items(), key=lambda i: i[1], reverse=True)
 
-        member_list = []
-        for e in leader_sort.keys():
-            m = guild.get_member(e)
-            if not m:
-                member_list.append(f"<@{e}>")
-            else:
-                member_list.append(m.mention)
         embed = BlueEmbed(
             title="Transaction Leaderboard",
             description="Your transaction is my command.",
@@ -1677,14 +1670,14 @@ class TransactionMixIn(RSCMixIn):
 
         embed.add_field(
             name="Rank",
-            value="\n".join(str(i + 1) for i in range(len(member_list))),
+            value="\n".join(str(i + 1) for i in range(len(leader_fmt))),
             inline=True,
         )
-        embed.add_field(name="Name", value="\n".join(member_list), inline=True)
         embed.add_field(
-            name="Total",
-            value="\n".join(str(x) for x in leader_sort.values()),
-            inline=True,
+            name="Name", value="\n".join(f"<@!{x[0]}>" for x in leader_fmt), inline=True
+        )
+        embed.add_field(
+            name="Total", value="\n".join(str(x[1]) for x in leader_fmt), inline=True
         )
         await interaction.followup.send(embed=embed, ephemeral=True)
 
@@ -1710,12 +1703,12 @@ class TransactionMixIn(RSCMixIn):
         if isinstance(player, discord.Member):
             member_fmt.append(player.mention)
         elif isinstance(player, int):
-            member_fmt.append(f"<@{player}>")
+            member_fmt.append(f"<@!{player}>")
 
         if isinstance(gm, discord.Member):
             member_fmt.append(gm.mention)
         elif isinstance(gm, int):
-            member_fmt.append(f"<@{gm}>")
+            member_fmt.append(f"<@!{gm}>")
 
         ping_fmt = " ".join(member_fmt)
         tmsg = await tchan.send(
@@ -1879,7 +1872,7 @@ class TransactionMixIn(RSCMixIn):
         if gm_id:
             embed.add_field(
                 name="GM",
-                value=f"<@{gm_id}>",
+                value=f"<@!{gm_id}>",
                 inline=True,
             )
 
@@ -1975,7 +1968,7 @@ class TransactionMixIn(RSCMixIn):
             content = gm.mention
 
         if isinstance(gm, int):
-            content = f"<@{gm}>"
+            content = f"<@!{gm}>"
 
         log.debug(f"Announcing to {channel.name}")
         return await channel.send(

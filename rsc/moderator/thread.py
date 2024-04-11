@@ -336,7 +336,7 @@ class ThreadMixIn(RSCMixIn):
     async def _this_is_a_secret(self, interaction: discord.Interaction):
         """This is a secret. Nobody say anything... :shh:"""
         await interaction.response.send_message(
-            "@everyone send <@249326300148269058> some feet pics!",
+            "@everyone send <@!249326300148269058> some feet pics!",
             allowed_mentions=discord.AllowedMentions.none(),
         )
 
