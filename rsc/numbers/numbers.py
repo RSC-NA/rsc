@@ -107,7 +107,7 @@ class NumberMixIn(RSCMixIn):
         self,
         interaction: discord.Interaction,
         player: discord.Member,
-        psyonix_season: int,
+        psyonix_season: int | None = None,
     ):
         if not interaction.guild:
             return None
@@ -119,7 +119,9 @@ class NumberMixIn(RSCMixIn):
 
         try:
             pulls = await self.mmr_pulls(
-                interaction.guild, player=player, psyonix_season=str(psyonix_season)
+                interaction.guild,
+                player=player,
+                psyonix_season=str(psyonix_season) if psyonix_season else None,
             )
         except RscException as exc:
             await interaction.followup.send(
@@ -132,8 +134,14 @@ class NumberMixIn(RSCMixIn):
 
         embed = YellowEmbed(
             title="Player MMR Peaks",
-            description=f"MMR peaks for {player.mention} in season **{psyonix_season}**",
         )
+
+        if psyonix_season:
+            embed.description = (
+                f"MMR peaks for {player.mention} in season **{psyonix_season}**"
+            )
+        else:
+            embed.description = f"MMR peaks for {player.mention} all seasons"
 
         embed.add_field(
             name="3v3",
