@@ -4,6 +4,7 @@ from os import PathLike
 from zoneinfo import ZoneInfo
 
 import discord
+from aiohttp.web_runner import AppRunner, TCPSite
 from discord.ext.commands import CogMeta as DPYCogMeta
 from redbot.core import Config as RedConfig
 from redbot.core.bot import Red
@@ -53,6 +54,8 @@ class RSCMixIn(ABC):
     _api_conf: dict[int, ApiConfig]
 
     _franchise_cache: dict[int, list[str]]
+    _combines_runner: AppRunner
+    _combines_site: TCPSite
 
     # Core
 
