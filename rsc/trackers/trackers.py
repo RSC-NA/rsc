@@ -119,7 +119,7 @@ class TrackerMixIn(RSCMixIn):
         if not guild:
             return
 
-        await interaction.response.defer()
+        await interaction.response.defer(ephemeral=True)
         try:
             trackers = await self.trackers(guild, status)
         except RscException as exc:
@@ -153,7 +153,7 @@ class TrackerMixIn(RSCMixIn):
             value="\n".join(dates[:25]),
             inline=True,
         )
-        await interaction.followup.send(embed=embed)
+        await interaction.followup.send(embed=embed, ephemeral=True)
 
     @_trackers.command(name="stats", description="Display RSC tracker link stats")  # type: ignore
     async def _trackers_stats(
@@ -164,7 +164,7 @@ class TrackerMixIn(RSCMixIn):
         if not guild:
             return
 
-        await interaction.response.defer()
+        await interaction.response.defer(ephemeral=True)
         try:
             stats = await self.tracker_stats(guild)
         except RscException as exc:
@@ -185,7 +185,7 @@ class TrackerMixIn(RSCMixIn):
             value=str(stats.stale),
             inline=True,
         )
-        await interaction.followup.send(embed=embed)
+        await interaction.followup.send(embed=embed, ephemeral=True)
 
     @_trackers.command(  # type: ignore
         name="old", description="Display number of outdated RSC tracker links"

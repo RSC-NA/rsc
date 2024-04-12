@@ -19,7 +19,7 @@ FONT_32 = ImageFont.truetype(str(RSC_FONT), 32)
 
 
 def drawProgressBar(
-    d: ImageDraw,
+    d: ImageDraw.ImageDraw,
     x: int,
     y: int,
     w: int,
@@ -29,7 +29,7 @@ def drawProgressBar(
     bg=(17, 17, 17),
     # fg=(0, 152, 219),
     fg=(0, 102, 153),
-) -> ImageDraw:
+) -> ImageDraw.ImageDraw:
     # draw background
     d.ellipse((x + w, y, x + h + w, y + h), fill=bg)
     d.ellipse((x, y, x + h, y + h), fill=bg)

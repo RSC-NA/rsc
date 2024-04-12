@@ -512,13 +512,16 @@ class CombineMixIn(RSCMixIn):
             description="Displaying lobby information for combines match.",
         )
 
-        lobby_info = (
-            f"Name: **{result.lobby_user}**\n" f"Password: **{result.lobby_pass}**"
-        )
-        if result.team.lower() == "home":
-            team_fmt = "Home (Blue)"
-        else:
-            team_fmt = "Away (Orange)"
+        lobby_info = f"Name: **{result.lobby_user}**\nPassword: **{result.lobby_pass}**"
+
+        team_fmt = "Error (Unknown Team)"
+        for hplayer, aplayer in zip(result.home, result.away):
+            if hplayer.discord_id == interaction.user.id:
+                team_fmt = "Home (Blue)"
+                break
+            if aplayer.discord_id == interaction.user.id:
+                team_fmt = "Away (Orange)"
+                break
 
         embed.add_field(name="Lobby Info", value=lobby_info, inline=True)
         embed.add_field(name="Team", value=team_fmt, inline=True)

@@ -105,6 +105,7 @@ class RSC(
         self.expire_free_agent_checkins_loop.cancel()
         await self.close_ballchasing_sessions()
         await self._combines_runner.cleanup()
+        await asyncio.sleep(1)
 
     async def setup(self):
         """Prepare the bot API and caches. Requires API configuration"""

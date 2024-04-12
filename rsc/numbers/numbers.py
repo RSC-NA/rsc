@@ -1,5 +1,7 @@
+import copy
 import logging
 from datetime import datetime
+from typing import cast
 
 import discord
 from redbot.core import app_commands
@@ -96,11 +98,16 @@ class NumberMixIn(RSCMixIn):
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
     @_numbers.command(  # type: ignore
-        name="fetch", description="Display list of MMR pulls for a player"
+        name="peaks", description="Display player MMR peaks for a psyonix season"
     )
-    @app_commands.describe(player="RSC Discord Member")
-    async def _numbers_fetch_cmd(
-        self, interaction: discord.Interaction, player: discord.Member
+    @app_commands.describe(
+        player="RSC Discord Member", psyonix_season="Pysonix season to display"
+    )
+    async def _numbers_peaks_cmd(
+        self,
+        interaction: discord.Interaction,
+        player: discord.Member,
+        psyonix_season: int,
     ):
         if not interaction.guild:
             return None
@@ -111,49 +118,126 @@ class NumberMixIn(RSCMixIn):
         await interaction.response.defer(ephemeral=True)
 
         try:
-            pulls = await self.mmr_pulls(interaction.guild, player=player)
+            pulls = await self.mmr_pulls(
+                interaction.guild, player=player, psyonix_season=str(psyonix_season)
+            )
         except RscException as exc:
             await interaction.followup.send(
                 embed=ApiExceptionErrorEmbed(exc), ephemeral=True
             )
 
         log.debug(f"Total MMR pulls: {len(pulls)}")
-        pulls.sort(key=lambda x: x.date_pulled, reverse=True)
+
+        peaks = await self.calculate_mmr_peaks(pulls)
+
         embed = YellowEmbed(
-            title="Player MMR Pulls",
-            description=f"List of MMR pulls for {player.mention}",
+            title="Player MMR Peaks",
+            description=f"MMR peaks for {player.mention} in season **{psyonix_season}**",
         )
-        embed.add_field(
-            name="Date",
-            value="\n".join([str(x.date_pulled.date()) for x in pulls]),
-            inline=True,
-        )
+
         embed.add_field(
             name="3v3",
-            value="\n".join(
-                [f"{x.threes_season_peak} ({x.threes_games_played})" for x in pulls]
-            ),
+            value=str(peaks[0]),
             inline=True,
         )
         embed.add_field(
             name="2v2",
-            value="\n".join(
-                [f"{x.twos_season_peak} ({x.twos_games_played})" for x in pulls]
-            ),
+            value=str(peaks[1]),
             inline=True,
         )
         embed.add_field(
             name="1v1",
-            value="\n".join(
-                [f"{x.ones_season_peak} ({x.ones_games_played})" for x in pulls]
-            ),
+            value=str(peaks[2]),
+            inline=True,
+        )
+        await interaction.followup.send(embed=embed)
+
+    @_numbers.command(  # type: ignore
+        name="gamesplayed",
+        description="Display tracker games played for a pysonix season",
+    )
+    @app_commands.describe(
+        player="RSC Discord Member", psyonix_season="Pysonix season to display"
+    )
+    async def _numbers_gamesplayed_cmd(
+        self,
+        interaction: discord.Interaction,
+        player: discord.Member,
+        psyonix_season: int,
+    ):
+        if not interaction.guild:
+            return None
+
+        if not await self.has_numbers_perms(interaction):
+            return
+
+        await interaction.response.defer(ephemeral=True)
+
+        try:
+            pulls = await self.mmr_pulls(
+                interaction.guild, player=player, psyonix_season=str(psyonix_season)
+            )
+        except RscException as exc:
+            await interaction.followup.send(
+                embed=ApiExceptionErrorEmbed(exc), ephemeral=True
+            )
+
+        log.debug(f"Total MMR pulls: {len(pulls)}")
+
+        pulls_fmt = await self.filter_no_games_played_mmr_pulls(pulls)
+        log.debug(f"Total Filtered MMR pulls: {len(pulls)}")
+        pulls_fmt.sort(key=lambda x: cast(int, x.threes_games_played), reverse=True)
+
+        embed = YellowEmbed(
+            title="Player Games Played",
+            description=f"Games played for {player.mention} in season **{psyonix_season}**",
+        )
+
+        embed.add_field(
+            name="3v3",
+            value="\n".join([str(x.threes_games_played) for x in pulls_fmt]),
+            inline=True,
+        )
+        embed.add_field(
+            name="2v2",
+            value="\n".join([str(x.twos_games_played) for x in pulls_fmt]),
+            inline=True,
+        )
+        embed.add_field(
+            name="1v1",
+            value="\n".join([str(x.ones_games_played) for x in pulls_fmt]),
             inline=True,
         )
         await interaction.followup.send(embed=embed)
 
     # Functions
 
-    # async def
+    async def filter_no_games_played_mmr_pulls(
+        self, pulls: list[PlayerMMR]
+    ) -> list[PlayerMMR]:
+        log.debug(f"Filter pulls len: {len(pulls)}")
+        pulls_filtered = copy.deepcopy(pulls)
+        for p in pulls:
+            log.debug(p)
+            if not (
+                p.threes_games_played or p.twos_games_played or p.ones_games_played
+            ):
+                log.debug("Removing above pull.")
+                pulls_filtered.remove(p)
+        return pulls_filtered
+
+    async def calculate_mmr_peaks(self, pulls: list[PlayerMMR]) -> tuple[int, int, int]:
+        threes = 0
+        twos = 0
+        ones = 0
+        for p in pulls:
+            if p.threes_season_peak and p.threes_season_peak > threes:
+                threes = p.threes_season_peak
+            if p.twos_season_peak and p.twos_season_peak > twos:
+                twos = p.twos_season_peak
+            if p.ones_season_peak and p.ones_season_peak > ones:
+                ones = p.ones_season_peak
+        return (threes, twos, ones)
 
     # API
 
