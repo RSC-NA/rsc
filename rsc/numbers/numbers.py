@@ -1,4 +1,3 @@
-import copy
 import logging
 from datetime import datetime
 from typing import cast
@@ -224,14 +223,31 @@ class NumberMixIn(RSCMixIn):
         self, pulls: list[PlayerMMR]
     ) -> list[PlayerMMR]:
         log.debug(f"Filter pulls len: {len(pulls)}")
-        pulls_filtered = copy.deepcopy(pulls)
+        pulls_filtered: list[PlayerMMR] = []
         for p in pulls:
             log.debug(p)
+            # Remove pulls with no games played in any playlist
             if not (
                 p.threes_games_played or p.twos_games_played or p.ones_games_played
             ):
                 log.debug("Removing above pull.")
-                pulls_filtered.remove(p)
+                continue
+
+            # Make sure it's not a duplicate
+            dupe = False
+            for pf in pulls_filtered:
+                if (
+                    pf.threes_games_played == p.threes_games_played
+                    and pf.twos_games_played == p.twos_games_played
+                    and pf.ones_games_played == p.ones_games_played
+                ):
+                    log.debug("Duplicate")
+                    dupe = True
+                    break
+
+            if not dupe:
+                pulls_filtered.append(p)
+
         return pulls_filtered
 
     async def calculate_mmr_peaks(self, pulls: list[PlayerMMR]) -> tuple[int, int, int]:
