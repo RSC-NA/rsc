@@ -970,7 +970,7 @@ class AdminMixIn(RSCMixIn):
         progress_view = CancelView(interaction, timeout=0)
 
         loading_embed.set_image(url="attachment://progress.jpeg")
-        await interaction.edit_original_response(
+        msg = await interaction.edit_original_response(
             embed=loading_embed, attachments=[dFile], view=progress_view
         )
 
@@ -982,7 +982,7 @@ class AdminMixIn(RSCMixIn):
                     "Cancelled synchronizing all free agent players."
                 )
                 loading_embed.colour = discord.Color.red()
-                return await interaction.edit_original_response(
+                return await msg.edit(
                     embed=loading_embed, attachments=[dFile], view=None
                 )
 
@@ -1061,7 +1061,7 @@ class AdminMixIn(RSCMixIn):
                     dFile = discord.File(filename="progress.jpeg", fp=buf)
 
                 try:
-                    await interaction.edit_original_response(
+                    await msg.edit(
                         embed=loading_embed, attachments=[dFile], view=progress_view
                     )
                 except discord.HTTPException as exc:
@@ -1091,9 +1091,7 @@ class AdminMixIn(RSCMixIn):
 
         loading_embed.title = "Free Agent Sync"
         loading_embed.description = "Successfully synchronized all free agent players."
-        await interaction.edit_original_response(
-            embed=loading_embed, attachments=[dFile], view=None
-        )
+        await msg.edit(embed=loading_embed, attachments=[dFile], view=None)
 
     @_sync.command(  # type: ignore
         name="drafteligble",
