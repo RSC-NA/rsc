@@ -173,7 +173,7 @@ class AdminMixIn(RSCMixIn):
         if not guild:
             return
 
-        await interaction.response.defer(ephemeral=True)
+        await interaction.response.defer(ephemeral=False)
 
         try:
             if tracker:
@@ -181,7 +181,7 @@ class AdminMixIn(RSCMixIn):
             mdata = await self.change_member_name(guild, id=member.id, name=name)
         except RscException as exc:
             await interaction.followup.send(
-                embed=ApiExceptionErrorEmbed(exc), ephemeral=True
+                embed=ApiExceptionErrorEmbed(exc), ephemeral=False
             )
             return
 
