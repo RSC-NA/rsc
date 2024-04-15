@@ -2,6 +2,7 @@ import asyncio
 import json
 import logging
 import re
+from pathlib import Path
 from typing import MutableMapping
 
 import aiohttp
@@ -11,7 +12,17 @@ from redbot.core import app_commands
 
 from rsc.abc import RSCMixIn
 from rsc.combines import api, models
-from rsc.const import COMBINES_HELP_1, COMBINES_HELP_2, COMBINES_HELP_3, MUTED_ROLE
+from rsc.const import (
+    COMBINES_HELP_1,
+    COMBINES_HELP_2,
+    COMBINES_HELP_3,
+    COMBINES_HOW_TO_PLAY_1,
+    COMBINES_HOW_TO_PLAY_2,
+    COMBINES_HOW_TO_PLAY_3,
+    COMBINES_HOW_TO_PLAY_4,
+    COMBINES_HOW_TO_PLAY_5,
+    MUTED_ROLE,
+)
 from rsc.decorator import active_combines
 from rsc.embeds import BlueEmbed, ErrorEmbed, GreenEmbed, YellowEmbed
 from rsc.exceptions import BadGateway
@@ -201,6 +212,19 @@ class CombineMixIn(RSCMixIn):
                 add_reactions=False,
             ),
         }
+
+        combines_how_to_play = discord.utils.get(category.channels, name="how-to-play")
+        if not combines_how_to_play:
+            combines_how_to_play = await guild.create_text_channel(
+                name="how-to-play",
+                category=category,
+                overwrites=admin_overwrites,
+                reason="Starting combines",
+            )
+
+        # Send how to play
+        if isinstance(combines_how_to_play, discord.TextChannel):
+            await self.send_combines_how_to_play(combines_how_to_play)
 
         combines_announce = discord.utils.get(
             category.channels, name="combines-announcements"
@@ -813,6 +837,20 @@ class CombineMixIn(RSCMixIn):
         await channel.send(content=COMBINES_HELP_1)
         await channel.send(content=COMBINES_HELP_2)
         await channel.send(content=COMBINES_HELP_3)
+
+    async def send_combines_how_to_play(self, channel: discord.TextChannel):
+        resources_root = Path(__file__).parent.parent / "resources" / "combines"
+
+        login_img = discord.File(resources_root / "combines_login.png")
+        checkin_img = discord.File(resources_root / "combines_check_in.png")
+        announce_img = discord.File(resources_root / "combines_announcement.png")
+        report_img = discord.File(resources_root / "combines_report.png")
+
+        await channel.send(content=COMBINES_HOW_TO_PLAY_1, file=login_img)
+        await channel.send(content=COMBINES_HOW_TO_PLAY_2, file=checkin_img)
+        await channel.send(content=COMBINES_HOW_TO_PLAY_3, file=announce_img)
+        await channel.send(content=COMBINES_HOW_TO_PLAY_4, file=report_img)
+        await channel.send(content=COMBINES_HOW_TO_PLAY_5)
 
     # Runner
 

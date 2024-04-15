@@ -131,8 +131,8 @@ class AgreeButton(discord.ui.Button):
 
 
 class LinkButton(discord.ui.Button):
-    def __init__(self, label: str, url: str):
-        super().__init__(label=label, url=url, style=discord.ButtonStyle.link)
+    def __init__(self, label: str, url: str, style=discord.ButtonStyle.link):
+        super().__init__(label=label, url=url, style=style)
 
 
 # RSC League Selection
