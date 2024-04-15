@@ -169,5 +169,6 @@ COMBINES_HOW_TO_PLAY_4 = (
 )
 COMBINES_HOW_TO_PLAY_5 = (
     "## Queue again!\n\n"
-    "If you want to play another series, you **MUST CHECK IN AGAIN**. Just repeat the steps above!"
+    "If you want to play another series, you **MUST CHECK IN AGAIN**. Just repeat the steps above!\n\n"
+    "Thanks to <@!308295592033910784> for putting this guide together"
 )
