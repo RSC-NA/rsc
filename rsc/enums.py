@@ -101,6 +101,7 @@ class Status(StrEnum):
     WAIVER_CLAIM = "WC"  # Waiver Claim
     WAIVER_RELEASE = "WR"  # Waiver Release
     RENEWED = "RN"  # Renewed
+    DROPPED = "DR"  # Dropped
 
     @property
     def full_name(self) -> str:
@@ -133,6 +134,8 @@ class Status(StrEnum):
                 return "Waiver Release"
             case Status.RENEWED:
                 return "Renewed"
+            case Status.DROPPED:
+                return "Dropped"
             case _:
                 return "Unknown"
 

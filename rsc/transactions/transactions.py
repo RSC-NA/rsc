@@ -1436,14 +1436,16 @@ class TransactionMixIn(RSCMixIn):
     @app_commands.describe(
         player="RSC discord member to retire",
         notes="Transaction notes (Optional)",
-        override="Admin only override",
+        override="Admin only override (Default: False)",
+        announce="Announce to transactions channel (Default: True)",
     )
-    async def _transactions_retire(
+    async def _transactions_retire_cmd(
         self,
         interaction: discord.Interaction,
         player: discord.Member,
         notes: str | None = None,
         override: bool = False,
+        announce: bool = True,
     ):
         guild = interaction.guild
         if not guild or not isinstance(interaction.user, discord.Member):
@@ -1495,9 +1497,7 @@ class TransactionMixIn(RSCMixIn):
 
         if old_tier_role:
             roles_to_remove.append(old_tier_role)
-            tier_fa_role = await utils.get_tier_fa_role(
-                guild, f"{old_tier_role.name}FA"
-            )
+            tier_fa_role = await utils.get_tier_fa_role(guild, old_tier_role.name)
             if tier_fa_role:
                 log.debug(f"Tier FA role: {tier_fa_role}")
                 roles_to_remove.append(tier_fa_role)
@@ -1523,13 +1523,14 @@ class TransactionMixIn(RSCMixIn):
         if former_player_role:
             await player.add_roles(former_player_role)
 
-        embed, files = await self.build_transaction_embed(
-            guild=guild, response=result, player_in=player
-        )
+        if announce:
+            embed, files = await self.build_transaction_embed(
+                guild=guild, response=result, player_in=player
+            )
 
-        await self.announce_transaction(
-            guild=guild, embed=embed, files=files, player=player
-        )
+            await self.announce_transaction(
+                guild=guild, embed=embed, files=files, player=player
+            )
 
         # Send result
         await interaction.followup.send(

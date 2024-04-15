@@ -169,15 +169,16 @@ class AdminMixIn(RSCMixIn):
         name: str,
         tracker: str | None = None,
     ):
-        if not interaction.guild:
+        guild = interaction.guild
+        if not guild:
             return
 
         await interaction.response.defer(ephemeral=True)
 
         try:
             if tracker:
-                await self.add_tracker(interaction.guild, member, tracker)
-            await self.change_member_name(interaction.guild, id=member.id, name=name)
+                await self.add_tracker(guild, member, tracker)
+            mdata = await self.change_member_name(guild, id=member.id, name=name)
         except RscException as exc:
             await interaction.followup.send(
                 embed=ApiExceptionErrorEmbed(exc), ephemeral=True
@@ -194,6 +195,31 @@ class AdminMixIn(RSCMixIn):
             new_nick = f"{name} {accolades}".strip()
 
         await member.edit(nick=new_nick)
+
+        # Update franchise role if player is GM
+        if mdata.elevated_roles:
+            for elevated in mdata.elevated_roles:
+                if elevated.gm and elevated.league.id == self._league[guild.id]:
+                    frole = await utils.franchise_role_from_disord_member(member)
+                    if not frole:
+                        return await interaction.followup.send(
+                            embed=ErrorEmbed(
+                                description=f"Name change was successful but could not find {member.mention} franchise role. Unable to update GM name in role, Please open a modmail ticket."
+                            )
+                        )
+
+                    fsplit = frole.name.split("(", maxsplit=1)
+                    if len(fsplit) != 2:
+                        return await interaction.followup.send(
+                            embed=ErrorEmbed(
+                                description=f"Error updating franchise role {frole.mention}. Unable to parse name and GM."
+                            )
+                        )
+
+                    log.debug("Updating Franchise Role")
+                    fname = fsplit[0].strip()
+                    await frole.edit(name=f"{fname} ({name})")
+
         await interaction.followup.send(
             embed=SuccessEmbed(
                 description=f"Player RSC name has been updated to {member.mention}"
@@ -970,7 +996,7 @@ class AdminMixIn(RSCMixIn):
         progress_view = CancelView(interaction, timeout=0)
 
         loading_embed.set_image(url="attachment://progress.jpeg")
-        msg = await interaction.edit_original_response(
+        await interaction.edit_original_response(
             embed=loading_embed, attachments=[dFile], view=progress_view
         )
 
@@ -982,7 +1008,7 @@ class AdminMixIn(RSCMixIn):
                     "Cancelled synchronizing all free agent players."
                 )
                 loading_embed.colour = discord.Color.red()
-                return await msg.edit(
+                return await interaction.edit_original_response(
                     embed=loading_embed, attachments=[dFile], view=None
                 )
 
@@ -1062,7 +1088,7 @@ class AdminMixIn(RSCMixIn):
                     dFile = discord.File(filename="progress.jpeg", fp=buf)
 
                 try:
-                    await msg.edit(
+                    await interaction.edit_original_response(
                         embed=loading_embed, attachments=[dFile], view=progress_view
                     )
                 except discord.HTTPException as exc:
@@ -1092,7 +1118,9 @@ class AdminMixIn(RSCMixIn):
 
         loading_embed.title = "Free Agent Sync"
         loading_embed.description = "Successfully synchronized all free agent players."
-        await msg.edit(embed=loading_embed, attachments=[dFile], view=None)
+        await interaction.edit_original_response(
+            embed=loading_embed, attachments=[dFile], view=None
+        )
 
     @_sync.command(  # type: ignore
         name="drafteligble",
