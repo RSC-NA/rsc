@@ -1033,6 +1033,7 @@ class AdminMixIn(RSCMixIn):
 
             # Add roles
             if not all(x in m.roles for x in roles_to_add):
+                log.debug("Adding roles.")
                 await m.add_roles(*roles_to_add)
 
             # Edit nickname
