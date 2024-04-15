@@ -1006,7 +1006,7 @@ class AdminMixIn(RSCMixIn):
 
             # Remove old tier if it exists
             for r in m.roles:
-                if r.name.lower() in tiers:
+                if r.name.replace("FA", "").lower() in tiers:
                     roles_to_remove.append(r)
 
             # Get tier and tier FA roles
