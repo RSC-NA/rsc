@@ -1486,6 +1486,7 @@ class TransactionMixIn(RSCMixIn):
         fa_role = await utils.get_free_agent_role(guild)
         former_player_role = await utils.get_former_player_role(guild)
         spectator_role = await utils.get_spectator_role(guild)
+        de_role = await utils.get_draft_eligible_role(guild)
 
         if fname:
             franchise_role = await utils.franchise_role_from_name(guild, fname)
@@ -1514,6 +1515,9 @@ class TransactionMixIn(RSCMixIn):
         if captain_role:
             roles_to_remove.append(captain_role)
 
+        if de_role:
+            roles_to_remove.append(de_role)
+
         if roles_to_remove:
             await player.remove_roles(*roles_to_remove)
 
@@ -1523,6 +1527,12 @@ class TransactionMixIn(RSCMixIn):
         if former_player_role:
             await player.add_roles(former_player_role)
 
+        # Change name
+        new_name = await utils.remove_prefix(player)
+        log.debug(f"Changing retired players name: {new_name}")
+        await player.edit(nick=new_name)
+
+        # Announce to Transaction channel
         if announce:
             embed, files = await self.build_transaction_embed(
                 guild=guild, response=result, player_in=player

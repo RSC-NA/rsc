@@ -249,7 +249,7 @@ class TrackerMixIn(RSCMixIn):
         if not interaction.guild:
             return
 
-        await interaction.response.defer()
+        await interaction.response.defer(ephemeral=True)
         try:
             trackers = await self.trackers(interaction.guild, player=player.id)
         except RscException as exc:
@@ -280,7 +280,7 @@ class TrackerMixIn(RSCMixIn):
         account_view = discord.ui.View()
         account_view.add_item(link_button)
 
-        await interaction.followup.send(embed=embed, view=account_view)
+        await interaction.followup.send(embed=embed, view=account_view, ephemeral=True)
 
     # Functions
 
