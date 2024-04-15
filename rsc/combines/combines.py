@@ -222,9 +222,9 @@ class CombineMixIn(RSCMixIn):
                 reason="Starting combines",
             )
 
-        # Send how to play
-        if isinstance(combines_how_to_play, discord.TextChannel):
-            await self.send_combines_how_to_play(combines_how_to_play)
+            # Send how to play
+            if isinstance(combines_how_to_play, discord.TextChannel):
+                await self.send_combines_how_to_play(combines_how_to_play)
 
         combines_announce = discord.utils.get(
             category.channels, name="combines-announcements"
@@ -273,9 +273,9 @@ class CombineMixIn(RSCMixIn):
                 reason="Starting combines",
             )
 
-        # Send help message
-        if isinstance(combines_help, discord.TextChannel):
-            await self.send_combines_help_msg(combines_help)
+            # Send help message
+            if isinstance(combines_help, discord.TextChannel):
+                await self.send_combines_help_msg(combines_help)
 
         # Make default channels
         combines_chat = discord.utils.get(category.channels, name="combines-general")
