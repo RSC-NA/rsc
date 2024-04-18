@@ -5,10 +5,12 @@ import discord
 from redbot.core import app_commands, commands
 from rscapi import ApiClient, MembersApi
 from rscapi.exceptions import ApiException
+from rscapi.models.activity_check import ActivityCheck
 from rscapi.models.deleted import Deleted
 from rscapi.models.intent_to_play_schema import IntentToPlaySchema
 from rscapi.models.league_player import LeaguePlayer
 from rscapi.models.member import Member
+from rscapi.models.player_activity_check_schema import PlayerActivityCheckSchema
 from rscapi.models.player_season_stats import PlayerSeasonStats
 from rscapi.models.player_signup_schema import PlayerSignupSchema
 from rscapi.models.update_member_rsc_name import UpdateMemberRSCName
@@ -1039,5 +1041,27 @@ class MemberMixIn(RSCMixIn):
             try:
                 log.debug(f"PermFA Signup Data: {data}")
                 return await api.members_permfa_signup(member.id, data)
+            except ApiException as exc:
+                raise RscException(response=exc)
+
+    async def activity_check(
+        self,
+        guild: discord.Guild,
+        player: discord.Member,
+        returning_status: bool,
+        executor: discord.Member,
+        override: bool = False,
+    ) -> ActivityCheck:
+        async with ApiClient(self._api_conf[guild.id]) as client:
+            api = MembersApi(client)
+            data = PlayerActivityCheckSchema(
+                league=self._league[guild.id],
+                returning_status=returning_status,
+                executor=executor.id,
+                admin_override=override,
+            )
+            try:
+                log.debug(f"[{player.id}] Activity Check: {data}")
+                return await api.members_activity_check(player.id, data)
             except ApiException as exc:
                 raise RscException(response=exc)

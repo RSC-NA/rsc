@@ -2,9 +2,20 @@ import logging
 from enum import IntEnum
 
 import discord
+from rscapi import ApiClient, Configuration, MembersApi
+from rscapi.exceptions import ApiException
+from rscapi.models.activity_check import ActivityCheck
+from rscapi.models.player_activity_check_schema import PlayerActivityCheckSchema
 
 from rsc.const import DEFAULT_TIMEOUT
-from rsc.embeds import LoadingEmbed, OrangeEmbed, RedEmbed
+from rsc.embeds import (
+    ApiExceptionErrorEmbed,
+    GreenEmbed,
+    LoadingEmbed,
+    OrangeEmbed,
+    RedEmbed,
+)
+from rsc.exceptions import RscException
 from rsc.types import RebrandTeamDict
 from rsc.views import AuthorOnlyView, CancelButton, ConfirmButton, DeclineButton
 
@@ -18,6 +29,93 @@ class CreateState(IntEnum):
     FINISHED = 4
     CANCELLED = 5
     NOTIERS = 6
+
+
+class InactiveCheckView(discord.ui.View):
+    def __init__(
+        self,
+        guild: discord.Guild,
+        league_id=int,
+        api_conf=Configuration,
+        timeout: float | None = None,
+    ):
+        super().__init__(timeout=timeout)
+        self._guild = guild
+        self._league_id = league_id
+        self._api_conf = api_conf
+
+    @discord.ui.button(
+        label="I'm active",
+        style=discord.ButtonStyle.green,
+        custom_id="inactive_check_view:green",
+    )
+    async def active(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not isinstance(interaction.user, discord.Member):
+            return
+
+        await interaction.response.defer(ephemeral=True)
+        try:
+            result = await self.call_api(interaction.user, returning_status=True)
+            log.debug(f"Active Result: {result}")
+        except RscException as exc:
+            log.warning(f"[{self._guild.name}] Activity Check Error: {exc.reason}")
+            return await interaction.followup.send(
+                embed=ApiExceptionErrorEmbed(exc), ephemeral=True
+            )
+
+        await interaction.followup.send(
+            embed=GreenEmbed(
+                title="Marked Active",
+                description="You have declared yourself as **active** for the RSC season.",
+            ),
+            ephemeral=True,
+        )
+
+    @discord.ui.button(
+        label="Withdraw",
+        style=discord.ButtonStyle.red,
+        custom_id="inactive_check_view:red",
+    )
+    async def withdraw(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ):
+        if not isinstance(interaction.user, discord.Member):
+            return
+
+        await interaction.response.defer(ephemeral=True)
+        try:
+            result = await self.call_api(interaction.user, returning_status=False)
+            log.debug(f"Active Result: {result}")
+        except RscException as exc:
+            log.warning(f"[{self._guild.name}] Activity Check Error: {exc.reason}")
+            return await interaction.followup.send(
+                embed=ApiExceptionErrorEmbed(exc), ephemeral=True
+            )
+
+        await interaction.followup.send(
+            embed=RedEmbed(
+                title="Marked In-Active",
+                description="You have declared yourself as **in-active** for the RSC season.\n\n**You will be removed from playing this season.**",
+            ),
+            ephemeral=True,
+        )
+
+    async def call_api(
+        self, player: discord.Member, returning_status: bool
+    ) -> ActivityCheck:
+        async with ApiClient(self._api_conf) as client:
+            api = MembersApi(client)
+            data = PlayerActivityCheckSchema(
+                league=self._league_id,
+                admin_override=False,
+                executor=0,
+                returning_status=returning_status,
+            )
+            try:
+                log.debug(f"[{player.id}] Activity Check: {data}")
+                return await api.members_activity_check(player.id, data)
+            except ApiException as exc:
+                raise RscException(response=exc)
 
 
 class ConfirmSyncView(AuthorOnlyView):

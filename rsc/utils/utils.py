@@ -949,6 +949,7 @@ class UtilsMixIn(RSCMixIn):
         role: discord.Role,
         role2: discord.Role | None = None,
         role3: discord.Role | None = None,
+        role4: discord.Role | None = None,
     ):
         desc = f"Role(s): {role.mention}"
         if not (role2 or role3):

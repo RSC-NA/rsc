@@ -37,12 +37,20 @@ async def combines_active(
 
 
 async def combines_lobby(
-    url: str, player: discord.Member
+    url: str, player: discord.Member | None = None, lobby_id: int | None = None
 ) -> models.CombinesLobby | models.CombinesStatus:
     async with aiohttp.ClientSession(trust_env=True) as session:
-        url = urljoin(url, "lobby")
+        params = {}
+        if player:
+            params["discord_id"] = player.id
+        elif lobby_id:
+            url = urljoin(url, str(lobby_id))
+        else:
+            raise ValueError("No parameter provided for player or lobby_id")
+
+        url = urljoin(url, "lobby/")
         log.debug(f"URL: {url}")
-        params = {"discord_id": player.id}
+
         async with session.get(url, params=params) as resp:
             log.debug(f"Server Response: {resp.status}")
             if resp.status == 502:
@@ -52,10 +60,13 @@ async def combines_lobby(
             if data.get("status") and data.get("message"):
                 return models.CombinesStatus(**data)
             else:
-                return models.CombinesLobby(**data)
+                lobby: dict | None = next(iter(data.values()), None)
+                if not lobby:
+                    raise ValueError("Combine API did not return a valid JSON object.")
+                return models.CombinesLobby(**lobby)
 
 
-async def combines_check_in(url, player: discord.Member) -> models.CombinesStatus:
+async def combines_check_in(url: str, player: discord.Member) -> models.CombinesStatus:
     async with aiohttp.ClientSession(trust_env=True) as session:
         url = urljoin(url, "check_in")
         log.debug(f"URL: {url}")
@@ -68,7 +79,7 @@ async def combines_check_in(url, player: discord.Member) -> models.CombinesStatu
             return models.CombinesStatus(**data)
 
 
-async def combines_check_out(url, player: discord.Member) -> models.CombinesStatus:
+async def combines_check_out(url: str, player: discord.Member) -> models.CombinesStatus:
     async with aiohttp.ClientSession(trust_env=True) as session:
         url = urljoin(url, "check_out")
         log.debug(f"URL: {url}")

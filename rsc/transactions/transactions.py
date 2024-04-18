@@ -1,7 +1,9 @@
+import itertools
 import logging
 import re
 from datetime import datetime, time, timedelta
 from pathlib import Path
+from pprint import pformat
 
 import discord
 from discord.ext import tasks
@@ -23,6 +25,7 @@ from rscapi.models.sign_a_player_to_a_team_in_a_league import (
 )
 from rscapi.models.temporary_fa_sub import TemporaryFASub
 from rscapi.models.trade_item import TradeItem
+from rscapi.models.trade_schema import TradeSchema
 
 # from rscapi.models.trade_schema import TradeSchema
 from rscapi.models.trade_value import TradeValue
@@ -64,7 +67,7 @@ FUTURE_TRADE_REGEX = re.compile(
 )
 GM_TRADE_REGEX = re.compile(r"^(?P<gm>[a-z0-9\x20]+) receives:$", re.IGNORECASE)
 PLAYER_TRADE_REGEX = re.compile(
-    r"^@(?P<player>[a-z0-9\x20]+?)(?:\sto\s(?P<team>[a-z0-9\x20]+))?$", re.IGNORECASE
+    r"^@(?P<player>.+?)(?:\sto\s(?P<team>[a-z0-9\x20]+))?$", re.IGNORECASE
 )
 
 defaults = TransactionSettings(
@@ -994,9 +997,6 @@ class TransactionMixIn(RSCMixIn):
         if not interaction.guild:
             return
 
-        # await utils.not_implemented(interaction)
-        # return
-
         trans_channel = await self._trans_channel(interaction.guild)
         if not trans_channel:
             await interaction.response.send_message(
@@ -1018,16 +1018,31 @@ class TransactionMixIn(RSCMixIn):
         # await trans_channel.send(content=trade.trade, allowed_mentions=discord.AllowedMentions(users=True))
         # TODO - modal not working for this because mentions
 
+        await utils.not_implemented(interaction)
+
     @_transactions.command(  # type: ignore
         name="trade",
         description="Process a trade between franchises",
     )
     @app_commands.describe(override="Admin only override")
     async def _transactions_trade_cmd(
-        self, interaction: discord.Interaction, override: bool = False
+        self,
+        interaction: discord.Interaction,
+        notes: str | None = None,
+        override: bool = False,
+        announce: bool = True,
     ):
         guild = interaction.guild
         if not guild:
+            return
+
+        if not isinstance(interaction.user, discord.Member):
+            return
+
+        if override and not interaction.user.guild_permissions.manage_guild:
+            await interaction.followup.send(
+                embed=ErrorEmbed(description="Only admins can process an override.")
+            )
             return
 
         trans_channel = await self._trans_channel(guild)
@@ -1048,67 +1063,12 @@ class TransactionMixIn(RSCMixIn):
             )
             return
 
+        # Parse trade
         try:
             trade_items = await self.parse_trade_text(
                 guild=guild, data=trade_modal.trade.value
             )
-            log.debug(trade_items)
-
-            embed = BlueEmbed(
-                title="Debug Trades",
-                description="Trade Overview",
-            )
-
-            players = []
-            futures = []
-            for x in trade_items:
-                if x.value.player:
-                    p = (
-                        str(x.source.id),
-                        str(x.destination.id),
-                        str(x.value.player.id)[:8],
-                        x.value.player.team,
-                    )
-                    players.append(p)
-                else:
-                    f = (
-                        str(x.source.gm)[:8],
-                        str(x.destination.id),
-                        str(x.value.pick.round),
-                        x.value.pick.tier,
-                    )
-                    futures.append(f)
-
-            if players:
-                embed.add_field(name="Player Trades", value="", inline=False)
-                embed.add_field(
-                    name="Source", value="\n".join([x[0] for x in players]), inline=True
-                )
-                embed.add_field(
-                    name="Dest", value="\n".join([x[1] for x in players]), inline=True
-                )
-                embed.add_field(
-                    name="Player", value="\n".join([x[2] for x in players]), inline=True
-                )
-                embed.add_field(
-                    name="Team", value="\n".join([x[3] for x in players]), inline=True
-                )
-
-            if futures:
-                embed.add_field(name="Draft Picks", value="", inline=False)
-                embed.add_field(
-                    name="Source", value="\n".join([x[0] for x in futures]), inline=True
-                )
-                embed.add_field(
-                    name="Dest", value="\n".join([x[1] for x in futures]), inline=True
-                )
-                embed.add_field(
-                    name="Round", value="\n".join([x[2] for x in futures]), inline=True
-                )
-                embed.add_field(
-                    name="Tier", value="\n".join([x[3] for x in futures]), inline=True
-                )
-            await interaction.followup.send(embed=embed, ephemeral=False)
+            log.debug(pformat(trade_items))
         except TradeParserException as exc:
             await interaction.followup.send(
                 embed=ExceptionErrorEmbed(
@@ -1117,6 +1077,36 @@ class TransactionMixIn(RSCMixIn):
                 ephemeral=True,
             )
             return
+
+        try:
+            # result = await self.trade(
+            #     guild=guild,
+            #     trades=trade_items,
+            #     executor=interaction.user,
+            #     notes=notes,
+            #     override=override
+            # )
+            # log.debug(f"Transaction History Result: {result}")
+            log.debug("REMOVE ME NERD")
+        except RscException as exc:
+            await interaction.followup.send(
+                embed=ApiExceptionErrorEmbed(exc), ephemeral=True
+            )
+            return
+
+        if announce:
+            gms, embed = await self.build_trade_embed(guild, trade_items)
+            gm_mention = " ".join([f"<@!{g}>" for g in gms])
+            msg = await trans_channel.send(
+                content=gm_mention,
+                embed=embed,
+                allowed_mentions=discord.AllowedMentions(users=True),
+            )
+            await msg.edit(content=None, embed=embed)
+
+        await interaction.followup.send(
+            embed=SuccessEmbed(description="Trade was successful")
+        )
 
     @_transactions.command(  # type: ignore
         name="captain",
@@ -2000,11 +1990,9 @@ class TransactionMixIn(RSCMixIn):
         except ValueError as exc:
             raise TradeParserException(message=exc.args[0])
 
-        from pprint import pformat
-
         # Iterate once to get all franchises involved
         log.debug("Finding all franchises in trade.")
-        franchises = []
+        franchises: list[FranchiseIdentifier] = []
         for line in data.splitlines():
             line = line.strip()
             log.debug(f"Line: {line}")
@@ -2012,13 +2000,14 @@ class TransactionMixIn(RSCMixIn):
             if match := GM_TRADE_REGEX.search(line):
                 if not match.group("gm"):
                     raise TradeParserException(
-                        message=f"Unable to parse GM name from: {line}"
+                        message=f"Unable to parse GM name from: `{line}`"
                     )
 
                 gm_str = match.group("gm").strip()
                 log.debug(f"GM str: {gm_str}")
 
                 # Find name in GM role members
+                gm: discord.Member | None = None
                 for m in gm_role.members:
                     tmp = await utils.remove_prefix(m)
                     if tmp.lower().startswith(gm_str.lower()):
@@ -2027,7 +2016,7 @@ class TransactionMixIn(RSCMixIn):
 
                 if not gm:
                     raise TradeParserException(
-                        message=f"Unable to parse GM name from: {line}"
+                        message=f"Unable to parse GM name from: `{line}`"
                     )
                 log.debug(f"Trade GM: {gm.display_name}")
 
@@ -2035,7 +2024,7 @@ class TransactionMixIn(RSCMixIn):
                 fdata = await self.franchises(guild=guild, gm_name=tmp)
                 if not fdata or len(fdata) > 1:
                     raise TradeParserException(
-                        message=f"Error finding franchise for GM: {tmp}"
+                        message=f"Error finding franchise for GM: `{tmp}`"
                     )
 
                 fname = fdata[0].name
@@ -2043,7 +2032,6 @@ class TransactionMixIn(RSCMixIn):
                 log.debug(f"Franchise ID: {fid} Name: {fname} GM: {gm.id}")
                 f_object = FranchiseIdentifier(gm=gm.id, name=fname, id=fid)
                 franchises.append(f_object)
-                continue
 
         # Initial validation on franchises
         if len(franchises) < 2:
@@ -2072,22 +2060,24 @@ class TransactionMixIn(RSCMixIn):
             elif match := GM_TRADE_REGEX.search(line):
                 if not match.group("gm"):
                     raise TradeParserException(
-                        message=f"Unable to parse GM name from: {line}"
+                        message=f"Unable to parse GM name from: `{line}`"
                     )
 
                 gm_str = match.group("gm").strip()
                 log.debug(f"GM str: {gm_str}")
 
                 # Find name in GM role members
+                gm = None
                 for m in gm_role.members:
                     tmp = await utils.remove_prefix(m)
+                    log.debug(f"GM tmp: {tmp}")
                     if tmp.lower().startswith(gm_str.lower()):
                         gm = m
                         break
 
                 if not gm:
                     raise TradeParserException(
-                        message=f"Unable to parse GM name from: {line}"
+                        message=f"Unable to parse GM name from: `{line}`"
                     )
                 log.debug(f"Trade GM: {gm.display_name}")
 
@@ -2097,7 +2087,7 @@ class TransactionMixIn(RSCMixIn):
                 log.debug(f"Destination Franchise: {dest_franchise}")
                 if not dest_franchise:
                     raise TradeParserException(
-                        message=f"Error finding franchise for GM: {gm.display_name} ({gm.id})"
+                        message=f"Error finding franchise for GM: `{gm.display_name} ({gm.id})`"
                     )
                 continue
 
@@ -2111,7 +2101,7 @@ class TransactionMixIn(RSCMixIn):
                 # Parse line with regex
                 if not match or not match.group("player"):
                     raise TradeParserException(
-                        message=f"Unable to parse player trade from: {line}"
+                        message=f"Unable to parse player trade from: `{line}`"
                     )
 
                 m_str = match.group("player").strip()
@@ -2164,7 +2154,7 @@ class TransactionMixIn(RSCMixIn):
 
                     if not team_list or len(team_list) > 1:
                         raise TradeParserException(
-                            message=f"Error finding destination team. Franchise: {dest_franchise.id} Tier: {pdata.tier.name}"
+                            message=f"Error finding destination team. Franchise: `{dest_franchise.id}` Tier: `{pdata.tier.name}`"
                         )
 
                     dest_team = team_list[0].name
@@ -2177,13 +2167,11 @@ class TransactionMixIn(RSCMixIn):
                 item = TradeItem(
                     source=sfranchise, destination=dest_franchise, value=tvalue
                 )
-                log.debug(pformat(item))
-
                 trade_list.append(item)
             elif match := FUTURE_TRADE_REGEX.match(line):
                 if not match:
                     raise TradeParserException(
-                        message=f"Unable to parse future trade from: {line}"
+                        message=f"Unable to parse future trade from: `{line}`"
                     )
                 if not dest_franchise:
                     raise TradeParserException(
@@ -2192,7 +2180,6 @@ class TransactionMixIn(RSCMixIn):
 
                 gm_str = match.group("gm").strip()
                 tier = match.group("tier")
-                # season = int(match.group("season"))
                 round = int(match.group("round"))
 
                 # Find name in GM role members
@@ -2218,14 +2205,12 @@ class TransactionMixIn(RSCMixIn):
                 item = TradeItem(
                     source=sfranchise, destination=dest_franchise, value=tvalue
                 )
-                log.debug(pformat(item))
-
                 trade_list.append(item)
 
             elif match := PICK_TRADE_REGEX.match(line):
                 if not match:
                     raise TradeParserException(
-                        message=f"Unable to parse future trade from: {line}"
+                        message=f"Unable to parse future trade from: `{line}`"
                     )
                 if not dest_franchise:
                     raise TradeParserException(
@@ -2234,11 +2219,12 @@ class TransactionMixIn(RSCMixIn):
 
                 tier = match.group("tier")
                 round = int(match.group("round"))
-                # pick = int(match.group("pick"))
+                pick = int(match.group("pick"))
 
                 # Check if GM was provided (3+ way trade)
                 gm_str = None
                 source_gm = None
+                sfranchise = None
                 if match.group("gm"):
                     gm_str = match.group("gm").strip()
 
@@ -2250,33 +2236,123 @@ class TransactionMixIn(RSCMixIn):
                             source_gm = m
                             break
 
-                # If no source gm, check if only two GMs involved
-                raise NotImplementedError("uh what if this is in the first pick?")
-                if not source_gm:
-                    raise TradeParserException(
-                        message=f"Error finding discord member for future source GM: `{gm_str}`"
+                    if not source_gm:
+                        raise TradeParserException(
+                            message=f"Error finding discord member for future source GM: `{gm_str}`"
+                        )
+                else:
+                    # 2 way trade. Validate against franchise list
+                    if len(franchises) > 2:
+                        raise TradeParserException(
+                            message="Pick trade does not contain source GM name and this trade involves more than 2 franchises."
+                        )
+
+                    # Grab franchise that isn't the destination franchise
+                    for f in franchises:
+                        if f.gm != dest_franchise.gm:
+                            sfranchise = f
+
+                log.debug(
+                    f"Pick Trade. Source GM: {source_gm} Source Franchise: {sfranchise}"
+                )
+                if not sfranchise and source_gm:
+                    sfranchise = FranchiseIdentifier(
+                        id=None, name=None, gm=source_gm.id
                     )
 
-                sfranchise = FranchiseIdentifier(id=None, name=None, gm=source_gm.id)
-
                 tvalue = TradeValue(
-                    pick=DraftPick(tier=tier, round=round, number=0, future=True)
+                    pick=DraftPick(tier=tier, round=round, number=pick, future=False)
                 )
                 log.debug(tvalue)
 
                 item = TradeItem(
                     source=sfranchise, destination=dest_franchise, value=tvalue
                 )
-                log.debug(pformat(item))
-
                 trade_list.append(item)
 
             else:
                 raise TradeParserException(
-                    message=f"Unknown line in trade data: {line}"
+                    message=f"Unknown line in trade data: `{line}`"
                 )
 
         return trade_list
+
+    async def build_trade_embed(
+        self, guild: discord.Guild, trades: list[TradeItem]
+    ) -> tuple[list[int], discord.Embed]:
+        trade_groups = [
+            list(t) for _, t in itertools.groupby(trades, lambda t: t.destination)
+        ]
+        embed = BlueEmbed(title="Trade")
+
+        gms = []
+        for group in trade_groups:
+            dest: str | None = None
+            trade_fmt = []
+            for trade in group:
+                if trade.destination.gm and trade.destination.gm not in gms:
+                    gms.append(trade.destination.gm)
+
+                # Get GM for field name
+                if not dest:
+                    if trade.destination.name:
+                        dest = trade.destination.name
+                    else:
+                        dest = "Error"
+
+                # Process trade item
+                if trade.value.player:
+                    if trade.value.player.team:
+                        trade_fmt.append(
+                            f"<@!{trade.value.player.id}> to {trade.value.player.team}"
+                        )
+                    else:
+                        trade_fmt.append(f"<@!{trade.value.player.id}>")
+                    continue
+
+                if trade.value.pick:
+                    # Format Round
+                    round_fmt = None
+                    match trade.value.pick.round:
+                        case 1:
+                            round_fmt = "1st"
+                        case 2:
+                            round_fmt = "2nd"
+                        case 3:
+                            round_fmt = "3rd"
+                        case _:
+                            round_fmt = f"{trade.value.pick.round}th"
+
+                    # Determine if need source
+                    src_fmt = None
+                    if len(trade_groups) > 2 and trade.source.gm:
+                        # Future Pick Trade
+                        src_fmt = f"<@!{trade.source.gm}>"
+
+                    if trade.value.pick.future:
+                        # Future Pick Trade
+                        if src_fmt:
+                            trade_fmt.append(
+                                f"{src_fmt} Future {round_fmt} Round {trade.value.pick.tier}"
+                            )
+                        else:
+                            trade_fmt.append(
+                                f"Future {round_fmt} Round {trade.value.pick.tier}"
+                            )
+                    else:
+                        if src_fmt:
+                            trade_fmt.append(
+                                f"{src_fmt} Future {round_fmt} Round {trade.value.pick.tier}"
+                            )
+                        else:
+                            trade_fmt.append(
+                                f"{round_fmt} Round {trade.value.pick.tier} ({trade.value.pick.number})"
+                            )
+
+            # Build field
+            embed.add_field(name=dest, value="\n".join(trade_fmt), inline=False)
+
+        return gms, embed
 
     # API
 
@@ -2497,6 +2573,30 @@ class TransactionMixIn(RSCMixIn):
             api = TransactionsApi(client)
             try:
                 return await api.transactions_history_read(id=transaction_id)
+            except ApiException as exc:
+                raise RscException(response=exc)
+
+    async def trade(
+        self,
+        guild: discord.Guild,
+        trades: list[TradeItem],
+        executor: discord.Member,
+        notes: str | None = None,
+        override: bool = False,
+    ) -> TransactionResponse:
+        """Fetch transaction history based on specified criteria"""
+        async with ApiClient(self._api_conf[guild.id]) as client:
+            api = TransactionsApi(client)
+            try:
+                schema = TradeSchema(
+                    league=self._league[guild.id],
+                    trades=trades,
+                    executor=executor.id,
+                    notes=notes,
+                    admin_override=override,
+                )
+                log.debug(f"Schema: {pformat(schema)}")
+                return await api.transactions_trade_create(schema)
             except ApiException as exc:
                 raise RscException(response=exc)
 

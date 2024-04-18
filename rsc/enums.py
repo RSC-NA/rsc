@@ -5,6 +5,11 @@ from enum import IntEnum, StrEnum
 log = logging.getLogger("red.rsc.enums")
 
 
+class ActivityCheckStatus(IntEnum):
+    NotActive = 0
+    Active = 1
+
+
 class ModActionType(StrEnum):
     MUTE = "MUTE"
     KICK = "KICK"

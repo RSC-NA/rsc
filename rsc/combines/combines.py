@@ -284,6 +284,7 @@ class CombineMixIn(RSCMixIn):
                 name="combines-general",
                 category=category,
                 overwrites=player_overwrites,
+                slowmode_delay=5,  # Add 5 second slowmode
                 reason="Starting combines",
             )
 
@@ -502,7 +503,9 @@ class CombineMixIn(RSCMixIn):
         name="lobbyinfo", description="Get your active combines game lobby info"
     )
     @active_combines
-    async def _combines_lobby_info_cmd(self, interaction: discord.Interaction):
+    async def _combines_lobby_info_cmd(
+        self, interaction: discord.Interaction, lobby_id: int | None = None
+    ):
         guild = interaction.guild
         if not guild:
             return
@@ -519,7 +522,10 @@ class CombineMixIn(RSCMixIn):
             )
 
         try:
-            result = await api.combines_lobby(url, player)
+            if not lobby_id:
+                result = await api.combines_lobby(url, player=player)
+            else:
+                result = await api.combines_lobby(url, lobby_id=lobby_id)
         except BadGateway:
             return await interaction.response.send_message(
                 embed=ErrorEmbed(description="Combines API returned 502 Bad Gateway."),

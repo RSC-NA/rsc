@@ -29,10 +29,16 @@ def active_combines(f):
             return
 
         active = await cls._get_combines_active(interaction.guild)
-        print(f"{'=' * 20} Active: {active}")
         if not active:
             return await interaction.response.send_message(
                 embed=ErrorEmbed(description="Combines are not currently active."),
+                ephemeral=True,
+            )
+
+        api_url = await cls._get_combines_api(interaction.guild)
+        if not api_url:
+            return await interaction.response.send_message(
+                embed=ErrorEmbed(description="Combines API has not been configured."),
                 ephemeral=True,
             )
 

@@ -129,6 +129,7 @@ class RSC(
                         # tg.create_task(self._populate_combines_cache(guild))
                         tg.create_task(self._populate_free_agent_cache(guild))
                         tg.create_task(self.prepare_ballchasing(guild))
+                        tg.create_task(self.setup_persistent_activity_check(guild))
                 except* ApiException as eg:
                     # API is down or not responding
                     for err in eg.exceptions:

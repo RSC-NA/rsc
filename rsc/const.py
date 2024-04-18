@@ -45,6 +45,7 @@ DEFAULT_BAN_LENGTH = 30  # Default 30 minute mute
 
 # Permissions
 
+
 FRANCHISE_ROLE_PERMS = discord.Permissions(
     view_channel=True,
     create_instant_invite=True,

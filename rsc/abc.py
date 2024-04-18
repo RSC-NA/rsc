@@ -9,6 +9,7 @@ from discord.ext.commands import CogMeta as DPYCogMeta
 from redbot.core import Config as RedConfig
 from redbot.core.bot import Red
 from rscapi import Configuration as ApiConfig
+from rscapi.models.activity_check import ActivityCheck
 from rscapi.models.deleted import Deleted
 from rscapi.models.franchise import Franchise
 from rscapi.models.franchise_list import FranchiseList
@@ -71,6 +72,16 @@ class RSCMixIn(ABC):
 
     @abstractmethod
     async def _get_dates(self, guild: discord.Guild) -> str:
+        ...
+
+    # Combines
+
+    @abstractmethod
+    async def _get_combines_api(self, guild: discord.Guild) -> str | None:
+        ...
+
+    @abstractmethod
+    async def _get_combines_active(self, guild: discord.Guild) -> bool:
         ...
 
     # Franchises
@@ -299,6 +310,17 @@ class RSCMixIn(ABC):
         executor: discord.Member | None = None,
         override: bool = False,
     ) -> LeaguePlayer:
+        ...
+
+    @abstractmethod
+    async def activity_check(
+        self,
+        guild: discord.Guild,
+        player: discord.Member,
+        returning_status: bool,
+        executor: discord.Member,
+        override: bool = False,
+    ) -> ActivityCheck:
         ...
 
     # Seasons

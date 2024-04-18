@@ -93,6 +93,7 @@ class Accolades:
 
 
 class AdminSettings(TypedDict):
+    ActivityCheckMsgId: int | None
     AgmMessage: str | None
     Dates: str | None
     IntentChannel: discord.TextChannel | None
