@@ -2635,11 +2635,13 @@ class AdminMixIn(RSCMixIn):
 
         de_role = await utils.get_draft_eligible_role(guild)
         fa_role = await utils.get_free_agent_role(guild)
+        gm_role = await utils.get_gm_role(guild)
+        agm_role = await utils.get_agm_role(guild)
 
-        if not (de_role and fa_role):
+        if not (de_role and fa_role and gm_role and agm_role):
             return await interaction.response.send_message(
                 embed=ErrorEmbed(
-                    description="Draft Eligible or Free Agent role does not exist in guild."
+                    description="Draft Eligible, Free Agent, General Manager, or Assistant GM role does not exist in guild."
                 ),
                 ephemeral=True,
             )
@@ -2667,6 +2669,16 @@ class AdminMixIn(RSCMixIn):
             )
 
         # Lock down channel. Only show to DE/FA
+        view_perms = discord.PermissionOverwrite(
+            view_channel=True,
+            read_messages=True,
+            send_messages=False,
+            add_reactions=False,
+            send_messages_in_threads=False,
+            create_private_threads=False,
+            create_public_threads=False,
+        )
+
         activity_overwrites: MutableMapping[
             discord.Member | discord.Role, discord.PermissionOverwrite
         ] = {
@@ -2675,24 +2687,10 @@ class AdminMixIn(RSCMixIn):
                 send_messages=False,
                 add_reactions=False,
             ),
-            de_role: discord.PermissionOverwrite(
-                view_channel=True,
-                read_messages=True,
-                send_messages=False,
-                add_reactions=False,
-                send_messages_in_threads=False,
-                create_private_threads=False,
-                create_public_threads=False,
-            ),
-            fa_role: discord.PermissionOverwrite(
-                view_channel=True,
-                read_messages=True,
-                send_messages=False,
-                add_reactions=False,
-                send_messages_in_threads=False,
-                create_private_threads=False,
-                create_public_threads=False,
-            ),
+            de_role: view_perms,
+            fa_role: view_perms,
+            gm_role: view_perms,
+            agm_role: view_perms,
         }
 
         # Create channel
