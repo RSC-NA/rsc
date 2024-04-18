@@ -37,18 +37,14 @@ async def combines_active(
 
 
 async def combines_lobby(
-    url: str, player: discord.Member | None = None, lobby_id: int | None = None
+    url: str, executor: discord.Member, lobby_id: int | None = None
 ) -> models.CombinesLobby | models.CombinesStatus:
     async with aiohttp.ClientSession(trust_env=True) as session:
-        params = {}
-        if player:
-            params["discord_id"] = player.id
-        elif lobby_id:
-            url = urljoin(url, str(lobby_id))
-        else:
-            raise ValueError("No parameter provided for player or lobby_id")
+        params = {"discord_id": executor.id}
 
         url = urljoin(url, "lobby/")
+        if lobby_id:
+            url = urljoin(url, str(lobby_id))
         log.debug(f"URL: {url}")
 
         async with session.get(url, params=params) as resp:

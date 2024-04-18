@@ -522,10 +522,7 @@ class CombineMixIn(RSCMixIn):
             )
 
         try:
-            if not lobby_id:
-                result = await api.combines_lobby(url, player=player)
-            else:
-                result = await api.combines_lobby(url, lobby_id=lobby_id)
+            result = await api.combines_lobby(url, executor=player, lobby_id=lobby_id)
         except BadGateway:
             return await interaction.response.send_message(
                 embed=ErrorEmbed(description="Combines API returned 502 Bad Gateway."),
