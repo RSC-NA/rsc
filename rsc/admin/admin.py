@@ -2707,8 +2707,8 @@ class AdminMixIn(RSCMixIn):
         embed = BlueEmbed(
             title="Activity Check",
             description=(
-                "This is an activity check for all draft eligible and free agent players. **This MUST be completed to continue playing in RSC**\n\n"
-                "**Declare your activity with the buttons below**"
+                "This is an activity check for all draft eligible and free agent players. **This MUST be completed to continue playing in RSC.**\n\n"
+                "**Declare your activity with the buttons below.**"
             ),
         )
 
