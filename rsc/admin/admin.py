@@ -80,6 +80,14 @@ class AdminMixIn(RSCMixIn):
         if not league_id:
             log.error(f"{guild.name} has an inactivity check but no league ID")
 
+        inactive_channel = discord.utils.get(guild.channels, name="inactive-check")
+        if not inactive_channel:
+            log.warning(
+                "Inactive check channel does not exist but is turned on. Resetting..."
+            )
+            await self._set_actvity_check_msg_id(guild, None)
+            return
+
         log.debug(f"[{guild.name}] Making activity check persistent: {msg_id}")
         # Create and attach view to persistent messsage ID
         inactive_view = InactiveCheckView(
