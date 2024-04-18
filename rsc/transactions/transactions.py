@@ -238,7 +238,7 @@ class TransactionMixIn(RSCMixIn):
                 override=True,
             )
         except RscException as exc:
-            log.error(f"Error retiring player that left guild: {exc}")
+            log.error(f"Error retiring player that left guild: {exc.reason}")
             return
 
         # Check if notifications are enabled
