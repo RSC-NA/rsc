@@ -536,12 +536,12 @@ class CombineMixIn(RSCMixIn):
 
         embed = BlueEmbed(
             title=f"Combine Match {result.id}",
-            description="Displaying lobby information for combines match.",
+            description="Displaying lobby information for combine match.",
         )
 
         lobby_info = f"Name: **{result.lobby_user}**\nPassword: **{result.lobby_pass}**"
 
-        team_fmt = "Error (Unknown Team)"
+        team_fmt = None
         for hplayer, aplayer in zip(result.home, result.away):
             if hplayer.discord_id == interaction.user.id:
                 team_fmt = "Home (Blue)"
@@ -551,7 +551,9 @@ class CombineMixIn(RSCMixIn):
                 break
 
         embed.add_field(name="Lobby Info", value=lobby_info, inline=True)
-        embed.add_field(name="Team", value=team_fmt, inline=True)
+
+        if team_fmt:
+            embed.add_field(name="Team", value=team_fmt, inline=True)
 
         if guild.icon:
             embed.set_thumbnail(url=guild.icon.url)

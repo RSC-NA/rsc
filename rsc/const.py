@@ -149,6 +149,8 @@ COMBINES_HELP_3 = """
 - `/combines checkin` - Check in to a combines match
 - `/combines checkout` - Check out of combines waiting list
 - `/combines lobbyinfo` - Get your combine lobby info
+
+Note: Scouts can use `/combines lobbyinfo <LobbyID>` to get lobby game info.
 """.strip()
 
 
