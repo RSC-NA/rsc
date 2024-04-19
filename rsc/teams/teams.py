@@ -56,45 +56,110 @@ class TeamMixIn(RSCMixIn):
                 return choices
         return choices
 
+    # Group Commands
+
+    _teams = app_commands.Group(
+        name="teams", description="Get a list of teams in RSC", guild_only=True
+    )
+
     # Commands
 
-    @app_commands.command(  # type: ignore
-        name="teams", description="Get a list of teams for a franchise or tier"
+    @_teams.command(  # type: ignore
+        name="franchise", description="Get a list of teams for a franchise"
     )
-    @app_commands.autocomplete(
-        franchise=FranchiseMixIn.franchise_autocomplete,
-        tier=TierMixIn.tier_autocomplete,
-    )
-    @app_commands.describe(
-        franchise="Teams in a franchise", tier="Teams in a league tier"
-    )
+    @app_commands.autocomplete(franchise=FranchiseMixIn.franchise_autocomplete)
+    @app_commands.describe(franchise="Teams in a franchise")
     @app_commands.guild_only
-    async def _teams(
+    async def _teams_franchise_cmd(
         self,
         interaction: discord.Interaction,
-        franchise: str | None = None,
-        tier: str | None = None,
+        franchise: str,
     ):
         """Get a list of teams for a franchise"""
         guild = interaction.guild
         if not guild:
             return
 
-        if not (franchise or tier):
-            await interaction.response.send_message(
-                content="You must specify one of the search options.", ephemeral=True
-            )
+        await interaction.response.defer()
+        log.debug(f"Fetching teams for {franchise}")
+        teams = await self.teams(guild, franchise=franchise)
+
+        if not teams:
+            await interaction.followup.send(content="No results found.", ephemeral=True)
             return
 
-        if franchise and tier:
-            await interaction.response.send_message(
-                content="Please specify only one search option.", ephemeral=True
-            )
+        # Validate API data
+        for t in teams:
+            if not t.name:
+                return await interaction.followup.send(
+                    embed=ErrorEmbed(
+                        description=f"`Team {t.id}` has no name. Please open a modmail ticket."
+                    )
+                )
+            if not t.tier:
+                return await interaction.followup.send(
+                    embed=ErrorEmbed(
+                        description=f"`Team {t.id}` has no tier. Please open a modmail ticket."
+                    )
+                )
+            if not t.tier.name:
+                return await interaction.followup.send(
+                    embed=ErrorEmbed(
+                        description=f"`Team {t.id}` has no tier name. Please open a modmail ticket."
+                    )
+                )
+            if not t.tier.position:
+                return await interaction.followup.send(
+                    embed=ErrorEmbed(
+                        description=f"`Team {t.id}` has no tier position. Please open a modmail ticket."
+                    )
+                )
+
+        teams.sort(key=lambda t: cast(str, t.tier.position), reverse=True)  # type: ignore
+
+        embed = BlueEmbed()
+        embed.title = f"{franchise} Teams"
+        embed.add_field(
+            name="Team",
+            value="\n".join([t.name or "Error" for t in teams]),
+            inline=True,
+        )
+        embed.add_field(
+            name="Tier",
+            value="\n".join([str(t.tier.name) if t.tier else "Error" for t in teams]),
+            inline=True,
+        )
+
+        flogo = None
+        if teams[0].franchise.id:
+            flogo = await self.franchise_logo(guild, teams[0].franchise.id)
+
+        if flogo:
+            embed.set_thumbnail(url=flogo)
+        elif guild.icon:
+            embed.set_thumbnail(url=guild.icon.url)
+
+        await interaction.followup.send(embed=embed)
+
+    @_teams.command(  # type: ignore
+        name="tier", description="Get a list of teams in a tier"
+    )
+    @app_commands.autocomplete(tier=TierMixIn.tier_autocomplete)  # type: ignore
+    @app_commands.describe(tier="Teams in a league tier")
+    @app_commands.guild_only
+    async def _teams_tier_cmd(
+        self,
+        interaction: discord.Interaction,
+        tier: str,
+    ):
+        """Get a list of teams for a franchise"""
+        guild = interaction.guild
+        if not guild:
             return
 
         await interaction.response.defer()
-        log.debug(f"Fetching teams for {franchise}")
-        teams = await self.teams(guild, tier=tier, franchise=franchise)
+        log.debug(f"Fetching teams for {tier}")
+        teams = await self.teams(guild, tier=tier)
 
         if not teams:
             await interaction.followup.send(content="No results found.", ephemeral=True)
@@ -121,54 +186,29 @@ class TeamMixIn(RSCMixIn):
                     )
                 )
 
+        # Sort by Team Name
+        teams.sort(key=lambda x: cast(str, x.name))
+
         embed = BlueEmbed()
-        if franchise:
-            embed.title = f"{franchise} Teams"
-            embed.add_field(
-                name="Team",
-                value="\n".join([t.name or "Error" for t in teams]),
-                inline=True,
-            )
-            embed.add_field(
-                name="Tier",
-                value="\n".join(
-                    [str(t.tier.name) if t.tier else "Error" for t in teams]
-                ),
-                inline=True,
-            )
+        embed.title = f"{tier} Teams"
+        embed.add_field(
+            name="Team",
+            value="\n".join([t.name or "Error" for t in teams]),
+            inline=True,
+        )
+        embed.add_field(
+            name="Franchise",
+            value="\n".join([t.franchise.name for t in teams]),
+            inline=True,
+        )
 
-            flogo = None
-            if teams[0].franchise.id:
-                flogo = await self.franchise_logo(guild, teams[0].franchise.id)
+        # Get Tier Color
+        tier_color = await utils.tier_color_by_name(guild, name=tier)
+        embed.colour = tier_color
 
-            if flogo:
-                embed.set_thumbnail(url=flogo)
-            elif guild.icon:
-                embed.set_thumbnail(url=guild.icon.url)
-
-            await interaction.followup.send(embed=embed)
-        elif tier:
-            # Sort by Team Name
-            teams.sort(key=lambda x: cast(str, x.name))
-            embed.title = f"{tier} Teams"
-            embed.add_field(
-                name="Team",
-                value="\n".join([t.name or "Error" for t in teams]),
-                inline=True,
-            )
-            embed.add_field(
-                name="Franchise",
-                value="\n".join([t.franchise.name for t in teams]),
-                inline=True,
-            )
-
-            # Get Tier Color
-            tier_color = await utils.tier_color_by_name(guild, name=tier)
-            embed.colour = tier_color
-
-            if guild.icon:
-                embed.set_thumbnail(url=guild.icon.url)
-            await interaction.followup.send(embed=embed)
+        if guild.icon:
+            embed.set_thumbnail(url=guild.icon.url)
+        await interaction.followup.send(embed=embed)
 
     @app_commands.command(name="roster", description="Get roster for a team")  # type: ignore
     @app_commands.describe(team="Team name to search")

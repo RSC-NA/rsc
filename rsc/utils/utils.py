@@ -23,6 +23,7 @@ from rsc.enums import BulkRoleAction, TransactionType
 from rsc.transformers import GreedyMemberTransformer
 from rsc.types import Accolades
 from rsc.utils import filters
+from rsc.utils.pagify import Pagify
 from rsc.utils.views import BulkRoleConfirmView
 
 log = logging.getLogger("red.rsc.utils")
@@ -940,7 +941,7 @@ class UtilsMixIn(RSCMixIn):
 
     @app_commands.command(  # type: ignore
         name="getallwithrole",
-        description="Get all users with the specified role(s). (Max 3 roles)",
+        description="Get all users with the specified role(s). (Max 4 roles)",
     )
     @app_commands.guild_only
     async def _getallwithrole(
@@ -962,6 +963,9 @@ class UtilsMixIn(RSCMixIn):
             if role3:
                 members = members.intersection(role3.members)
                 desc += f", {role3.mention}"
+            if role4:
+                members = members.intersection(role4.members)
+                desc += f", {role4.mention}"
             results = sorted(members, key=lambda x: x.display_name)
 
         # Check for character max being exceeded (6000 total in embed or 1024 per field)
@@ -971,13 +975,22 @@ class UtilsMixIn(RSCMixIn):
 
         if len(nicks) > 1024 or len(usernames) > 1024 or len(ids) > 1024:
             msg = "\n".join([f"{p.display_name}:{p.name}:{p.id}" for p in results])
-            if len(msg) > 6000:
-                await interaction.response.send_message(
-                    content="Total results exceed 6000 characters. Please be more specific.",
-                    ephemeral=True,
-                )
+            if len(msg) > 2000:
+                paged_msg = Pagify(text=msg)
+                log.debug(f"Paged Msg: {paged_msg}")
+                for idx, page in enumerate(paged_msg):
+                    if idx == 1:
+                        await interaction.response.send_message(
+                            content=f"```\n{page}\n```",
+                            ephemeral=True,
+                        )
+                    else:
+                        await interaction.followup.send(
+                            content=f"```\n{page}\n```",
+                            ephemeral=True,
+                        )
             else:
-                await interaction.response.send_message(f"```{msg}```")
+                await interaction.response.send_message(f"```\n{msg}\n```")
         else:
             embed = discord.Embed(
                 title="Matching Members",
