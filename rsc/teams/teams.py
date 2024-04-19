@@ -4,14 +4,17 @@ from typing import cast
 import discord
 from redbot.core import app_commands
 from rscapi import ApiClient, TeamsApi
-from rscapi.exceptions import ApiException
+from rscapi.exceptions import ApiException, BadRequestException
 from rscapi.models.high_level_match import HighLevelMatch
 from rscapi.models.league_player import LeaguePlayer
 from rscapi.models.match import Match
 from rscapi.models.player import Player
 from rscapi.models.team import Team
+from rscapi.models.team_create import TeamCreate
+from rscapi.models.team_franchise import TeamFranchise
 from rscapi.models.team_list import TeamList
 from rscapi.models.team_season_stats import TeamSeasonStats
+from rscapi.models.tier import Tier
 
 from rsc.abc import RSCMixIn
 from rsc.embeds import BlueEmbed, ErrorEmbed
@@ -719,4 +722,35 @@ class TeamMixIn(RSCMixIn):
                 stats = await api.teams_stats(team_id, season=season)
                 return stats
         except ApiException as exc:
+            raise RscException(exc)
+
+    async def create_team(
+        self,
+        guild: discord.Guild,
+        name: str,
+        franchise: str,
+        tier: str,
+    ) -> TeamCreate:
+        try:
+            async with ApiClient(self._api_conf[guild.id]) as client:
+                api = TeamsApi(client)
+                data = TeamCreate(
+                    name=name,
+                    franchise=TeamFranchise(name=franchise),
+                    tier=Tier(name=tier),
+                    league=self._league[guild.id],
+                )
+                result = await api.teams_create(data)
+                return result
+        except (ApiException, BadRequestException) as exc:
+            log.debug(f"Exception during team creation: {type(exc)}")
+            pass
+            raise RscException(exc)
+
+    async def delete_team(self, guild: discord.Guild, team_id: int):
+        try:
+            async with ApiClient(self._api_conf[guild.id]) as client:
+                api = TeamsApi(client)
+                await api.teams_delete(team_id)
+        except (ApiException, BadRequestException) as exc:
             raise RscException(exc)

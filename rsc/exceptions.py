@@ -2,6 +2,7 @@ import json
 import logging
 
 from rscapi.exceptions import ApiException as RscApiException
+from rscapi.exceptions import BadRequestException, ServiceException
 
 log = logging.getLogger("red.rsc.exceptions")
 
@@ -53,18 +54,31 @@ class RscException(Exception):
     def __init__(self, *args, **kwargs):
         self.response = kwargs.pop("response", None)
         self.message = kwargs.pop("message", None)
+        log.debug(f"ExceptionType: {type(self.response)}")
         if self.response is not None and isinstance(self.response, RscApiException):
             self.status = self.response.status
             try:
-                body = json.loads(self.response.body)
-                self.reason = body.get("detail")
-                self.type = body.get("type")
+                log.debug(f"Response Body: {self.response.body}")
+                if self.response.body:
+                    body = json.loads(self.response.body)
+                    self.reason = body.get("detail")
+                    self.type = body.get("type")
             except json.JSONDecodeError:
                 log.error(
                     f"Unable to JSON decode API exception body. Status: {self.status}"
                 )
                 self.reason = "Received unknown error from server."
                 self.type = "UnknownError"
+        elif args[0] and isinstance(args[0], BadRequestException):
+            self.status = args[0].status
+            if args[0].body:
+                body = json.loads(args[0].body)
+                self.reason = body.get("detail")
+                self.type = body.get("type")
+        elif isinstance(self.response, ServiceException):
+            self.status = self.response.status
+            self.reason = self.response.reason
+            self.type = "ServiceException"
 
         super().__init__(self.message, *args, **kwargs)
 

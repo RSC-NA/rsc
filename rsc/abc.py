@@ -27,6 +27,7 @@ from rscapi.models.player_season_stats import PlayerSeasonStats
 from rscapi.models.rebrand_a_franchise import RebrandAFranchise
 from rscapi.models.season import Season
 from rscapi.models.team import Team
+from rscapi.models.team_create import TeamCreate
 from rscapi.models.team_list import TeamList
 from rscapi.models.team_season_stats import TeamSeasonStats
 from rscapi.models.tier import Tier
@@ -61,6 +62,9 @@ class RSCMixIn(ABC):
     _franchise_cache: dict[int, list[str]]
     _web_runner: AppRunner
     _web_site: TCPSite
+
+    _team_cache: dict[int, list[str]]
+    _franchise_cache: dict[int, list[str]]
 
     # Core
 
@@ -442,6 +446,20 @@ class RSCMixIn(ABC):
         team_id: int,
         season: int | None = None,
     ) -> TeamSeasonStats:
+        ...
+
+    @abstractmethod
+    async def create_team(
+        self,
+        guild: discord.Guild,
+        name: str,
+        franchise: str,
+        tier: str,
+    ) -> TeamCreate:
+        ...
+
+    @abstractmethod
+    async def delete_team(self, guild: discord.Guild, team_id: int):
         ...
 
     # Tiers

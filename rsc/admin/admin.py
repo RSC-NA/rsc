@@ -39,6 +39,8 @@ from rsc.enums import ActivityCheckStatus, Status
 from rsc.exceptions import LeagueNotConfigured, RscException
 from rsc.franchises import FranchiseMixIn
 from rsc.logs import GuildLogAdapter
+from rsc.teams import TeamMixIn
+from rsc.tiers import TierMixIn
 from rsc.types import AdminSettings, RebrandTeamDict
 from rsc.utils import utils
 from rsc.utils.images import drawProgressBar
@@ -1403,6 +1405,102 @@ class AdminMixIn(RSCMixIn):
 
     # Franchise
 
+    @_franchise.command(name="addteam", description="Add a new team to a franchise")  # type: ignore
+    @app_commands.describe(
+        franchise="Franchise name", tier="Team Tier", name="Team Name"
+    )
+    @app_commands.autocomplete(
+        franchise=FranchiseMixIn.franchise_autocomplete,
+        tier=TierMixIn.tier_autocomplete,
+    )
+    async def _franchise_addteam_cmd(
+        self, interaction: discord.Interaction, franchise: str, tier: str, name: str
+    ):
+        guild = interaction.guild
+        if not guild:
+            return
+
+        await interaction.response.defer(ephemeral=True)
+
+        try:
+            result = await self.create_team(
+                guild, franchise=franchise, tier=tier, name=name
+            )
+            log.debug(f"Result: {result}")
+        except RscException as exc:
+            return await interaction.followup.send(
+                embed=ApiExceptionErrorEmbed(exc), ephemeral=True
+            )
+
+        # Update team cache
+        if name not in self._team_cache[guild.id]:
+            self._team_cache[guild.id].append(name)
+
+        embed = GreenEmbed(title="Team Created", description="Team has been created.")
+        embed.add_field(name="Name", value=result.name, inline=True)
+        embed.add_field(name="Franchise", value=result.franchise.name, inline=True)
+        if result.tier:
+            embed.add_field(name="Tier", value=result.tier.name, inline=True)
+        await interaction.followup.send(embed=embed, ephemeral=True)
+
+    @_franchise.command(name="delteam", description="Remove a team from a franchise")  # type: ignore
+    @app_commands.describe(
+        franchise="Franchise name", tier="Team Tier", team="Team to delete"
+    )
+    @app_commands.autocomplete(
+        franchise=FranchiseMixIn.franchise_autocomplete,
+        tier=TierMixIn.tier_autocomplete,
+        team=TeamMixIn.teams_autocomplete,
+    )
+    async def _franchise_rmteam_cmd(
+        self, interaction: discord.Interaction, franchise: str, tier: str, team: str
+    ):
+        guild = interaction.guild
+        if not guild:
+            return
+
+        await interaction.response.defer(ephemeral=True)
+
+        fteams = await self.teams(guild, franchise=franchise, tier=tier, name=team)
+        if not fteams:
+            return await interaction.followup.send(
+                embed=ErrorEmbed(description="Unable to find a matching team in API."),
+                ephemeral=True,
+            )
+
+        if len(fteams) > 1:
+            return await interaction.followup.send(
+                embed=ErrorEmbed(
+                    description="API returned multiple results for that team."
+                ),
+                ephemeral=True,
+            )
+
+        fteam = fteams.pop(0)
+
+        if not fteam.id:
+            return await interaction.followup.send(
+                embed=ErrorEmbed(description="API returned a team without an ID."),
+                ephemeral=True,
+            )
+
+        try:
+            await self.delete_team(guild, team_id=fteam.id)
+        except RscException as exc:
+            return await interaction.followup.send(
+                embed=ApiExceptionErrorEmbed(exc), ephemeral=True
+            )
+
+        # Update team cache
+        if team in self._team_cache[guild.id]:
+            self._team_cache[guild.id].append(team)
+
+        embed = GreenEmbed(title="Team Deleted", description="Team has been deleted.")
+        embed.add_field(name="Name", value=team, inline=True)
+        embed.add_field(name="Franchise", value=franchise, inline=True)
+        embed.add_field(name="Tier", value=tier, inline=True)
+        await interaction.followup.send(embed=embed, ephemeral=True)
+
     @_franchise.command(name="logo", description="Upload a logo for the franchise")  # type: ignore
     @app_commands.describe(franchise="Franchise name", logo="Franchise logo file (PNG)")
     @app_commands.autocomplete(franchise=FranchiseMixIn.franchise_autocomplete)  # type: ignore
@@ -1720,6 +1818,14 @@ class AdminMixIn(RSCMixIn):
             return await rebrand_modal.interaction.edit_original_response(
                 embed=ApiExceptionErrorEmbed(exc), view=None
             )
+
+        # Update franchise cache
+        if franchise in self._franchise_cache[guild.id]:
+            self._franchise_cache[guild.id].remove(franchise)
+
+        if rebrand_modal.name not in self._franchise_cache[guild.id]:
+            self._franchise_cache[guild.id].append(rebrand_modal.name)
+            self._franchise_cache[guild.id].sort()
 
         # Update franchise role
         await frole.edit(name=f"{rebrand_modal.name} ({fdata.gm.rsc_name})")
