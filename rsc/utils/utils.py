@@ -850,11 +850,15 @@ class UtilsMixIn(RSCMixIn):
                 value=(
                     "\N{SPEECH BALLOON} Text: {text}\n"
                     "\N{SPEAKER WITH THREE SOUND WAVES} Voice: {voice}\n"
-                    "\N{STUDIO MICROPHONE} Stage: {stage}"
+                    "\N{STUDIO MICROPHONE} Stage: {stage}\n"
+                    ":cat2: Categories: {categories}\n"
+                    ":heavy_equals_sign: Total: {total}"
                 ).format(
                     text=f"**{text_channels}**",
                     voice=f"**{voice_channels}**",
                     stage=f"**{stage_channels}**",
+                    categories=f"**{len(guild.categories)}**",
+                    total=f"**{len(guild.channels)}**",
                 ),
             )
             data.add_field(

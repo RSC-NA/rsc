@@ -14,6 +14,7 @@ from rsc.enums import Status
 from rsc.exceptions import RscException
 from rsc.tiers import TierMixIn
 from rsc.utils import utils
+from rsc.utils.pagify import Pagify
 
 log = logging.getLogger("red.rsc.leagues")
 
@@ -120,34 +121,35 @@ class LeagueMixIn(RSCMixIn):
             else:
                 pfmt.append(p.player.name)
 
-        # Ensure we are within the character limit
-        while True:
-            if sum(len(i) for i in pfmt) > 1024:
-                pfmt.pop()
-            else:
-                break
+        # Ensure we are within the character limit (name length + newline)
+        if sum((len(i) + 1) for i in pfmt) > 1024:
+            paged_msg = Pagify(text="\n".join(pfmt))
+            for page in paged_msg:
+                await interaction.followup.send(
+                    content=f"```\n{page}\n```", ephemeral=True
+                )
 
-        tcolor = await utils.tier_color_by_name(guild, name=tier)
-
-        embed = discord.Embed(
-            title=f"{tier.capitalize()} Draft Eligible",
-            description=f"Displaying draft eligible players for {tier}.",
-            color=tcolor,
-        )
-
-        if pfmt:
-            embed.add_field(name="Players", value="\n".join(pfmt), inline=False)
         else:
-            embed.description = (
-                f"There are currently no Draft Eligible players in {tier}"
+            tcolor = await utils.tier_color_by_name(guild, name=tier)
+            embed = discord.Embed(
+                title=f"{tier.capitalize()} Draft Eligible",
+                description=f"Displaying draft eligible players for {tier}.",
+                color=tcolor,
             )
 
-        embed.set_footer(text=f"Found {len(pfmt)} players")
+            if pfmt:
+                embed.add_field(name="Players", value="\n".join(pfmt), inline=False)
+            else:
+                embed.description = (
+                    f"There are currently no Draft Eligible players in {tier}"
+                )
 
-        if guild.icon:
-            embed.set_thumbnail(url=guild.icon.url)
+            embed.set_footer(text=f"Found {len(pfmt)} players")
 
-        await interaction.followup.send(embed=embed, ephemeral=True)
+            if guild.icon:
+                embed.set_thumbnail(url=guild.icon.url)
+
+            await interaction.followup.send(embed=embed, ephemeral=True)
 
     @app_commands.command(  # type: ignore
         name="season", description="Display current RSC season for league"
