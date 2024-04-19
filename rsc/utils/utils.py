@@ -430,13 +430,6 @@ async def is_guild_interaction(interaction: discord.Interaction) -> bool:
     return False
 
 
-async def update_prefix_for_franchise_role(role: discord.Role, prefix: str):
-    """Update the prefix for all role members"""
-    for m in role.members:
-        name = await remove_prefix(m)
-        await m.edit(nick=f"{prefix} | {name}")
-
-
 async def get_tier_role(guild: discord.Guild, name: str) -> discord.Role:
     """Return discord.Role for a tier"""
     r = discord.utils.get(guild.roles, name=name)

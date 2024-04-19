@@ -233,7 +233,12 @@ class AdminMixIn(RSCMixIn):
         else:
             new_nick = f"{name} {accolades}".strip()
 
-        await member.edit(nick=new_nick)
+        try:
+            await member.edit(nick=new_nick)
+        except discord.Forbidden as exc:
+            await interaction.followup.send(
+                content=f"Unable to update nickname {member.mention}: {exc}"
+            )
 
         # Update franchise role if player is GM
         if mdata.elevated_roles:
@@ -1681,10 +1686,22 @@ class AdminMixIn(RSCMixIn):
         if not rebrand_view.result:
             return
 
+        # Get franchise role
+        frole = await utils.franchise_role_from_name(guild, franchise)
+        if not frole:
+            log.error(
+                f"Unable to find franchise role for rebrand: {franchise}", guild=guild
+            )
+            return await rebrand_modal.interaction.edit_original_response(
+                embed=ErrorEmbed(
+                    description="Franchise was rebranded but franchise role was not found."
+                )
+            )
+
         # Populate TeamDetails list with new names and team IDs
         tdetails: list[TeamDetails] = []
-        for t in rebrands:
-            tdetails.append(TeamDetails(tier=t["tier_id"], name=t["name"]))
+        for r in rebrands:
+            tdetails.append(TeamDetails(tier=r["tier_id"], name=r["name"]))
 
         # Rebrand Franchise
         log.debug("Rebranding franchise.")
@@ -1705,21 +1722,17 @@ class AdminMixIn(RSCMixIn):
             )
 
         # Update franchise role
-        frole = await utils.franchise_role_from_name(guild, franchise)
-        if not frole:
-            log.error(
-                f"[{interaction.guild}] Unable to find franchise role for rebrand: {franchise}"
-            )
-            return await rebrand_modal.interaction.edit_original_response(
-                embed=ErrorEmbed(
-                    description="Franchise was rebranded but franchise role was not found."
-                )
-            )
-
         await frole.edit(name=f"{rebrand_modal.name} ({fdata.gm.rsc_name})")
 
         # Update all prefix
-        await utils.update_prefix_for_franchise_role(frole, rebrand_modal.prefix)
+        try:
+            for m in frole.members:
+                name = await utils.remove_prefix(m)
+                await m.edit(nick=f"{rebrand_modal.prefix} | {name}")
+        except discord.Forbidden as exc:
+            await interaction.followup.send(
+                content=f"Unable to update nickname {m.mention}: `{exc}`"
+            )
 
         embed = SuccessEmbed(
             description=f"**{fdata.name}** has been rebranded to **{rebrand_modal.name}**"

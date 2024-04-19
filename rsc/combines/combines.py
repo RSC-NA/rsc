@@ -79,11 +79,16 @@ class CombineMixIn(RSCMixIn):
         description="Combine commands and configuration",
         guild_only=True,
     )
+    _combine_manager = app_commands.Group(
+        name="combinemanager",
+        description="Manage combines",
+        guild_only=True,
+        default_permissions=discord.Permissions(manage_guild=True),
+    )
 
     # Privileged Commands
 
-    @_combines.command(name="settings", description="Display combine settings")  # type: ignore
-    @app_commands.checks.has_permissions(manage_guild=True)
+    @_combine_manager.command(name="settings", description="Display combine settings")  # type: ignore
     async def _combines_settings_cmd(self, interaction: discord.Interaction):
         guild = interaction.guild
         if not guild:
@@ -107,9 +112,8 @@ class CombineMixIn(RSCMixIn):
         )
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-    @_combines.command(name="category", description="Configure the combines category channel")  # type: ignore
+    @_combine_manager.command(name="category", description="Configure the combines category channel")  # type: ignore
     @app_commands.describe(category="Combines Category Channel")
-    @app_commands.checks.has_permissions(manage_guild=True)
     async def _combines_category_cmd(
         self, interaction: discord.Interaction, category: discord.CategoryChannel
     ):
@@ -126,11 +130,10 @@ class CombineMixIn(RSCMixIn):
             ephemeral=True,
         )
 
-    @_combines.command(name="api", description="Configure the API url for combines")  # type: ignore
+    @_combine_manager.command(name="api", description="Configure the API url for combines")  # type: ignore
     @app_commands.describe(
         url="Combines API location (Ex: https://devleague.rscna.com/c-api/)"
     )
-    @app_commands.checks.has_permissions(manage_guild=True)
     async def _combines_api_cmd(self, interaction: discord.Interaction, url: str):
         guild = interaction.guild
         if not guild:
@@ -145,10 +148,9 @@ class CombineMixIn(RSCMixIn):
             ephemeral=True,
         )
 
-    @_combines.command(  # type: ignore
+    @_combine_manager.command(  # type: ignore
         name="start", description="Begin RSC combines and create channels"
     )
-    @app_commands.checks.has_permissions(manage_guild=True)
     async def _combines_start(self, interaction: discord.Interaction):
         guild = interaction.guild
         if not guild:
@@ -320,8 +322,7 @@ class CombineMixIn(RSCMixIn):
             )
         )
 
-    @_combines.command(name="stop", description="End RSC combines and delete channels")  # type: ignore
-    @app_commands.checks.has_permissions(manage_guild=True)
+    @_combine_manager.command(name="stop", description="End RSC combines and delete channels")  # type: ignore
     async def _combines_stop(self, interaction: discord.Interaction):
         guild = interaction.guild
         if not guild:
@@ -355,11 +356,10 @@ class CombineMixIn(RSCMixIn):
             )
         )
 
-    @_combines.command(  # type: ignore
+    @_combine_manager.command(  # type: ignore
         name="active", description="Display active combine games"
     )
     @app_commands.describe(player="Only show games with containing discord member")
-    @app_commands.checks.has_permissions(manage_guild=True)
     async def _combines_active_cmd(
         self, interaction: discord.Interaction, player: discord.Member | None = None
     ):
