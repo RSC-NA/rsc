@@ -952,6 +952,7 @@ class UtilsMixIn(RSCMixIn):
         role3: discord.Role | None = None,
         role4: discord.Role | None = None,
     ):
+        await interaction.response.defer(ephemeral=True)
         desc = f"Role(s): {role.mention}"
         if not (role2 or role3):
             results = role.members
@@ -978,19 +979,13 @@ class UtilsMixIn(RSCMixIn):
             if len(msg) > 2000:
                 paged_msg = Pagify(text=msg)
                 log.debug(f"Paged Msg: {paged_msg}")
-                for idx, page in enumerate(paged_msg):
-                    if idx == 1:
-                        await interaction.response.send_message(
-                            content=f"```\n{page}\n```",
-                            ephemeral=True,
-                        )
-                    else:
-                        await interaction.followup.send(
-                            content=f"```\n{page}\n```",
-                            ephemeral=True,
-                        )
+                for page in paged_msg:
+                    await interaction.followup.send(
+                        content=f"```\n{page}\n```",
+                        ephemeral=True,
+                    )
             else:
-                await interaction.response.send_message(f"```\n{msg}\n```")
+                await interaction.followup.send(f"```\n{msg}\n```", ephemeral=True)
         else:
             embed = discord.Embed(
                 title="Matching Members",
@@ -1010,7 +1005,7 @@ class UtilsMixIn(RSCMixIn):
             )
 
             embed.set_footer(text=f"Found {len(results)} matching player(s).")
-            await interaction.response.send_message(embed=embed, ephemeral=True)
+            await interaction.followup.send(embed=embed, ephemeral=True)
 
     @app_commands.command(  # type: ignore
         name="addrole", description="Add a role to the specified user"
