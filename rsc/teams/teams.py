@@ -70,7 +70,7 @@ class TeamMixIn(RSCMixIn):
     @_teams.command(  # type: ignore
         name="franchise", description="Get a list of teams for a franchise"
     )
-    @app_commands.autocomplete(franchise=FranchiseMixIn.franchise_autocomplete)
+    @app_commands.autocomplete(franchise=FranchiseMixIn.franchise_autocomplete)  # type: ignore
     @app_commands.describe(franchise="Teams in a franchise")
     @app_commands.guild_only
     async def _teams_franchise_cmd(
