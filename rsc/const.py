@@ -145,12 +145,15 @@ Once the four-game series is complete, the two team captains from _BOTH_ teams m
 """.strip()
 
 COMBINES_HELP_3 = """
-# Bot Commands
+## Player Bot Commands
 - `/combines checkin` - Check in to a combines match
 - `/combines checkout` - Check out of combines waiting list
 - `/combines lobbyinfo` - Get your combine lobby info
 
-Note: Scouts can use `/combines lobbyinfo <LobbyID>` to get lobby game info.
+## Scout Bot Commands
+- `/combines active <player> <tier>` - Search for active combine games to scout!
+- `/combines lobbyinfo <LobbyID>` - Get the lobby game information.
+
 """.strip()
 
 
