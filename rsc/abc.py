@@ -1,6 +1,7 @@
 from abc import ABC, ABCMeta, abstractmethod
 from datetime import datetime
 from os import PathLike
+from typing import TYPE_CHECKING
 from zoneinfo import ZoneInfo
 
 import discord
@@ -44,6 +45,9 @@ from rsc.enums import (
     TrackerLinksStatus,
 )
 
+if TYPE_CHECKING:
+    from rsc.combines.models import CombinesLobby
+
 
 class RSCMixIn(ABC):
     """ABC class used for type hinting RSC Mix In modules"""
@@ -55,8 +59,8 @@ class RSCMixIn(ABC):
     _api_conf: dict[int, ApiConfig]
 
     _franchise_cache: dict[int, list[str]]
-    _combines_runner: AppRunner
-    _combines_site: TCPSite
+    _web_runner: AppRunner
+    _web_site: TCPSite
 
     # Core
 
@@ -77,11 +81,37 @@ class RSCMixIn(ABC):
     # Combines
 
     @abstractmethod
+    async def combine_players_from_lobby(
+        self, guild: discord.Guild, lobby: "CombinesLobby"
+    ) -> list[discord.Member]:
+        ...
+
+    @abstractmethod
+    async def _set_combines_category(
+        self, guild: discord.Guild, category: discord.CategoryChannel
+    ):
+        ...
+
+    @abstractmethod
+    async def _get_combines_category(
+        self, guild: discord.Guild
+    ) -> discord.CategoryChannel | None:
+        ...
+
+    @abstractmethod
     async def _get_combines_api(self, guild: discord.Guild) -> str | None:
         ...
 
     @abstractmethod
+    async def _set_combines_api(self, guild: discord.Guild, url: str):
+        ...
+
+    @abstractmethod
     async def _get_combines_active(self, guild: discord.Guild) -> bool:
+        ...
+
+    @abstractmethod
+    async def _set_combines_active(self, guild: discord.Guild, active: bool):
         ...
 
     # Franchises
@@ -472,6 +502,10 @@ class RSCMixIn(ABC):
     @abstractmethod
     async def _trans_channel(self, guild: discord.Guild) -> discord.TextChannel | None:
         ...
+
+
+class MixInMetaClass(RSCMixIn, ABCMeta):
+    pass
 
 
 class CompositeMetaClass(DPYCogMeta, ABCMeta):

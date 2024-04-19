@@ -11,15 +11,13 @@ log = logging.getLogger("red.rsc.combines.api")
 
 
 async def combines_active(
-    url: str, player: discord.Member | None
-) -> list[models.CombinesLobby]:
+    url: str, player: discord.Member
+) -> list[models.CombinesLobby] | models.CombinesStatus:
     async with aiohttp.ClientSession(trust_env=True) as session:
         url = urljoin(url, "active")
         log.debug(f"URL: {url}")
 
-        params = {}
-        if player:
-            params = {"discord_id": player.id}
+        params = {"discord_id": player.id}
 
         async with session.get(url, params=params) as resp:
             log.debug(f"Server Response: {resp.status}")
@@ -30,10 +28,16 @@ async def combines_active(
             if not data:
                 return []
 
-            lobbies = []
-            for v in data.values():
-                lobbies.append(models.CombinesLobby(**v))
-            return lobbies
+            log.debug(f"data: {data}")
+
+            data = await resp.json()
+            if data.get("status") and data.get("message"):
+                return models.CombinesStatus(**data)
+            else:
+                lobbies = []
+                for v in data.values():
+                    lobbies.append(models.CombinesLobby(**v))
+                return lobbies
 
 
 async def combines_lobby(

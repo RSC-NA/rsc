@@ -3,6 +3,7 @@ import itertools
 import logging
 from zoneinfo import ZoneInfo
 
+import aiohttp
 import discord
 import pytz
 import validators  # type: ignore
@@ -104,14 +105,14 @@ class RSC(
         self.expire_sub_contract_loop.cancel()
         self.expire_free_agent_checkins_loop.cancel()
         await self.close_ballchasing_sessions()
-        await self._combines_runner.cleanup()
+        await self._web_runner.cleanup()
 
     async def setup(self):
         """Prepare the bot API and caches. Requires API configuration"""
         log.info("Preparing API connector and local caches")
 
         # Start runners
-        await self.start_combines_runner()
+        await self.start_webapp()
 
         # Per guild setup
         for guild in self.bot.guilds:
@@ -195,6 +196,22 @@ class RSC(
             await self.setup()
         except ExceptionGroup as exc:
             log.exception(f"Error: {exc}", exc_info=exc)
+
+    async def start_webapp(self):
+        log.debug("Starting Web App")
+
+        self._web_app = aiohttp.web.Application()
+
+        # Combines
+        self._web_app.router.add_post("/combines_match", self.start_combines_game)
+        self._web_app.router.add_post("/combines_event", self.combines_event_handler)
+
+        # Runner and Site
+        self._web_runner = aiohttp.web.AppRunner(self._web_app)
+        await self._web_runner.setup()
+        self._web_site = aiohttp.web.TCPSite(self._web_runner, "localhost", 8008)
+
+        self._web_app_task = self.bot.loop.create_task(self._web_site.start())
 
     # Autocomplete
 
