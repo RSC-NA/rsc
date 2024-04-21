@@ -118,9 +118,12 @@ class TeamMixIn(RSCMixIn):
                     )
                 )
 
+        if teams[0].franchise and teams[0].franchise.gm:
+            gm_id = teams[0].franchise.gm.discord_id
+
         teams.sort(key=lambda t: cast(str, t.tier.position), reverse=True)  # type: ignore
 
-        embed = BlueEmbed()
+        embed = BlueEmbed(description=f"GM: <@!{gm_id}>")
         embed.title = f"{franchise} Teams"
         embed.add_field(
             name="Team",
