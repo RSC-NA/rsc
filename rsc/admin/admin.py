@@ -1828,6 +1828,25 @@ class AdminMixIn(RSCMixIn):
             self._franchise_cache[guild.id].append(rebrand_modal.name)
             self._franchise_cache[guild.id].sort()
 
+        # Update transaction channel
+        trans_channel = discord.utils.get(
+            guild.channels, name=f"{franchise.lower().replace(' ', '-')}-transactions"
+        )
+        if trans_channel:
+            trans_channel = await trans_channel.edit(
+                name=f"{rebrand_modal.name.lower().replace(' ','-')}-transactions"
+            )
+            if trans_channel.category:
+                channels = sorted(trans_channel.category.channels, key=lambda x: x.name)
+                idx = channels.index(trans_channel)
+                log.debug(f"Transaction Channel Index: {idx}")
+                await trans_channel.edit(position=idx)
+        else:
+            await interaction.followup.send(
+                content="Unable to find franchise transaction channel. Must be manually updated.",
+                ephemeral=True,
+            )
+
         # Update franchise role
         await frole.edit(name=f"{rebrand_modal.name} ({fdata.gm.rsc_name})")
 
