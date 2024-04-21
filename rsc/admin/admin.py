@@ -1838,10 +1838,14 @@ class AdminMixIn(RSCMixIn):
             guild.channels, name=f"{franchise.lower().replace(' ', '-')}-transactions"
         )
         if trans_channel:
+            log.debug(f"Before position: {trans_channel.position}")
             trans_channel = await trans_channel.edit(
                 name=f"{rebrand_modal.name.lower().replace(' ','-')}-transactions"
             )
             if trans_channel.category:
+                log.debug(
+                    f"Category Channel Count: {len(trans_channel.category.channels)}"
+                )
                 channels = sorted(trans_channel.category.channels, key=lambda x: x.name)
                 idx = channels.index(trans_channel)
                 log.debug(f"Transaction Channel Index: {idx}")
