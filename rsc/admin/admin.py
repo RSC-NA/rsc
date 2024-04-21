@@ -1,7 +1,7 @@
 import io
 import logging
 import tempfile
-from typing import MutableMapping
+from typing import MutableMapping, cast
 
 import discord
 from PIL import Image, ImageDraw
@@ -1767,6 +1767,7 @@ class AdminMixIn(RSCMixIn):
 
         # Match teams to tiers
         rebrands = []
+        fdata.tiers.sort(key=lambda x: cast(int, x.id))
         for t in fdata.tiers:
             if t.name and t.id:
                 rebrands.append(
