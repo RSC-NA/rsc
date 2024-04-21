@@ -206,6 +206,7 @@ class RebrandFranchiseView(AuthorOnlyView):
 
     async def confirm(self, interaction: discord.Interaction):
         log.debug("User confirmed franchise deletion")
+        await interaction.response.defer(ephemeral=True)
         self.result = True
         self.stop()
 
