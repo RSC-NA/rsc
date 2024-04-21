@@ -124,7 +124,7 @@ class TeamMixIn(RSCMixIn):
         teams.sort(key=lambda t: cast(str, t.tier.position), reverse=True)  # type: ignore
 
         embed = BlueEmbed(description=f"GM: <@!{gm_id}>")
-        embed.title = f"{franchise} Teams"
+        embed.title = f"{franchise}"
         embed.add_field(
             name="Team",
             value="\n".join([t.name or "Error" for t in teams]),
