@@ -1876,7 +1876,8 @@ class AdminMixIn(RSCMixIn):
                 await emoji.edit(name=new_fdata.prefix)
             else:
                 await interaction.followup.send(
-                    content=f"Unable to update franchise emoji. `{fdata.prefix}` not found."
+                    content=f"Unable to update franchise emoji. `{fdata.prefix}` not found.",
+                    ephemeral=True,
                 )
 
         # Update all prefix
@@ -1886,7 +1887,8 @@ class AdminMixIn(RSCMixIn):
                 await m.edit(nick=f"{rebrand_modal.prefix} | {name}")
         except discord.Forbidden as exc:
             await interaction.followup.send(
-                content=f"Unable to update nickname {m.mention}: `{exc}`"
+                content=f"Unable to update nickname {m.mention}: `{exc}`",
+                ephemeral=True,
             )
 
         embed = SuccessEmbed(
