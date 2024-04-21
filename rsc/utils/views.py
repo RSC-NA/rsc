@@ -43,6 +43,7 @@ class BulkRoleConfirmView(AuthorOnlyView):
 
     async def confirm(self, interaction: discord.Interaction):
         log.debug("User confirmed bulk role change")
+        await interaction.response.defer(ephemeral=True)
         self.result = True
         self.stop()
 
