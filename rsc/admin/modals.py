@@ -75,6 +75,6 @@ class FranchiseRebrandModal(discord.ui.Modal, title="Franchise Rebrand"):
         self.interaction = interaction
 
     async def parse_data(self):
-        self.name = self.name_input.value
-        self.prefix = self.prefix_input.value
+        self.name = self.name_input.value.strip()
+        self.prefix = self.prefix_input.value.strip()
         self.teams = self.team_input.value.splitlines()

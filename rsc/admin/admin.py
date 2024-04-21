@@ -1803,7 +1803,7 @@ class AdminMixIn(RSCMixIn):
             tdetails.append(TeamDetails(tier=r["tier_id"], name=r["name"]))
 
         # Rebrand Franchise
-        log.debug("Rebranding franchise.")
+        log.debug(f"Rebranding {franchise} to {rebrand_modal.name}")
         rebrand = RebrandAFranchise(
             name=rebrand_modal.name,
             prefix=rebrand_modal.prefix,
