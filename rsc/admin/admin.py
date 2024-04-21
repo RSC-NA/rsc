@@ -32,6 +32,7 @@ from rsc.embeds import (
     BlueEmbed,
     ErrorEmbed,
     GreenEmbed,
+    LoadingEmbed,
     SuccessEmbed,
     YellowEmbed,
 )
@@ -1784,6 +1785,10 @@ class AdminMixIn(RSCMixIn):
 
         if not rebrand_view.result:
             return
+
+        await rebrand_modal.interaction.edit_original_response(
+            embed=LoadingEmbed(), view=None
+        )
 
         # Get franchise role
         frole = await utils.franchise_role_from_name(guild, franchise)
