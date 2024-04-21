@@ -1851,9 +1851,11 @@ class AdminMixIn(RSCMixIn):
                     log.debug(f"Channel: {c.name} Position: {c.position}")
 
                 channels = sorted(trans_channel.category.channels, key=lambda x: x.name)
+                min_idx = min(c.position for c in trans_channel.category.channels)
+                log.debug(f"Min Index: {min_idx}")
                 idx = channels.index(trans_channel)
-                log.debug(f"Transaction Channel Index: {idx}")
-                await trans_channel.edit(position=idx)
+                log.debug(f"Transaction Channel Index: {idx} ({min_idx+idx})")
+                await trans_channel.edit(position=min_idx + idx)
         else:
             await interaction.followup.send(
                 content="Unable to find franchise transaction channel. Must be manually updated.",
