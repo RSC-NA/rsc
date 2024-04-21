@@ -1577,6 +1577,10 @@ class AdminMixIn(RSCMixIn):
         if old_emoji:
             log.debug(f"Deleting old franchise emoji: {old_emoji.name}")
             await old_emoji.delete(reason="Updating emoji to new logo")
+        else:
+            await interaction.followup.send(
+                content=f"Unable to find franchise emoji ({fdata.prefix}). It has not been removed."
+            )
 
         # Discord Max
         MAX_EMOJIS = 200 if "ROLE_ICONS" in guild.features else 50
