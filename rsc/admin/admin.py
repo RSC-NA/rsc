@@ -1867,7 +1867,17 @@ class AdminMixIn(RSCMixIn):
             )
 
         # Update franchise role
-        await frole.edit(name=f"{rebrand_modal.name} ({fdata.gm.rsc_name})")
+        await frole.edit(name=f"{rebrand_modal.name} ({new_fdata.gm.rsc_name})")
+
+        # Update emoji
+        if fdata.prefix:
+            emoji = await utils.emoji_from_prefix(guild, prefix=fdata.prefix)
+            if emoji:
+                await emoji.edit(name=new_fdata.prefix)
+            else:
+                await interaction.followup.send(
+                    content=f"Unable to update franchise emoji. `{fdata.prefix}` not found."
+                )
 
         # Update all prefix
         try:
