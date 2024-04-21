@@ -1843,9 +1843,13 @@ class AdminMixIn(RSCMixIn):
                 name=f"{rebrand_modal.name.lower().replace(' ','-')}-transactions"
             )
             if trans_channel.category:
+                # Debug print
                 log.debug(
                     f"Category Channel Count: {len(trans_channel.category.channels)}"
                 )
+                for c in trans_channel.category.channels:
+                    log.debug(f"Channel: {c.name} Position: {c.position}")
+
                 channels = sorted(trans_channel.category.channels, key=lambda x: x.name)
                 idx = channels.index(trans_channel)
                 log.debug(f"Transaction Channel Index: {idx}")
