@@ -51,6 +51,10 @@ from rsc.exceptions import (
 )
 from rsc.teams import TeamMixIn
 from rsc.transactions.modals import CutMsgModal
+from rsc.transactions.roles import (
+    update_cut_player_discord,
+    update_signed_player_discord,
+)
 from rsc.transactions.views import TradeAnnouncementModal
 from rsc.types import Substitute, TransactionSettings
 from rsc.utils import utils
@@ -566,89 +570,19 @@ class TransactionMixIn(RSCMixIn):
 
         ptu = await self.league_player_from_transaction(result, player=player)
 
-        if not ptu.old_team:
-            return await interaction.followup.send(
-                embed=ErrorEmbed(
-                    description=(
-                        "Player was cut but the API did not return any information on previous team. "
-                        "Please reach out to modmail.\n\n"
-                        "**Roles and names were not modified**"
-                    )
-                )
+        try:
+            await update_cut_player_discord(
+                guild=guild, player=player, response=result, ptu=ptu
             )
-
-        if not ptu.player.tier or not ptu.player.tier.name:
-            return await interaction.followup.send(
-                embed=ErrorEmbed(
-                    description=(
-                        "Player was cut but the API did not return any tier information. "
-                        "Please reach out to modmail.\n\n"
-                        "**Roles and names were not modified**"
-                    )
-                )
-            )
-
-        # Remove captain
-        captain_role = await utils.get_captain_role(guild)
-        await player.remove_roles(captain_role)
-
-        # Update tier role, handle promotion case
-        log.debug(f"[{guild.name}] Updating tier roles for {player.id}")
-        old_tier_role = await utils.get_tier_role(guild, ptu.old_team.tier)
-        tier_role = await utils.get_tier_role(guild, ptu.player.tier.name)
-        if old_tier_role != tier_role:
-            await player.remove_roles(old_tier_role)
-            await player.add_roles(tier_role)
-
-        # Apply tier role if they never had it
-        if tier_role not in player.roles:
-            await player.add_roles(tier_role)
-
-        # Free agent roles
-        fa_role = await utils.get_free_agent_role(guild)
-        tier_fa_role = await utils.get_tier_fa_role(guild, ptu.player.tier.name)
-
-        if not result.first_franchise:
-            return await interaction.followup.send(
-                embed=ErrorEmbed(
-                    description=(
-                        "Player was cut but the API did not return first/second franchise data. "
-                        "Please reach out to modmail.\n\n"
-                        "**Roles and names were not modified**"
-                    )
-                )
-            )
-
-        # Franchise Role
-        franchise_role = await utils.franchise_role_from_name(
-            guild, result.first_franchise.name
-        )
-        if not franchise_role:
-            log.error(
-                f"[{guild.name}] Unable to find franchise name during cut: {result.first_franchise.name}"
-            )
+        except discord.Forbidden as exc:
+            log.warning(f"Unable to update nickname for {player.id}: {exc}")
             await interaction.followup.send(
-                embed=ErrorEmbed(
-                    description=f"Unable to find franchise role for **{result.first_franchise.name}**"
-                ),
-                ephemeral=True,
+                content=f"Unable to update nickname for {player.mention}: `{exc}"
             )
-            return
-
-        # Make changes for Non-GM player
-        if result.first_franchise.gm.discord_id != player.id:
-            new_nick = f"FA | {await utils.remove_prefix(player)}"
-            log.debug(f"Changing cut players nickname to: {new_nick}")
-            await player.edit(nick=new_nick)
-            await player.remove_roles(franchise_role)
-            await player.add_roles(fa_role, tier_fa_role)
-
-            # Add Dev League Interest if it exists
-            # dev_league_role = discord.utils.get(
-            #     interaction.guild.roles, name=DEV_LEAGUE_ROLE
-            # )
-            # if dev_league_role:
-            #     await player.add_roles(dev_league_role)
+        except AttributeError as exc:
+            await interaction.followup.send(embed=ErrorEmbed(description=str(exc)))
+        except ValueError as exc:
+            await interaction.followup.send(embed=ErrorEmbed(description=str(exc)))
 
         embed, files = await self.build_transaction_embed(
             guild=guild,
@@ -657,13 +591,21 @@ class TransactionMixIn(RSCMixIn):
         )
 
         # Announce to transaction channel
-        await self.announce_transaction(
-            guild,
-            embed=embed,
-            files=files,
-            player=player,
-            gm=result.first_franchise.gm.discord_id,
-        )
+        if result.first_franchise:
+            await self.announce_transaction(
+                guild,
+                embed=embed,
+                files=files,
+                player=player,
+                gm=result.first_franchise.gm.discord_id,
+            )
+        else:
+            await interaction.followup.send(
+                embed=ErrorEmbed(
+                    description="Transaction was processed but did not contain any old franchise data. **Announcement not sent.**"
+                ),
+                ephemeral=True,
+            )
 
         # Send cut message to user directly
         await self.send_cut_msg(guild, player=player)
@@ -716,6 +658,7 @@ class TransactionMixIn(RSCMixIn):
                 override=override,
             )
             log.debug(f"[{guild.name}] Sign Result: {result}]")
+            tiers = await self.tiers(guild=guild)
         except RscException as exc:
             log.warning(f"[{guild.name}] Transaction Exception: {exc.reason}")
             await interaction.followup.send(
@@ -727,62 +670,57 @@ class TransactionMixIn(RSCMixIn):
             result, player=player
         )
 
-        if not ptu.player.tier or not ptu.player.tier.name:
-            return await interaction.followup.send(
-                embed=ErrorEmbed(
-                    description=(
-                        "Player was cut but the API did not return any tier information. "
-                        "Please reach out to modmail.\n\n"
-                        "**Roles and names were not modified**"
-                    )
-                )
-            )
+        # Need to get tier data to remove old roles (Ex: Promotion)
 
-        # Remove FA roles
-        log.debug(f"[{guild.name}] Removing FA roles from {player.id}")
-        fa_role = await utils.get_free_agent_role(guild)
-        tier_fa_role = await utils.get_tier_fa_role(guild, ptu.player.tier.name)
-        await player.remove_roles(fa_role, tier_fa_role)
-
-        # Add franchise role
-        log.debug(f"[{guild.name}] Adding franchise role to {player.id}")
-        frole = await utils.franchise_role_from_league_player(guild, ptu.player)
-
-        # Verify player has tier role
-        log.debug(f"[{guild.name}] Adding tier role to {player.id}")
-        tier_role = await utils.get_tier_role(guild, name=ptu.new_team.tier)
-        await player.add_roles(frole, tier_role)
-
-        # Change member prefix
-        new_nick = (
-            f"{ptu.player.team.franchise.prefix} | {await utils.remove_prefix(player)}"
-        )
-        log.debug(f"[{guild.name}] Changing signed player nick to {player.id}")
         try:
-            await player.edit(nick=new_nick)
-        except discord.Forbidden:
-            log.warning(f"Forbidden to change name of {player.display_name}")
-            pass
+            await update_signed_player_discord(
+                guild=guild, player=player, ptu=ptu, tiers=tiers
+            )
+        except discord.Forbidden as exc:
+            log.warning(f"Unable to update nickname for {player.id}: {exc}")
+            await interaction.followup.send(
+                content=f"Unable to update nickname for {player.mention}: `{exc}"
+            )
+        except AttributeError as exc:
+            await interaction.followup.send(embed=ErrorEmbed(description=str(exc)))
+        except ValueError as exc:
+            await interaction.followup.send(embed=ErrorEmbed(description=str(exc)))
 
         embed, files = await self.build_transaction_embed(
             guild=guild, response=result, player_in=player
         )
 
-        await self.announce_transaction(
-            guild=guild,
-            embed=embed,
-            files=files,
-            player=player,
-            gm=result.second_franchise.gm.discord_id,
-        )
+        if result.second_franchise:
+            await self.announce_transaction(
+                guild=guild,
+                embed=embed,
+                files=files,
+                player=player,
+                gm=result.second_franchise.gm.discord_id,
+            )
+        else:
+            await interaction.followup.send(
+                embed=ErrorEmbed(
+                    description="Transaction was processed but did not contain any new franchise data. **Announcement not sent.**"
+                ),
+                ephemeral=True,
+            )
 
         # Send result
-        await interaction.followup.send(
-            embed=SuccessEmbed(
-                description=f"{player.mention} has been signed to **{ptu.new_team.name}**"
-            ),
-            ephemeral=True,
-        )
+        if ptu.new_team:
+            await interaction.followup.send(
+                embed=SuccessEmbed(
+                    description=f"{player.mention} has been signed to **{ptu.new_team.name}**"
+                ),
+                ephemeral=True,
+            )
+        else:
+            await interaction.followup.send(
+                embed=YellowEmbed(
+                    description=f"{player.mention} has been signed but a team name was not returned."
+                ),
+                ephemeral=True,
+            )
 
     @_transactions.command(name="resign", description="Re-sign a player to their team.")  # type: ignore
     @app_commands.autocomplete(team=TeamMixIn.teams_autocomplete)  # type: ignore
@@ -822,6 +760,7 @@ class TransactionMixIn(RSCMixIn):
                 override=override,
             )
             log.debug(f"[{guild.name}] Re-sign Result: {result}]")
+            tiers = await self.tiers(guild=guild)
         except RscException as exc:
             log.warning(f"[{guild.name}] Transaction Exception: {exc.reason}")
             await interaction.followup.send(
@@ -833,28 +772,19 @@ class TransactionMixIn(RSCMixIn):
             result, player=player
         )
 
-        # We check roles and name here just in case.
-        # Remove FA roles
-        log.debug(f"[{guild.name}] Removing FA roles from {player.id}")
-        fa_role = await utils.get_free_agent_role(guild)
-        tier_fa_role = await utils.get_tier_fa_role(guild, ptu.player.tier.name)
-        await player.remove_roles(fa_role, tier_fa_role)
-
-        # Add franchise role
-        log.debug(f"[{guild.name}] Adding franchise role to {player.id}")
-        frole = await utils.franchise_role_from_league_player(guild, ptu.player)
-
-        # Verify player has tier role
-        log.debug(f"[{guild.name}] Adding tier role to {player.id}")
-        tier_role = await utils.get_tier_role(guild, name=ptu.new_team.tier)
-        await player.add_roles(frole, tier_role)
-
-        # Change member prefix
-        new_nick = (
-            f"{ptu.player.team.franchise.prefix} | {await utils.remove_prefix(player)}"
-        )
-        log.debug(f"[{guild.name}] Changing signed player nick to {player.id}")
-        await player.edit(nick=new_nick)
+        try:
+            await update_signed_player_discord(
+                guild=guild, player=player, ptu=ptu, tiers=tiers
+            )
+        except discord.Forbidden as exc:
+            log.warning(f"Unable to update nickname for {player.id}: {exc}")
+            await interaction.followup.send(
+                content=f"Unable to update nickname for {player.mention}: `{exc}`"
+            )
+        except AttributeError as exc:
+            await interaction.followup.send(embed=ErrorEmbed(description=str(exc)))
+        except ValueError as exc:
+            await interaction.followup.send(embed=ErrorEmbed(description=str(exc)))
 
         embed, files = await self.build_transaction_embed(
             guild=guild, response=result, player_in=player
@@ -865,12 +795,20 @@ class TransactionMixIn(RSCMixIn):
         )
 
         # Send result
-        await interaction.followup.send(
-            embed=SuccessEmbed(
-                description=f"{player.mention} has been re-signed to **{ptu.new_team.name}**"
-            ),
-            ephemeral=True,
-        )
+        if ptu.new_team:
+            await interaction.followup.send(
+                embed=SuccessEmbed(
+                    description=f"{player.mention} has been re-signed to **{ptu.new_team.name}**"
+                ),
+                ephemeral=True,
+            )
+        else:
+            await interaction.followup.send(
+                embed=YellowEmbed(
+                    description=f"{player.mention} has been re-signed but a team name was not returned."
+                ),
+                ephemeral=True,
+            )
 
     @_transactions.command(name="sub", description="Substitute a player on a team")  # type: ignore
     @app_commands.describe(
@@ -919,12 +857,45 @@ class TransactionMixIn(RSCMixIn):
             result, player_in
         )
 
+        # Subbed out role
+        subbed_out_role = await utils.get_subbed_out_role(guild)
+        await player_out.add_roles(subbed_out_role)
+
         embed, files = await self.build_transaction_embed(
             guild=guild,
             response=result,
             player_in=player_in,
             player_out=player_out,
         )
+
+        # Validate response
+        if not result.second_franchise:
+            return await interaction.followup.send(
+                embed=ErrorEmbed(
+                    description="Subsitution was processed but no second franchise data was returned. **Announcement was not sent.**"
+                )
+            )
+
+        if not result.second_franchise.gm.discord_id:
+            return await interaction.followup.send(
+                embed=ErrorEmbed(
+                    description="Subsitution was processed but no second franchise data has no GM. **Announcement was not sent.**"
+                )
+            )
+
+        if not (ptu_in.new_team and ptu_in.new_team.name):
+            return await interaction.followup.send(
+                embed=ErrorEmbed(
+                    description="Subsitution was processed but no team name was returned. **Announcement was not sent.**"
+                )
+            )
+
+        if not (ptu_in.new_team and ptu_in.new_team.tier):
+            return await interaction.followup.send(
+                embed=ErrorEmbed(
+                    description="Subsitution was processed but no team tier was returned. **Announcement was not sent.**"
+                )
+            )
 
         await self.announce_transaction(
             guild=guild,
@@ -947,17 +918,16 @@ class TransactionMixIn(RSCMixIn):
         )
         await self._add_substitute(guild, sub_obj)
 
-        # Subbed out role
-        subbed_out_role = await utils.get_subbed_out_role(guild)
-        await player_out.add_roles(subbed_out_role)
-
         embed = SuccessEmbed(
             description=f"{player_out.mention} has been subbed out for {player_in.mention}"
         )
-        embed.add_field(
-            name="Date", value=result.var_date.strftime("%Y-%m-%d"), inline=True
-        )
+        if result.var_date:
+            embed.add_field(
+                name="Date", value=result.var_date.strftime("%Y-%m-%d"), inline=True
+            )
+
         embed.add_field(name="Match Day", value=str(result.match_day), inline=True)
+
         if result.notes:
             # embed.add_field(name="", value="", inline=False)
             embed.add_field(name="Notes", value=result.notes, inline=False)

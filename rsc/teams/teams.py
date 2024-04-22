@@ -236,7 +236,8 @@ class TeamMixIn(RSCMixIn):
         # Verify team exists and get data
         if not players:
             await interaction.followup.send(
-                content=f"No results found for **{team}**.", ephemeral=True
+                content=f"No results found for **{team}** or no rostered players.",
+                ephemeral=True,
             )
             return
 
