@@ -26,14 +26,10 @@ from rscapi.models.sign_a_player_to_a_team_in_a_league import (
 from rscapi.models.temporary_fa_sub import TemporaryFASub
 from rscapi.models.trade_item import TradeItem
 from rscapi.models.trade_schema import TradeSchema
-
-# from rscapi.models.trade_schema import TradeSchema
 from rscapi.models.trade_value import TradeValue
 from rscapi.models.transaction_response import TransactionResponse
 
 from rsc.abc import RSCMixIn
-
-# from rsc.const import GM_ROLE
 from rsc.embeds import (
     ApiExceptionErrorEmbed,
     BlueEmbed,
@@ -49,17 +45,20 @@ from rsc.exceptions import (
     TradeParserException,
     translate_api_error,
 )
+from rsc.logs import GuildLogAdapter
 from rsc.teams import TeamMixIn
 from rsc.transactions.modals import CutMsgModal
 from rsc.transactions.roles import (
     update_cut_player_discord,
     update_signed_player_discord,
+    update_team_captain_discord,
 )
 from rsc.transactions.views import TradeAnnouncementModal
 from rsc.types import Substitute, TransactionSettings
 from rsc.utils import utils
 
-log = logging.getLogger("red.rsc.transactions")
+logger = logging.getLogger("red.rsc.transactions")
+log = GuildLogAdapter(logger)
 
 PICK_TRADE_REGEX = re.compile(
     r"^(?P<gm>[a-z0-9\x20]+)?(?:'s\s+)?(?P<round>\d)(?:st|nd|rd|th)\s+Round\s+(?P<tier>\w+)\s+\((?P<pick>\d{1,2})\)$",
@@ -108,18 +107,19 @@ class TransactionMixIn(RSCMixIn):
     async def expire_sub_contract_loop(self):
         """Send contract expiration message to Transaction Channel"""
         log.info("Expire sub contracts loop started")
-        for guild in self.bot.guilds:
-            log.info(f"[{guild.name}] Expire sub contract loop is running")
+        guilds: list[discord.Guild] = list(self.bot.guilds)
+        for guild in guilds:
+            log.info("Expire sub contract loop is running", guild=guild)
             subs: list[Substitute] = await self._get_substitutes(guild)
             if not subs:
-                log.debug(f"No substitutes to expire in {guild.name}")
+                log.debug("No substitutes to expire", guild=guild)
                 continue
 
             tchan = await self._trans_channel(guild)
             if not tchan or not hasattr(tchan, "send"):
                 # Still need to remove player from sub list after.
                 log.warning(
-                    f"Substitutes found but transaction channel not set in {guild.name}"
+                    "Substitutes found but transaction channel not set", guild=guild
                 )
 
             subbed_out_role = await utils.get_subbed_out_role(guild)
@@ -134,7 +134,7 @@ class TransactionMixIn(RSCMixIn):
             )
 
             # Loop through checkins.
-            log.debug(f"Total substitute count: {len(subs)}")
+            log.debug(f"Total substitute count: {len(subs)}", guild=guild)
             for s in subs:
                 sub_date = datetime.fromisoformat(s["date"])
                 dFiles = [discord.File(img_path)]
@@ -152,7 +152,7 @@ class TransactionMixIn(RSCMixIn):
                     m_in_fmt = m_in.mention if m_in else f"<@!{s['player_in']}>"
                     m_out_fmt = m_out.mention if m_out else f"<@!{s['player_out']}>"
 
-                    log.debug(f"[{guild.name} Expiring Sub Contract: {s['player_in']}")
+                    log.debug(f"Expiring Sub Contract: {s['player_in']}", guild=guild)
                     embed = discord.Embed(color=tier_color)
                     embed.set_image(url=f"attachment://{img_path.name}")
                     if fa_icon:
@@ -194,7 +194,8 @@ class TransactionMixIn(RSCMixIn):
                         await m_out.remove_roles(subbed_out_role)
                 else:
                     log.debug(
-                        f"{s['player_in']} is not ready to be expired. Sub Date: {s['date']}"
+                        f"{s['player_in']} is not ready to be expired. Sub Date: {s['date']}",
+                        guild=guild,
                     )
         log.info("Finished expire substitute daily loop.")
 
@@ -212,10 +213,8 @@ class TransactionMixIn(RSCMixIn):
         if not players:
             # Member is not a league player, do nothing
             log.debug(
-                (
-                    f"[{guild.name}] {member.display_name} ({member.id}) has left the server but is not on a team."
-                    " No action taken."
-                )
+                f"{member.display_name} ({member.id}) has left the server but is not on a team. No action taken.",
+                guild=guild,
             )
             return
 
@@ -226,10 +225,8 @@ class TransactionMixIn(RSCMixIn):
 
         p = players.pop(0)
         log.info(
-            (
-                f"[{guild.name}] {member.display_name} ({member.id}) has left the server."
-                f" Player is being retired. Reason: {reason}"
-            )
+            f"{member.display_name} ({member.id}) has left the server. Player is being retired. Reason: {reason}",
+            guild=guild,
         )
 
         # Retire player
@@ -242,7 +239,9 @@ class TransactionMixIn(RSCMixIn):
                 override=True,
             )
         except RscException as exc:
-            log.error(f"Error retiring player that left guild: {exc.reason}")
+            log.error(
+                f"Error retiring player that left guild: {exc.reason}", guild=guild
+            )
             return
 
         # Check if notifications are enabled
@@ -258,11 +257,14 @@ class TransactionMixIn(RSCMixIn):
         now = datetime.now(tz=tz)
 
         if not (p.team and p.team.franchise):
-            log.info(f"{member.display_name} has no team. Skipping notifications...")
+            log.info(
+                f"{member.display_name} has no team. Skipping notifications...",
+                guild=guild,
+            )
             return
 
         fname = p.team.franchise.name or "**Unknown Franchise**"
-        gm_id = p.team.franchise.gm.discord_id
+        gm_id = p.team.franchise.gm.discord_id or 0  # Has to be a better solution
 
         match p.status:
             case Status.ROSTERED | Status.IR | Status.AGMIR:
@@ -272,7 +274,8 @@ class TransactionMixIn(RSCMixIn):
             case _:
                 # We only notify for specific statuses
                 log.debug(
-                    f"Not sending transaction notification. Player Status: {p.status}"
+                    f"Not sending transaction notification. Player Status: {p.status}",
+                    guild=guild,
                 )
                 return
 
@@ -395,13 +398,14 @@ class TransactionMixIn(RSCMixIn):
     @app_commands.checks.has_permissions(manage_guild=True)
     async def transactions_notifications(self, interaction: discord.Interaction):
         """Toggle channel notifications on or off"""
-        if not interaction.guild:
+        guild = interaction.guild
+        if not guild:
             return
-        status = await self._notifications_enabled(interaction.guild)
-        log.debug(f"Current Notifications: {status}")
+        status = await self._notifications_enabled(guild)
+        log.debug(f"Current Notifications: {status}", guild=guild)
         status ^= True  # Flip boolean with xor
-        log.debug(f"Transaction Notifications: {status}")
-        await self._set_notifications(interaction.guild, status)
+        log.debug(f"Transaction Notifications: {status}", guild=guild)
+        await self._set_notifications(guild, status)
         result = "**enabled**" if status else "**disabled**"
         await interaction.response.send_message(
             embed=discord.Embed(
@@ -418,13 +422,16 @@ class TransactionMixIn(RSCMixIn):
     @app_commands.checks.has_permissions(manage_guild=True)
     async def transactions_dms_toggle(self, interaction: discord.Interaction):
         """Toggle channel notifications on or off"""
-        if not interaction.guild:
+        guild = interaction.guild
+        if not guild:
             return
-        status = await self._trans_dms_enabled(interaction.guild)
-        log.debug(f"Current DM Status: {status}")
+
+        status = await self._trans_dms_enabled(guild)
+        log.debug(f"Current DM Status: {status}", guild=guild)
         status ^= True  # Flip boolean with xor
-        log.debug(f"New Transaction DMs Status: {status}")
-        await self._set_trans_dm(interaction.guild, status)
+        log.debug(f"New Transaction DMs Status: {status}", guild=guild)
+        await self._set_trans_dm(guild, status)
+
         result = "**enabled**" if status else "**disabled**"
         await interaction.response.send_message(
             embed=discord.Embed(
@@ -977,18 +984,25 @@ class TransactionMixIn(RSCMixIn):
 
         trade_modal = TradeAnnouncementModal()
         await interaction.response.send_modal(trade_modal)
+        await trade_modal.wait()
 
-        if not trade_modal.trade:
+        if not trade_modal.trade.value:
             await interaction.followup.send(
                 content="No trade information provided... Try again.", ephemeral=True
             )
             return
 
-        # log.debug(f"Trade Announcement: {trade.trade}")
-        # await trans_channel.send(content=trade.trade, allowed_mentions=discord.AllowedMentions(users=True))
-        # TODO - modal not working for this because mentions
+        log.debug(f"Trade Announcement: {trade_modal.trade.value}")
+        trade_msg = await trans_channel.send(
+            content=trade_modal.trade.value,
+            allowed_mentions=discord.AllowedMentions(users=True),
+        )
 
-        await utils.not_implemented(interaction)
+        embed = SuccessEmbed(
+            description=f"Trade announcement has been posted: {trade_msg.jump_url}"
+        )
+        embed.add_field(name="Content", value=trade_modal.trade.value)
+        await interaction.followup.send(embed=embed, ephemeral=True)
 
     @_transactions.command(  # type: ignore
         name="trade",
@@ -1049,21 +1063,49 @@ class TransactionMixIn(RSCMixIn):
             return
 
         try:
-            # result = await self.trade(
-            #     guild=guild,
-            #     trades=trade_items,
-            #     executor=interaction.user,
-            #     notes=notes,
-            #     override=override
-            # )
-            # log.debug(f"Transaction History Result: {result}")
-            log.debug("REMOVE ME NERD")
+            result = await self.trade(
+                guild=guild,
+                trades=trade_items,
+                executor=interaction.user,
+                notes=notes,
+                override=override,
+            )
+            log.debug(f"Transaction History Result: {result}")
+            tiers = await self.tiers(guild=guild)
         except RscException as exc:
             await interaction.followup.send(
                 embed=ApiExceptionErrorEmbed(exc), ephemeral=True
             )
             return
 
+        # Process role changes for traded players
+        if result.player_updates:
+            for r in result.player_updates:
+                if r is None:
+                    continue
+                if not r.player.player:
+                    await interaction.followup.send(
+                        content=f"**{r.player.id}** has no player data. Unable to process roles and name change."
+                    )
+                    continue
+                if not r.player.player.discord_id:
+                    await interaction.followup.send(
+                        content=f"**{r.player.id}** has no discord_id. Unable to process roles and name change."
+                    )
+                    continue
+
+                m = guild.get_member(r.player.player.discord_id)
+                if not m:
+                    await interaction.followup.send(
+                        content=f"<@{r.player.player.discord_id}> not found in the server. Unable to process roles and name change."
+                    )
+                    continue
+
+                await update_signed_player_discord(
+                    guild=guild, player=m, ptu=r, tiers=tiers
+                )
+
+        msg = None
         if announce:
             gms, embed = await self.build_trade_embed(guild, trade_items)
             gm_mention = " ".join([f"<@!{g}>" for g in gms])
@@ -1074,13 +1116,15 @@ class TransactionMixIn(RSCMixIn):
             )
             await msg.edit(content=None, embed=embed)
 
-        await interaction.followup.send(
-            embed=SuccessEmbed(description="Trade was successful")
-        )
+        embed = SuccessEmbed(description="Trade has been processed.")
+        if msg:
+            embed.add_field(name="Announcement", value=msg.jump_url, inline=False)
+
+        await interaction.followup.send(embed=embed, ephemeral=True)
 
     @_transactions.command(  # type: ignore
         name="captain",
-        description="Promote a player to captain of their team",
+        description="Promote player(s) to captain of their team",
     )
     @app_commands.describe(player="RSC Discord Member")
     async def _transactions_captain(
@@ -1103,6 +1147,7 @@ class TransactionMixIn(RSCMixIn):
         argv = locals()
         captains: list[discord.Member] = []
 
+        # Aggregate captains into list
         log.debug(f"Locals: {argv}")
         for k, v in argv.items():
             if v and k.startswith("player"):
@@ -1110,91 +1155,102 @@ class TransactionMixIn(RSCMixIn):
         log.debug(f"Captain Count: {len(captains)}")
 
         # Get Captain Role
-        cpt_role = await utils.get_captain_role(guild)
-        if not cpt_role:
-            await interaction.followup.send(
+        try:
+            cpt_role = await utils.get_captain_role(guild)
+        except ValueError:
+            return await interaction.followup.send(
                 embed=ErrorEmbed(description="Captain role does not exist in guild.")
             )
-            return
 
-        # Get team of player being made captain
-        player_list = await self.players(guild, discord_id=player.id, limit=1)
+        # Get transaction channel
+        trans_channel = await self._trans_channel(guild)
 
-        if not player_list:
-            await interaction.followup.send(
-                embed=ErrorEmbed(
-                    description=f"{player.mention} is not a league player."
-                ),
-                ephemeral=True,
-            )
-            return
+        results: list[discord.Member] = []
+        for captain in captains:
+            # Get team of player being made captain
+            plist = await self.players(guild, discord_id=captain.id, limit=1)
 
-        player_data = player_list.pop()
-
-        if player_data.status != Status.ROSTERED:
-            await interaction.followup.send(
-                embed=ErrorEmbed(
-                    description=f"{player.mention} is not currently rostered."
-                ),
-                ephemeral=True,
-            )
-            return
-
-        # Get team data
-        team_players = await self.team_players(guild, player_data.team.id)
-
-        # Remove captain role from anyone on the team that has it just in case
-        alreadyCaptain = False
-        for p in team_players:
-            m = guild.get_member(p.discord_id)
-
-            if not m:
-                log.error(
-                    f"[{guild.name}] Unable to find rostered player in guild: {p.discord_id}"
+            if not plist:
+                await interaction.followup.send(
+                    content=f"{player.mention} is not a league player. Skipping...",
+                    ephemeral=True,
                 )
                 continue
 
-            if m.id == player.id and p.captain:
-                log.debug(
-                    f"{player.display_name} is already captain. Removing captain status"
+            player_data = plist.pop()
+
+            if player_data.status != Status.ROSTERED:
+                await interaction.followup.send(
+                    content=f"{captain.mention} is not currently rostered. Skipping...",
+                    ephemeral=True,
                 )
-                alreadyCaptain = True
-            log.debug(f"Removing captain role from: {m.display_name}")
-            await m.remove_roles(cpt_role)
+                continue
 
-        # Promote new player to captain or flip captain flag off.
-        await self.set_captain(guild, player_data.id)
+            if not player_data.id:
+                await interaction.followup.send(
+                    content=f"{captain.mention} has no player ID.", ephemeral=True
+                )
+                continue
 
-        # If player was already captain, they are being removed.
-        if alreadyCaptain:
-            embed = SuccessEmbed(
-                title="Captain Removed",
-                description=f"{player.mention} has been removed as **captain**",
-            )
-            await interaction.followup.send(embed=embed, ephemeral=True)
-            return
+            if not (player_data.team and player_data.team.id and player_data.team.name):
+                await interaction.followup.send(
+                    content=f"{captain.mention} has no team data or team ID. Skipping...",
+                    ephemeral=True,
+                )
+                continue
 
-        # Add captain role
-        await player.add_roles(cpt_role)
+            if not player_data.tier:
+                await interaction.followup.send(
+                    content=f"{captain.mention} has no tier data. Skipping...",
+                    ephemeral=True,
+                )
+                continue
 
-        # Announce to transaction channel
-        trans_channel = await self._trans_channel(guild)
-        if trans_channel:
-            str_fmt = (
-                f"{player.mention} was elected captain of {player_data.team.name}"
-                f" (<@!{player_data.team.franchise.gm.discord_id}> - {player_data.tier.name})"
-            )
-            await trans_channel.send(
-                content=str_fmt,
-                allowed_mentions=discord.AllowedMentions(users=True),
-            )
+            if not player_data.team.franchise:
+                await interaction.followup.send(
+                    content=f"{captain.mention} has no franchise data. Skipping...",
+                    ephemeral=True,
+                )
+                continue
+
+            try:
+                # Promote new player to captain or flip captain flag off.
+                await self.set_captain(guild, player_data.id)
+
+                # Get team data
+                team_players = await self.team_players(guild, player_data.team.id)
+
+                # Update roles in discord
+                await update_team_captain_discord(guild=guild, players=team_players)
+            except RscException as exc:
+                await interaction.followup.send(
+                    embed=ApiExceptionErrorEmbed(exc), ephemeral=True
+                )
+                continue
+            except ValueError as exc:
+                await interaction.followup.send(embed=ErrorEmbed(description=str(exc)))
+
+            # Add to final result
+            results.append(captain)
+
+            if trans_channel:
+                str_fmt = (
+                    f"{player.mention} was elected captain of {player_data.team.name}"
+                    f" (<@!{player_data.team.franchise.gm.discord_id}> - {player_data.tier.name})"
+                )
+                await trans_channel.send(
+                    content=str_fmt,
+                    allowed_mentions=discord.AllowedMentions(users=True),
+                )
 
         # Send Result
         embed = SuccessEmbed(
-            title="Captain Designated",
-            description=f"{player.mention} has been promoted to **captain**",
+            title="Captains Designated",
+            description="Updated captain roles for the following player(s).",
         )
-
+        embed.add_field(
+            name="Players", value="\n".join([m.mention for m in results]), inline=False
+        )
         await interaction.followup.send(embed=embed, ephemeral=True)
 
     @_transactions.command(  # type: ignore

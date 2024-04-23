@@ -1,6 +1,7 @@
 import logging
 
 import discord
+from rscapi.models.player import Player
 from rscapi.models.player_transaction_updates import PlayerTransactionUpdates
 from rscapi.models.tier import Tier
 from rscapi.models.transaction_response import TransactionResponse
@@ -52,6 +53,11 @@ async def update_signed_player_discord(
     log.debug(f"Player Tier: {ptu.player.tier.name}", guild=guild)
     fa_role = await utils.get_free_agent_role(guild)
     await player.remove_roles(fa_role)
+
+    # Remove old franchise role if it exists
+    old_frole = await utils.franchise_role_from_disord_member(player)
+    if old_frole:
+        await player.remove_roles(old_frole)
 
     # Add franchise role
     frole = await utils.franchise_role_from_league_player(guild, ptu.player)
@@ -154,3 +160,26 @@ async def update_cut_player_discord(
 
     log.debug(f"Updating cut player nickname: {new_nick}", guild=guild)
     await player.edit(nick=new_nick)
+
+
+async def update_team_captain_discord(
+    guild: discord.Guild,
+    players: list[Player],
+):
+    cpt_role = await utils.get_captain_role(guild)
+
+    for p in players:
+        m = guild.get_member(p.discord_id)
+        if not m:
+            log.error(
+                f"Unable to find rostered player in guild: {p.discord_id}", guild=guild
+            )
+            continue
+
+        if p.captain:
+            log.debug(f"Adding captain role: {m.display_name} ({m.id})", guild=guild)
+            if cpt_role not in m.roles:
+                await m.add_roles(cpt_role)
+        else:
+            log.debug(f"Removing captain role: {m.display_name} ({m.id})", guild=guild)
+            await m.remove_roles(cpt_role)
