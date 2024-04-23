@@ -567,9 +567,9 @@ class TransactionMixIn(RSCMixIn):
                 notes=notes,
                 override=override,
             )
-            log.debug(f"Cut Result: {result}")
+            log.debug(f"Cut Result: {result}", guild=guild)
         except RscException as exc:
-            log.warning(f"[{guild.name}] Transaction Exception: {exc.reason}")
+            log.warning(f"Transaction Exception: {exc.reason}", guild=guild)
             await interaction.followup.send(
                 embed=ApiExceptionErrorEmbed(exc), ephemeral=True
             )
@@ -582,7 +582,9 @@ class TransactionMixIn(RSCMixIn):
                 guild=guild, player=player, response=result, ptu=ptu
             )
         except discord.Forbidden as exc:
-            log.warning(f"Unable to update nickname for {player.id}: {exc}")
+            log.warning(
+                f"Unable to update nickname for {player.id}: {exc}", guild=guild
+            )
             await interaction.followup.send(
                 content=f"Unable to update nickname for {player.mention}: `{exc}"
             )
@@ -664,10 +666,10 @@ class TransactionMixIn(RSCMixIn):
                 notes=notes,
                 override=override,
             )
-            log.debug(f"[{guild.name}] Sign Result: {result}]")
+            log.debug(f"Sign Result: {result}]", guild=guild)
             tiers = await self.tiers(guild=guild)
         except RscException as exc:
-            log.warning(f"[{guild.name}] Transaction Exception: {exc.reason}")
+            log.warning(f"Transaction Exception: {exc.reason}", guild=guild)
             await interaction.followup.send(
                 embed=ApiExceptionErrorEmbed(exc), ephemeral=True
             )
@@ -684,7 +686,9 @@ class TransactionMixIn(RSCMixIn):
                 guild=guild, player=player, ptu=ptu, tiers=tiers
             )
         except discord.Forbidden as exc:
-            log.warning(f"Unable to update nickname for {player.id}: {exc}")
+            log.warning(
+                f"Unable to update nickname for {player.id}: {exc}", guild=guild
+            )
             await interaction.followup.send(
                 content=f"Unable to update nickname for {player.mention}: `{exc}"
             )
@@ -766,10 +770,10 @@ class TransactionMixIn(RSCMixIn):
                 notes=notes,
                 override=override,
             )
-            log.debug(f"[{guild.name}] Re-sign Result: {result}]")
+            log.debug(f"Re-sign Result: {result}]", guild=guild)
             tiers = await self.tiers(guild=guild)
         except RscException as exc:
-            log.warning(f"[{guild.name}] Transaction Exception: {exc.reason}")
+            log.warning(f"Transaction Exception: {exc.reason}", guild=guild)
             await interaction.followup.send(
                 embed=ApiExceptionErrorEmbed(exc), ephemeral=True
             )
@@ -784,7 +788,9 @@ class TransactionMixIn(RSCMixIn):
                 guild=guild, player=player, ptu=ptu, tiers=tiers
             )
         except discord.Forbidden as exc:
-            log.warning(f"Unable to update nickname for {player.id}: {exc}")
+            log.warning(
+                f"Unable to update nickname for {player.id}: {exc}", guild=guild
+            )
             await interaction.followup.send(
                 content=f"Unable to update nickname for {player.mention}: `{exc}`"
             )
@@ -853,7 +859,7 @@ class TransactionMixIn(RSCMixIn):
                 notes=notes,
                 override=override,
             )
-            log.debug(f"Sub Result: {result}")
+            log.debug(f"Sub Result: {result}", guild=guild)
         except RscException as exc:
             await interaction.followup.send(
                 embed=ApiExceptionErrorEmbed(exc), ephemeral=True
@@ -971,10 +977,11 @@ class TransactionMixIn(RSCMixIn):
         description="Announce a trade between two franchises to the transaction chanenl",
     )
     async def _transactions_announcetrade(self, interaction: discord.Interaction):
-        if not interaction.guild:
+        guild = interaction.guild
+        if not guild:
             return
 
-        trans_channel = await self._trans_channel(interaction.guild)
+        trans_channel = await self._trans_channel(guild)
         if not trans_channel:
             await interaction.response.send_message(
                 embed=ErrorEmbed(description="Transaction channel is not configured."),
@@ -992,7 +999,7 @@ class TransactionMixIn(RSCMixIn):
             )
             return
 
-        log.debug(f"Trade Announcement: {trade_modal.trade.value}")
+        log.debug(f"Trade Announcement: {trade_modal.trade.value}", guild=guild)
         trade_msg = await trans_channel.send(
             content=trade_modal.trade.value,
             allowed_mentions=discord.AllowedMentions(users=True),
@@ -1070,7 +1077,7 @@ class TransactionMixIn(RSCMixIn):
                 notes=notes,
                 override=override,
             )
-            log.debug(f"Transaction History Result: {result}")
+            log.debug(f"Transaction History Result: {result}", guild=guild)
             tiers = await self.tiers(guild=guild)
         except RscException as exc:
             await interaction.followup.send(
@@ -1148,11 +1155,11 @@ class TransactionMixIn(RSCMixIn):
         captains: list[discord.Member] = []
 
         # Aggregate captains into list
-        log.debug(f"Locals: {argv}")
+        log.debug(f"Locals: {argv}", guild=guild)
         for k, v in argv.items():
             if v and k.startswith("player"):
                 captains.append(v)
-        log.debug(f"Captain Count: {len(captains)}")
+        log.debug(f"Captain Count: {len(captains)}", guild=guild)
 
         # Get Captain Role
         try:
@@ -1272,7 +1279,7 @@ class TransactionMixIn(RSCMixIn):
                 player=player,
                 executor=interaction.user,
             )
-            log.debug(f"Expire Sub Result: {result}")
+            log.debug(f"Expire Sub Result: {result}", guild=guild)
         except RscException as exc:
             await interaction.followup.send(
                 embed=ApiExceptionErrorEmbed(exc), ephemeral=True
@@ -1401,7 +1408,7 @@ class TransactionMixIn(RSCMixIn):
         await interaction.response.defer(ephemeral=True)
 
         remove = bool(action.value)
-        log.debug(f"Remove from IR: {remove}")
+        log.debug(f"Remove from IR: {remove}", guild=guild)
 
         try:
             result = await self.inactive_reserve(
@@ -1412,7 +1419,7 @@ class TransactionMixIn(RSCMixIn):
                 override=override,
                 remove=remove,
             )
-            log.debug(f"Expire Sub Result: {result}")
+            log.debug(f"Expire Sub Result: {result}", guild=guild)
         except RscException as exc:
             await interaction.followup.send(
                 embed=ApiExceptionErrorEmbed(exc), ephemeral=True
@@ -1482,7 +1489,7 @@ class TransactionMixIn(RSCMixIn):
                 notes=notes,
                 override=override,
             )
-            log.debug(f"Retire Result: {result}")
+            log.debug(f"Retire Result: {result}", guild=guild)
         except RscException as exc:
             await interaction.followup.send(
                 embed=ApiExceptionErrorEmbed(exc), ephemeral=True
@@ -1507,7 +1514,7 @@ class TransactionMixIn(RSCMixIn):
         if fname:
             franchise_role = await utils.franchise_role_from_name(guild, fname)
         if ptu.old_team:
-            log.debug(f"Old Team Tier: {ptu.old_team.tier}")
+            log.debug(f"Old Team Tier: {ptu.old_team.tier}", guild=guild)
             old_tier_role = await utils.get_tier_role(guild, ptu.old_team.tier)
 
         roles_to_remove = []
@@ -1676,12 +1683,12 @@ class TransactionMixIn(RSCMixIn):
 
         await interaction.response.defer(ephemeral=True)
         history = await self.transaction_history(guild, season=season, limit=10000)
-        log.debug(f"History Length: {len(history)}")
+        log.debug(f"History Length: {len(history)}", guild=guild)
 
         leaders: dict[int, int] = {}
         for t in history:
             if not t.executor.discord_id:
-                log.warning("Transaction executor has no discord ID.")
+                log.warning("Transaction executor has no discord ID.", guild=guild)
                 continue
             if not leaders.get(t.executor.discord_id):
                 leaders[t.executor.discord_id] = 1
@@ -1755,7 +1762,7 @@ class TransactionMixIn(RSCMixIn):
         player_out: discord.Member | None = None,
     ) -> tuple[discord.Embed, list[discord.File]]:
         action = TransactionType(response.type)
-        log.debug(f"Building transactions embed for type {action.name}")
+        log.debug(f"Building transactions embed for type {action.name}", guild=guild)
 
         # LeaguePlayer Objects
         ptu_in = await self.league_player_from_transaction(response, player_in)
@@ -1997,7 +2004,7 @@ class TransactionMixIn(RSCMixIn):
         if isinstance(gm, int):
             content = f"<@!{gm}>"
 
-        log.debug(f"Announcing to {channel.name}")
+        log.debug(f"Announcing to {channel.name}", guild=guild)
         return await channel.send(
             content=content,
             allowed_mentions=discord.AllowedMentions(users=True, roles=True),
@@ -2017,11 +2024,11 @@ class TransactionMixIn(RSCMixIn):
             raise TradeParserException(message=exc.args[0])
 
         # Iterate once to get all franchises involved
-        log.debug("Finding all franchises in trade.")
+        log.debug("Finding all franchises in trade.", guild=guild)
         franchises: list[FranchiseIdentifier] = []
         for line in data.splitlines():
             line = line.strip()
-            log.debug(f"Line: {line}")
+            log.debug(f"Line: {line}", guild=guild)
 
             if match := GM_TRADE_REGEX.search(line):
                 if not match.group("gm"):
@@ -2030,7 +2037,7 @@ class TransactionMixIn(RSCMixIn):
                     )
 
                 gm_str = match.group("gm").strip()
-                log.debug(f"GM str: {gm_str}")
+                log.debug(f"GM str: {gm_str}", guild=guild)
 
                 # Find name in GM role members
                 gm: discord.Member | None = None
@@ -2044,7 +2051,7 @@ class TransactionMixIn(RSCMixIn):
                     raise TradeParserException(
                         message=f"Unable to parse GM name from: `{line}`"
                     )
-                log.debug(f"Trade GM: {gm.display_name}")
+                log.debug(f"Trade GM: {gm.display_name}", guild=guild)
 
                 # Get franchise from API
                 fdata = await self.franchises(guild=guild, gm_name=tmp)
@@ -2055,7 +2062,7 @@ class TransactionMixIn(RSCMixIn):
 
                 fname = fdata[0].name
                 fid = fdata[0].id
-                log.debug(f"Franchise ID: {fid} Name: {fname} GM: {gm.id}")
+                log.debug(f"Franchise ID: {fid} Name: {fname} GM: {gm.id}", guild=guild)
                 f_object = FranchiseIdentifier(gm=gm.id, name=fname, id=fid)
                 franchises.append(f_object)
 
@@ -2067,7 +2074,7 @@ class TransactionMixIn(RSCMixIn):
 
         trade_list = []
         dest_franchise = None
-        log.debug("Parsing trades...")
+        log.debug("Parsing trades...", guild=guild)
         for line in data.splitlines():
             line = line.strip()
             log.debug(f"Line: {line}")
@@ -2078,7 +2085,7 @@ class TransactionMixIn(RSCMixIn):
 
             # New franchise data
             elif line.startswith("---"):
-                log.debug("Trade line break. Resetting destination...")
+                log.debug("Trade line break. Resetting destination...", guild=guild)
                 dest_franchise = None
                 continue
 
@@ -2090,13 +2097,13 @@ class TransactionMixIn(RSCMixIn):
                     )
 
                 gm_str = match.group("gm").strip()
-                log.debug(f"GM str: {gm_str}")
+                log.debug(f"GM str: {gm_str}", guild=guild)
 
                 # Find name in GM role members
                 gm = None
                 for m in gm_role.members:
                     tmp = await utils.remove_prefix(m)
-                    log.debug(f"GM tmp: {tmp}")
+                    log.debug(f"GM tmp: {tmp}", guild=guild)
                     if tmp.lower().startswith(gm_str.lower()):
                         gm = m
                         break
@@ -2105,7 +2112,7 @@ class TransactionMixIn(RSCMixIn):
                     raise TradeParserException(
                         message=f"Unable to parse GM name from: `{line}`"
                     )
-                log.debug(f"Trade GM: {gm.display_name}")
+                log.debug(f"Trade GM: {gm.display_name}", guild=guild)
 
                 # Get franchise from API
                 dest_franchise = next((x for x in franchises if x.gm == gm.id), None)
@@ -2131,7 +2138,7 @@ class TransactionMixIn(RSCMixIn):
                     )
 
                 m_str = match.group("player").strip()
-                log.debug(f"Player str: {m_str}")
+                log.debug(f"Player str: {m_str}", guild=guild)
                 player = discord.utils.get(league_role.members, display_name=m_str)
 
                 if not player:
@@ -2161,7 +2168,7 @@ class TransactionMixIn(RSCMixIn):
 
                 sf_id = pdata.team.franchise.id
                 sf_name = pdata.team.franchise.name
-                log.debug(f"Source. ID={sf_id} NAME={sf_name}")
+                log.debug(f"Source. ID={sf_id} NAME={sf_name}", guild=guild)
                 sfranchise = FranchiseIdentifier(id=sf_id, name=sf_name, gm=None)
 
                 # Get destination team name (find by current tier)
@@ -2185,10 +2192,10 @@ class TransactionMixIn(RSCMixIn):
 
                     dest_team = team_list[0].name
 
-                log.debug(f"Destination Team Name: {dest_team}")
+                log.debug(f"Destination Team Name: {dest_team}", guild=guild)
 
                 tvalue = TradeValue(player=Player1(id=player.id, team=dest_team))
-                log.debug(tvalue)
+                log.debug(tvalue, guild=guild)
 
                 item = TradeItem(
                     source=sfranchise, destination=dest_franchise, value=tvalue
@@ -2226,7 +2233,7 @@ class TransactionMixIn(RSCMixIn):
                 tvalue = TradeValue(
                     pick=DraftPick(tier=tier, round=round, number=0, future=True)
                 )
-                log.debug(tvalue)
+                log.debug(tvalue, guild=guild)
 
                 item = TradeItem(
                     source=sfranchise, destination=dest_franchise, value=tvalue
@@ -2279,7 +2286,8 @@ class TransactionMixIn(RSCMixIn):
                             sfranchise = f
 
                 log.debug(
-                    f"Pick Trade. Source GM: {source_gm} Source Franchise: {sfranchise}"
+                    f"Pick Trade. Source GM: {source_gm} Source Franchise: {sfranchise}",
+                    guild=guild,
                 )
                 if not sfranchise and source_gm:
                     sfranchise = FranchiseIdentifier(
@@ -2289,7 +2297,7 @@ class TransactionMixIn(RSCMixIn):
                 tvalue = TradeValue(
                     pick=DraftPick(tier=tier, round=round, number=pick, future=False)
                 )
-                log.debug(tvalue)
+                log.debug(tvalue, guild=guild)
 
                 item = TradeItem(
                     source=sfranchise, destination=dest_franchise, value=tvalue
@@ -2402,7 +2410,7 @@ class TransactionMixIn(RSCMixIn):
                 notes=notes,
                 admin_override=override,
             )
-            log.debug(f"[{guild.name}] Sign Parameters: {data}")
+            log.debug(f"Sign Parameters: {data}", guild=guild)
             try:
                 return await api.transactions_sign_create(data)
             except ApiException as exc:
@@ -2426,7 +2434,7 @@ class TransactionMixIn(RSCMixIn):
                 notes=notes,
                 admin_override=override,
             )
-            log.debug(f"[{guild.name}] Cut Parameters: {data}")
+            log.debug(f"Cut Parameters: {data}", guild=guild)
             try:
                 return await api.transactions_cut_create(data)
             except ApiException as exc:
@@ -2452,7 +2460,7 @@ class TransactionMixIn(RSCMixIn):
                 notes=notes,
                 admin_override=override,
             )
-            log.debug(f"[{guild.name}] Resign Parameters: {data}")
+            log.debug(f"Resign Parameters: {data}", guild=guild)
             try:
                 return await api.transactions_resign_create(data)
             except ApiException as exc:
@@ -2484,7 +2492,7 @@ class TransactionMixIn(RSCMixIn):
                 notes=notes,
                 admin_override=override,
             )
-            log.debug(f"Sub Data: {data}")
+            log.debug(f"Sub Data: {data}", guild=guild)
             try:
                 return await api.transactions_substitution_create(data)
             except ApiException as exc:
@@ -2502,7 +2510,7 @@ class TransactionMixIn(RSCMixIn):
             data = ExpireAPlayerSub(
                 league=self._league[guild.id], player=player.id, executor=executor.id
             )
-            log.debug(f"Expire Sub Data: {data}")
+            log.debug(f"Expire Sub Data: {data}", guild=guild)
             try:
                 return await api.transactions_expire_create(data)
             except ApiException as exc:
@@ -2526,7 +2534,7 @@ class TransactionMixIn(RSCMixIn):
                 notes=notes,
                 admin_override=override,
             )
-            log.debug(f"Retire Data: {data}")
+            log.debug(f"Retire Data: {data}", guild=guild)
             try:
                 return await api.transactions_retire_create(data)
             except ApiException as exc:
@@ -2552,7 +2560,7 @@ class TransactionMixIn(RSCMixIn):
                 admin_override=override,
                 remove_from_ir=remove,
             )
-            log.debug(f"IR Data: {data}")
+            log.debug(f"IR Data: {data}", guild=guild)
             try:
                 return await api.transactions_inactive_reserve_create(data)
             except ApiException as exc:
@@ -2575,7 +2583,8 @@ class TransactionMixIn(RSCMixIn):
             executor_id = executor.id if executor else None
             t_type = str(trans_type) if trans_type else None
             log.debug(
-                f"Transaction History Query. Player: {player_id} Executor: {executor_id} Season: {season} Type: {trans_type}"
+                f"Transaction History Query. Player: {player_id} Executor: {executor_id} Season: {season} Type: {trans_type}",
+                guild=guild,
             )
             try:
                 trans_list = await api.transactions_history_list(
@@ -2621,7 +2630,7 @@ class TransactionMixIn(RSCMixIn):
                     notes=notes,
                     admin_override=override,
                 )
-                log.debug(f"Schema: {pformat(schema)}")
+                log.debug(f"Schema: {pformat(schema)}", guild=guild)
                 return await api.transactions_trade_create(schema)
             except ApiException as exc:
                 raise RscException(response=exc)
