@@ -8,22 +8,22 @@ import discord
 DEFAULT_TIMEOUT = 30.0
 
 # Role Names
-GM_ROLE = "General Manager"
 AGM_ROLE = "Assistant GM"
-LEAGUE_ROLE = "League"
-MUTED_ROLE = "Muted"
 CAPTAIN_ROLE = "Captain"
-PERM_FA_ROLE = "PermFA"
-FREE_AGENT_ROLE = "Free Agent"
 DEV_LEAGUE_ROLE = "Dev League Interest"
-SUBBED_OUT_ROLE = "Subbed Out"
+DRAFT_ELIGIBLE = "Draft Eligible"
+FORMER_ADMIN_ROLE = "Former Admin"
 FORMER_GM_ROLE = "Former GM"
 FORMER_PLAYER_ROLE = "Former Player"
-FORMER_ADMIN_ROLE = "Former Admin"
 FORMER_STAFF_ROLE = "Former Staff"
-SPECTATOR_ROLE = "Spectator"
+FREE_AGENT_ROLE = "Free Agent"
+GM_ROLE = "General Manager"
 IR_ROLE = "IR"
-DRAFT_ELIGIBLE = "Draft Eligible"
+LEAGUE_ROLE = "League"
+MUTED_ROLE = "Muted"
+PERM_FA_ROLE = "PermFA"
+SPECTATOR_ROLE = "Spectator"
+SUBBED_OUT_ROLE = "Subbed Out"
 
 # Emoji
 TROPHY_EMOJI = "\U0001F3C6"  # :trophy:

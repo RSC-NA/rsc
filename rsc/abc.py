@@ -21,7 +21,7 @@ from rscapi.models.league import League
 from rscapi.models.league_player import LeaguePlayer
 from rscapi.models.match import Match
 from rscapi.models.match_list import MatchList
-from rscapi.models.member import Member
+from rscapi.models.member import Member as RSCMember
 from rscapi.models.player import Player
 from rscapi.models.player_season_stats import PlayerSeasonStats
 from rscapi.models.rebrand_a_franchise import RebrandAFranchise
@@ -270,12 +270,18 @@ class RSCMixIn(ABC):
     # Members
 
     @abstractmethod
+    async def league_player_from_member(
+        self, guild: discord.Guild, member: RSCMember
+    ) -> LeaguePlayer | None:
+        ...
+
+    @abstractmethod
     async def change_member_name(
         self,
         guild: discord.Guild,
         id: int,
         name: str,
-    ) -> Member:
+    ) -> RSCMember:
         ...
 
     @abstractmethod
@@ -287,7 +293,18 @@ class RSCMixIn(ABC):
         discord_id: int | None = None,
         limit: int = 0,
         offset: int = 0,
-    ) -> list[Member]:
+    ) -> list[RSCMember]:
+        ...
+
+    @abstractmethod
+    async def paged_members(
+        self,
+        guild: discord.Guild,
+        rsc_name: str | None = None,
+        discord_username: str | None = None,
+        discord_id: int | None = None,
+        per_page: int = 100,
+    ):
         ...
 
     @abstractmethod
@@ -325,7 +342,7 @@ class RSCMixIn(ABC):
         guild: discord.Guild,
         member: discord.Member,
         rsc_name: str | None = None,
-    ) -> Member:
+    ) -> RSCMember:
         ...
 
     @abstractmethod

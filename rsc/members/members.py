@@ -883,6 +883,37 @@ class MemberMixIn(RSCMixIn):
             )
             return members.results
 
+    async def paged_members(
+        self,
+        guild: discord.Guild,
+        rsc_name: str | None = None,
+        discord_username: str | None = None,
+        discord_id: int | None = None,
+        per_page: int = 100,
+    ):
+        offset = 0
+        while True:
+            async with ApiClient(self._api_conf[guild.id]) as client:
+                api = MembersApi(client)
+                members = await api.members_list(
+                    rsc_name=rsc_name,
+                    discord_username=discord_username,
+                    discord_id=discord_id,
+                    limit=per_page,
+                    offset=offset,
+                )
+
+                if not members.results:
+                    break
+
+                for member in members.results:
+                    yield member
+
+            if not members.next:
+                break
+
+            offset += per_page
+
     async def signup(
         self,
         guild: discord.Guild,

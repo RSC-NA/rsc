@@ -183,3 +183,55 @@ async def update_team_captain_discord(
         else:
             log.debug(f"Removing captain role: {m.display_name} ({m.id})", guild=guild)
             await m.remove_roles(cpt_role)
+
+
+async def update_nonplaying_discord(
+    guild: discord.Guild, member: discord.Member, tiers: list[Tier]
+):
+    former_player_role = await utils.get_former_player_role(guild)
+
+    # Bulk remove/add to help avoid rate limit
+    roles_to_remove: list[discord.Role] = []
+
+    # Franchise Role
+    frole = await utils.franchise_role_from_disord_member(member)
+    if frole:
+        roles_to_remove.append(frole)
+
+    # Find applicable roles
+    for r in member.roles:
+        # Tiers
+        for tier in tiers:
+            if r.name.replace("FA", "").lower() == tier.name.lower():
+                roles_to_remove.append(r)
+
+        # All player roles
+        match r.name:
+            case const.LEAGUE_ROLE:
+                roles_to_remove.append(r)
+            case const.FREE_AGENT_ROLE:
+                roles_to_remove.append(r)
+            case const.IR_ROLE:
+                roles_to_remove.append(r)
+            case const.PERM_FA_ROLE:
+                roles_to_remove.append(r)
+            case const.DRAFT_ELIGIBLE:
+                roles_to_remove.append(r)
+            case const.DEV_LEAGUE_ROLE:
+                roles_to_remove.append(r)
+            case const.CAPTAIN_ROLE:
+                roles_to_remove.append(r)
+            case const.SUBBED_OUT_ROLE:
+                roles_to_remove.append(r)
+
+    # Remove Roles
+    log.debug(f"Removing roles: {roles_to_remove}", guild=guild)
+    if roles_to_remove:
+        await member.remove_roles(*roles_to_remove)
+
+    # Determine Former Player by prefix
+    if await utils.get_prefix(member):
+        await member.add_roles(former_player_role)
+        new_nick = await utils.remove_prefix(member)
+        log.debug(f"Updating nickname: {new_nick}", guild=guild)
+        await member.edit(nick=new_nick)

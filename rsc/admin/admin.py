@@ -7,6 +7,7 @@ import discord
 from PIL import Image, ImageDraw
 from redbot.core import app_commands
 from rscapi.models.franchise import Franchise
+from rscapi.models.member import Member as RSCMember
 from rscapi.models.rebrand_a_franchise import RebrandAFranchise
 from rscapi.models.team_details import TeamDetails
 from rscapi.models.tier import Tier
@@ -42,6 +43,7 @@ from rsc.franchises import FranchiseMixIn
 from rsc.logs import GuildLogAdapter
 from rsc.teams import TeamMixIn
 from rsc.tiers import TierMixIn
+from rsc.transactions.roles import update_nonplaying_discord
 from rsc.types import AdminSettings, RebrandTeamDict
 from rsc.utils import utils
 from rsc.utils.images import drawProgressBar
@@ -913,7 +915,7 @@ class AdminMixIn(RSCMixIn):
                     )
 
                 # Add GM
-                if f.gm:
+                if f.gm and f.gm.discord_id:
                     gm = guild.get_member(f.gm.discord_id)
 
                 if gm:
@@ -960,6 +962,75 @@ class AdminMixIn(RSCMixIn):
                 name="Created", value="\n".join([r.mention for r in added]), inline=True
             )
 
+        await interaction.edit_original_response(embed=embed)
+
+    @_sync.command(  # type: ignore
+        name="nonplaying",
+        description="Sync all non playing discord members. (Long Execution Time)",
+    )
+    @app_commands.describe(dryrun="Do not modify any users.")
+    async def _sync_nonplaying_cmd(
+        self, interaction: discord.Interaction, dryrun: bool = False
+    ):
+        guild = interaction.guild
+        if not guild:
+            return
+
+        sync_view = ConfirmSyncView(interaction)
+        await sync_view.prompt()
+
+        try:
+            log.debug("Fetching tiers", guild=guild)
+            tiers: list[Tier] = await self.tiers(guild)
+        except RscException as exc:
+            return await interaction.edit_original_response(
+                embed=ApiExceptionErrorEmbed(exc)
+            )
+
+        # Wait for confirmation
+        await sync_view.wait()
+
+        if not sync_view.result:
+            return
+
+        log.debug("Fetching all members", guild=guild)
+        api_member: RSCMember
+        total = 0
+        synced = 0
+        async for api_member in self.paged_members(guild=guild):
+            total += 1
+            if not api_member.discord_id:
+                continue
+
+            # Check if member in league
+            if await self.league_player_from_member(guild, api_member):
+                continue
+
+            m = guild.get_member(api_member.discord_id)
+            if not m:
+                continue
+
+            log.debug(
+                f"Processing non-playing member: {m.display_name} ({m.id})", guild=guild
+            )
+
+            if not dryrun:
+                try:
+                    await update_nonplaying_discord(guild=guild, member=m, tiers=tiers)
+                except ValueError as exc:
+                    return await interaction.edit_original_response(
+                        embed=ErrorEmbed(description=str(exc))
+                    )
+            synced += 1
+
+        log.debug(f"Total Members: {total}", guild=guild)
+        log.debug(f"Total Synced: {synced}", guild=guild)
+
+        embed = BlueEmbed(
+            title="Non-Playing Sync",
+            description="All non-playing RSC members have been synced.",
+        )
+        embed.set_footer(text=f"Synced {synced}/{total} RSC member(s).")
         await interaction.edit_original_response(embed=embed)
 
     @_sync.command(  # type: ignore

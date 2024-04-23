@@ -17,7 +17,7 @@ from rscapi.models.team_season_stats import TeamSeasonStats
 from rscapi.models.tier import Tier
 
 from rsc.abc import RSCMixIn
-from rsc.embeds import BlueEmbed, ErrorEmbed
+from rsc.embeds import ApiExceptionErrorEmbed, BlueEmbed, ErrorEmbed
 from rsc.enums import Status, SubStatus
 from rsc.exceptions import RscException
 from rsc.franchises import FranchiseMixIn
@@ -85,7 +85,12 @@ class TeamMixIn(RSCMixIn):
 
         await interaction.response.defer()
         log.debug(f"Fetching teams for {franchise}")
-        teams = await self.teams(guild, franchise=franchise)
+        try:
+            teams = await self.teams(guild, franchise=franchise)
+        except RscException as exc:
+            return await interaction.followup.send(
+                embed=ApiExceptionErrorEmbed(exc), ephemeral=True
+            )
 
         if not teams:
             await interaction.followup.send(content="No results found.", ephemeral=True)
