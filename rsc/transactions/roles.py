@@ -246,9 +246,8 @@ async def update_nonplaying_discord(
 
     # Determine Former Player by prefix
     if await utils.get_prefix(member):
-        roles_to_add.append(former_player_role)
-        log.debug(f"Adding Roles: {roles_to_add}", guild=guild)
-        await member.add_roles(former_player_role)
+        if former_player_role not in roles_to_add:
+            roles_to_add.append(former_player_role)
         new_nick = await utils.remove_prefix(member)
         log.debug(f"Updating nickname: {new_nick}", guild=guild)
         try:
@@ -257,3 +256,7 @@ async def update_nonplaying_discord(
             log.warning(
                 f"Unable to update nickname {member.display_name} ({member.id}): {exc}"
             )
+
+    # Add Roles
+    log.debug(f"Adding Roles: {roles_to_add}", guild=guild)
+    await member.add_roles(former_player_role)
