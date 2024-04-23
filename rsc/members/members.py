@@ -874,14 +874,17 @@ class MemberMixIn(RSCMixIn):
     ) -> list[Member]:
         async with ApiClient(self._api_conf[guild.id]) as client:
             api = MembersApi(client)
-            members = await api.members_list(
-                rsc_name=rsc_name,
-                discord_username=discord_username,
-                discord_id=discord_id,
-                limit=limit,
-                offset=offset,
-            )
-            return members.results
+            try:
+                members = await api.members_list(
+                    rsc_name=rsc_name,
+                    discord_username=discord_username,
+                    discord_id=discord_id,
+                    limit=limit,
+                    offset=offset,
+                )
+                return members.results
+            except ApiException as exc:
+                raise RscException(exc)
 
     async def paged_members(
         self,
@@ -895,13 +898,16 @@ class MemberMixIn(RSCMixIn):
         while True:
             async with ApiClient(self._api_conf[guild.id]) as client:
                 api = MembersApi(client)
-                members = await api.members_list(
-                    rsc_name=rsc_name,
-                    discord_username=discord_username,
-                    discord_id=discord_id,
-                    limit=per_page,
-                    offset=offset,
-                )
+                try:
+                    members = await api.members_list(
+                        rsc_name=rsc_name,
+                        discord_username=discord_username,
+                        discord_id=discord_id,
+                        limit=per_page,
+                        offset=offset,
+                    )
+                except ApiException as exc:
+                    raise RscException(exc)
 
                 if not members.results:
                     break

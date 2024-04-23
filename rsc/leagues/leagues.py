@@ -260,9 +260,9 @@ class LeagueMixIn(RSCMixIn):
         limit: int = 0,
         offset: int = 0,
     ) -> list[LeaguePlayer]:
-        try:
-            async with ApiClient(self._api_conf[guild.id]) as client:
-                api = LeaguePlayersApi(client)
+        async with ApiClient(self._api_conf[guild.id]) as client:
+            api = LeaguePlayersApi(client)
+            try:
                 players = await api.league_players_list(
                     status=str(status) if status else None,
                     name=name,
@@ -278,8 +278,55 @@ class LeagueMixIn(RSCMixIn):
                     offset=offset,
                 )
                 return players.results
-        except ApiException as exc:
-            raise RscException(exc)
+            except ApiException as exc:
+                raise RscException(exc)
+
+    async def paged_players(
+        self,
+        guild: discord.Guild,
+        status: Status | None = None,
+        name: str | None = None,
+        tier: int | None = None,
+        tier_name: str | None = None,
+        season: int | None = None,
+        season_number: int | None = None,
+        team_name: str | None = None,
+        franchise: str | None = None,
+        discord_id: int | None = None,
+        per_page: int = 100,
+    ):
+        offset = 0
+        while True:
+            async with ApiClient(self._api_conf[guild.id]) as client:
+                api = LeaguePlayersApi(client)
+                try:
+                    players = await api.league_players_list(
+                        status=str(status) if status else None,
+                        name=name,
+                        tier=tier,
+                        tier_name=tier_name,
+                        season=season,
+                        season_number=season_number,
+                        league=self._league[guild.id],
+                        team_name=team_name,
+                        franchise=franchise,
+                        discord_id=discord_id,
+                        limit=per_page,
+                        offset=offset,
+                    )
+                except ApiException as exc:
+                    raise RscException(exc)
+
+                if not players.results:
+                    break
+
+                for player in players.results:
+                    yield player
+
+            if not players.next:
+                break
+
+            offset += per_page
 
     async def league_player_partial_update(
         self, guild: discord.Guild, id: int, lp: LeaguePlayer

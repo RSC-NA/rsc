@@ -73,7 +73,12 @@ async def update_signed_player_discord(
         f"{ptu.player.team.franchise.prefix} | {await utils.remove_prefix(player)}"
     )
     log.debug(f"Changing {player.id} signed player nick: {new_nick}", guild=guild)
-    await player.edit(nick=new_nick)
+    try:
+        await player.edit(nick=new_nick)
+    except discord.Forbidden as exc:
+        log.warning(
+            f"Unable to update nickname {player.display_name} ({player.id}): {exc}"
+        )
 
 
 async def update_cut_player_discord(
@@ -159,7 +164,12 @@ async def update_cut_player_discord(
     await player.add_roles(*roles_to_add)
 
     log.debug(f"Updating cut player nickname: {new_nick}", guild=guild)
-    await player.edit(nick=new_nick)
+    try:
+        await player.edit(nick=new_nick)
+    except discord.Forbidden as exc:
+        log.warning(
+            f"Unable to update nickname {player.display_name} ({player.id}): {exc}"
+        )
 
 
 async def update_team_captain_discord(
@@ -189,9 +199,11 @@ async def update_nonplaying_discord(
     guild: discord.Guild, member: discord.Member, tiers: list[Tier]
 ):
     former_player_role = await utils.get_former_player_role(guild)
+    spectator_role = await utils.get_spectator_role(guild)
 
     # Bulk remove/add to help avoid rate limit
     roles_to_remove: list[discord.Role] = []
+    roles_to_add: list[discord.Role] = []
 
     # Franchise Role
     frole = await utils.franchise_role_from_disord_member(member)
@@ -224,6 +236,9 @@ async def update_nonplaying_discord(
             case const.SUBBED_OUT_ROLE:
                 roles_to_remove.append(r)
 
+    if spectator_role not in member.roles:
+        roles_to_add.append(spectator_role)
+
     # Remove Roles
     log.debug(f"Removing roles: {roles_to_remove}", guild=guild)
     if roles_to_remove:
@@ -231,7 +246,14 @@ async def update_nonplaying_discord(
 
     # Determine Former Player by prefix
     if await utils.get_prefix(member):
+        roles_to_add.append(former_player_role)
+        log.debug(f"Adding Roles: {roles_to_add}", guild=guild)
         await member.add_roles(former_player_role)
         new_nick = await utils.remove_prefix(member)
         log.debug(f"Updating nickname: {new_nick}", guild=guild)
-        await member.edit(nick=new_nick)
+        try:
+            await member.edit(nick=new_nick)
+        except discord.Forbidden as exc:
+            log.warning(
+                f"Unable to update nickname {member.display_name} ({member.id}): {exc}"
+            )

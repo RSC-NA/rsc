@@ -217,6 +217,23 @@ class RSCMixIn(ABC):
         ...
 
     @abstractmethod
+    async def paged_players(
+        self,
+        guild: discord.Guild,
+        status: Status | None = None,
+        name: str | None = None,
+        tier: int | None = None,
+        tier_name: str | None = None,
+        season: int | None = None,
+        season_number: int | None = None,
+        team_name: str | None = None,
+        franchise: str | None = None,
+        discord_id: int | None = None,
+        per_page: int = 100,
+    ):
+        ...
+
+    @abstractmethod
     async def league_seasons(self, guild: discord.Guild) -> list[Season]:
         ...
 

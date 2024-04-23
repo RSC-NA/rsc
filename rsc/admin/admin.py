@@ -1011,7 +1011,7 @@ class AdminMixIn(RSCMixIn):
                 continue
 
             log.debug(
-                f"Processing non-playing member: {m.display_name} ({m.id})", guild=guild
+                f"Syncing non-playing member: {m.display_name} ({m.id})", guild=guild
             )
 
             if not dryrun:
