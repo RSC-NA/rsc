@@ -246,7 +246,7 @@ async def update_nonplaying_discord(
 
     # Determine Former Player by prefix
     if await utils.get_prefix(member):
-        if former_player_role not in roles_to_add:
+        if former_player_role not in member.roles:
             roles_to_add.append(former_player_role)
         new_nick = await utils.remove_prefix(member)
         log.debug(f"Updating nickname: {new_nick}", guild=guild)
@@ -259,4 +259,5 @@ async def update_nonplaying_discord(
 
     # Add Roles
     log.debug(f"Adding Roles: {roles_to_add}", guild=guild)
-    await member.add_roles(former_player_role)
+    if roles_to_remove:
+        await member.add_roles(*roles_to_add)
