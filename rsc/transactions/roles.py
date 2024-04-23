@@ -240,8 +240,8 @@ async def update_nonplaying_discord(
         roles_to_add.append(spectator_role)
 
     # Remove Roles
-    log.debug(f"Removing roles: {roles_to_remove}", guild=guild)
     if roles_to_remove:
+        log.debug(f"Removing roles: {roles_to_remove}", guild=guild)
         await member.remove_roles(*roles_to_remove)
 
     # Determine Former Player by prefix
@@ -258,6 +258,6 @@ async def update_nonplaying_discord(
             )
 
     # Add Roles
-    log.debug(f"Adding Roles: {roles_to_add}", guild=guild)
     if roles_to_remove:
+        log.debug(f"Adding Roles: {roles_to_add}", guild=guild)
         await member.add_roles(*roles_to_add)
