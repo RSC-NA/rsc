@@ -1161,17 +1161,6 @@ class TransactionMixIn(RSCMixIn):
                 captains.append(v)
         log.debug(f"Captain Count: {len(captains)}", guild=guild)
 
-        # Get Captain Role
-        try:
-            cpt_role = await utils.get_captain_role(guild)
-        except ValueError:
-            return await interaction.followup.send(
-                embed=ErrorEmbed(description="Captain role does not exist in guild.")
-            )
-
-        # Get transaction channel
-        trans_channel = await self._trans_channel(guild)
-
         results: list[discord.Member] = []
         for captain in captains:
             # Get team of player being made captain
@@ -1237,22 +1226,11 @@ class TransactionMixIn(RSCMixIn):
             except ValueError as exc:
                 await interaction.followup.send(embed=ErrorEmbed(description=str(exc)))
 
-            # Add to final result
             results.append(captain)
-
-            if trans_channel:
-                str_fmt = (
-                    f"{player.mention} was elected captain of {player_data.team.name}"
-                    f" (<@!{player_data.team.franchise.gm.discord_id}> - {player_data.tier.name})"
-                )
-                await trans_channel.send(
-                    content=str_fmt,
-                    allowed_mentions=discord.AllowedMentions(users=True),
-                )
 
         # Send Result
         embed = SuccessEmbed(
-            title="Captains Designated",
+            title="Captains Updated",
             description="Updated captain roles for the following player(s).",
         )
         embed.add_field(
