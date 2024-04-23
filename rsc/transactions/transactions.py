@@ -2295,7 +2295,7 @@ class TransactionMixIn(RSCMixIn):
         trade_groups = [
             list(t) for _, t in itertools.groupby(trades, lambda t: t.destination)
         ]
-        embed = BlueEmbed(title="Trade")
+        embed = BlueEmbed(title="Trade Confirmed")
 
         gms = []
         for group in trade_groups:

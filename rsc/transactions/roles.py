@@ -241,7 +241,7 @@ async def update_nonplaying_discord(
 
     # Remove Roles
     if roles_to_remove:
-        log.debug(f"Removing roles: {roles_to_remove}", guild=guild)
+        log.debug(f"Removing roles ({member.id}): {roles_to_remove}", guild=guild)
         await member.remove_roles(*roles_to_remove)
 
     # Determine Former Player by prefix
@@ -249,7 +249,7 @@ async def update_nonplaying_discord(
         if former_player_role not in member.roles:
             roles_to_add.append(former_player_role)
         new_nick = await utils.remove_prefix(member)
-        log.debug(f"Updating nickname: {new_nick}", guild=guild)
+        log.debug(f"Updating nickname ({member.id}): {new_nick}", guild=guild)
         try:
             await member.edit(nick=new_nick)
         except discord.Forbidden as exc:
@@ -259,5 +259,5 @@ async def update_nonplaying_discord(
 
     # Add Roles
     if roles_to_remove:
-        log.debug(f"Adding Roles: {roles_to_add}", guild=guild)
+        log.debug(f"Adding Roles ({member.id}): {roles_to_add}", guild=guild)
         await member.add_roles(*roles_to_add)
