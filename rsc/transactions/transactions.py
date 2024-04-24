@@ -1675,7 +1675,7 @@ class TransactionMixIn(RSCMixIn):
         if not guild:
             return
 
-        await interaction.response.defer(ephemeral=True)
+        await interaction.response.defer()
         history = await self.transaction_history(guild, season=season, limit=10000)
         log.debug(f"History Length: {len(history)}", guild=guild)
 
@@ -1707,7 +1707,7 @@ class TransactionMixIn(RSCMixIn):
         embed.add_field(
             name="Total", value="\n".join(str(x[1]) for x in leader_fmt), inline=True
         )
-        await interaction.followup.send(embed=embed, ephemeral=True)
+        await interaction.followup.send(embed=embed)
 
     # Functions
 
