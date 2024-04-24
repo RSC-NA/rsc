@@ -2052,7 +2052,7 @@ class TransactionMixIn(RSCMixIn):
                 fdata = await self.franchises(guild=guild, gm_discord_id=gm.id)
                 if not fdata or len(fdata) > 1:
                     raise TradeParserException(
-                        message=f"Error finding franchise for GM: `{tmp}`"
+                        message=f"Error finding franchise for GM: `{gm.display_name} ({gm.id})`"
                     )
 
                 fname = fdata[0].name
