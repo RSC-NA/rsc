@@ -1075,11 +1075,15 @@ class AdminMixIn(RSCMixIn):
 
             m = guild.get_member(api_player.player.discord_id)
             if not m:
-                # log.debug(f"Player not in guild: {api_player.player.discord_id}", guild=guild)
+                log.warning(
+                    f"Rostered player not in guild: {api_player.player.discord_id}",
+                    guild=guild,
+                )
                 continue
 
             log.debug(f"Syncing Player: {m.display_name} ({m.id})", guild=guild)
 
+            synced += 1
             if not dryrun:
                 try:
                     await update_rostered_discord(
@@ -1089,7 +1093,6 @@ class AdminMixIn(RSCMixIn):
                     return await interaction.edit_original_response(
                         embed=ErrorEmbed(description=str(exc))
                     )
-            synced += 1
 
         log.debug(f"Total Players: {total}", guild=guild)
         log.debug(f"Total Synced: {synced}", guild=guild)
