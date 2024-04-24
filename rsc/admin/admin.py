@@ -1337,7 +1337,7 @@ class AdminMixIn(RSCMixIn):
             m = guild.get_member(player.player.discord_id)
             if not m:
                 log.warning(
-                    f"Couldn't find DE in guild: {player.player.name} ({player.id})"
+                    f"Couldn't find DE in guild: {player.player.name} ({player.player.discord_id})"
                 )
                 continue
             log.debug(f"Updating DE: {m.display_name}")

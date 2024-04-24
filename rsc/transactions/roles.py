@@ -479,9 +479,6 @@ async def update_draft_eligible_discord(
     if league_player.status != Status.DRAFT_ELIGIBLE:
         raise ValueError(f"{player.display_name} ({player.id}) is not draft eligible.")
 
-    if not league_player.tier:
-        raise AttributeError(f"{player.display_name} ({player.id}) has no tier data.")
-
     roles_to_remove: list[discord.Role] = []
     roles_to_add: list[discord.Role] = []
 
@@ -495,6 +492,7 @@ async def update_draft_eligible_discord(
                 ):
                     roles_to_remove.append(r)
     elif tiers:
+        log.debug(f"{player.display_name} ({player.id}) has no tier data.", guild=guild)
         for r in player.roles:
             for tier in tiers:
                 if r.name.replace("FA", "").lower() == tier.name.lower():
