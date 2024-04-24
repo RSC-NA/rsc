@@ -61,11 +61,11 @@ logger = logging.getLogger("red.rsc.transactions")
 log = GuildLogAdapter(logger)
 
 PICK_TRADE_REGEX = re.compile(
-    r"^(?P<gm>[a-z0-9\x20]+)?(?:'s\s+)?(?P<round>\d)(?:st|nd|rd|th)\s+Round\s+(?P<tier>\w+)\s+\((?P<pick>\d{1,2})\)$",
+    r"^(?P<gm>.+?)?(?:'s\s+)?(?P<round>\d)(?:st|nd|rd|th)\s+Round\s+(?P<tier>\w+)\s+\((?P<pick>\d{1,2})\)$",
     re.IGNORECASE,
 )
 FUTURE_TRADE_REGEX = re.compile(
-    r"^(?P<gm>[a-z0-9\x20]+)'s\s+S(?P<season>\d+)\s+(?P<round>\d)(?:st|nd|rd|th)\s+Round\s+(?P<tier>\w+)$",
+    r"^(?P<gm>.+?)'s\s+S(?P<season>\d+)\s+(?P<round>\d)(?:st|nd|rd|th)\s+Round\s+(?P<tier>\w+)$",
     re.IGNORECASE,
 )
 GM_TRADE_REGEX = re.compile(r"^(?P<gm>.+?) receives:$", re.IGNORECASE)
