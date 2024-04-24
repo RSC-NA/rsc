@@ -1206,9 +1206,12 @@ class AdminMixIn(RSCMixIn):
 
             # Check if dry run
             if not dryrun:
-                await update_free_agent_discord(
-                    guild=guild, player=m, league_player=player, tiers=tiers
-                )
+                try:
+                    await update_free_agent_discord(
+                        guild=guild, player=m, league_player=player, tiers=tiers
+                    )
+                except (ValueError, AttributeError) as exc:
+                    await interaction.followup.send(content=str(exc), ephemeral=True)
 
             # Update progress bar
             if (idx % 10) == 0:
@@ -1343,9 +1346,12 @@ class AdminMixIn(RSCMixIn):
             log.debug(f"Updating DE: {m.display_name}")
 
             if not dryrun:
-                await update_draft_eligible_discord(
-                    guild=guild, player=m, league_player=player, tiers=tiers
-                )
+                try:
+                    await update_draft_eligible_discord(
+                        guild=guild, player=m, league_player=player, tiers=tiers
+                    )
+                except (ValueError, AttributeError) as exc:
+                    await interaction.followup.send(content=str(exc), ephemeral=True)
 
             # Update progress bar
             if (idx % 10) == 0:
