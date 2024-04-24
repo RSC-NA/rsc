@@ -1020,8 +1020,8 @@ class AdminMixIn(RSCMixIn):
                 try:
                     await update_nonplaying_discord(guild=guild, member=m, tiers=tiers)
                 except (ValueError, AttributeError) as exc:
-                    return await interaction.edit_original_response(
-                        embed=ErrorEmbed(description=str(exc))
+                    return await interaction.followup.send(
+                        embed=ErrorEmbed(description=str(exc)), ephemeral=True
                     )
             synced += 1
 
@@ -1090,8 +1090,8 @@ class AdminMixIn(RSCMixIn):
                         guild=guild, player=m, league_player=api_player, tiers=tiers
                     )
                 except (ValueError, AttributeError) as exc:
-                    return await interaction.edit_original_response(
-                        embed=ErrorEmbed(description=str(exc))
+                    return await interaction.followup.send(
+                        embed=ErrorEmbed(description=str(exc)), ephemeral=True
                     )
 
         log.debug(f"Total Players: {total}", guild=guild)
