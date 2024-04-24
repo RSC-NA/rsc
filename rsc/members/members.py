@@ -765,7 +765,7 @@ class MemberMixIn(RSCMixIn):
             if flogo:
                 embed.set_thumbnail(url=flogo)
 
-        if not flogo and player.avatar:
+        if not embed.thumbnail.url and player.avatar:
             embed.set_thumbnail(url=player.avatar.url)
 
         await interaction.followup.send(embed=embed)
