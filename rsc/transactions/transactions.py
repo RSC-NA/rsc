@@ -68,7 +68,7 @@ FUTURE_TRADE_REGEX = re.compile(
     r"^(?P<gm>[a-z0-9\x20]+)'s\s+S(?P<season>\d+)\s+(?P<round>\d)(?:st|nd|rd|th)\s+Round\s+(?P<tier>\w+)$",
     re.IGNORECASE,
 )
-GM_TRADE_REGEX = re.compile(r"^(?P<gm>[a-z0-9\x20]+) receives:$", re.IGNORECASE)
+GM_TRADE_REGEX = re.compile(r"^(?P<gm>.+?) receives:$", re.IGNORECASE)
 PLAYER_TRADE_REGEX = re.compile(
     r"^@(?P<player>.+?)(?:\sto\s(?P<team>[a-z0-9\x20]+))?$", re.IGNORECASE
 )
@@ -2055,6 +2055,7 @@ class TransactionMixIn(RSCMixIn):
                         message=f"Error finding franchise for GM: `{gm.display_name} ({gm.id})`"
                     )
 
+                log.debug("Getting fname and fid")
                 fname = fdata[0].name
                 fid = fdata[0].id
                 log.debug(f"Franchise ID: {fid} Name: {fname} GM: {gm.id}", guild=guild)

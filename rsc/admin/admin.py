@@ -44,7 +44,11 @@ from rsc.franchises import FranchiseMixIn
 from rsc.logs import GuildLogAdapter
 from rsc.teams import TeamMixIn
 from rsc.tiers import TierMixIn
-from rsc.transactions.roles import update_nonplaying_discord, update_rostered_discord
+from rsc.transactions.roles import (
+    update_free_agent_discord,
+    update_nonplaying_discord,
+    update_rostered_discord,
+)
 from rsc.types import AdminSettings, RebrandTeamDict
 from rsc.utils import utils
 from rsc.utils.images import drawProgressBar
@@ -1104,9 +1108,9 @@ class AdminMixIn(RSCMixIn):
         name="freeagent",
         description="Sync all free agent players in discord",
     )
+    @app_commands.describe(dryrun="Do not modify any users.")
     async def _sync_freeagent_cmd(
-        self,
-        interaction: discord.Interaction,
+        self, interaction: discord.Interaction, dryrun: bool = False
     ):
         guild = interaction.guild
         if not guild:
@@ -1115,13 +1119,13 @@ class AdminMixIn(RSCMixIn):
         sync_view = ConfirmSyncView(interaction)
         await sync_view.prompt()
         plist = await self.players(guild, status=Status.FREE_AGENT, limit=10000)
-        tier_list: list[Tier] = await self.tiers(guild)
+        tiers: list[Tier] = await self.tiers(guild)
         await sync_view.wait()
 
         if not sync_view.result:
             return
 
-        # Exit if no DE's exist
+        # Exit if no FA's exist
         if not plist:
             return await interaction.edit_original_response(
                 embed=BlueEmbed(
@@ -1131,18 +1135,13 @@ class AdminMixIn(RSCMixIn):
             )
 
         # Make sure tiers exist
-        if not tier_list:
+        if not tiers:
             return await interaction.edit_original_response(
                 embed=BlueEmbed(
                     title="Free Agent Sync",
                     description="League has no tiers configured.",
                 )
             )
-
-        tiers = []
-        for t in tier_list:
-            if t.name:
-                tiers.append(t.name.lower())
 
         loading_embed = BlueEmbed(
             title="Syncing Free Agents",
@@ -1151,11 +1150,6 @@ class AdminMixIn(RSCMixIn):
 
         total_de = len(plist)
         log.debug(f"Total FA: {total_de}")
-
-        # Get Roles
-        league_role = await utils.get_league_role(guild)
-        captain_role = await utils.get_captain_role(guild)
-        fa_role = await utils.get_free_agent_role(guild)
 
         # Send initial progress bar
         progress_bar = Image.new("RGBA", (275, 50), (255, 255, 255))
@@ -1211,47 +1205,12 @@ class AdminMixIn(RSCMixIn):
                     f"Couldn't find FA in guild: {player.player.name} ({player.id})"
                 )
                 continue
-            log.debug(f"Updating FA: {m.display_name}")
+            log.debug(f"Syncing FA: {m.display_name}")
 
-            roles_to_add = [fa_role, league_role]
-            roles_to_remove = [captain_role]
-
-            # Remove old tier if it exists
-            for r in m.roles:
-                if r.name.replace("FA", "").lower() in tiers:
-                    roles_to_remove.append(r)
-
-            # Get tier and tier FA roles
-            if player.tier and player.tier.name:
-                tier_role = await utils.get_tier_role(guild, name=player.tier.name)
-                log.debug(f"Tier Name: {player.tier.name}")
-                log.debug(f"Tier Role: {tier_role}")
-                if tier_role:
-                    roles_to_add.append(tier_role)
-
-                tier_fa_role = await utils.get_tier_fa_role(
-                    guild, name=player.tier.name
+            if not dryrun:
+                await update_free_agent_discord(
+                    guild=guild, player=m, league_player=player, tiers=tiers
                 )
-                if tier_fa_role:
-                    roles_to_add.append(tier_fa_role)
-
-            # Remove franchise role if it exists
-            franchise_role = await utils.franchise_role_from_disord_member(m)
-            if franchise_role:
-                roles_to_remove.append(franchise_role)
-
-            # Remove roles
-            await m.remove_roles(*roles_to_remove)
-
-            # Add roles
-            if not all(x in m.roles for x in roles_to_add):
-                log.debug("Adding roles.")
-                await m.add_roles(*roles_to_add)
-
-            # Edit nickname
-            name = await utils.remove_prefix(m)
-            if not m.name.startswith("FA |"):
-                await m.edit(nick=f"FA | {name}")
 
             # Update progress bar
             if (idx % 10) == 0:
