@@ -65,7 +65,12 @@ class MatchMixIn(RSCMixIn):
                 return
 
             pdata = player[0]
-            if pdata.status not in (Status.ROSTERED, Status.IR, Status.AGMIR):
+            if pdata.status not in (
+                Status.ROSTERED,
+                Status.IR,
+                Status.AGMIR,
+                Status.RENEWED,
+            ):
                 await interaction.followup.send(
                     embed=ErrorEmbed(
                         description="You are not currently rostered on a team."
