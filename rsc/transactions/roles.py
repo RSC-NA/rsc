@@ -53,24 +53,20 @@ async def update_signed_player_discord(
                     r.name.replace("FA", "").lower() == tier.name.lower()
                     and r.name.lower() != ptu.new_team.tier.lower()
                 ):
-                    log.debug(f"Removing role: {r.name}", guild=guild)
                     roles_to_remove.append(r)
 
     # FA Role:
-    log.debug(f"Removing FA roles from {player.id}", guild=guild)
     fa_role = await utils.get_free_agent_role(guild)
     if fa_role in player.roles:
         roles_to_remove.append(fa_role)
 
     # Remove old franchise role if it exists
     old_frole = await utils.franchise_role_from_disord_member(player)
-    log.debug(f"Old Franchise Role: {old_frole}", guild=guild)
     if old_frole:
         roles_to_remove.append(old_frole)
 
     # Add franchise role
     frole = await utils.franchise_role_from_league_player(guild, ptu.player)
-    log.debug(f"Adding franchise role to {player.id}: {frole.name}", guild=guild)
     if frole:
         roles_to_add.append(frole)
     else:
@@ -79,9 +75,7 @@ async def update_signed_player_discord(
         )
 
     # Verify player has tier role
-    log.debug(f"Player Tier: {ptu.player.tier.name}", guild=guild)
     tier_role = await utils.get_tier_role(guild, name=ptu.new_team.tier)
-    log.debug(f"Adding tier role to {player.id}: {tier_role.name}", guild=guild)
     if tier_role:
         if tier_role not in player.roles:
             roles_to_add.append(tier_role)
@@ -90,17 +84,22 @@ async def update_signed_player_discord(
 
     # Update roles at same time to reduce API calls
     if roles_to_remove:
+        log.debug(f"Removing roles: {roles_to_remove}", guild=guild)
         await player.remove_roles(*roles_to_remove)
     if roles_to_add:
+        log.debug(f"Adding roles: {roles_to_remove}", guild=guild)
         await player.add_roles(*roles_to_add)
 
     # Update player prefix
     new_nick = (
         f"{ptu.player.team.franchise.prefix} | {await utils.remove_prefix(player)}"
     )
-    log.debug(f"Changing {player.id} signed player nick: {new_nick}", guild=guild)
     try:
-        await player.edit(nick=new_nick)
+        if new_nick != player.display_name:
+            log.debug(
+                f"Changing {player.id} signed player nick: {new_nick}", guild=guild
+            )
+            await player.edit(nick=new_nick)
     except discord.Forbidden as exc:
         log.warning(
             f"Unable to update nickname {player.display_name} ({player.id}): {exc}"
@@ -154,8 +153,10 @@ async def update_cut_player_discord(
     # Free agent roles
     fa_role = await utils.get_free_agent_role(guild)
     tier_fa_role = await utils.get_tier_fa_role(guild, ptu.player.tier.name)
-    roles_to_add.append(fa_role)
-    roles_to_add.append(tier_fa_role)
+    if fa_role not in player.roles:
+        roles_to_add.append(fa_role)
+    if tier_fa_role not in player.roles:
+        roles_to_add.append(tier_fa_role)
 
     # Franchise Role
     franchise_role = await utils.franchise_role_from_name(
@@ -172,23 +173,24 @@ async def update_cut_player_discord(
 
     # Make changes for Non-GM player
     if response.first_franchise.gm.discord_id != player.id:
-        accolades = await utils.member_accolades(player)
-        new_nick = f"FA | {await utils.remove_prefix(player)} {accolades}".strip()
+        new_nick = f"FA | {await utils.remove_prefix(player)}".strip()
         roles_to_remove.append(franchise_role)
 
         # Add Dev League Interest if it exists
         dev_league_role = discord.utils.get(guild.roles, name=const.DEV_LEAGUE_ROLE)
-        if dev_league_role:
+        if dev_league_role and dev_league_role not in player.roles:
             roles_to_add.append(dev_league_role)
     else:
         new_nick = player.display_name
         roles_to_add.remove(fa_role)
         roles_to_add.remove(tier_fa_role)
 
-    log.debug(f"Removing cut player roles: {roles_to_remove}", guild=guild)
-    await player.remove_roles(*roles_to_remove)
-    log.debug(f"Adding cut player roles: {roles_to_add}", guild=guild)
-    await player.add_roles(*roles_to_add)
+    if roles_to_remove:
+        log.debug(f"Removing cut player roles: {roles_to_remove}", guild=guild)
+        await player.remove_roles(*roles_to_remove)
+    if roles_to_add:
+        log.debug(f"Adding cut player roles: {roles_to_add}", guild=guild)
+        await player.add_roles(*roles_to_add)
 
     log.debug(f"Updating cut player nickname: {new_nick}", guild=guild)
     try:
@@ -213,11 +215,10 @@ async def update_team_captain_discord(
             )
             continue
 
-        if p.captain:
+        if p.captain and cpt_role not in m.roles:
             log.debug(f"Adding captain role: {m.display_name} ({m.id})", guild=guild)
-            if cpt_role not in m.roles:
-                await m.add_roles(cpt_role)
-        else:
+            await m.add_roles(cpt_role)
+        elif cpt_role in m.roles:
             log.debug(f"Removing captain role: {m.display_name} ({m.id})", guild=guild)
             await m.remove_roles(cpt_role)
 
