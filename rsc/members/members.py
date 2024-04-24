@@ -724,16 +724,7 @@ class MemberMixIn(RSCMixIn):
             )
             return
 
-        p = players[0]
-
-        if not (p.tier and p.tier.name):
-            await interaction.followup.send(
-                embed=YellowEmbed(
-                    title="Player Info",
-                    description=f"{player.mention} has no tier data. If this is an error, please submit a modmail.",
-                )
-            )
-            return
+        p = players.pop()
 
         if not p.status:
             await interaction.followup.send(
@@ -744,52 +735,35 @@ class MemberMixIn(RSCMixIn):
             )
             return
 
-        tier_color = await utils.tier_color_by_name(guild, p.tier.name)
-
-        embed = discord.Embed(
-            title=f"Player Info: {p.player.name}",
-            color=tier_color,
-        )
+        embed = BlueEmbed(title=f"Player Info: {p.player.name}")
 
         embed.add_field(name="Player", value=player.mention, inline=True)
-        embed.add_field(name="Tier", value=p.tier.name, inline=True)
+
+        if p.tier and p.tier.name:
+            tier_color = await utils.tier_color_by_name(guild, p.tier.name)
+            embed.colour = tier_color
+            embed.add_field(name="Tier", value=p.tier.name, inline=True)
+
         embed.add_field(name="Status", value=Status(p.status).full_name, inline=True)
 
-        if not p.team:
-            await interaction.followup.send(embed=embed)
-            return
-
-        if not p.team.franchise:
-            return await interaction.followup.send(
-                embed=ErrorEmbed(
-                    description="Player team has no associated franchise. Please submit a modmail ticket."
-                )
-            )
-
-        if not p.team.franchise.id:
-            return await interaction.followup.send(
-                embed=ErrorEmbed(
-                    description="Player franchise has no ID assocaited with it. Please submit a modmail ticket."
-                )
-            )
-
-        if not p.team.franchise.name:
-            return await interaction.followup.send(
-                embed=ErrorEmbed(
-                    description="Player franchise has no name. Please submit a modmail ticket."
-                )
-            )
-
-        frole = await utils.franchise_role_from_name(guild, p.team.franchise.name)
-        f_fmt = frole.mention if frole else p.team.franchise.name
-
         embed.add_field(name="", value="", inline=False)  # Line Break
-        embed.add_field(name="Team", value=p.team.name, inline=True)
-        embed.add_field(name="Franchise", value=f_fmt, inline=True)
 
-        flogo = await self.franchise_logo(guild, p.team.franchise.id)
-        if flogo:
-            embed.set_thumbnail(url=flogo)
+        if p.team:
+            embed.add_field(name="Team", value=p.team.name, inline=True)
+
+        if (
+            p.team
+            and p.team.franchise
+            and p.team.franchise.name
+            and p.team.franchise.id
+        ):
+            frole = await utils.franchise_role_from_name(guild, p.team.franchise.name)
+            f_fmt = frole.mention if frole else p.team.franchise.name
+            embed.add_field(name="Franchise", value=f_fmt, inline=True)
+
+            flogo = await self.franchise_logo(guild, p.team.franchise.id)
+            if flogo:
+                embed.set_thumbnail(url=flogo)
         await interaction.followup.send(embed=embed)
 
     @app_commands.command(  # type: ignore
