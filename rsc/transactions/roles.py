@@ -460,8 +460,92 @@ async def update_free_agent_discord(
         await player.add_roles(*roles_to_add)
 
     try:
+        new_nick = f"FA | {await utils.remove_prefix(player)}".strip()
+        if new_nick != player.display_name:
+            log.debug(f"Updating cut player nickname: {new_nick}", guild=guild)
+            await player.edit(nick=new_nick)
+    except discord.Forbidden as exc:
+        log.warning(
+            f"Unable to update nickname {player.display_name} ({player.id}): {exc}"
+        )
+
+
+async def update_draft_eligible_discord(
+    guild: discord.Guild,
+    player: discord.Member,
+    league_player: LeaguePlayer,
+    tiers: list[Tier],
+):
+    if league_player.status != Status.DRAFT_ELIGIBLE:
+        raise ValueError(f"{player.display_name} ({player.id}) is not draft eligible.")
+
+    if not league_player.tier:
+        raise AttributeError(f"{player.display_name} ({player.id}) has no tier data.")
+
+    roles_to_remove: list[discord.Role] = []
+    roles_to_add: list[discord.Role] = []
+
+    # Remove old tier roles and tier FA role on discord.Member
+    if tiers and league_player.tier:
+        for r in player.roles:
+            for tier in tiers:
+                if (
+                    r.name.replace("FA", "").lower() == tier.name.lower()
+                    and r.name.lower() != league_player.tier.name.lower()
+                ):
+                    roles_to_remove.append(r)
+    elif tiers:
+        for r in player.roles:
+            for tier in tiers:
+                if r.name.replace("FA", "").lower() == tier.name.lower():
+                    roles_to_remove.append(r)
+
+    # Remove any old franchise role if it exists
+    old_froles = await utils.franchise_role_list_from_disord_member(player)
+    if old_froles:
+        roles_to_remove.extend(old_froles)
+
+    # League Role:
+    league_role = await utils.get_captain_role(guild)
+    if league_role in player.roles:
+        roles_to_add.append(league_role)
+
+    # PermFA Role:
+    permfa_role = await utils.get_permfa_role(guild)
+    if permfa_role in player.roles:
+        roles_to_remove.append(permfa_role)
+
+    # Remove captain
+    captain_role = await utils.get_captain_role(guild)
+    if captain_role in player.roles:
+        roles_to_remove.append(captain_role)
+
+    # Update tier role, handle promotion case
+    if league_player.tier.name:
+        tier_role = await utils.get_tier_role(guild, league_player.tier.name)
+        if tier_role not in player.roles:
+            roles_to_add.append(tier_role)
+
+    # Free agent roles
+    fa_role = await utils.get_free_agent_role(guild)
+    if fa_role in player.roles:
+        roles_to_remove.append(fa_role)
+
+    # Draft Eligible
+    de_role = await utils.get_draft_eligible_role(guild)
+    if de_role not in player.roles:
+        roles_to_add.append(de_role)
+
+    if roles_to_remove:
+        log.debug(f"Removing roles: {roles_to_remove}", guild=guild)
+        await player.remove_roles(*roles_to_remove)
+    if roles_to_add:
+        log.debug(f"Adding roles: {roles_to_add}", guild=guild)
+        await player.add_roles(*roles_to_add)
+
+    try:
         accolades = await utils.member_accolades(player)
-        new_nick = f"FA | {await utils.remove_prefix(player)} {accolades}".strip()
+        new_nick = f"DE | {league_player.player.name} {accolades}".strip()
         if new_nick != player.display_name:
             log.debug(f"Updating cut player nickname: {new_nick}", guild=guild)
             await player.edit(nick=new_nick)

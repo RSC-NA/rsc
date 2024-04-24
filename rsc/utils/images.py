@@ -1,7 +1,9 @@
+import io
 import logging
 from pathlib import Path
 
-from PIL import ImageDraw, ImageFont
+import discord
+from PIL import Image, ImageDraw, ImageFont
 
 log = logging.getLogger("red.rsc.utils.images")
 
@@ -27,7 +29,6 @@ def drawProgressBar(
     progress,
     progress_bounds: tuple[int, int] | None = None,
     bg=(17, 17, 17),
-    # fg=(0, 152, 219),
     fg=(0, 102, 153),
 ) -> ImageDraw.ImageDraw:
     # draw background
@@ -53,3 +54,38 @@ def drawProgressBar(
         d.text(((w / 2) + (x * 2), (h / 2) + y), message, font=FONT_16, anchor="mm")
 
     return d
+
+
+def getProgressBar(
+    x: int,
+    y: int,
+    w: int,
+    h: int,
+    progress: float = 0.0,
+    progress_bounds: tuple[int, int] | None = None,
+    bg: tuple[int, int, int] = (17, 17, 17),
+    fg: tuple[int, int, int] = (0, 102, 153),
+) -> discord.File:
+    progress_bar = Image.new("RGBA", (275, 50), (255, 255, 255))
+    progress_bar.putalpha(1)
+    base_image = ImageDraw.Draw(progress_bar)
+
+    drawProgressBar(
+        base_image,
+        x=x,
+        y=y,
+        w=w,
+        h=h,
+        progress=progress,
+        progress_bounds=progress_bounds,
+        bg=bg,
+        fg=fg,
+    )
+
+    with io.BytesIO() as buf:
+        progress_bar.save(buf, format="PNG")
+        # byte_arr = buf.getvalue()
+        buf.seek(0)
+        dFile = discord.File(filename="progress.jpeg", fp=buf)
+
+    return dFile

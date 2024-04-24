@@ -1,10 +1,8 @@
-import io
 import logging
 import tempfile
 from typing import MutableMapping, cast
 
 import discord
-from PIL import Image, ImageDraw
 from redbot.core import app_commands
 from rscapi.models.franchise import Franchise
 from rscapi.models.league_player import LeaguePlayer
@@ -45,13 +43,13 @@ from rsc.logs import GuildLogAdapter
 from rsc.teams import TeamMixIn
 from rsc.tiers import TierMixIn
 from rsc.transactions.roles import (
+    update_draft_eligible_discord,
     update_free_agent_discord,
     update_nonplaying_discord,
     update_rostered_discord,
 )
 from rsc.types import AdminSettings, RebrandTeamDict
-from rsc.utils import utils
-from rsc.utils.images import drawProgressBar
+from rsc.utils import images, utils
 from rsc.views import CancelView, LinkButton
 
 logger = logging.getLogger("red.rsc.admin")
@@ -1118,7 +1116,7 @@ class AdminMixIn(RSCMixIn):
 
         sync_view = ConfirmSyncView(interaction)
         await sync_view.prompt()
-        plist = await self.players(guild, status=Status.FREE_AGENT, limit=10000)
+        plist = await self.players(guild, status=Status.FREE_AGENT, limit=5000)
         tiers: list[Tier] = await self.tiers(guild)
         await sync_view.wait()
 
@@ -1130,7 +1128,16 @@ class AdminMixIn(RSCMixIn):
             return await interaction.edit_original_response(
                 embed=BlueEmbed(
                     title="Free Agent Sync",
-                    description="There are no free agent players to sync.",
+                    description="League has no Free Agent players.",
+                )
+            )
+
+        # No tier data
+        if not tiers:
+            return await interaction.edit_original_response(
+                embed=ErrorEmbed(
+                    title="Free Agent Sync",
+                    description="League has no tiers configured.",
                 )
             )
 
@@ -1143,34 +1150,23 @@ class AdminMixIn(RSCMixIn):
                 )
             )
 
+        total_fa = len(plist)
+        log.debug(f"Total FA: {total_fa}", guild=guild)
+
         loading_embed = BlueEmbed(
             title="Syncing Free Agents",
             description="Free Agent player synchronziation in progress",
         )
 
-        total_de = len(plist)
-        log.debug(f"Total FA: {total_de}")
-
         # Send initial progress bar
-        progress_bar = Image.new("RGBA", (275, 50), (255, 255, 255))
-        progress_bar.putalpha(1)
-        base_image = ImageDraw.Draw(progress_bar)
-
-        drawProgressBar(
-            base_image,
+        dFile = images.getProgressBar(
             x=10,
             y=10,
             w=225,
             h=30,
             progress=0.0,
-            progress_bounds=(0, total_de),
+            progress_bounds=(0, total_fa),
         )
-
-        with io.BytesIO() as buf:
-            progress_bar.save(buf, format="PNG")
-            # byte_arr = buf.getvalue()
-            buf.seek(0)
-            dFile = discord.File(filename="progress.jpeg", fp=buf)
 
         # Progress View
         progress_view = CancelView(interaction, timeout=0)
@@ -1180,7 +1176,10 @@ class AdminMixIn(RSCMixIn):
             embed=loading_embed, attachments=[dFile], view=progress_view
         )
 
-        for idx, player in enumerate(plist):
+        idx = 0
+        player: LeaguePlayer
+        for player in plist:
+            idx += 1
             # Check if cancelled
             if progress_view.cancelled:
                 loading_embed.title = "Sync Cancelled"
@@ -1192,14 +1191,12 @@ class AdminMixIn(RSCMixIn):
                     embed=loading_embed, attachments=[dFile], view=None
                 )
 
-            idx += 1
             log.debug(f"Index: {idx}")
-
             if not (player.player and player.player.discord_id):
                 continue
 
+            # Get guild member from LeaguePlayer
             m = guild.get_member(player.player.discord_id)
-
             if not m:
                 log.warning(
                     f"Couldn't find FA in guild: {player.player.name} ({player.id})"
@@ -1207,6 +1204,7 @@ class AdminMixIn(RSCMixIn):
                 continue
             log.debug(f"Syncing FA: {m.display_name}")
 
+            # Check if dry run
             if not dryrun:
                 await update_free_agent_discord(
                     guild=guild, player=m, league_player=player, tiers=tiers
@@ -1215,22 +1213,16 @@ class AdminMixIn(RSCMixIn):
             # Update progress bar
             if (idx % 10) == 0:
                 log.debug("Updating progress bar")
-                progress = idx / total_de
+                progress = idx / total_fa
 
-                drawProgressBar(
-                    base_image,
+                dFile = images.getProgressBar(
                     x=10,
                     y=10,
                     w=225,
                     h=30,
                     progress=progress,
-                    progress_bounds=(idx, total_de),
+                    progress_bounds=(idx, total_fa),
                 )
-
-                with io.BytesIO() as buf:
-                    progress_bar.save(buf, format="PNG")
-                    buf.seek(0)
-                    dFile = discord.File(filename="progress.jpeg", fp=buf)
 
                 try:
                     await interaction.edit_original_response(
@@ -1245,21 +1237,14 @@ class AdminMixIn(RSCMixIn):
                         pass
 
         # Draw 100%
-        drawProgressBar(
-            base_image,
+        dFile = images.getProgressBar(
             x=10,
             y=10,
             w=225,
             h=30,
             progress=1.0,
-            progress_bounds=(total_de, total_de),
+            progress_bounds=(total_fa, total_fa),
         )
-
-        with io.BytesIO() as buf:
-            progress_bar.save(buf, format="PNG")
-            # byte_arr = buf.getvalue()
-            buf.seek(0)
-            dFile = discord.File(filename="progress.jpeg", fp=buf)
 
         loading_embed.title = "Free Agent Sync"
         loading_embed.description = "Successfully synchronized all free agent players."
@@ -1271,9 +1256,9 @@ class AdminMixIn(RSCMixIn):
         name="drafteligble",
         description="Sync all draft eligibile players in discord",
     )
+    @app_commands.describe(dryrun="Do not modify any users.")
     async def _sync_drafteligible_cmd(
-        self,
-        interaction: discord.Interaction,
+        self, interaction: discord.Interaction, dryrun: bool = False
     ):
         guild = interaction.guild
         if not guild:
@@ -1282,6 +1267,7 @@ class AdminMixIn(RSCMixIn):
         sync_view = ConfirmSyncView(interaction)
         await sync_view.prompt()
         plist = await self.players(guild, status=Status.DRAFT_ELIGIBLE, limit=10000)
+        tiers: list[Tier] = await self.tiers(guild)
         await sync_view.wait()
 
         if not sync_view.result:
@@ -1296,6 +1282,15 @@ class AdminMixIn(RSCMixIn):
                 )
             )
 
+        # No tier data
+        if not tiers:
+            return await interaction.edit_original_response(
+                embed=BlueEmbed(
+                    title="Draft Eligible Sync",
+                    description="League has no configured tiers.",
+                )
+            )
+
         loading_embed = BlueEmbed(
             title="Syncing Draft Eligble",
             description="Draft eligible player synchronziation in progress",
@@ -1304,17 +1299,8 @@ class AdminMixIn(RSCMixIn):
         total_de = len(plist)
         log.debug(f"Total DE: {total_de}")
 
-        # Get Roles
-        de_role = await utils.get_draft_eligible_role(guild)
-        league_role = await utils.get_league_role(guild)
-
-        # Send initial progress bar
-        progress_bar = Image.new("RGBA", (275, 50), (255, 255, 255))
-        progress_bar.putalpha(1)
-        base_image = ImageDraw.Draw(progress_bar)
-
-        drawProgressBar(
-            base_image,
+        # Draw initial progress bar
+        dFile = images.getProgressBar(
             x=10,
             y=10,
             w=225,
@@ -1322,11 +1308,6 @@ class AdminMixIn(RSCMixIn):
             progress=0.0,
             progress_bounds=(0, total_de),
         )
-
-        with io.BytesIO() as buf:
-            progress_bar.save(buf, format="PNG")
-            buf.seek(0)
-            dFile = discord.File(filename="progress.jpeg", fp=buf)
 
         # Progress View
         progress_view = CancelView(interaction, timeout=0)
@@ -1349,7 +1330,6 @@ class AdminMixIn(RSCMixIn):
                 )
 
             idx += 1
-            log.debug(f"Index: {idx}")
 
             if not (player.player and player.player.discord_id):
                 continue
@@ -1362,26 +1342,17 @@ class AdminMixIn(RSCMixIn):
                 continue
             log.debug(f"Updating DE: {m.display_name}")
 
-            # Edit nickname
-
-            if not m.name.startswith("DE |"):
-                accolades = await utils.member_accolades(m)
-                if accolades:
-                    await m.edit(nick=f"DE | {player.player.name} {accolades}")
-                else:
-                    await m.edit(nick=f"DE | {player.player.name}")
-
-            # Add roles
-            if not all(x in m.roles for x in (de_role, league_role)):
-                await m.add_roles(de_role, league_role)
+            if not dryrun:
+                await update_draft_eligible_discord(
+                    guild=guild, player=m, league_player=player, tiers=tiers
+                )
 
             # Update progress bar
             if (idx % 10) == 0:
                 log.debug("Updating progress bar")
                 progress = idx / total_de
 
-                drawProgressBar(
-                    base_image,
+                dFile = images.getProgressBar(
                     x=10,
                     y=10,
                     w=225,
@@ -1390,18 +1361,12 @@ class AdminMixIn(RSCMixIn):
                     progress_bounds=(idx, total_de),
                 )
 
-                with io.BytesIO() as buf:
-                    progress_bar.save(buf, format="PNG")
-                    buf.seek(0)
-                    dFile = discord.File(filename="progress.jpeg", fp=buf)
-
                 await interaction.edit_original_response(
                     embed=loading_embed, attachments=[dFile]
                 )
 
         # Draw 100%
-        drawProgressBar(
-            base_image,
+        dFile = images.getProgressBar(
             x=10,
             y=10,
             w=225,
@@ -1409,11 +1374,6 @@ class AdminMixIn(RSCMixIn):
             progress=1.0,
             progress_bounds=(total_de, total_de),
         )
-
-        with io.BytesIO() as buf:
-            progress_bar.save(buf, format="PNG")
-            buf.seek(0)
-            dFile = discord.File(filename="progress.jpeg", fp=buf)
 
         loading_embed.title = "Draft Eligible Sync"
         loading_embed.description = (
