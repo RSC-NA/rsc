@@ -1179,7 +1179,6 @@ class AdminMixIn(RSCMixIn):
         idx = 0
         player: LeaguePlayer
         for player in plist:
-            idx += 1
             # Check if cancelled
             if progress_view.cancelled:
                 loading_embed.title = "Sync Cancelled"
@@ -1191,7 +1190,8 @@ class AdminMixIn(RSCMixIn):
                     embed=loading_embed, attachments=[dFile], view=None
                 )
 
-            log.debug(f"Index: {idx}")
+            idx += 1
+
             if not (player.player and player.player.discord_id):
                 continue
 
@@ -1325,7 +1325,7 @@ class AdminMixIn(RSCMixIn):
             if progress_view.cancelled:
                 loading_embed.title = "Sync Cancelled"
                 loading_embed.description = (
-                    "Cancelled synchronizing all free agent players."
+                    "Cancelled synchronizing all draft eligible players."
                 )
                 loading_embed.colour = discord.Color.red()
                 return await interaction.edit_original_response(
