@@ -483,7 +483,7 @@ async def update_draft_eligible_discord(
     roles_to_add: list[discord.Role] = []
 
     # Remove old tier roles and tier FA role on discord.Member
-    if tiers and league_player.tier:
+    if tiers and league_player.tier and league_player.tier.name:
         for r in player.roles:
             for tier in tiers:
                 if (
@@ -519,7 +519,7 @@ async def update_draft_eligible_discord(
         roles_to_remove.append(captain_role)
 
     # Update tier role, handle promotion case
-    if league_player.tier.name:
+    if league_player.tier and league_player.tier.name:
         tier_role = await utils.get_tier_role(guild, league_player.tier.name)
         if tier_role not in player.roles:
             roles_to_add.append(tier_role)
