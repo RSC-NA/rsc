@@ -1019,7 +1019,7 @@ class AdminMixIn(RSCMixIn):
             if not dryrun:
                 try:
                     await update_nonplaying_discord(guild=guild, member=m, tiers=tiers)
-                except ValueError as exc:
+                except (ValueError, AttributeError) as exc:
                     return await interaction.edit_original_response(
                         embed=ErrorEmbed(description=str(exc))
                     )
@@ -1089,7 +1089,7 @@ class AdminMixIn(RSCMixIn):
                     await update_rostered_discord(
                         guild=guild, player=m, league_player=api_player, tiers=tiers
                     )
-                except ValueError as exc:
+                except (ValueError, AttributeError) as exc:
                     return await interaction.edit_original_response(
                         embed=ErrorEmbed(description=str(exc))
                     )
