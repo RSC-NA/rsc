@@ -28,7 +28,7 @@ from rsc.utils.views import BulkRoleConfirmView
 
 log = logging.getLogger("red.rsc.utils")
 
-FRANCHISE_ROLE_REGEX = re.compile(r"^\w[\w\s\x27]+?\s\(\w[\w\s]+?\)$")
+FRANCHISE_ROLE_REGEX = re.compile(r"^\w[\w\s\x27]+?\s\(.+?\)$")
 EMOJI_REGEX = re.compile(
     "["
     "\U0001F600-\U0001F64F"  # emoticons
