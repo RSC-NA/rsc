@@ -314,14 +314,15 @@ class LeagueMixIn(RSCMixIn):
                         limit=per_page,
                         offset=offset,
                     )
+
+                    if not players.results:
+                        break
+
+                    for player in players.results:
+                        yield player
+                    # yield players.results
                 except ApiException as exc:
                     raise RscException(exc)
-
-                if not players.results:
-                    break
-
-                for player in players.results:
-                    yield player
 
             if not players.next:
                 break

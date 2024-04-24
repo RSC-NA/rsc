@@ -906,19 +906,22 @@ class MemberMixIn(RSCMixIn):
                         limit=per_page,
                         offset=offset,
                     )
+
+                    if not members:
+                        break
+
+                    if not members.results:
+                        break
+
+                    for member in members.results:
+                        yield member
+
+                    if not members.next:
+                        break
+
+                    offset += per_page
                 except ApiException as exc:
                     raise RscException(exc)
-
-                if not members.results:
-                    break
-
-                for member in members.results:
-                    yield member
-
-            if not members.next:
-                break
-
-            offset += per_page
 
     async def signup(
         self,

@@ -232,6 +232,10 @@ class MatchMixIn(RSCMixIn):
 
         tz = await self.timezone(guild)
         today = datetime.now(tz).strftime("%A")
+
+        if not season.season_tier_data[0].schedule:
+            raise AttributeError("Season does not have any match nights configured.")
+
         if today in season.season_tier_data[0].schedule.match_nights:
             return True
         return False
@@ -370,7 +374,6 @@ class MatchMixIn(RSCMixIn):
         match_format: MatchFormat | None = None,
         limit: int = 0,
         offset: int = 0,
-        preseason: int = 0,
     ) -> list[MatchList]:
         async with ApiClient(self._api_conf[guild.id]) as client:
             api = MatchesApi(client)
@@ -387,7 +390,6 @@ class MatchMixIn(RSCMixIn):
                 league=self._league[guild.id],
                 limit=limit,
                 offset=offset,
-                preseason=preseason,
             )
             return matches.results
 

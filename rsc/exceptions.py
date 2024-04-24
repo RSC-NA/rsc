@@ -69,7 +69,8 @@ class RscException(Exception):
                 )
                 self.reason = "Received unknown error from server."
                 self.type = "UnknownError"
-        elif args[0] and isinstance(args[0], BadRequestException):
+
+        elif len(args) > 0 and isinstance(args[0], BadRequestException):
             self.status = args[0].status
             if args[0].body:
                 body = json.loads(args[0].body)
@@ -146,7 +147,7 @@ class TransactionException(RscException):
     """Generic Transaction Exception Base Type"""
 
 
-class TradeParserException(TransactionException):
+class TradeParserException(RscException):
     """Error occurred during trade parsing"""
 
 

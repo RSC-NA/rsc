@@ -7,6 +7,7 @@ import discord
 from PIL import Image, ImageDraw
 from redbot.core import app_commands
 from rscapi.models.franchise import Franchise
+from rscapi.models.league_player import LeaguePlayer
 from rscapi.models.member import Member as RSCMember
 from rscapi.models.rebrand_a_franchise import RebrandAFranchise
 from rscapi.models.team_details import TeamDetails
@@ -43,7 +44,7 @@ from rsc.franchises import FranchiseMixIn
 from rsc.logs import GuildLogAdapter
 from rsc.teams import TeamMixIn
 from rsc.tiers import TierMixIn
-from rsc.transactions.roles import update_nonplaying_discord
+from rsc.transactions.roles import update_nonplaying_discord, update_rostered_discord
 from rsc.types import AdminSettings, RebrandTeamDict
 from rsc.utils import utils
 from rsc.utils.images import drawProgressBar
@@ -994,10 +995,11 @@ class AdminMixIn(RSCMixIn):
             return
 
         log.debug("Fetching all members", guild=guild)
-        api_member: RSCMember
         total = 0
         synced = 0
+        api_member: RSCMember
         async for api_member in self.paged_members(guild=guild):
+            log.debug(f"API Member: {api_member}")
             total += 1
             if not api_member.discord_id:
                 continue
@@ -1031,6 +1033,72 @@ class AdminMixIn(RSCMixIn):
             description="All non-playing RSC members have been synced.",
         )
         embed.set_footer(text=f"Synced {synced}/{total} RSC member(s).")
+        await interaction.edit_original_response(embed=embed)
+
+    @_sync.command(  # type: ignore
+        name="players",
+        description="Sync all players in discord members. (Long Execution Time)",
+    )
+    @app_commands.describe(dryrun="Do not modify any users.")
+    async def _sync_players_cmd(
+        self, interaction: discord.Interaction, dryrun: bool = False
+    ):
+        guild = interaction.guild
+        if not guild:
+            return
+
+        sync_view = ConfirmSyncView(interaction)
+        await sync_view.prompt()
+
+        try:
+            log.debug("Fetching tiers", guild=guild)
+            tiers: list[Tier] = await self.tiers(guild)
+        except RscException as exc:
+            return await interaction.edit_original_response(
+                embed=ApiExceptionErrorEmbed(exc)
+            )
+
+        # Wait for confirmation
+        await sync_view.wait()
+
+        if not sync_view.result:
+            return
+
+        log.debug("Fetching all rostered players", guild=guild)
+        total = 0
+        synced = 0
+        api_player: LeaguePlayer
+        async for api_player in self.paged_players(guild=guild, status=Status.ROSTERED):
+            total += 1
+            if not api_player.player.discord_id:
+                continue
+
+            m = guild.get_member(api_player.player.discord_id)
+            if not m:
+                # log.debug(f"Player not in guild: {api_player.player.discord_id}", guild=guild)
+                continue
+
+            log.debug(f"Syncing Player: {m.display_name} ({m.id})", guild=guild)
+
+            if not dryrun:
+                try:
+                    await update_rostered_discord(
+                        guild=guild, player=m, league_player=api_player, tiers=tiers
+                    )
+                except ValueError as exc:
+                    return await interaction.edit_original_response(
+                        embed=ErrorEmbed(description=str(exc))
+                    )
+            synced += 1
+
+        log.debug(f"Total Players: {total}", guild=guild)
+        log.debug(f"Total Synced: {synced}", guild=guild)
+
+        embed = BlueEmbed(
+            title="Rostered Player Sync",
+            description="All RSC rostered players have been synced.",
+        )
+        embed.set_footer(text=f"Synced {synced}/{total} RSC players(s).")
         await interaction.edit_original_response(embed=embed)
 
     @_sync.command(  # type: ignore
@@ -2057,7 +2125,9 @@ class AdminMixIn(RSCMixIn):
         tchan = await self._trans_channel(guild)
 
         # Edit GM
-        gm = guild.get_member(fdata.gm.discord_id)
+        gm = None
+        if fdata.gm.discord_id:
+            gm = guild.get_member(fdata.gm.discord_id)
         if gm:
             await gm.remove_roles(gm_role)
             await gm.add_roles(former_gm_role)
@@ -2067,6 +2137,11 @@ class AdminMixIn(RSCMixIn):
             for t in fdata.teams:
                 tier = t.tier
                 tier_fa_role = await utils.get_tier_fa_role(guild, tier)
+
+                # Not sure why these types are `list[Player|None] | None`
+                if not t.players:
+                    continue
+
                 for p in t.players:
                     m = guild.get_member(p.discord_id)
                     if not m:
@@ -2293,7 +2368,7 @@ class AdminMixIn(RSCMixIn):
 
         # Get old gm discord reference
         old_gm = None
-        if fdata.gm:
+        if fdata.gm and fdata.gm.discord_id:
             old_gm = guild.get_member(fdata.gm.discord_id)
 
         # Update old GM roles and name

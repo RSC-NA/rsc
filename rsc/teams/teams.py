@@ -553,7 +553,9 @@ class TeamMixIn(RSCMixIn):
             guild, captains[0].team.franchise.name
         )
 
-        gm = guild.get_member(captains[0].team.franchise.gm.discord_id)
+        gm = None
+        if captains[0].team.franchise.gm.discord_id:
+            gm = guild.get_member(captains[0].team.franchise.gm.discord_id)
 
         embed = BlueEmbed(title=f"{franchise} Captains")
 

@@ -228,6 +228,16 @@ async def get_free_agent_role(guild: discord.Guild) -> discord.Role:
     return r
 
 
+async def get_permfa_role(guild: discord.Guild) -> discord.Role:
+    r = discord.utils.get(guild.roles, name=const.PERM_FA_ROLE)
+    if not r:
+        log.error(f"[{guild.name}] Expected role does not exist: {const.PERM_FA_ROLE}")
+        raise ValueError(
+            f"[{guild.name}] Expected role does not exist: {const.PERM_FA_ROLE}"
+        )
+    return r
+
+
 async def get_gm_role(guild: discord.Guild) -> discord.Role:
     r = discord.utils.get(guild.roles, name=const.GM_ROLE)
     if not r:
@@ -457,6 +467,16 @@ async def franchise_role_from_disord_member(
         if FRANCHISE_ROLE_REGEX.match(r.name):
             return r
     return None
+
+
+async def franchise_role_list_from_disord_member(
+    member: discord.Member,
+) -> list[discord.Role]:
+    result = []
+    for r in member.roles:
+        if FRANCHISE_ROLE_REGEX.match(r.name):
+            result.append(r)
+    return result
 
 
 async def emoji_from_prefix(

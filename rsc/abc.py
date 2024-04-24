@@ -64,7 +64,6 @@ class RSCMixIn(ABC):
     _web_site: TCPSite
 
     _team_cache: dict[int, list[str]]
-    _franchise_cache: dict[int, list[str]]
 
     # Core
 
@@ -258,7 +257,6 @@ class RSCMixIn(ABC):
         match_format: MatchFormat | None = None,
         limit: int = 0,
         offset: int = 0,
-        preseason: int = 0,
     ) -> list[MatchList]:
         ...
 

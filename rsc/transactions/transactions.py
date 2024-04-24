@@ -1074,7 +1074,7 @@ class TransactionMixIn(RSCMixIn):
                 guild=guild,
                 trades=trade_items,
                 executor=interaction.user,
-                notes=notes,
+                notes=notes or trade_modal.trade.value,
                 override=override,
             )
             log.debug(f"Transaction History Result: {result}", guild=guild)
@@ -1108,9 +1108,25 @@ class TransactionMixIn(RSCMixIn):
                     )
                     continue
 
-                await update_signed_player_discord(
-                    guild=guild, player=m, ptu=r, tiers=tiers
-                )
+                try:
+                    await update_signed_player_discord(
+                        guild=guild, player=m, ptu=r, tiers=tiers
+                    )
+                except discord.Forbidden as exc:
+                    log.warning(
+                        f"Unable to update nickname for {m.id}: {exc}", guild=guild
+                    )
+                    await interaction.followup.send(
+                        content=f"Unable to update nickname for {m.mention}: `{exc}"
+                    )
+                except AttributeError as exc:
+                    await interaction.followup.send(
+                        embed=ErrorEmbed(description=str(exc))
+                    )
+                except ValueError as exc:
+                    await interaction.followup.send(
+                        embed=ErrorEmbed(description=str(exc))
+                    )
 
         msg = None
         if announce:
@@ -2018,6 +2034,7 @@ class TransactionMixIn(RSCMixIn):
                 log.debug(f"GM str: {gm_str}", guild=guild)
 
                 # Find name in GM role members
+                log.debug("Finding GM in role.")
                 gm: discord.Member | None = None
                 for m in gm_role.members:
                     tmp = await utils.remove_prefix(m)
@@ -2308,7 +2325,17 @@ class TransactionMixIn(RSCMixIn):
                 # Get GM for field name
                 if not dest:
                     if trade.destination.name:
-                        dest = trade.destination.name
+                        m = None
+                        if trade.destination.gm:
+                            m = guild.get_member(trade.destination.gm)
+
+                        if m:
+                            gm_name = await utils.remove_prefix(m)
+                            gm_name = await utils.strip_discord_accolades(gm_name)
+                            log.debug(f"Embed GM Name: {gm_name}", guild=guild)
+                            dest = f"{trade.destination.name} ({gm_name.strip()})"
+                        else:
+                            dest = trade.destination.name
                     else:
                         dest = "Error"
 
@@ -2354,7 +2381,7 @@ class TransactionMixIn(RSCMixIn):
                     else:
                         if src_fmt:
                             trade_fmt.append(
-                                f"{src_fmt} Future {round_fmt} Round {trade.value.pick.tier}"
+                                f"{src_fmt} {round_fmt} Round {trade.value.pick.tier}"
                             )
                         else:
                             trade_fmt.append(
@@ -2363,6 +2390,10 @@ class TransactionMixIn(RSCMixIn):
 
             # Build field
             embed.add_field(name=dest, value="\n".join(trade_fmt), inline=False)
+
+        # Add thumbnail
+        if guild.icon:
+            embed.set_thumbnail(url=guild.icon.url)
 
         return gms, embed
 
