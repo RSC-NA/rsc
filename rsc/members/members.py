@@ -764,6 +764,10 @@ class MemberMixIn(RSCMixIn):
             flogo = await self.franchise_logo(guild, p.team.franchise.id)
             if flogo:
                 embed.set_thumbnail(url=flogo)
+
+        if not flogo and player.avatar:
+            embed.set_thumbnail(url=player.avatar.url)
+
         await interaction.followup.send(embed=embed)
 
     @app_commands.command(  # type: ignore
