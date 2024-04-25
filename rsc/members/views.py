@@ -292,7 +292,7 @@ class SignupView(AuthorOnlyView):
             name="Tracker Links",
             value=(
                 "You will need to submit rocket league tracker links for **ALL** of your accounts."
-                " Please seperate each link by a new line.\n\n"
+                " Please separate each link by a new line.\n\n"
                 "For example:\n"
                 "https://rocketleague.tracker.network/rocket-league/profile/psn/Untamed-chaos/overview\n"
                 "https://rocketleague.tracker.network/rocket-league/profile/steam/76561198028063203/overview\n\n"

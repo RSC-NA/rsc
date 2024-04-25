@@ -102,7 +102,7 @@ class WelcomeMixIn(RSCMixIn):
         result = "**enabled**" if status else "**disabled**"
         await interaction.response.send_message(
             embed=discord.Embed(
-                title="Successs",
+                title="Success",
                 description=f"Welcome message has been {result}.",
                 color=discord.Color.green(),
             ),

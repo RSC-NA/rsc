@@ -202,7 +202,7 @@ class ThreadMixIn(RSCMixIn):
         await self._set_management_role(interaction.guild, role)
         await interaction.response.send_message(
             embed=SuccessEmbed(
-                description=f"Mangement role for ModMail threads has been set to {role.mention}"
+                description=f"Management role for ModMail threads has been set to {role.mention}"
             ),
             ephemeral=True,
         )

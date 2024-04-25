@@ -1,6 +1,6 @@
 # League Mix In
 
-RSC league relatd commands
+RSC league related commands
 
 ## Commands
 

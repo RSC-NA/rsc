@@ -98,7 +98,7 @@ class AdminMixIn(RSCMixIn):
             return
 
         log.debug(f"[{guild.name}] Making activity check persistent: {msg_id}")
-        # Create and attach view to persistent messsage ID
+        # Create and attach view to persistent message ID
         inactive_view = InactiveCheckView(
             guild=guild, league_id=league_id, api_conf=conf
         )
@@ -1233,7 +1233,7 @@ class AdminMixIn(RSCMixIn):
                     )
                 except discord.HTTPException as exc:
                     log.warning(
-                        f"Recived {exc.status} (error code {exc.code}: {exc.text})"
+                        f"Received {exc.status} (error code {exc.code}: {exc.text})"
                     )
                     if exc.code == 50027:
                         # Try passing on Invalid Webhook Token (401)
@@ -1256,7 +1256,7 @@ class AdminMixIn(RSCMixIn):
         )
 
     @_sync.command(  # type: ignore
-        name="drafteligble",
+        name="drafteligible",
         description="Sync all draft eligibile players in discord",
     )
     @app_commands.describe(dryrun="Do not modify any users.")
@@ -1295,7 +1295,7 @@ class AdminMixIn(RSCMixIn):
             )
 
         loading_embed = BlueEmbed(
-            title="Syncing Draft Eligble",
+            title="Syncing Draft Eligible",
             description="Draft eligible player synchronziation in progress",
         )
 
@@ -2199,7 +2199,7 @@ class AdminMixIn(RSCMixIn):
         # Display working screen
         await interaction.edit_original_response(
             embed=YellowEmbed(
-                title="Transfering Franchise",
+                title="Transferring Franchise",
                 description="Please wait while the GM transfer is processed...",
             ),
             view=None,
@@ -2214,7 +2214,7 @@ class AdminMixIn(RSCMixIn):
             )
 
         try:
-            log.debug(f"Transfering {franchise} to {gm.id}")
+            log.debug(f"Transferring {franchise} to {gm.id}")
             f: Franchise = await self.transfer_franchise(guild, fdata.id, gm)
         except RscException as exc:
             return await interaction.edit_original_response(

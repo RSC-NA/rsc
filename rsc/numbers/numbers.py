@@ -292,7 +292,7 @@ class NumberMixIn(RSCMixIn):
                     psyonix_season=psyonix_season,
                 )
             except ApiException as exc:
-                raise RscException(repsonse=exc)
+                raise RscException(response=exc)
 
     # Config
 

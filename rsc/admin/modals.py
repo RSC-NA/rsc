@@ -59,7 +59,7 @@ class FranchiseRebrandModal(discord.ui.Modal, title="Franchise Rebrand"):
         label="Prefix", style=discord.TextStyle.short, required=True
     )
     team_input: TextInput = TextInput(
-        label="Teams (New line sperated, high to low tiers)",
+        label="Teams (New line separated, high to low tiers)",
         style=discord.TextStyle.paragraph,
         required=True,
     )

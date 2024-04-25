@@ -203,7 +203,7 @@ class TransactionMixIn(RSCMixIn):
 
     @commands.Cog.listener("on_member_remove")
     async def _transactions_on_member_remove(self, member: discord.Member):
-        """Check if a rostered player has left the server and report to tranasction log channel. Retire player"""
+        """Check if a rostered player has left the server and report to transaction log channel. Retire player"""
         if not member.guild:
             return
 
@@ -378,7 +378,7 @@ class TransactionMixIn(RSCMixIn):
             inline=False,
         )
 
-        # Discord embed field max length is 1024. Send a seperate embed for cut message if greater.
+        # Discord embed field max length is 1024. Send a separate embed for cut message if greater.
         if len(cut_msg) <= 1024:
             settings_embed.add_field(name="Cut Message", value=cut_msg, inline=False)
             await interaction.response.send_message(
@@ -409,7 +409,7 @@ class TransactionMixIn(RSCMixIn):
         result = "**enabled**" if status else "**disabled**"
         await interaction.response.send_message(
             embed=discord.Embed(
-                title="Successs",
+                title="Success",
                 description=f"Transaction committee and GM notifications are now {result}.",
                 color=discord.Color.green(),
             ),
@@ -435,7 +435,7 @@ class TransactionMixIn(RSCMixIn):
         result = "**enabled**" if status else "**disabled**"
         await interaction.response.send_message(
             embed=discord.Embed(
-                title="Successs",
+                title="Success",
                 description=f"Player transaction direct messages are now {result}.",
                 color=discord.Color.green(),
             ),
@@ -885,28 +885,28 @@ class TransactionMixIn(RSCMixIn):
         if not result.second_franchise:
             return await interaction.followup.send(
                 embed=ErrorEmbed(
-                    description="Subsitution was processed but no second franchise data was returned. **Announcement was not sent.**"
+                    description="Substitution was processed but no second franchise data was returned. **Announcement was not sent.**"
                 )
             )
 
         if not result.second_franchise.gm.discord_id:
             return await interaction.followup.send(
                 embed=ErrorEmbed(
-                    description="Subsitution was processed but no second franchise data has no GM. **Announcement was not sent.**"
+                    description="Substitution was processed but no second franchise data has no GM. **Announcement was not sent.**"
                 )
             )
 
         if not (ptu_in.new_team and ptu_in.new_team.name):
             return await interaction.followup.send(
                 embed=ErrorEmbed(
-                    description="Subsitution was processed but no team name was returned. **Announcement was not sent.**"
+                    description="Substitution was processed but no team name was returned. **Announcement was not sent.**"
                 )
             )
 
         if not (ptu_in.new_team and ptu_in.new_team.tier):
             return await interaction.followup.send(
                 embed=ErrorEmbed(
-                    description="Subsitution was processed but no team tier was returned. **Announcement was not sent.**"
+                    description="Substitution was processed but no team tier was returned. **Announcement was not sent.**"
                 )
             )
 
@@ -1952,7 +1952,7 @@ class TransactionMixIn(RSCMixIn):
         return lp
 
     async def get_sub(self, member: discord.Member) -> Substitute | None:
-        """Get sub from saved subsitute list"""
+        """Get sub from saved substitute list"""
         subs = await self._get_substitutes(member.guild)
         s = next((x for x in subs if x["player_in"] == member.id), None)
         return s
