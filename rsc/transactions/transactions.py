@@ -2391,7 +2391,7 @@ class TransactionMixIn(RSCMixIn):
                     else:
                         if src_fmt:
                             trade_fmt.append(
-                                f"{src_fmt} {round_fmt} Round {trade.value.pick.tier}"
+                                f"{src_fmt} {round_fmt} Round {trade.value.pick.tier} ({trade.value.pick.number})"
                             )
                         else:
                             trade_fmt.append(
