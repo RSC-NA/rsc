@@ -19,7 +19,7 @@ def send_webhook():
         data = json.load(fd)
 
     print("Sending mock combine data...")
-    resp = requests.post("http://localhost:8008/combines_match", json=data)
+    resp = requests.post("http://localhost:8008/combines_match", json=data, timeout=10)
     print(f"Response Status: {resp.status_code}")
 
 

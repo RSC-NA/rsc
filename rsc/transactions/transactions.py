@@ -2015,7 +2015,7 @@ class TransactionMixIn(RSCMixIn):
             league_role = await utils.get_league_role(guild=guild)
             gm_role = await utils.get_gm_role(guild=guild)
         except ValueError as exc:
-            raise TradeParserException(message=exc.args[0])
+            raise TradeParserException(message=str(exc))
 
         # Iterate once to get all franchises involved
         log.debug("Finding all franchises in trade.", guild=guild)
@@ -2065,7 +2065,7 @@ class TransactionMixIn(RSCMixIn):
         # Initial validation on franchises
         if len(franchises) < 2:
             raise TradeParserException(
-                "Unable to identify 2 or more franchises in trade."
+                message="Unable to identify 2 or more franchises in trade."
             )
 
         trade_list = []
@@ -2227,7 +2227,9 @@ class TransactionMixIn(RSCMixIn):
                 sfranchise = FranchiseIdentifier(id=None, name=None, gm=source_gm.id)
 
                 tvalue = TradeValue(
-                    pick=DraftPick(tier=tier, round=round, number=0, future=True)
+                    pick=DraftPick(
+                        tier=tier.capitalize(), round=round, number=0, future=True
+                    )
                 )
                 log.debug(tvalue, guild=guild)
 
@@ -2291,7 +2293,9 @@ class TransactionMixIn(RSCMixIn):
                     )
 
                 tvalue = TradeValue(
-                    pick=DraftPick(tier=tier, round=round, number=pick, future=False)
+                    pick=DraftPick(
+                        tier=tier.capitalize(), round=round, number=pick, future=False
+                    )
                 )
                 log.debug(tvalue, guild=guild)
 

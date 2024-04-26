@@ -22,7 +22,7 @@ def send_finished(lobby_id: int):
     data["match_id"] = lobby_id
 
     print("Sending mock combine data...")
-    resp = requests.post("http://localhost:8008/combines_event", json=data)
+    resp = requests.post("http://localhost:8008/combines_event", json=data, timeout=10)
     print(f"Response Status: {resp.status_code}")
 
 

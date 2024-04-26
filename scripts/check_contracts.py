@@ -19,7 +19,7 @@ session.headers.update(auth)
 
 def api_fa_players():
     r = session.get(
-        "https://api.rscna.com/api/v1/league-players/?status=FA&limit=10000"
+        "https://api.rscna.com/api/v1/league-players/?status=FA&limit=10000", timeout=10
     )
 
     if r.status_code != 200:
@@ -44,7 +44,8 @@ def check_invalid_fa(players, df: pandas.DataFrame):
 
 def remove_cut_players(players):
     r = session.get(
-        "https://api.rscna.com/api/v1/transactions/history/?season_number=20&league=1&transaction_type=CUT&limit=5000"
+        "https://api.rscna.com/api/v1/transactions/history/?season_number=20&league=1&transaction_type=CUT&limit=5000",
+        timeout=10,
     )
 
     if r.status_code != 200:
