@@ -1798,8 +1798,8 @@ class TransactionMixIn(RSCMixIn):
 
                 franchise = response.first_franchise.name
                 gm_id = response.first_franchise.gm.discord_id
-                # player_fmt = player_in.mention
 
+                embed.set_footer(text=f"Discord ID: {player_in.id}")
             case TransactionType.PICKUP:
                 if not (ptu_in.new_team and response.second_franchise):
                     raise MalformedTransactionResponse
@@ -1813,7 +1813,7 @@ class TransactionMixIn(RSCMixIn):
 
                 franchise = response.second_franchise.name
                 gm_id = response.second_franchise.gm.discord_id
-
+                embed.set_footer(text=f"Discord ID: {player_in.id}")
             case TransactionType.RESIGN:
                 if not (ptu_in.new_team and response.second_franchise):
                     raise MalformedTransactionResponse
@@ -1827,7 +1827,7 @@ class TransactionMixIn(RSCMixIn):
 
                 franchise = response.second_franchise.name
                 gm_id = response.second_franchise.gm.discord_id
-
+                embed.set_footer(text=f"Discord ID: {player_in.id}")
             case TransactionType.TEMP_FA | TransactionType.SUBSTITUTION:
                 if not (ptu_in.new_team and response.second_franchise):
                     raise MalformedTransactionResponse
@@ -1870,7 +1870,7 @@ class TransactionMixIn(RSCMixIn):
 
                 franchise = response.first_franchise.name
                 gm_id = response.first_franchise.gm.discord_id
-
+                embed.set_footer(text=f"Discord ID: {player_in.id}")
             case TransactionType.IR_RETURN:
                 if not (ptu_in.old_team and response.first_franchise):
                     raise MalformedTransactionResponse
@@ -1886,7 +1886,7 @@ class TransactionMixIn(RSCMixIn):
 
                 franchise = response.first_franchise.name
                 gm_id = response.first_franchise.gm.discord_id
-
+                embed.set_footer(text=f"Discord ID: {player_in.id}")
             case _:
                 raise NotImplementedError
 
