@@ -617,7 +617,12 @@ class TransactionMixIn(RSCMixIn):
             )
 
         # Send cut message to user directly
-        await self.send_cut_msg(guild, player=player)
+        try:
+            await self.send_cut_msg(guild, player=player)
+        except discord.Forbidden as exc:
+            await interaction.followup.send(
+                content=f"Unable to DM user {player.mention}: {exc}"
+            )
 
         # Send result
         await interaction.followup.send(
