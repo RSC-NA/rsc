@@ -305,11 +305,12 @@ class TeamMixIn(RSCMixIn):
                     ir.append(f"{name} (IR)")
                 case Status.AGMIR:
                     ir.append(f"{name} (AGM IR)")
-                case Status.ROSTERED:
+                case Status.ROSTERED | Status.RENEWED:
                     if insertTop:
                         roster.insert(0, name)
                     else:
                         roster.append(name)
+
                 case _:
                     roster.append(name)
 
@@ -592,7 +593,7 @@ class TeamMixIn(RSCMixIn):
         self, guild: discord.Guild, team_name: str
     ) -> LeaguePlayer | None:
         """Return captain of a team by name"""
-        players = await self.players(guild, status=Status.ROSTERED, team_name=team_name)
+        players = await self.players(guild, team_name=team_name)
         if not players:
             return None
         return next((x for x in players if x.captain), None)
@@ -601,9 +602,7 @@ class TeamMixIn(RSCMixIn):
         self, guild: discord.Guild, tier_name: str
     ) -> list[LeaguePlayer]:
         """Return all captains in a tier"""
-        players = await self.players(
-            guild, status=Status.ROSTERED, tier_name=tier_name, limit=1000
-        )
+        players = await self.players(guild, tier_name=tier_name, limit=1000)
         if not players:
             return []
 
@@ -621,9 +620,7 @@ class TeamMixIn(RSCMixIn):
         self, guild: discord.Guild, franchise_name: str
     ) -> list[LeaguePlayer]:
         """Return all captains in a franchise"""
-        players = await self.players(
-            guild, status=Status.ROSTERED, franchise=franchise_name
-        )
+        players = await self.players(guild, franchise=franchise_name)
         if not players:
             return []
 

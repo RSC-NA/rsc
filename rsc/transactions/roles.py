@@ -297,7 +297,7 @@ async def update_rostered_discord(
     league_player: LeaguePlayer,
     tiers: list[Tier],
 ):
-    if league_player.status != Status.ROSTERED:
+    if league_player.status not in (Status.ROSTERED, Status.RENEWED):
         raise ValueError(f"{player.display_name} ({player.id}) is not rostered.")
 
     if not league_player.tier:

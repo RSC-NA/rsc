@@ -1068,7 +1068,34 @@ class AdminMixIn(RSCMixIn):
         total = 0
         synced = 0
         api_player: LeaguePlayer
+
+        # Rostered
         async for api_player in self.paged_players(guild=guild, status=Status.ROSTERED):
+            total += 1
+            if not api_player.player.discord_id:
+                continue
+
+            m = guild.get_member(api_player.player.discord_id)
+            if not m:
+                log.warning(
+                    f"Rostered player not in guild: {api_player.player.discord_id}",
+                    guild=guild,
+                )
+                continue
+
+            log.debug(f"Syncing Player: {m.display_name} ({m.id})", guild=guild)
+
+            synced += 1
+            if not dryrun:
+                try:
+                    await update_rostered_discord(
+                        guild=guild, player=m, league_player=api_player, tiers=tiers
+                    )
+                except (ValueError, AttributeError) as exc:
+                    await interaction.followup.send(content=str(exc), ephemeral=True)
+
+        # Renewed
+        async for api_player in self.paged_players(guild=guild, status=Status.RENEWED):
             total += 1
             if not api_player.player.discord_id:
                 continue

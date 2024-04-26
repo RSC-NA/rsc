@@ -234,7 +234,7 @@ class TransactionMixIn(RSCMixIn):
             await self.retire(
                 guild,
                 player=member,
-                executor=member.guild.me,
+                executor=guild.me,
                 notes="Player left the RSC discord server",
                 override=True,
             )
@@ -1228,7 +1228,7 @@ class TransactionMixIn(RSCMixIn):
 
             player_data = plist.pop()
 
-            if player_data.status != Status.ROSTERED:
+            if player_data.status not in (Status.ROSTERED, Status.RENEWED):
                 await interaction.followup.send(
                     content=f"{captain.mention} is not currently rostered. Skipping...",
                     ephemeral=True,
