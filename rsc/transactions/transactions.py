@@ -593,11 +593,19 @@ class TransactionMixIn(RSCMixIn):
         except ValueError as exc:
             await interaction.followup.send(embed=ErrorEmbed(description=str(exc)))
 
-        embed, files = await self.build_transaction_embed(
-            guild=guild,
-            response=result,
-            player_in=player,
-        )
+        try:
+            embed, files = await self.build_transaction_embed(
+                guild=guild,
+                response=result,
+                player_in=player,
+            )
+        except MalformedTransactionResponse as exc:
+            return await interaction.followup.send(
+                embed=ErrorEmbed(
+                    description=f"Unable to announce transaction: `{str(exc)}`"
+                ),
+                ephemeral=True,
+            )
 
         # Announce to transaction channel
         if result.first_franchise:
@@ -702,9 +710,17 @@ class TransactionMixIn(RSCMixIn):
         except ValueError as exc:
             await interaction.followup.send(embed=ErrorEmbed(description=str(exc)))
 
-        embed, files = await self.build_transaction_embed(
-            guild=guild, response=result, player_in=player
-        )
+        try:
+            embed, files = await self.build_transaction_embed(
+                guild=guild, response=result, player_in=player
+            )
+        except MalformedTransactionResponse as exc:
+            return await interaction.followup.send(
+                embed=ErrorEmbed(
+                    description=f"Unable to announce transaction: `{str(exc)}`"
+                ),
+                ephemeral=True,
+            )
 
         if result.second_franchise:
             await self.announce_transaction(
@@ -804,9 +820,17 @@ class TransactionMixIn(RSCMixIn):
         except ValueError as exc:
             await interaction.followup.send(embed=ErrorEmbed(description=str(exc)))
 
-        embed, files = await self.build_transaction_embed(
-            guild=guild, response=result, player_in=player
-        )
+        try:
+            embed, files = await self.build_transaction_embed(
+                guild=guild, response=result, player_in=player
+            )
+        except MalformedTransactionResponse as exc:
+            return await interaction.followup.send(
+                embed=ErrorEmbed(
+                    description=f"Unable to announce transaction: `{str(exc)}`"
+                ),
+                ephemeral=True,
+            )
 
         await self.announce_transaction(
             guild=guild, embed=embed, files=files, player=player
@@ -879,12 +903,20 @@ class TransactionMixIn(RSCMixIn):
         subbed_out_role = await utils.get_subbed_out_role(guild)
         await player_out.add_roles(subbed_out_role)
 
-        embed, files = await self.build_transaction_embed(
-            guild=guild,
-            response=result,
-            player_in=player_in,
-            player_out=player_out,
-        )
+        try:
+            embed, files = await self.build_transaction_embed(
+                guild=guild,
+                response=result,
+                player_in=player_in,
+                player_out=player_out,
+            )
+        except MalformedTransactionResponse as exc:
+            return await interaction.followup.send(
+                embed=ErrorEmbed(
+                    description=f"Unable to announce transaction: `{str(exc)}`"
+                ),
+                ephemeral=True,
+            )
 
         # Validate response
         if not result.second_franchise:
@@ -1434,9 +1466,17 @@ class TransactionMixIn(RSCMixIn):
             else:
                 await player.add_roles(ir_role)
 
-        embed, files = await self.build_transaction_embed(
-            guild=guild, response=result, player_in=player
-        )
+        try:
+            embed, files = await self.build_transaction_embed(
+                guild=guild, response=result, player_in=player
+            )
+        except MalformedTransactionResponse as exc:
+            return await interaction.followup.send(
+                embed=ErrorEmbed(
+                    description=f"Unable to announce transaction: `{str(exc)}`"
+                ),
+                ephemeral=True,
+            )
 
         await self.announce_transaction(
             guild=guild,
@@ -1556,9 +1596,17 @@ class TransactionMixIn(RSCMixIn):
 
         # Announce to Transaction channel
         if announce:
-            embed, files = await self.build_transaction_embed(
-                guild=guild, response=result, player_in=player
-            )
+            try:
+                embed, files = await self.build_transaction_embed(
+                    guild=guild, response=result, player_in=player
+                )
+            except MalformedTransactionResponse as exc:
+                return await interaction.followup.send(
+                    embed=ErrorEmbed(
+                        description=f"Unable to announce transaction: `{str(exc)}`"
+                    ),
+                    ephemeral=True,
+                )
 
             await self.announce_transaction(
                 guild=guild, embed=embed, files=files, player=player
@@ -1760,6 +1808,11 @@ class TransactionMixIn(RSCMixIn):
         player_in: discord.Member,
         player_out: discord.Member | None = None,
     ) -> tuple[discord.Embed, list[discord.File]]:
+        if not response.type:
+            raise MalformedTransactionResponse(
+                "Transaction response type not returned by API."
+            )
+
         action = TransactionType(response.type)
         log.debug(f"Building transactions embed for type {action.name}", guild=guild)
 
@@ -1784,8 +1837,14 @@ class TransactionMixIn(RSCMixIn):
 
         match action:
             case TransactionType.CUT:
-                if not (ptu_in.old_team and response.first_franchise):
-                    raise MalformedTransactionResponse
+                if not (
+                    ptu_in.old_team
+                    and ptu_in.old_team.tier
+                    and response.first_franchise
+                ):
+                    raise MalformedTransactionResponse(
+                        "Old team, tier, or first_franchise was not returned by API."
+                    )
                 author_icon = await utils.fa_img_from_tier(
                     ptu_in.old_team.tier, tiny=True
                 )
@@ -1801,8 +1860,14 @@ class TransactionMixIn(RSCMixIn):
 
                 embed.set_footer(text=f"Discord ID: {player_in.id}")
             case TransactionType.PICKUP:
-                if not (ptu_in.new_team and response.second_franchise):
-                    raise MalformedTransactionResponse
+                if not (
+                    ptu_in.new_team
+                    and response.second_franchise
+                    and response.second_franchise.id
+                ):
+                    raise MalformedTransactionResponse(
+                        "New team, second franchise, or second franchise ID was not returned by API."
+                    )
                 author_icon = await self.franchise_logo(
                     guild, response.second_franchise.id
                 )
@@ -1815,8 +1880,14 @@ class TransactionMixIn(RSCMixIn):
                 gm_id = response.second_franchise.gm.discord_id
                 embed.set_footer(text=f"Discord ID: {player_in.id}")
             case TransactionType.RESIGN:
-                if not (ptu_in.new_team and response.second_franchise):
-                    raise MalformedTransactionResponse
+                if not (
+                    ptu_in.new_team
+                    and response.second_franchise
+                    and response.second_franchise.id
+                ):
+                    raise MalformedTransactionResponse(
+                        "New team, second franchise, or second franchise ID was not returned by API."
+                    )
                 author_icon = await self.franchise_logo(
                     guild, response.second_franchise.id
                 )
@@ -1829,8 +1900,14 @@ class TransactionMixIn(RSCMixIn):
                 gm_id = response.second_franchise.gm.discord_id
                 embed.set_footer(text=f"Discord ID: {player_in.id}")
             case TransactionType.TEMP_FA | TransactionType.SUBSTITUTION:
-                if not (ptu_in.new_team and response.second_franchise):
-                    raise MalformedTransactionResponse
+                if not (
+                    ptu_in.new_team
+                    and response.second_franchise
+                    and response.second_franchise.id
+                ):
+                    raise MalformedTransactionResponse(
+                        "New team, second franchise, or second franchise ID was not returned by API."
+                    )
                 author_icon = await self.franchise_logo(
                     guild, response.second_franchise.id
                 )
@@ -1854,8 +1931,14 @@ class TransactionMixIn(RSCMixIn):
                     gm_id = response.first_franchise.gm.discord_id
 
             case TransactionType.INACTIVE_RESERVE:
-                if not (ptu_in.old_team and response.first_franchise):
-                    raise MalformedTransactionResponse
+                if not (
+                    ptu_in.old_team
+                    and response.first_franchise
+                    and response.first_franchise.id
+                ):
+                    raise MalformedTransactionResponse(
+                        "Old team, first franchise, or first franchise ID was not returned by API."
+                    )
                 author_icon = await self.franchise_logo(
                     guild, response.first_franchise.id
                 )
@@ -1872,8 +1955,14 @@ class TransactionMixIn(RSCMixIn):
                 gm_id = response.first_franchise.gm.discord_id
                 embed.set_footer(text=f"Discord ID: {player_in.id}")
             case TransactionType.IR_RETURN:
-                if not (ptu_in.old_team and response.first_franchise):
-                    raise MalformedTransactionResponse
+                if not (
+                    ptu_in.old_team
+                    and response.first_franchise
+                    and response.first_franchise.id
+                ):
+                    raise MalformedTransactionResponse(
+                        "Old team, first franchise, or first franchise ID was not returned by API."
+                    )
                 author_icon = await self.franchise_logo(
                     guild, response.first_franchise.id
                 )
