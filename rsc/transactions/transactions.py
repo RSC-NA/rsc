@@ -2440,6 +2440,9 @@ class TransactionMixIn(RSCMixIn):
 
                 # Process trade item
                 if trade.value.player:
+                    # Append to ping list
+                    if trade.value.player.id:
+                        gms.append(trade.value.player.id)
                     if trade.value.player.team:
                         trade_fmt.append(
                             f"<@!{trade.value.player.id}> to {trade.value.player.team}"
