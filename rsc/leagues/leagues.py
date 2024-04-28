@@ -123,6 +123,17 @@ class LeagueMixIn(RSCMixIn):
 
         # Ensure we are within the character limit (name length + newline)
         if sum((len(i) + 1) for i in pfmt) > 1024:
+            # Reformat with display name
+            pfmt = []
+            for p in delist:
+                if not (p.player and p.player.discord_id):
+                    continue
+                m = guild.get_member(p.player.discord_id)
+                if m:
+                    pfmt.append(m.display_name)
+                else:
+                    pfmt.append(p.player.name)
+
             paged_msg = Pagify(text="\n".join(pfmt))
             for page in paged_msg:
                 await interaction.followup.send(
