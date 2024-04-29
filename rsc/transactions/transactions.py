@@ -577,6 +577,13 @@ class TransactionMixIn(RSCMixIn):
             return
 
         ptu = await self.league_player_from_transaction(result, player=player)
+        if not ptu:
+            return await interaction.followup.send(
+                embed=ErrorEmbed(
+                    description=f"Cut was processed but API did not return PlayerTransactionUpdate for {player.mention}. Announcement and discord updates have not been completed."
+                ),
+                ephemeral=True,
+            )
 
         try:
             await update_cut_player_discord(
@@ -689,9 +696,14 @@ class TransactionMixIn(RSCMixIn):
             )
             return
 
-        ptu: PlayerTransactionUpdates = await self.league_player_from_transaction(
-            result, player=player
-        )
+        ptu = await self.league_player_from_transaction(result, player=player)
+        if not ptu:
+            return await interaction.followup.send(
+                embed=ErrorEmbed(
+                    description=f"Cut was processed but API did not return PlayerTransactionUpdate for {player.mention}. Announcement and discord updates have not been completed."
+                ),
+                ephemeral=True,
+            )
 
         # Need to get tier data to remove old roles (Ex: Promotion)
 
@@ -801,9 +813,14 @@ class TransactionMixIn(RSCMixIn):
             )
             return
 
-        ptu: PlayerTransactionUpdates = await self.league_player_from_transaction(
-            result, player=player
-        )
+        ptu = await self.league_player_from_transaction(result, player=player)
+        if not ptu:
+            return await interaction.followup.send(
+                embed=ErrorEmbed(
+                    description=f"Cut was processed but API did not return PlayerTransactionUpdate for {player.mention}. Announcement and discord updates have not been completed."
+                ),
+                ephemeral=True,
+            )
 
         try:
             await update_signed_player_discord(
@@ -896,9 +913,14 @@ class TransactionMixIn(RSCMixIn):
             )
             return
 
-        ptu_in: PlayerTransactionUpdates = await self.league_player_from_transaction(
-            result, player_in
-        )
+        ptu_in = await self.league_player_from_transaction(result, player_in)
+        if not ptu_in:
+            return await interaction.followup.send(
+                embed=ErrorEmbed(
+                    description=f"Cut was processed but API did not return PlayerTransactionUpdate for {player_in.mention}. Announcement and discord updates have not been completed."
+                ),
+                ephemeral=True,
+            )
 
         # Subbed out role
         subbed_out_role = await utils.get_subbed_out_role(guild)
@@ -1516,6 +1538,7 @@ class TransactionMixIn(RSCMixIn):
                 executor=interaction.user,
                 notes=notes,
                 override=override,
+                redshirt=False,
                 remove=remove,
             )
             log.debug(f"Expire Sub Result: {result}", guild=guild)
@@ -1546,13 +1569,19 @@ class TransactionMixIn(RSCMixIn):
                 ephemeral=True,
             )
 
-        await self.announce_transaction(
-            guild=guild,
-            embed=embed,
-            files=files,
-            player=player,
-            gm=result.first_franchise.gm.discord_id,
-        )
+        if result.first_franchise and result.first_franchise.gm.discord_id:
+            await self.announce_transaction(
+                guild=guild,
+                embed=embed,
+                files=files,
+                player=player,
+                gm=result.first_franchise.gm.discord_id,
+            )
+        else:
+            await interaction.followup.send(
+                content="IR transaction response did not return first_franchise and or GM discord ID. Announcement skipped...",
+                ephemeral=True,
+            )
 
         action_fmt = "removed from" if remove else "moved to"
         await interaction.followup.send(
@@ -1604,6 +1633,14 @@ class TransactionMixIn(RSCMixIn):
             return
 
         ptu = await self.league_player_from_transaction(result, player=player)
+        if not ptu:
+            return await interaction.followup.send(
+                embed=ErrorEmbed(
+                    description=f"Cut was processed but API did not return PlayerTransactionUpdate for {player.mention}. Announcement and discord updates have not been completed."
+                ),
+                ephemeral=True,
+            )
+
         fname = None
         if result.first_franchise:
             fname = result.first_franchise.name
@@ -1620,7 +1657,7 @@ class TransactionMixIn(RSCMixIn):
 
         if fname:
             franchise_role = await utils.franchise_role_from_name(guild, fname)
-        if ptu.old_team:
+        if ptu.old_team and ptu.old_team.tier:
             log.debug(f"Old Team Tier: {ptu.old_team.tier}", guild=guild)
             old_tier_role = await utils.get_tier_role(guild, ptu.old_team.tier)
 
@@ -1883,9 +1920,17 @@ class TransactionMixIn(RSCMixIn):
                 embed=ApiExceptionErrorEmbed(exc), ephemeral=True
             )
 
+        ptu = await self.league_player_from_transaction(result, player=player)
+        if not ptu:
+            return await interaction.followup.send(
+                embed=ErrorEmbed(
+                    description=f"Cut was processed but API did not return PlayerTransactionUpdate for {player.mention}. Announcement and discord updates have not been completed."
+                ),
+                ephemeral=True,
+            )
+
         # Update player roles and name
         try:
-            ptu = await self.league_player_from_transaction(result, player=player)
             await update_signed_player_discord(guild=guild, player=player, ptu=ptu)
         except discord.Forbidden as exc:
             log.warning(
@@ -1997,6 +2042,10 @@ class TransactionMixIn(RSCMixIn):
 
         # LeaguePlayer Objects
         ptu_in = await self.league_player_from_transaction(response, player_in)
+        if not ptu_in:
+            raise MalformedTransactionResponse(
+                f"Cut was processed but API did not return PlayerTransactionUpdate for {player_in.mention}. Announcement and discord updates have not been completed."
+            )
 
         # Locals
         author_fmt = "Generic Transaction"
@@ -2211,18 +2260,16 @@ class TransactionMixIn(RSCMixIn):
 
     async def league_player_from_transaction(
         self, transaction: TransactionResponse, player=discord.Member
-    ) -> PlayerTransactionUpdates:
+    ) -> PlayerTransactionUpdates | None:
         if not transaction.player_updates:
             raise ValueError("Transaction response contains no Player Updates.")
 
-        lp = next(
-            (
-                x
-                for x in transaction.player_updates
-                if x.player.player.discord_id == player.id
-            )
-        )
-        return lp
+        for x in transaction.player_updates:
+            if not x:
+                continue
+            if x.player.player.discord_id == player.id:
+                return x
+        return None
 
     async def get_sub(self, member: discord.Member) -> Substitute | None:
         """Get sub from saved substitute list"""
