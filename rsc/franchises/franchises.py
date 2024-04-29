@@ -70,7 +70,7 @@ class FranchiseMixIn(RSCMixIn):
 
         gm_names = []
         for f in franchises:
-            if not (f.gm and f.gm.rsc_name):
+            if not (f.gm and f.gm.rsc_name and f.gm.discord_id):
                 gm_names.append("None")
                 continue
             member = guild.get_member(f.gm.discord_id)

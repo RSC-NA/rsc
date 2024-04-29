@@ -11,6 +11,7 @@ from redbot.core import app_commands, commands
 from rscapi import ApiClient, LeaguePlayersApi, TransactionsApi
 from rscapi.exceptions import ApiException
 from rscapi.models.cut_a_player_from_a_league import CutAPlayerFromALeague
+from rscapi.models.draft_a_player_to_a_team import DraftAPlayerToATeam
 from rscapi.models.draft_pick import DraftPick
 from rscapi.models.expire_a_player_sub import ExpireAPlayerSub
 from rscapi.models.franchise_identifier import FranchiseIdentifier
@@ -267,7 +268,7 @@ class TransactionMixIn(RSCMixIn):
         gm_id = p.team.franchise.gm.discord_id or 0  # Has to be a better solution
 
         match p.status:
-            case Status.ROSTERED | Status.IR | Status.AGMIR:
+            case Status.ROSTERED | Status.IR | Status.AGMIR | Status.RENEWED:
                 desc = f"Player left server while rostered on **{fname}**"
             case Status.UNSIGNED_GM:
                 desc = "A general manager has left the server."
@@ -1404,6 +1405,73 @@ class TransactionMixIn(RSCMixIn):
         await interaction.response.send_message(embed=embed)
 
     @_transactions.command(  # type: ignore
+        name="redshirt",
+        description="Move an AGM to redshirt status",
+    )
+    @app_commands.describe(
+        player="RSC Discord Member",
+        notes="Transaction notes (Optional)",
+        override="Admin only override",
+    )
+    async def _transactions_redshirt_cmd(
+        self,
+        interaction: discord.Interaction,
+        player: discord.Member,
+        notes: str | None = None,
+        override: bool = False,
+    ):
+        guild = interaction.guild
+        if not guild or not isinstance(interaction.user, discord.Member):
+            return
+
+        if override and not interaction.user.guild_permissions.manage_guild:
+            await interaction.response.send_message(
+                embed=ErrorEmbed(description="Only admins can process an override.")
+            )
+            return
+
+        log.debug(
+            f"Moving AGM to Redshirt: {player.display_name} ({player.id})", guild=guild
+        )
+        await interaction.response.defer(ephemeral=True)
+        try:
+            result = await self.inactive_reserve(
+                guild,
+                player=player,
+                executor=interaction.user,
+                notes=notes,
+                override=override,
+                redshirt=True,
+            )
+            log.debug(f"Redshirt Result: {result}", guild=guild)
+        except RscException as exc:
+            await interaction.followup.send(
+                embed=ApiExceptionErrorEmbed(exc), ephemeral=True
+            )
+            return
+
+        # Remove tier roles since redshirt is not a player.
+        tiers = await self.tiers(guild)
+        if tiers:
+            log.debug(
+                f"Removing tier roles from AGM Redshirt: {player.id}", guild=guild
+            )
+            roles_to_remove: list[discord.Role] = []
+            for r in player.roles:
+                for tier in tiers:
+                    if r.name.replace("FA", "").lower() == tier.name.lower():
+                        roles_to_remove.append(r)
+            if roles_to_remove:
+                await player.remove_roles(*roles_to_remove)
+
+        await interaction.followup.send(
+            embed=SuccessEmbed(
+                description=f"{player.mention} has been declared as Redshirt."
+            ),
+            ephemeral=True,
+        )
+
+    @_transactions.command(  # type: ignore
         name="ir",
         description="Modify inactive reserve status of a player",
     )
@@ -1729,7 +1797,13 @@ class TransactionMixIn(RSCMixIn):
             return
 
         await interaction.response.defer()
-        history = await self.transaction_history(guild, season=season, limit=10000)
+        try:
+            history = await self.transaction_history(guild, season=season, limit=10000)
+        except RscException as exc:
+            return await interaction.followup.send(
+                embed=ApiExceptionErrorEmbed(exc), ephemeral=True
+            )
+
         log.debug(f"History Length: {len(history)}", guild=guild)
 
         leaders: dict[int, int] = {}
@@ -1761,6 +1835,111 @@ class TransactionMixIn(RSCMixIn):
             name="Total", value="\n".join(str(x[1]) for x in leader_fmt), inline=True
         )
         await interaction.followup.send(embed=embed)
+
+    @_transactions.command(name="draft", description="Process a draft pick and announce it")  # type: ignore
+    @app_commands.describe(
+        player="RSC discord member being drafted",
+        team="Team name",
+        round="Round player was drafted in",
+        pick="Pick number",
+        override="Admin only override (Default: False)",
+    )
+    @app_commands.autocomplete(team=TeamMixIn.teams_autocomplete)  # type: ignore
+    async def _transactions_draft_cmd(
+        self,
+        interaction: discord.Interaction,
+        player: discord.Member,
+        team: str,
+        round: int,
+        pick: int,
+        override: bool = False,
+    ):
+        guild = interaction.guild
+        if not guild:
+            return
+
+        if not isinstance(interaction.user, discord.Member):
+            return
+
+        if override and not interaction.user.guild_permissions.manage_guild:
+            await interaction.response.send_message(
+                embed=ErrorEmbed(description="Only admins can process an override.")
+            )
+            return
+
+        await interaction.response.defer()
+        try:
+            result = await self.draft(
+                guild=guild,
+                player=player,
+                executor=interaction.user,
+                team=team,
+                round=round,
+                pick=pick,
+                override=override,
+            )
+        except RscException as exc:
+            return await interaction.followup.send(
+                embed=ApiExceptionErrorEmbed(exc), ephemeral=True
+            )
+
+        # Update player roles and name
+        try:
+            ptu = await self.league_player_from_transaction(result, player=player)
+            await update_signed_player_discord(guild=guild, player=player, ptu=ptu)
+        except discord.Forbidden as exc:
+            log.warning(
+                f"Unable to update nickname for {player.id}: {exc}", guild=guild
+            )
+            await interaction.followup.send(
+                content=f"Unable to update nickname for {player.mention}: `{exc}"
+            )
+        except AttributeError as exc:
+            await interaction.followup.send(embed=ErrorEmbed(description=str(exc)))
+        except ValueError as exc:
+            await interaction.followup.send(embed=ErrorEmbed(description=str(exc)))
+
+        # Get gm discord id and tier
+        gm_id = None
+        if (
+            ptu.player.team
+            and ptu.player.team.franchise
+            and ptu.player.team.franchise.gm
+            and ptu.player.team.franchise.gm.discord_id
+        ):
+            gm_id = ptu.player.team.franchise.gm.discord_id
+
+        tier = None
+        if ptu.player.tier:
+            tier = ptu.player.tier.name
+
+        # Announce
+        trans_channel = await self._trans_channel(guild)
+        if trans_channel:
+            # Determine if kept or drafted
+            if player.display_name.startswith("FA |") or player.display_name.startswith(
+                "DE |"
+            ):
+                action_fmt = "drafted"
+            else:
+                action_fmt = "kept"
+
+            # Handle edge case where tier/gm id are `None`
+            if gm_id and tier:
+                draft_fmt = f"Round {round} Pick {pick}: {player.mention} was {action_fmt} by {team} (<@{gm_id}> - {tier})"
+            elif gm_id:
+                draft_fmt = f"Round {round} Pick {pick}: {player.mention} was {action_fmt} by {team} (<@{gm_id}>)"
+            elif tier:
+                draft_fmt = f"Round {round} Pick {pick}: {player.mention} was {action_fmt} by {team} ({tier})"
+            else:
+                draft_fmt = f"Round {round} Pick {pick}: {player.mention} was {action_fmt} by {team}"
+
+            await trans_channel.send(
+                content=draft_fmt, allowed_mentions=discord.AllowedMentions(users=True)
+            )
+
+        # Report result
+        await interaction.followup.send(content="Done.")
 
     # Functions
 
@@ -2658,6 +2837,7 @@ class TransactionMixIn(RSCMixIn):
         executor: discord.Member,
         notes: str | None = None,
         override: bool = False,
+        redshirt: bool = False,
         remove: bool = False,
     ) -> TransactionResponse:
         """Move a player or AGM to inactive reserve"""
@@ -2669,6 +2849,7 @@ class TransactionMixIn(RSCMixIn):
                 executor=executor.id,
                 notes=notes,
                 admin_override=override,
+                redshirt=redshirt,
                 remove_from_ir=remove,
             )
             log.debug(f"IR Data: {data}", guild=guild)
@@ -2743,6 +2924,34 @@ class TransactionMixIn(RSCMixIn):
                 )
                 log.debug(f"Schema: {pformat(schema)}", guild=guild)
                 return await api.transactions_trade_create(schema)
+            except ApiException as exc:
+                raise RscException(response=exc)
+
+    async def draft(
+        self,
+        guild: discord.Guild,
+        player: discord.Member,
+        executor: discord.Member,
+        team: str,
+        round: int,
+        pick: int,
+        override: bool = False,
+    ) -> TransactionResponse:
+        """Fetch transaction history based on specified criteria"""
+        async with ApiClient(self._api_conf[guild.id]) as client:
+            api = TransactionsApi(client)
+            try:
+                draft_pick = DraftAPlayerToATeam(
+                    league=self._league[guild.id],
+                    player=player.id,
+                    executor=executor.id,
+                    team=team,
+                    round=round,
+                    number=pick,
+                    admin_override=override,
+                )
+                log.debug(f"Draft Schema: {pformat(draft_pick)}", guild=guild)
+                return await api.transactions_draft_create(draft_pick)
             except ApiException as exc:
                 raise RscException(response=exc)
 
