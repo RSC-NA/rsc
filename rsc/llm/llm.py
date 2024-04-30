@@ -65,13 +65,17 @@ class LLMMixIn(RSCMixIn):
         cleaned_msg = message.content.replace(guild.me.mention, "")
         log.debug(f"Cleaned LLM Message: {cleaned_msg}")
 
-        response, _sources = await llm_query(
-            org_name=org,
-            api_key=key,
-            question=cleaned_msg,
-            count=count,
-            threshold=threshold,
-        )
+        try:
+            response, _sources = await llm_query(
+                org_name=org,
+                api_key=key,
+                question=cleaned_msg,
+                count=count,
+                threshold=threshold,
+            )
+        except RuntimeError as exc:
+            log.error(str(exc), exc_info=exc)
+            return
 
         if not response:
             return await message.reply(content="I am unable to answer that question.")
@@ -252,13 +256,16 @@ class LLMMixIn(RSCMixIn):
             )
 
         await interaction.response.defer()
-        response, _sources = await llm_query(
-            org_name=org,
-            api_key=key,
-            question=question,
-            count=count,
-            threshold=threshold,
-        )
+        try:
+            response, _sources = await llm_query(
+                org_name=org,
+                api_key=key,
+                question=question,
+                count=count,
+                threshold=threshold,
+            )
+        except RuntimeError as exc:
+            return await interaction.followup.send(content=str(exc), ephemeral=True)
 
         if not response:
             response_fmt = "I am unable to answer that question."
