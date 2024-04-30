@@ -1084,7 +1084,6 @@ class AdminMixIn(RSCMixIn):
                 continue
 
             log.debug(f"Syncing Player: {m.display_name} ({m.id})", guild=guild)
-
             synced += 1
             if not dryrun:
                 try:

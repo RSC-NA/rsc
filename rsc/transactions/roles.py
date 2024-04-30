@@ -324,6 +324,10 @@ async def update_rostered_discord(
             f"{player.display_name} ({player.id}) has no franchise data."
         )
 
+    # Do not sync dropped players
+    if league_player.status == Status.DROPPED:
+        return
+
     roles_to_remove: list[discord.Role] = []
     roles_to_add: list[discord.Role] = []
 
