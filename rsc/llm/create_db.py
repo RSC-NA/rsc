@@ -36,6 +36,14 @@ sys.modules["sqlite3"] = sys.modules.pop("pysqlite3")
 CHROMA_PATH = Path(__file__).parent / "db"
 
 
+async def load_funny_docs() -> list[Document]:
+    log.debug("Loading funny documents")
+    fpath = Path(__file__).parent.parent / "resources" / "funny"
+    loader = DirectoryLoader(str(fpath), glob="*.md")
+    documents = loader.load()
+    return documents
+
+
 async def load_rule_docs() -> list[Document]:
     log.debug("Loading rule documents")
     fpath = Path(__file__).parent.parent / "resources" / "rules"

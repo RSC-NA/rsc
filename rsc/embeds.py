@@ -206,8 +206,7 @@ class ExceptionErrorEmbed(RedEmbed):
 
     def __init__(self, exc_message: str, **kwargs):
         title = kwargs.pop("title", "Error")
-        super().__init__(title=title, **kwargs)
-        self.add_field(name="Reason", value=exc_message, inline=False)
+        super().__init__(title=title, description=exc_message, **kwargs)
 
 
 class NotImplementedEmbed(RedEmbed):

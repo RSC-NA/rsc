@@ -9,6 +9,7 @@ from rsc.abc import RSCMixIn
 from rsc.embeds import BlueEmbed, ErrorEmbed
 from rsc.llm.create_db import (
     create_chroma_db,
+    load_funny_docs,
     load_help_docs,
     load_rule_docs,
     markdown_to_documents,
@@ -288,7 +289,7 @@ class LLMMixIn(RSCMixIn):
         name="createdb", description="Create the LLM Chroma DB"
     )
     async def _llm_createdb_cmd(self, interaction: discord.Interaction):
-        """Query the RSC LLM with a question"""
+        """Create the LLM Chroma DB"""
         guild = interaction.guild
         if not guild:
             return
@@ -332,15 +333,20 @@ class LLMMixIn(RSCMixIn):
         # Read in Markdown documents
         ruledocs = await load_rule_docs()
         helpdocs = await load_help_docs()
+        funnydocs = await load_funny_docs()
 
         for d in ruledocs:
             print(f"Loaded Document: {d.metadata}")
         for d in helpdocs:
             print(f"Loaded Document: {d.metadata}")
+        for d in funnydocs:
+            print(f"Loaded Document: {d.metadata}")
 
         markdown_docs = await markdown_to_documents(ruledocs)
         docs.extend(markdown_docs)
         markdown_docs = await markdown_to_documents(helpdocs)
+        docs.extend(markdown_docs)
+        markdown_docs = await markdown_to_documents(funnydocs)
         docs.extend(markdown_docs)
 
         await create_chroma_db(org_name=org, api_key=key, docs=docs)

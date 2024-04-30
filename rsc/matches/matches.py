@@ -10,12 +10,14 @@ from rscapi.models.match_list import MatchList
 from rscapi.models.matches_list200_response import MatchesList200Response
 
 from rsc.abc import RSCMixIn
-from rsc.embeds import BlueEmbed, ErrorEmbed
+from rsc.embeds import BlueEmbed, ErrorEmbed, ExceptionErrorEmbed
 from rsc.enums import MatchFormat, MatchTeamEnum, MatchType, Status
+from rsc.logs import GuildLogAdapter
 from rsc.teams import TeamMixIn
 from rsc.utils.utils import tier_color_by_name
 
-log = logging.getLogger("red.rsc.matches")
+logger = logging.getLogger("red.rsc.matches")
+log = GuildLogAdapter(logger)
 
 
 class MatchMixIn(RSCMixIn):
@@ -197,6 +199,7 @@ class MatchMixIn(RSCMixIn):
 
         # Get API id of team
         team_id = await self.team_id_by_name(guild, name=player[0].team.name)
+        log.debug(f"Getting match for team: {team_id}", guild=guild)
 
         # Get teams next match
         try:
@@ -213,17 +216,19 @@ class MatchMixIn(RSCMixIn):
             return
 
         if not match:
-            await interaction.followup.send(
+            return await interaction.followup.send(
                 embed=BlueEmbed(
                     title="Match Info",
                     description="You do not have any upcoming matches.",
                 ),
                 ephemeral=True,
             )
-            return
 
         # Is interaction user away/home
-        user_team = await self.match_team_by_user(match, interaction.user)
+        try:
+            user_team = await self.match_team_by_user(match, interaction.user)
+        except ValueError as exc:
+            return await interaction.followup.send(embed=ExceptionErrorEmbed(str(exc)))
 
         embed = await self.build_match_embed(guild, match, user_team=user_team)
         await interaction.followup.send(embed=embed, ephemeral=True)
