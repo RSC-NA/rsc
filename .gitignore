@@ -8,3 +8,6 @@ Scripts/
 pyvenv.cfg
 Tracker*.json
 *.swp
+
+# Chroma DB
+rsc/llm/db/

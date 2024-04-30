@@ -145,8 +145,10 @@ class MatchMixIn(RSCMixIn):
         )
 
         embed.add_field(
-            name="Day",
-            value="\n".join([f"{m.day}" for m in matches]),
+            name="Date",
+            value="\n".join(
+                [f"{m.var_date.strftime('%-m/%-d')}" for m in matches if m.var_date]
+            ),
             inline=True,
         )
         embed.add_field(

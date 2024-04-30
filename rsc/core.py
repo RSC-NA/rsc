@@ -24,6 +24,7 @@ from rsc.extras import ExtrasMixIn
 from rsc.franchises import FranchiseMixIn
 from rsc.freeagents import FreeAgentMixIn
 from rsc.leagues import LeagueMixIn
+from rsc.llm import LLMMixIn
 from rsc.matches import MatchMixIn
 from rsc.members import MemberMixIn
 from rsc.moderator import ModeratorMixIn, ThreadMixIn
@@ -54,21 +55,22 @@ class RSC(
     AdminMixIn,
     BallchasingMixIn,
     CombineMixIn,
-    FranchiseMixIn,
-    LeagueMixIn,
     DeveloperMixIn,
     DevLeagueMixIn,
     ExtrasMixIn,
+    FranchiseMixIn,
     FreeAgentMixIn,
-    MemberMixIn,
+    LeagueMixIn,
+    LLMMixIn,
     MatchMixIn,
+    MemberMixIn,
     ModeratorMixIn,
     NumberMixIn,
     SeasonsMixIn,
     StatsMixIn,
     TeamMixIn,
-    TierMixIn,
     ThreadMixIn,
+    TierMixIn,
     TrackerMixIn,
     TransactionMixIn,
     UtilsMixIn,

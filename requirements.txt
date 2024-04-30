@@ -2,3 +2,8 @@ rscapi
 python-ballchasing
 pytz
 validators
+langchain
+langchain_openai
+langchain_community
+unstructured
+chromadb

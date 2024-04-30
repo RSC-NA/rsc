@@ -107,6 +107,14 @@ class CombineSettings(TypedDict):
     CombinesCategory: discord.CategoryChannel | None
 
 
+class LLMSettings(TypedDict):
+    LLMActive: bool
+    OpenAIKey: str | None
+    OpenAIOrg: str | None
+    SimilarityCount: int
+    SimilarityThreshold: float
+
+
 class TransactionSettings(TypedDict):
     TransChannel: discord.TextChannel | None
     TransDMs: bool
