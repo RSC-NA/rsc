@@ -318,8 +318,8 @@ async def update_rostered_discord(
     if tiers:
         for r in player.roles:
             for tier in tiers:
-                if (
-                    r.name.replace("FA", "").lower() == tier.name.lower()
+                if r.name.endswith("FA") or (
+                    r.name.lower() == tier.name.lower()
                     and r.name.lower() != league_player.tier.name.lower()
                 ):
                     roles_to_remove.append(r)
