@@ -234,20 +234,17 @@ async def update_team_captain_discord(
 async def update_nonplaying_discord(
     guild: discord.Guild, member: discord.Member, tiers: list[Tier]
 ):
-    former_player_role = await utils.get_former_player_role(guild)
-    spectator_role = await utils.get_spectator_role(guild)
-
     # Bulk remove/add to help avoid rate limit
     roles_to_remove: list[discord.Role] = []
     roles_to_add: list[discord.Role] = []
 
-    # Franchise Role
-    frole = await utils.franchise_role_from_disord_member(member)
-    if frole:
-        roles_to_remove.append(frole)
+    # Remove any old franchise role if it exists
+    old_froles = await utils.franchise_role_list_from_disord_member(member)
+    if old_froles:
+        roles_to_remove.extend(old_froles)
 
-    # Find tier roles
     for r in member.roles:
+        # Find tier roles
         for tier in tiers:
             if r in roles_to_remove:
                 continue
@@ -274,6 +271,8 @@ async def update_nonplaying_discord(
             case const.SUBBED_OUT_ROLE:
                 roles_to_remove.append(r)
 
+    # Spectator
+    spectator_role = await utils.get_spectator_role(guild)
     if spectator_role not in member.roles:
         roles_to_add.append(spectator_role)
 
@@ -284,11 +283,15 @@ async def update_nonplaying_discord(
 
     # Determine Former Player by prefix
     if await utils.get_prefix(member):
+        former_player_role = await utils.get_former_player_role(guild)
         if former_player_role not in member.roles:
             roles_to_add.append(former_player_role)
-        new_nick = await utils.remove_prefix(member)
-        log.debug(f"Updating nickname ({member.id}): {new_nick}", guild=guild)
+
+    # Update nickname
+    new_nick = await utils.remove_prefix(member)
+    if new_nick != member.display_name:
         try:
+            log.debug(f"Updating nickname ({member.id}): {new_nick}", guild=guild)
             await member.edit(nick=new_nick)
         except discord.Forbidden as exc:
             log.warning(
@@ -465,6 +468,7 @@ async def update_free_agent_discord(
     if fa_role not in player.roles:
         roles_to_add.append(fa_role)
 
+    # Tier FA role
     tier_fa_role = await utils.get_tier_fa_role(guild, league_player.tier.name)
     if tier_fa_role not in player.roles:
         roles_to_add.append(tier_fa_role)
