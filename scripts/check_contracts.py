@@ -54,7 +54,7 @@ def remove_cut_players(players):
 
     cut_players = []
     for r in data["results"]:
-        tmp = r["player_updates"].pop(0)
+        tmp = r["player_updates"].pop(0)  # type: ignore
         try:
             cut_players.append(tmp["player"]["player"]["name"])
         except Exception as exc:

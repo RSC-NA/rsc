@@ -25,8 +25,6 @@ class LeagueMixIn(RSCMixIn):
         log.debug("Initializing LeagueMixIn")
         super().__init__()
 
-    # Setup
-
     # Commands
 
     @app_commands.command(name="leagues", description="Show all RSC leagues")  # type: ignore

@@ -2323,6 +2323,10 @@ class AdminMixIn(RSCMixIn):
 
         # Update old GM roles and name
         if old_gm:
+            former_gm_role = await utils.get_former_gm_role(guild)
+            if former_gm_role and former_gm_role not in old_gm.roles:
+                await old_gm.add_roles(former_gm_role)
+
             await old_gm.remove_roles(
                 frole, gm_role, captain_role, reason="Removed from GM"
             )

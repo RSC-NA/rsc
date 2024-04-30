@@ -622,7 +622,7 @@ class TeamMixIn(RSCMixIn):
                     f"LeaguePlayer {c.id} captain is missing tier data."
                 )
 
-        captains.sort(key=lambda c: cast(str, c.team.name))
+        captains.sort(key=lambda c: cast(str, c.team.name))  # type: ignore
         return captains
 
     async def franchise_captains(
@@ -640,7 +640,7 @@ class TeamMixIn(RSCMixIn):
                     f"LeaguePlayer {c.id} captain is missing tier data."
                 )
 
-        captains.sort(key=lambda c: cast(int, c.tier.position), reverse=True)
+        captains.sort(key=lambda c: cast(int, c.tier.position), reverse=True)  # type: ignore
         return captains
 
     # API

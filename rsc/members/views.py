@@ -298,7 +298,8 @@ class SignupView(AuthorOnlyView):
                 "https://rocketleague.tracker.network/rocket-league/profile/steam/76561198028063203/overview\n\n"
                 "Note: Steam accounts must list your Steam64ID.\n"
                 "You can find your Steam64ID here: https://steamidfinder.com/\n"
-                "Find your tracker link here: https://rocketleague.tracker.network\n"
+                "Find your tracker link here: https://rocketleague.tracker.network\n\n"
+                "**A tracker with 50 3v3 games played is required.**"
             ),
             inline=False,
         )

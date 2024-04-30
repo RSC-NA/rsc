@@ -1386,7 +1386,7 @@ class BallchasingMixIn(RSCMixIn):
                 sort_dir=ballchasing.SortDir.ASCENDING,
                 replay_after=after,
                 replay_before=before,
-                player_name=tracker.name,
+                player_name=[tracker.name],
                 deep=True,
             ):
                 if await self.valid_replay(match, r):

@@ -17,7 +17,7 @@ def combines_check_in(discord_id: int) -> int:
     log.info(f"Sending Check In: {discord_id}")
     params = {"discord_id": discord_id}
     r = requests.get(url=CHECKIN_URL, params=params, timeout=10)
-    return r.status
+    return r.status_code
 
 
 if __name__ == "__main__":
