@@ -510,7 +510,7 @@ class MemberMixIn(RSCMixIn):
         except RscException as exc:
             match exc.status:
                 case 409:
-                    await interaction.edit_original_response(
+                    return await interaction.edit_original_response(
                         embed=YellowEmbed(
                             title="RSC Sign-up",
                             description="You are already signed up for the league. Please use `/intenttoplay` to declare your intent for next season.",
@@ -518,16 +518,15 @@ class MemberMixIn(RSCMixIn):
                         view=None,
                     )
                 case 405:
-                    await interaction.edit_original_response(
+                    return await interaction.edit_original_response(
                         embed=YellowEmbed(title="RSC Sign-up", description=exc.reason),
                         view=None,
                     )
                 case _:
-                    await interaction.edit_original_response(
+                    return await interaction.edit_original_response(
                         embed=ApiExceptionErrorEmbed(exc),
                         view=None,
                     )
-            return
 
         success_embed = SuccessEmbed(
             description=(
@@ -537,7 +536,7 @@ class MemberMixIn(RSCMixIn):
         )
         await interaction.edit_original_response(embed=success_embed, view=None)
 
-    @app_commands.command(name="permfa", description="Sign up as an RSC permanent free agent")  # type: ignore
+    @app_commands.command(name="permfa", description="Sign up as an permanent free agent")  # type: ignore
     @app_commands.guild_only
     async def _member_permfa_signup(self, interaction: discord.Interaction):
         guild = interaction.guild
@@ -559,7 +558,6 @@ class MemberMixIn(RSCMixIn):
             log.warning(
                 f"MemberCreate exception during PermFA sign-up: {exc.response.body}"
             )
-            pass
 
         # Wait for embed finish.
         await signup_view.wait()
@@ -569,8 +567,7 @@ class MemberMixIn(RSCMixIn):
                 title="Signup Cancelled",
                 description="You have cancelled signing up for RSC. Please try again if this was a mistake.",
             )
-            await interaction.edit_original_response(embed=embed, view=None)
-            return
+            return await interaction.edit_original_response(embed=embed, view=None)
         if signup_view.state != SignupState.FINISHED:
             embed = ErrorEmbed(
                 title="Signup Failed",
@@ -579,8 +576,7 @@ class MemberMixIn(RSCMixIn):
                     " Please try again, if the issue persists contact a staff member."
                 ),
             )
-            await interaction.edit_original_response(embed=embed, view=None)
-            return
+            return await interaction.edit_original_response(embed=embed, view=None)
 
         # Filter empty new lines
         tracker_list = list(filter(None, signup_view.trackers))
@@ -603,26 +599,25 @@ class MemberMixIn(RSCMixIn):
         except RscException as exc:
             match exc.status:
                 case 409:
-                    await interaction.edit_original_response(
+                    return await interaction.edit_original_response(
                         embed=YellowEmbed(
                             title="RSC PermFA Sign-up",
-                            description="You are already signed up for the league. Please use `/intenttoplay` to declare your intent for next season.",
+                            description="You are already signed up as a permanent free agent.",
                         ),
                         view=None,
                     )
                 case 405:
-                    await interaction.edit_original_response(
+                    return await interaction.edit_original_response(
                         embed=YellowEmbed(
                             title="RSC PermFA Sign-up", description=exc.reason
                         ),
                         view=None,
                     )
                 case _:
-                    await interaction.edit_original_response(
+                    return await interaction.edit_original_response(
                         embed=ApiExceptionErrorEmbed(exc),
                         view=None,
                     )
-            return
 
         success_embed = SuccessEmbed(
             description=(

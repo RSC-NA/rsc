@@ -95,6 +95,7 @@ class Status(StrEnum):
     DRAFT_ELIGIBLE = "DE"  # Draft Eligible
     FREE_AGENT = "FA"  # Free Agent
     ROSTERED = "RO"  # Rostered
+    RENEWED = "RN"  # Renewed
     IR = "IR"  # Inactive Reserve
     WAIVERS = "WV"  # Waivers
     AGMIR = "AR"  # AGM IR
@@ -105,7 +106,6 @@ class Status(StrEnum):
     PERMFA_W = "PW"  # Permanent FA in Waiting
     WAIVER_CLAIM = "WC"  # Waiver Claim
     WAIVER_RELEASE = "WR"  # Waiver Release
-    RENEWED = "RN"  # Renewed
     DROPPED = "DR"  # Dropped
 
     @property

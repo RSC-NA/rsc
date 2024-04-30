@@ -1,4 +1,5 @@
 import logging
+from typing import AsyncIterator
 
 import discord
 from redbot.core import app_commands
@@ -305,7 +306,7 @@ class LeagueMixIn(RSCMixIn):
         franchise: str | None = None,
         discord_id: int | None = None,
         per_page: int = 100,
-    ):
+    ) -> AsyncIterator[LeaguePlayer]:
         offset = 0
         while True:
             async with ApiClient(self._api_conf[guild.id]) as client:
@@ -331,7 +332,7 @@ class LeagueMixIn(RSCMixIn):
 
                     for player in players.results:
                         yield player
-                    # yield players.results
+
                 except ApiException as exc:
                     raise RscException(exc)
 

@@ -1000,13 +1000,14 @@ class AdminMixIn(RSCMixIn):
         total = 0
         synced = 0
         api_member: RSCMember
-        async for api_member in self.paged_members(guild=guild):
+        async for api_member in self.paged_members(guild=guild, per_page=250):
             total += 1
             if not api_member.discord_id:
                 continue
 
             # Check if member in league
-            if await self.league_player_from_member(guild, api_member):
+            lp = await self.league_player_from_member(guild, api_member)
+            if lp and lp.status != Status.DROPPED:
                 continue
 
             m = guild.get_member(api_member.discord_id)

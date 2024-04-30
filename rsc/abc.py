@@ -1,7 +1,7 @@
 from abc import ABC, ABCMeta, abstractmethod
 from datetime import datetime
 from os import PathLike
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, AsyncIterator
 from zoneinfo import ZoneInfo
 
 import discord
@@ -216,7 +216,7 @@ class RSCMixIn(ABC):
         ...
 
     @abstractmethod
-    async def paged_players(
+    def paged_players(
         self,
         guild: discord.Guild,
         status: Status | None = None,
@@ -229,7 +229,7 @@ class RSCMixIn(ABC):
         franchise: str | None = None,
         discord_id: int | None = None,
         per_page: int = 100,
-    ):
+    ) -> AsyncIterator[LeaguePlayer]:
         ...
 
     @abstractmethod
@@ -312,14 +312,14 @@ class RSCMixIn(ABC):
         ...
 
     @abstractmethod
-    async def paged_members(
+    def paged_members(
         self,
         guild: discord.Guild,
         rsc_name: str | None = None,
         discord_username: str | None = None,
         discord_id: int | None = None,
         per_page: int = 100,
-    ):
+    ) -> AsyncIterator[RSCMember]:
         ...
 
     @abstractmethod
