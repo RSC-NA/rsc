@@ -49,6 +49,9 @@ async def update_signed_player_discord(
     if tiers:
         for r in player.roles:
             for tier in tiers:
+                if r in roles_to_remove:
+                    continue
+
                 if r.name.endswith("FA") or (
                     r.name.lower() == tier.name.lower()
                     and r.name.lower() != ptu.new_team.tier.lower()
@@ -243,10 +246,12 @@ async def update_nonplaying_discord(
     if frole:
         roles_to_remove.append(frole)
 
-    # Find applicable roles
+    # Find tier roles
     for r in member.roles:
-        # Tiers
         for tier in tiers:
+            if r in roles_to_remove:
+                continue
+
             if r.name.replace("FA", "").lower() == tier.name.lower():
                 roles_to_remove.append(r)
 
@@ -323,6 +328,9 @@ async def update_rostered_discord(
     if tiers:
         for r in player.roles:
             for tier in tiers:
+                if r in roles_to_remove:
+                    continue
+
                 if r.name.endswith("FA") or (
                     r.name.lower() == tier.name.lower()
                     and r.name.lower() != league_player.tier.name.lower()
@@ -422,6 +430,9 @@ async def update_free_agent_discord(
     if tiers:
         for r in player.roles:
             for tier in tiers:
+                if r in roles_to_remove:
+                    continue
+
                 if (
                     r.name.replace("FA", "").lower() == tier.name.lower()
                     and r.name.replace("FA", "").lower()
@@ -497,6 +508,9 @@ async def update_draft_eligible_discord(
     if tiers and league_player.tier and league_player.tier.name:
         for r in player.roles:
             for tier in tiers:
+                if r in roles_to_remove:
+                    continue
+
                 if (
                     r.name.replace("FA", "").lower() == tier.name.lower()
                     and r.name.lower() != league_player.tier.name.lower()
