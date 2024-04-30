@@ -36,7 +36,7 @@ BALLCHASING_URL = "https://ballchasing.com"
 BEHAVIOR_RULES_URL = (
     "https://docs.google.com/document/d/1AR241UmyNos8xflYqrzmpHE6Cy6xDcCtfn-32gdtPdI/"
 )
-RSC_TRACKER_URL = "https://docs.google.com/spreadsheets/d/1HLd_2yMGh_lX3adMLxQglWPIfRuiSiv587ABYnQX-0s/"
+RSC_TRACKER_URL = "https://docs.google.com/spreadsheets/d/1WVQEfU1DuFMm4s4XUXKI6mdU7k54c8OmdHvjLlDTWX0"
 
 # Moderation
 

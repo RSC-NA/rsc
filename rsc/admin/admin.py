@@ -1001,7 +1001,6 @@ class AdminMixIn(RSCMixIn):
         synced = 0
         api_member: RSCMember
         async for api_member in self.paged_members(guild=guild):
-            log.debug(f"API Member: {api_member}")
             total += 1
             if not api_member.discord_id:
                 continue
