@@ -1984,7 +1984,7 @@ class TransactionMixIn(RSCMixIn):
             )
 
         # Report result
-        await interaction.followup.send(content="Done.")
+        await interaction.followup.send(content=f"Done. Round: {round} Pick: {pick}")
 
     # Functions
 
