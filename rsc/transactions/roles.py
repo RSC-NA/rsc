@@ -60,6 +60,11 @@ async def update_signed_player_discord(
     if fa_role in player.roles:
         roles_to_remove.append(fa_role)
 
+    # Draft Eligible role
+    de_role = await utils.get_draft_eligible_role(guild)
+    if de_role in player.roles:
+        roles_to_remove.append(de_role)
+
     # Remove old franchise role if it exists
     old_frole = await utils.franchise_role_from_disord_member(player)
     if old_frole:
@@ -333,6 +338,11 @@ async def update_rostered_discord(
     fa_role = await utils.get_free_agent_role(guild)
     if fa_role in player.roles:
         roles_to_remove.append(fa_role)
+
+    # Draft Eligible role
+    de_role = await utils.get_draft_eligible_role(guild)
+    if de_role in player.roles:
+        roles_to_remove.append(de_role)
 
     # League Role
     league_role = await utils.get_league_role(guild)

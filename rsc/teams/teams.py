@@ -21,10 +21,12 @@ from rsc.embeds import ApiExceptionErrorEmbed, BlueEmbed, ErrorEmbed
 from rsc.enums import Status, SubStatus
 from rsc.exceptions import RscException
 from rsc.franchises import FranchiseMixIn
+from rsc.logs import GuildLogAdapter
 from rsc.tiers import TierMixIn
 from rsc.utils import utils
 
-log = logging.getLogger("red.rsc.teams")
+logger = logging.getLogger("red.rsc.teams")
+log = GuildLogAdapter(logger)
 
 
 class TeamMixIn(RSCMixIn):
@@ -236,10 +238,10 @@ class TeamMixIn(RSCMixIn):
             return
 
         await interaction.response.defer()
-        players = await self.players(guild, team_name=team)
+        plist = await self.players(guild, team_name=team)
 
         # Verify team exists and get data
-        if not players:
+        if not plist:
             await interaction.followup.send(
                 content=f"No results found for **{team}** or no rostered players.",
                 ephemeral=True,
@@ -247,19 +249,26 @@ class TeamMixIn(RSCMixIn):
             return
 
         # Check if we got results for other teams
-        for p in players:
-            if not (p.team and p.team.name):
-                raise ValueError("Malformed roster data received from API")
-            if p.team.name != team:
-                teams_found: set[str] = {
-                    str(p.team.name) if p.team else "Error" for p in players
-                }
-                names = ", ".join(list(teams_found))
-                await interaction.followup.send(
-                    content=f"Found multiple results for team name.\n\n **{names}**",
-                    ephemeral=True,
+        players: list[LeaguePlayer] = []
+        for p in plist:
+            if not (p.team and p.team.name and p.team.franchise):
+                log.error(
+                    "Malformed roster data received from API. Player has no team, team name, or franchise but is rostered.",
+                    guild=guild,
                 )
-                return
+                continue
+            if p.team.name.lower() == team.lower():
+                players.append(p)
+
+        if not players:
+            teams_found: set[str] = {
+                str(p.team.name) if p.team else "Error" for p in plist
+            }
+            names = ", ".join(list(teams_found))
+            return await interaction.followup.send(
+                content=f"Found multiple results for team name.\n\n **{names}**",
+                ephemeral=True,
+            )
 
         if not (players[0].team and players[0].team.franchise):
             raise ValueError("Malformed roster data received from API")
