@@ -57,8 +57,12 @@ async def llm_query(
 
     # Load DB
     llm_db = Chroma(
-        persist_directory=str(CHROMA_PATH), embedding_function=OpenAIEmbeddings()
+        persist_directory=str(CHROMA_PATH),
+        embedding_function=OpenAIEmbeddings(organization=org_name, api_key=api_key),
     )
+
+    if not llm_db:
+        raise RuntimeError("Chroma DB does not exist")
 
     # Search the DB.
     similar = llm_db.similarity_search_with_relevance_scores(question, k=count)

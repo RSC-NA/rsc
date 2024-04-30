@@ -1,9 +1,11 @@
-rscapi
+chromadb
+langchain
+langchain_community
+langchain_openai
+pysqlite3
+pysqlite3-binary
 python-ballchasing
 pytz
-validators
-langchain
-langchain_openai
-langchain_community
+rscapi
 unstructured
-chromadb
+validators

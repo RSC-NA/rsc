@@ -297,7 +297,12 @@ class LLMMixIn(RSCMixIn):
             )
 
         await interaction.response.defer(ephemeral=True)
-        await self.create_chroma_db(guild)
+
+        try:
+            await self.create_chroma_db(guild)
+        except ValueError as exc:
+            return await interaction.followup.send(content=str(exc), ephemeral=True)
+
         await interaction.followup.send(
             embed=BlueEmbed(
                 title="Chroma DB", description="Chroma DB has been successfully created"
