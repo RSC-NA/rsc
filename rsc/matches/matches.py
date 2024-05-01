@@ -53,7 +53,12 @@ class MatchMixIn(RSCMixIn):
         if team:
             # If team name was supplied, find the ID of that team
             log.debug(f"Searching for team: {team}")
-            team_id = await self.team_id_by_name(guild, name=team)
+            try:
+                team_id = await self.team_id_by_name(guild, name=team)
+            except ValueError as exc:
+                return await interaction.followup.send(
+                    embed=ExceptionErrorEmbed(exc_message=str(exc)), ephemeral=True
+                )
         else:
             log.debug(f"Finding team for {interaction.user.display_name}")
             # Find the team ID of interaction user
@@ -198,11 +203,16 @@ class MatchMixIn(RSCMixIn):
             return
 
         # Get API id of team
-        team_id = await self.team_id_by_name(guild, name=player[0].team.name)
-        log.debug(f"Getting match for team: {team_id}", guild=guild)
+        try:
+            team_id = await self.team_id_by_name(guild, name=player[0].team.name)
+        except ValueError as exc:
+            return await interaction.followup.send(
+                embed=ExceptionErrorEmbed(exc_message=str(exc)), ephemeral=True
+            )
 
         # Get teams next match
         try:
+            log.debug(f"Getting match for team: {team_id}", guild=guild)
             match = await self.next_match(guild, team_id)
         except ApiException as exc:
             log.debug(f"Match Return Status: {exc.status}")

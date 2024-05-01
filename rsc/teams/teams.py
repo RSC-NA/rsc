@@ -593,6 +593,9 @@ class TeamMixIn(RSCMixIn):
         if not teams:
             return 0
         if len(teams) > 1:
+            for t in teams:
+                if t.name == name and t.id:
+                    return t.id
             raise ValueError(f"More than one result for team: {name}")
         if not teams[0].id:
             return 0
