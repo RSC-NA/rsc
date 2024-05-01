@@ -292,7 +292,7 @@ class MatchMixIn(RSCMixIn):
         # Format Date
         if not match.var_date:
             raise AttributeError("Match does not contain a valid DateTime object")
-        date_str = match.var_date.strftime("%B %-m, %Y")
+        date_str = match.var_date.strftime("%B %-d, %Y")
 
         # Description
         desc = f"**{match.home_team.name}**\nversus\n**{match.away_team.name}**"
