@@ -593,6 +593,7 @@ class TeamMixIn(RSCMixIn):
         if not teams:
             return 0
         if len(teams) > 1:
+            # See if there was an exact name match in the response
             for t in teams:
                 if t.name == name and t.id:
                     return t.id

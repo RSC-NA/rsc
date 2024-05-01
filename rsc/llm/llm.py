@@ -1,3 +1,4 @@
+# import json
 import logging
 from pathlib import Path
 
@@ -7,7 +8,7 @@ from redbot.core import app_commands, commands
 
 from rsc.abc import RSCMixIn
 from rsc.embeds import BlueEmbed, ErrorEmbed
-from rsc.llm.create_db import (
+from rsc.llm.create_db import (  # json_to_docs,
     create_chroma_db,
     load_funny_docs,
     load_help_docs,
@@ -258,7 +259,7 @@ class LLMMixIn(RSCMixIn):
 
         await interaction.response.defer()
         try:
-            response, _sources = await llm_query(
+            response, sources = await llm_query(
                 org_name=org,
                 api_key=key,
                 question=question,
@@ -270,15 +271,17 @@ class LLMMixIn(RSCMixIn):
 
         if not response:
             response_fmt = "I am unable to answer that question."
-            # source_fmt = None
+            source_fmt = None
         else:
             response_fmt = str(response)
-            # source_fmt = await self.format_llm_sources(sources)
+            source_fmt = await self.format_llm_sources(sources)
 
         embed = BlueEmbed(title="RSC AI")
         embed.add_field(name="Question", value=question, inline=False)
         embed.add_field(name="Response", value=response_fmt, inline=False)
-        # embed.add_field(name="Sources", value=source_fmt, inline=False)
+
+        if source_fmt:
+            embed.add_field(name="Sources", value=source_fmt, inline=False)
 
         if guild.icon:
             embed.set_thumbnail(url=guild.icon.url)
@@ -335,8 +338,10 @@ class LLMMixIn(RSCMixIn):
         helpdocs = await load_help_docs()
         funnydocs = await load_funny_docs()
 
+        print(f"Ruledoc Len:{len(ruledocs)}")
         for d in ruledocs:
-            print(f"Loaded Document: {d.metadata}")
+            print("=" * 45)
+            print(f"Loaded Document: {d.metadata}\n{d.page_content}")
         for d in helpdocs:
             print(f"Loaded Document: {d.metadata}")
         for d in funnydocs:
@@ -348,6 +353,16 @@ class LLMMixIn(RSCMixIn):
         docs.extend(markdown_docs)
         markdown_docs = await markdown_to_documents(funnydocs)
         docs.extend(markdown_docs)
+
+        # from pprint import pformat
+        # # Get franchise data
+        # franchises = await self.franchises(guild)
+        # franchise_json = "".join([f.to_str() for f in franchises])
+        # log.debug(f"JSON Data: {pformat(franchise_json)}")
+        # franchise_docs = await json_to_docs(data=franchise_json, jq_schema=".[]")
+
+        # for i in range(5):
+        #     log.debug(f"Franchise:\n{franchise_docs[i]}")
 
         await create_chroma_db(org_name=org, api_key=key, docs=docs)
         log.info("Chroma database created")

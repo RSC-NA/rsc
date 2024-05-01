@@ -10,7 +10,7 @@ from rscapi.models.match_list import MatchList
 from rscapi.models.matches_list200_response import MatchesList200Response
 
 from rsc.abc import RSCMixIn
-from rsc.embeds import BlueEmbed, ErrorEmbed, ExceptionErrorEmbed
+from rsc.embeds import BlueEmbed, ErrorEmbed, ExceptionErrorEmbed, YellowEmbed
 from rsc.enums import MatchFormat, MatchTeamEnum, MatchType, Status
 from rsc.logs import GuildLogAdapter
 from rsc.teams import TeamMixIn
@@ -78,20 +78,18 @@ class MatchMixIn(RSCMixIn):
                 Status.AGMIR,
                 Status.RENEWED,
             ):
-                await interaction.followup.send(
+                return await interaction.followup.send(
                     embed=ErrorEmbed(
                         description="You are not currently rostered on a team."
                     ),
                 )
-                return
 
             if not (pdata.team and pdata.tier and pdata.team.id):
-                await interaction.followup.send(
+                return await interaction.followup.send(
                     embed=ErrorEmbed(
                         description="Malformed data returned from API. Please submit a modmail."
                     ),
                 )
-                return
 
             team = pdata.team.name
             tier = pdata.tier.name
@@ -107,21 +105,19 @@ class MatchMixIn(RSCMixIn):
         log.debug(f"Fetching next match for team id: {team_id}")
         schedule = await self.season_matches(guild, team_id, preseason=preseason)
 
+        if not schedule:
+            return await interaction.followup.send(
+                embed=YellowEmbed(
+                    title=f"{team} Schedule",
+                    description=f"There are no matches currently scheduled for **{team}**",
+                )
+            )
+
         # Get tier color
         if tier:
             tier_color = await tier_color_by_name(guild, tier)
         else:
-            tier_color = discord.Color.blue()
-
-        if not schedule:
-            await interaction.followup.send(
-                embed=discord.Embed(
-                    title=f"{team} Schedule",
-                    description=f"There are no matches currently scheduled for **{team}**",
-                    color=tier_color or discord.Color.blue(),
-                )
-            )
-            return
+            tier_color = await tier_color_by_name(guild, schedule[0].home_team.tier)
 
         # Sorting
         if preseason:

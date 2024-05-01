@@ -1,4 +1,5 @@
 chromadb
+jq
 langchain
 langchain_community
 langchain_openai

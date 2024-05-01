@@ -65,10 +65,15 @@ async def markdown_to_documents(docs: list[Document]) -> list[Document]:
     return md_splitter.split_documents(docs)
 
 
-async def json_to_docs(data: bytes) -> list[Document]:
+async def json_to_docs(data: str | bytes, jq_schema: str) -> list[Document]:
     with tempfile.NamedTemporaryFile() as fd:
-        fd.write(data)
-        loader = JSONLoader(file_path=fd.name, jq_schema=".[]", text_content=False)
+        if isinstance(data, str):
+            fd.write(data.encode("utf-8"))
+        elif isinstance(data, bytes):
+            fd.write(data)
+        else:
+            raise TypeError("JSON data must be str or bytes")
+        loader = JSONLoader(file_path=fd.name, jq_schema=jq_schema, text_content=False)
         chunks = loader.load()
 
     return chunks
