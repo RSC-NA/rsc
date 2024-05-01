@@ -8,16 +8,20 @@ from redbot.core import app_commands, commands
 
 from rsc.abc import RSCMixIn
 from rsc.embeds import BlueEmbed, ErrorEmbed
-from rsc.llm.create_db import (  # json_to_docs,
+from rsc.llm.create_db import (  # json_to_docs,; franchise_metadata
     create_chroma_db,
     load_funny_docs,
     load_help_docs,
-    load_rule_docs,
+    load_rule_style_docs,
     markdown_to_documents,
 )
 from rsc.llm.query import llm_query
 from rsc.logs import GuildLogAdapter
 from rsc.types import LLMSettings
+
+# import aiohttp
+# import json
+
 
 logger = logging.getLogger("red.rsc.llm")
 log = GuildLogAdapter(logger)
@@ -332,34 +336,30 @@ class LLMMixIn(RSCMixIn):
 
         # Store
         docs: list[Document] = []
+        rdocs: list[Document] = []
 
         # Read in Markdown documents
-        ruledocs = await load_rule_docs()
+        rulepath = Path(__file__).parent.parent / "resources" / "rules"
+        for fd in rulepath.glob("*.md"):
+            log.debug(f"Rule Doc: {fd}")
+            rdocs = await load_rule_style_docs(fd)
+            docs.extend(rdocs)
+
         helpdocs = await load_help_docs()
+        docs.extend(await markdown_to_documents(helpdocs))
+
         funnydocs = await load_funny_docs()
+        docs.extend(await markdown_to_documents(funnydocs))
 
-        print(f"Ruledoc Len:{len(ruledocs)}")
-        for d in ruledocs:
-            print("=" * 45)
-            print(f"Loaded Document: {d.metadata}\n{d.page_content}")
-        for d in helpdocs:
-            print(f"Loaded Document: {d.metadata}")
-        for d in funnydocs:
-            print(f"Loaded Document: {d.metadata}")
-
-        markdown_docs = await markdown_to_documents(ruledocs)
-        docs.extend(markdown_docs)
-        markdown_docs = await markdown_to_documents(helpdocs)
-        docs.extend(markdown_docs)
-        markdown_docs = await markdown_to_documents(funnydocs)
-        docs.extend(markdown_docs)
-
-        # from pprint import pformat
-        # # Get franchise data
-        # franchises = await self.franchises(guild)
-        # franchise_json = "".join([f.to_str() for f in franchises])
-        # log.debug(f"JSON Data: {pformat(franchise_json)}")
-        # franchise_docs = await json_to_docs(data=franchise_json, jq_schema=".[]")
+        # Get franchise data
+        # async with aiohttp.ClientSession() as session:
+        #     async with session.get(
+        #         "https://api.rscna.com/api/v1/franchises/?format=json&league=1"
+        #     ) as resp:
+        #         franchise_json = await resp.text()
+        # log.debug(f"JSON Type: {type(franchise_json)}")
+        # log.debug(f"JSON Data: {franchise_json}")
+        # franchise_docs = await json_to_docs(data=franchise_json, jq_schema=".[]", metadata_func=franchise_metadata)
 
         # for i in range(5):
         #     log.debug(f"Franchise:\n{franchise_docs[i]}")
@@ -368,12 +368,11 @@ class LLMMixIn(RSCMixIn):
         log.info("Chroma database created")
 
     async def format_llm_sources(self, sources: list[str]) -> str:
-        result = []
+        results = []
         for s in sources:
-            n = Path(s).name
-            if n not in result:
-                result.append(n)
-        return "\n".join([f"- {r}" for r in result])
+            if s not in results:
+                results.append(f"- {s}")
+        return "\n".join(results)
 
     async def get_llm_credentials(
         self, guild: discord.Guild

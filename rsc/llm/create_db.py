@@ -6,6 +6,7 @@ import shutil
 import sys
 import tempfile
 from pathlib import Path
+from typing import Callable
 
 from langchain.document_loaders.directory import DirectoryLoader
 from langchain.vectorstores.chroma import Chroma
@@ -13,6 +14,8 @@ from langchain_community.document_loaders import JSONLoader
 from langchain_core.documents import Document
 from langchain_openai.embeddings import OpenAIEmbeddings
 from langchain_text_splitters import MarkdownTextSplitter
+
+from rsc.llm.loaders import RuleDocumentLoader
 
 log = logging.getLogger("red.rsc.llm.create")
 
@@ -41,14 +44,8 @@ async def load_funny_docs() -> list[Document]:
     fpath = Path(__file__).parent.parent / "resources" / "funny"
     loader = DirectoryLoader(str(fpath), glob="*.md")
     documents = loader.load()
-    return documents
-
-
-async def load_rule_docs() -> list[Document]:
-    log.debug("Loading rule documents")
-    fpath = Path(__file__).parent.parent / "resources" / "rules"
-    loader = DirectoryLoader(str(fpath), glob="*.md")
-    documents = loader.load()
+    for d in documents:
+        d.metadata["source"] = "Funny"
     return documents
 
 
@@ -57,6 +54,19 @@ async def load_help_docs() -> list[Document]:
     fpath = Path(__file__).parent.parent / "resources" / "help"
     loader = DirectoryLoader(str(fpath), glob="*.md")
     documents = loader.load()
+    for d in documents:
+        src = Path(d.metadata["source"])
+        d.metadata["source"] = src.stem.capitalize()
+    return documents
+
+
+async def load_rule_style_docs(file: str | Path) -> list[Document]:
+    documents = []
+    loader = RuleDocumentLoader(str(file))
+    async for doc in loader.alazy_load():
+        log.debug(f"Document: {doc.page_content}")
+        log.debug(f"Document Source: {doc.metadata}")
+        documents.append(doc)
     return documents
 
 
@@ -65,7 +75,15 @@ async def markdown_to_documents(docs: list[Document]) -> list[Document]:
     return md_splitter.split_documents(docs)
 
 
-async def json_to_docs(data: str | bytes, jq_schema: str) -> list[Document]:
+def franchise_metadata(record: dict, metadata: dict):
+    log.debug(f"Metadata: {metadata}")
+    metadata["source"] = "API"
+    return metadata
+
+
+async def json_to_docs(
+    data: str, jq_schema: str, metadata_func: Callable | None
+) -> list[Document]:
     with tempfile.NamedTemporaryFile() as fd:
         if isinstance(data, str):
             fd.write(data.encode("utf-8"))
@@ -73,7 +91,12 @@ async def json_to_docs(data: str | bytes, jq_schema: str) -> list[Document]:
             fd.write(data)
         else:
             raise TypeError("JSON data must be str or bytes")
-        loader = JSONLoader(file_path=fd.name, jq_schema=jq_schema, text_content=False)
+        loader = JSONLoader(
+            file_path=fd.name,
+            jq_schema=jq_schema,
+            text_content=False,
+            metadata_func=franchise_metadata,
+        )
         chunks = loader.load()
 
     return chunks
@@ -81,19 +104,23 @@ async def json_to_docs(data: str | bytes, jq_schema: str) -> list[Document]:
 
 async def create_chroma_db(org_name: str, api_key: str, docs: list[Document]):
     # Clear out the database first.
-    # await rm_chroma_db()
+    await rm_chroma_db()
+
     # Load DB
     if not CHROMA_PATH.absolute().exists():
+        log.debug("Creating Chroma DB Directory")
         CHROMA_PATH.absolute().mkdir(parents=True, exist_ok=True)
         await asyncio.sleep(5)
 
     # Create a new DB from the documents.
-    db = Chroma.from_documents(
+    log.debug("Saving Chroma DB.")
+    Chroma.from_documents(
         docs,
         OpenAIEmbeddings(organization=org_name, api_key=api_key),
         persist_directory=str(CHROMA_PATH.absolute()),
     )
-    db.persist()
+    log.debug("Persisting Chroma DB")
+    # db.persist()
     log.info(f"Saved {len(docs)} chunks to {CHROMA_PATH}.")
 
 

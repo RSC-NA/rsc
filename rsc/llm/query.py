@@ -66,6 +66,7 @@ async def llm_query(
 
     # Search the DB.
     similar = llm_db.similarity_search_with_relevance_scores(question, k=count)
+
     if not similar:
         log.debug("Unable to find matching results.")
         return (None, [])
@@ -75,7 +76,7 @@ async def llm_query(
     results: list[tuple[Document, float]] = []
     for r in similar:
         log.debug(f"Result Threshold: {r[1]:.4f}")
-        if r[1] > 0.65:
+        if r[1] > 0.65 and r not in results:
             results.append(r)
 
     if not results:
