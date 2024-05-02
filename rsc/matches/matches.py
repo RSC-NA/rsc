@@ -320,18 +320,23 @@ class MatchMixIn(RSCMixIn):
 
         # User Team for additional info
         additional_fmt = ""
-        if user_team == MatchTeamEnum.HOME or user_team == MatchTeamEnum.AWAY:
+        if user_team == MatchTeamEnum.HOME:
             additional_fmt += (
-                f"You are the **{user_team.name}** team."
-                " You will join the room using the above information once the other team contacts you."
-                " Do not begin joining a team until your entire team is ready to begin playing.\n\n"
+                "You are the **HOME** team.\x20"
+                "You will create the room using the above information.\x20"
+                "Contact the other team when your team is ready to begin the match.\x20"
+                "Do **not** join a team before the away team does.\n\n"
+            )
+        elif user_team == MatchTeamEnum.AWAY:
+            additional_fmt += (
+                "You are the **AWAY** team.\x20"
+                "You will join the room using the above information once the other team contacts you.\x20"
+                "Do not begin joining a team until your entire team is ready to begin playing.\n\n"
             )
         additional_fmt += (
-            "Be sure that **crossplay is enabled** and to save all replays and screenshots of the end-of-game scoreboard."
-            " Do not leave the game until screenshots have been taken."
-            " These must be uploaded to the"
-            " [RSC Website](https://www.rocketsoccarconfederation.com/replay-and-screenshot-uploads)"
-            " after the game is finished."
+            "Be sure that **crossplay is enabled** and to save all replays and screenshots of the end-of-game scoreboard.\x20"
+            "Do not leave the game until screenshots have been taken.\x20"
+            "These must be uploaded to the [RSC Website](https://www.rocketsoccarconfederation.com/replay-and-screenshot-uploads) after the game is finished."
         )
         embed.add_field(name="Additional Info", value=additional_fmt, inline=False)
         return embed
