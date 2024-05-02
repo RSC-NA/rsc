@@ -342,23 +342,28 @@ class LLMMixIn(RSCMixIn):
         rdocs: list[Document] = []
 
         # Read in Markdown documents
+        log.info("Creating rule documents.")
         rulepath = Path(__file__).parent.parent / "resources" / "rules"
         for fd in rulepath.glob("*.md"):
             log.debug(f"Rule Doc: {fd}")
             rdocs = await load_rule_style_docs(fd)
             docs.extend(rdocs)
 
+        log.info("Creating help documents.")
         helpdocs = await load_help_docs()
         docs.extend(await markdown_to_documents(helpdocs))
 
+        log.info("Creating funny documents.")
         funnydocs = await load_funny_docs()
         docs.extend(await markdown_to_documents(funnydocs))
 
         # Get franchise data
+        log.info("Creating franchise documents.")
         franchises = await self.franchises(guild)
         if franchises:
             docs.extend(await load_franchise_docs(franchises))
 
+        log.info("Creating player documents.")
         players = await self.players(guild, limit=5000)
         if players:
             docs.extend(await load_player_docs(players))
