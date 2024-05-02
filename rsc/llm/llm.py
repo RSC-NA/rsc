@@ -8,7 +8,7 @@ from redbot.core import app_commands, commands
 
 from rsc.abc import RSCMixIn
 from rsc.embeds import BlueEmbed, ErrorEmbed
-from rsc.llm.create_db import (  # json_to_docs,; franchise_metadata
+from rsc.llm.create_db import (
     create_chroma_db,
     load_franchise_docs,
     load_funny_docs,
@@ -20,10 +20,6 @@ from rsc.llm.create_db import (  # json_to_docs,; franchise_metadata
 from rsc.llm.query import llm_query
 from rsc.logs import GuildLogAdapter
 from rsc.types import LLMSettings
-
-# import aiohttp
-# import json
-
 
 logger = logging.getLogger("red.rsc.llm")
 log = GuildLogAdapter(logger)
@@ -52,6 +48,10 @@ class LLMMixIn(RSCMixIn):
         if not guild:
             return
 
+        # Skip a message reply to bot mention
+        if message.reference is not None and not message.is_system():
+            return
+
         # Replay to mention only
         if not guild.me.mentioned_in(message):
             return
@@ -70,7 +70,8 @@ class LLMMixIn(RSCMixIn):
             return
 
         # Remove bot mention
-        cleaned_msg = message.clean_content.replace(guild.me.mention, "")
+        botname = guild.me.display_name
+        cleaned_msg = message.clean_content.replace(f"@{botname}", "").strip()
         log.debug(f"Cleaned LLM Message: {cleaned_msg}")
 
         try:
