@@ -10,8 +10,10 @@ from rsc.abc import RSCMixIn
 from rsc.embeds import BlueEmbed, ErrorEmbed
 from rsc.llm.create_db import (  # json_to_docs,; franchise_metadata
     create_chroma_db,
+    load_franchise_docs,
     load_funny_docs,
     load_help_docs,
+    load_player_docs,
     load_rule_style_docs,
     markdown_to_documents,
 )
@@ -68,7 +70,7 @@ class LLMMixIn(RSCMixIn):
             return
 
         # Remove bot mention
-        cleaned_msg = message.content.replace(guild.me.mention, "")
+        cleaned_msg = message.clean_content.replace(guild.me.mention, "")
         log.debug(f"Cleaned LLM Message: {cleaned_msg}")
 
         try:
@@ -352,17 +354,13 @@ class LLMMixIn(RSCMixIn):
         docs.extend(await markdown_to_documents(funnydocs))
 
         # Get franchise data
-        # async with aiohttp.ClientSession() as session:
-        #     async with session.get(
-        #         "https://api.rscna.com/api/v1/franchises/?format=json&league=1"
-        #     ) as resp:
-        #         franchise_json = await resp.text()
-        # log.debug(f"JSON Type: {type(franchise_json)}")
-        # log.debug(f"JSON Data: {franchise_json}")
-        # franchise_docs = await json_to_docs(data=franchise_json, jq_schema=".[]", metadata_func=franchise_metadata)
+        franchises = await self.franchises(guild)
+        if franchises:
+            docs.extend(await load_franchise_docs(franchises))
 
-        # for i in range(5):
-        #     log.debug(f"Franchise:\n{franchise_docs[i]}")
+        players = await self.players(guild, limit=5000)
+        if players:
+            docs.extend(await load_player_docs(players))
 
         await create_chroma_db(org_name=org, api_key=key, docs=docs)
         log.info("Chroma database created")

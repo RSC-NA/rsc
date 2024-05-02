@@ -14,8 +14,14 @@ from langchain_community.document_loaders import JSONLoader
 from langchain_core.documents import Document
 from langchain_openai.embeddings import OpenAIEmbeddings
 from langchain_text_splitters import MarkdownTextSplitter
+from rscapi.models.franchise_list import FranchiseList
+from rscapi.models.league_player import LeaguePlayer
 
-from rsc.llm.loaders import RuleDocumentLoader
+from rsc.llm.loaders import (
+    FranchiseDocumentLoader,
+    PlayerDocumentLoader,
+    RuleDocumentLoader,
+)
 
 log = logging.getLogger("red.rsc.llm.create")
 
@@ -100,6 +106,26 @@ async def json_to_docs(
         chunks = loader.load()
 
     return chunks
+
+
+async def load_franchise_docs(franchises: list[FranchiseList]):
+    documents = []
+    loader = FranchiseDocumentLoader(franchises)
+    async for doc in loader.alazy_load():
+        log.debug(f"Document: {doc.page_content}")
+        log.debug(f"Document Source: {doc.metadata}")
+        documents.append(doc)
+    return documents
+
+
+async def load_player_docs(players: list[LeaguePlayer]):
+    documents = []
+    loader = PlayerDocumentLoader(players)
+    async for doc in loader.alazy_load():
+        log.debug(f"Document: {doc.page_content}")
+        log.debug(f"Document Source: {doc.metadata}")
+        documents.append(doc)
+    return documents
 
 
 async def create_chroma_db(org_name: str, api_key: str, docs: list[Document]):
