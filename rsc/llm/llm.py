@@ -7,7 +7,7 @@ from langchain_core.documents import Document
 from redbot.core import app_commands, commands
 
 from rsc.abc import RSCMixIn
-from rsc.embeds import BlueEmbed, ErrorEmbed
+from rsc.embeds import BlueEmbed, ErrorEmbed, GreenEmbed
 from rsc.llm.create_db import (
     create_chroma_db,
     load_franchise_docs,
@@ -26,6 +26,7 @@ log = GuildLogAdapter(logger)
 
 defaults_guild = LLMSettings(
     LLMActive=False,
+    LLMBlacklist=None,
     OpenAIKey=None,
     OpenAIOrg=None,
     SimilarityCount=5,
@@ -58,6 +59,10 @@ class LLMMixIn(RSCMixIn):
 
         # Check if LLM active
         if not await self._get_llm_status(guild):
+            return
+
+        # Check if channel in blacklist
+        if message.channel.id in await self._get_llm_channel_blacklist(guild):
             return
 
         # Settings
@@ -95,7 +100,14 @@ class LLMMixIn(RSCMixIn):
 
     _llm_group = app_commands.Group(
         name="llm",
-        description="Display settings for LLM",
+        description="Configure the RSC LLM",
+        guild_only=True,
+        default_permissions=discord.Permissions(manage_guild=True),
+    )
+    _llm_blacklist_group = app_commands.Group(
+        name="blacklist",
+        description="Configure channel blacklist for LLM responses",
+        parent=_llm_group,
         guild_only=True,
         default_permissions=discord.Permissions(manage_guild=True),
     )
@@ -115,6 +127,19 @@ class LLMMixIn(RSCMixIn):
         llm_threshold = await self._get_llm_threshold(guild)
         llm_count = await self._get_llm_similarity_count(guild)
 
+        # Format blacklist
+        blacklist = await self._get_llm_channel_blacklist(guild)
+        blacklist_channels = []
+        for b in blacklist:
+            c = guild.get_channel(b)
+            if c:
+                blacklist_channels.append(c)
+
+        if blacklist_channels:
+            blacklist_fmt = "\n".join([c.mention for c in blacklist_channels])
+        else:
+            blacklist_fmt = "None"
+
         settings_embed = BlueEmbed(
             title="LLM Settings",
             description="Displaying configured settings for RSC LLM",
@@ -133,6 +158,9 @@ class LLMMixIn(RSCMixIn):
         )
         settings_embed.add_field(
             name="Similarity Threshold", value=str(llm_threshold), inline=False
+        )
+        settings_embed.add_field(
+            name="LLM Channel Blacklist", value=blacklist_fmt, inline=False
         )
 
         await interaction.response.send_message(embed=settings_embed, ephemeral=True)
@@ -328,6 +356,73 @@ class LLMMixIn(RSCMixIn):
             ephemeral=True,
         )
 
+    @_llm_blacklist_group.command(  # type: ignore
+        name="show", description="Display the LLM channel blacklist"
+    )
+    async def _llm_blacklist_show_cmd(self, interaction: discord.Interaction):
+        """Display the LLM channel blacklist"""
+        guild = interaction.guild
+        if not guild:
+            return
+
+        blacklist = await self._get_llm_channel_blacklist(guild)
+
+        channels = []
+        for b in blacklist:
+            c = guild.get_channel(b)
+            if c:
+                channels.append(c)
+
+        if channels:
+            blacklist_fmt = "\n".join([c.mention for c in channels])
+        else:
+            blacklist_fmt = "None"
+
+        embed = BlueEmbed(
+            title="LLM Channel Blacklist",
+            description="The following channels are blacklisted from LLM responses.",
+        )
+        embed.add_field(name="Channels", value=blacklist_fmt, inline=False)
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+    @_llm_blacklist_group.command(  # type: ignore
+        name="add", description="Add a channel to the LLM blacklist"
+    )
+    @app_commands.describe(channel="Discord text channel to blacklist")
+    async def _llm_blacklist_add_cmd(
+        self, interaction: discord.Interaction, channel: discord.TextChannel
+    ):
+        """Add a channel to the LLM blacklist"""
+        guild = interaction.guild
+        if not guild:
+            return
+
+        await self._add_llm_channel_blacklist(guild, channel)
+        embed = GreenEmbed(
+            title="LLM Channel Blacklisted",
+            description=f"{channel.mention} has been added to the LLM channel blacklist.",
+        )
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+    @_llm_blacklist_group.command(  # type: ignore
+        name="rm", description="Remove a channel from the LLM blacklist"
+    )
+    @app_commands.describe(channel="Discord text channel to remove")
+    async def _llm_blacklist_rm_cmd(
+        self, interaction: discord.Interaction, channel: discord.TextChannel
+    ):
+        """Remove a channel from the LLM blacklist"""
+        guild = interaction.guild
+        if not guild:
+            return
+
+        await self._rm_llm_channel_blacklist(guild, channel)
+        embed = GreenEmbed(
+            title="LLM Blacklist Removed",
+            description=f"{channel.mention} has been removed from the LLM channel blacklist.",
+        )
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
     # Helpers
 
     async def create_chroma_db(self, guild: discord.Guild):
@@ -433,3 +528,34 @@ class LLMMixIn(RSCMixIn):
         await self.config.custom("LLM", str(guild.id)).SimilarityThreshold.set(
             threshold
         )
+
+    async def _get_llm_channel_blacklist(self, guild: discord.Guild) -> list[int]:
+        """Get channel blacklist for LLM responses"""
+        blacklist = await self.config.custom("LLM", str(guild.id)).LLMBlacklist()
+        if blacklist is None:
+            return []
+        return blacklist
+
+    async def _set_llm_channel_blacklist(
+        self, guild: discord.Guild, channels: list[discord.TextChannel]
+    ):
+        """Set channel blacklist for LLM responses"""
+        await self.config.custom("LLM", str(guild.id)).LLMBlacklist.set(
+            [c.id for c in channels]
+        )
+
+    async def _add_llm_channel_blacklist(
+        self, guild: discord.Guild, channel: discord.TextChannel
+    ):
+        """Set channel blacklist for LLM responses"""
+        blacklist: list[int] = await self._get_llm_channel_blacklist(guild)
+        blacklist.append(channel.id)
+        await self.config.custom("LLM", str(guild.id)).LLMBlacklist.set(blacklist)
+
+    async def _rm_llm_channel_blacklist(
+        self, guild: discord.Guild, channel: discord.TextChannel
+    ):
+        """Set channel blacklist for LLM responses"""
+        blacklist: list[int] = await self._get_llm_channel_blacklist(guild)
+        blacklist.remove(channel.id)
+        await self.config.custom("LLM", str(guild.id)).LLMBlacklist.set(blacklist)

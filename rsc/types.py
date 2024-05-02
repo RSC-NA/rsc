@@ -109,6 +109,7 @@ class CombineSettings(TypedDict):
 
 class LLMSettings(TypedDict):
     LLMActive: bool
+    LLMBlacklist: list[discord.TextChannel] | None
     OpenAIKey: str | None
     OpenAIOrg: str | None
     SimilarityCount: int
