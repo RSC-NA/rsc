@@ -44,7 +44,7 @@ class LLMMixIn(RSCMixIn):
     # Listener
 
     @commands.Cog.listener("on_message")
-    async def llm_replay_to_mention(self, message: discord.Message):
+    async def llm_reply_to_mention(self, message: discord.Message):
         guild = message.guild
         if not guild:
             return
@@ -78,6 +78,10 @@ class LLMMixIn(RSCMixIn):
         botname = guild.me.display_name
         cleaned_msg = message.clean_content.replace(f"@{botname}", "").strip()
         log.debug(f"Cleaned LLM Message: {cleaned_msg}")
+
+        # Replace some key words
+        cleaned_msg = cleaned_msg.replace("my", message.author.display_name)
+        cleaned_msg = cleaned_msg.replace("your", guild.me.display_name)
 
         try:
             response, _sources = await llm_query(
