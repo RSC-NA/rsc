@@ -5,6 +5,9 @@ from pathlib import Path
 import discord
 from langchain_core.documents import Document
 from redbot.core import app_commands, commands
+from rscapi.models.franchise_list import FranchiseList
+from rscapi.models.league_player import LeaguePlayer
+from rscapi.models.team import Team
 
 from rsc.abc import RSCMixIn
 from rsc.embeds import BlueEmbed, ErrorEmbed, GreenEmbed
@@ -15,6 +18,7 @@ from rsc.llm.create_db import (
     load_help_docs,
     load_player_docs,
     load_rule_style_docs,
+    load_team_docs,
     markdown_to_documents,
 )
 from rsc.llm.query import llm_query
@@ -458,14 +462,35 @@ class LLMMixIn(RSCMixIn):
 
         # Get franchise data
         log.info("Creating franchise documents.")
-        franchises = await self.franchises(guild)
+        franchises: list[FranchiseList] = await self.franchises(guild)
         if franchises:
+            log.debug(f"Franchise Count: {len(franchises)}")
             docs.extend(await load_franchise_docs(franchises))
 
         log.info("Creating player documents.")
-        players = await self.players(guild, limit=5000)
+        players: list[LeaguePlayer] = await self.players(guild, limit=5000)
         if players:
+            log.debug(f"Player Count: {len(players)}")
             docs.extend(await load_player_docs(players))
+
+        # Get teams from franchise data to limit API calls
+        log.info("Creating team documents.")
+        teams: list[Team] = []
+        for f in franchises:
+            if not (f.id and f.teams):
+                continue
+
+            fdata = await self.franchise_by_id(guild, id=f.id)
+            if not (fdata and fdata.teams):
+                continue
+
+            for t in fdata.teams:
+                teams.append(t)
+
+        # Load Teams
+        if teams:
+            log.debug(f"Team Count: {len(teams)}")
+            docs.extend(await load_team_docs(teams))
 
         await create_chroma_db(org_name=org, api_key=key, docs=docs)
         log.info("Chroma database created")

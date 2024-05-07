@@ -42,7 +42,7 @@ Answer the question based only on the following context:
 
 ---
 
-Answer the question based on the above context but only provide kind responses: {question}
+Answer the question based on the above context: {question}
 """
 
 
@@ -52,7 +52,7 @@ async def llm_query(
     question: str,
     threshold: float = 0.65,
     count: int = 5,
-) -> tuple[str | list[str | dict] | None, list[str]]:
+) -> tuple[str | list | None, list[str | None]]:
     log.debug(f"Querying chroma db. Count={count} Threshold={threshold}")
 
     # Load DB
@@ -76,7 +76,7 @@ async def llm_query(
     results: list[tuple[Document, float]] = []
     for r in similar:
         log.debug(f"Result Threshold: {r[1]:.4f}")
-        if r[1] > 0.65 and r not in results:
+        if r[1] > threshold and r not in results:
             results.append(r)
 
     if not results:
@@ -93,10 +93,12 @@ async def llm_query(
     model = ChatOpenAI(organization=org_name, api_key=api_key)
     response_text = model.invoke(prompt)
 
-    sources = [doc.metadata.get("source") for doc, _score in results]
+    sources: list[str | None] = [doc.metadata.get("source") for doc, _score in results]
     if not response_text.content:
         return (None, [])
     log.debug(f"LLM Response: {response_text.content}")
+    if len(response_text.content) > 2000:
+        return ("Sorry that response is too long for me to put in discord.", [])
     return (response_text.content, sources)
 
 

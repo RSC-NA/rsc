@@ -26,6 +26,7 @@ class FranchiseDocumentLoader(BaseLoader):
     def lazy_load(self) -> Iterator[Document]:
         """A lazy loader that reads RSC Rule style documents."""
 
+        final = []
         for f in self.franchises:
             if not (
                 f.name and f.prefix and f.gm and f.gm.rsc_name and f.tiers and f.teams
@@ -59,7 +60,9 @@ class FranchiseDocumentLoader(BaseLoader):
                 tiers=", ".join(tiers),
             )
 
-            yield Document(
-                page_content=input,
-                metadata={"source": "Franchises API"},
-            )
+            final.append(input)
+
+        yield Document(
+            page_content="\n".join(final),
+            metadata={"source": "Franchises API"},
+        )
