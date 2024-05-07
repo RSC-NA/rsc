@@ -25,6 +25,7 @@ from rsc.franchises import FranchiseMixIn
 from rsc.freeagents import FreeAgentMixIn
 from rsc.leagues import LeagueMixIn
 from rsc.llm import LLMMixIn
+from rsc.logs import GuildLogAdapter
 from rsc.matches import MatchMixIn
 from rsc.members import MemberMixIn
 from rsc.moderator import ModeratorMixIn, ThreadMixIn
@@ -39,7 +40,8 @@ from rsc.utils import UtilsMixIn
 from rsc.views import LeagueSelectView, RSCSetupModal
 from rsc.welcome import WelcomeMixIn
 
-log = logging.getLogger("red.rsc.core")
+logger = logging.getLogger("red.rsc.core")
+log = GuildLogAdapter(logger)
 
 HIDDEN_COMMANDS = ["feet"]
 
@@ -118,12 +120,12 @@ class RSC(
 
         # Per guild setup
         for guild in self.bot.guilds:
-            log.debug(f"[{guild}] Preparing RSC API configuration")
+            log.debug("Preparing RSC API configuration", guild=guild)
             await self.prepare_api(guild)
 
             if self._api_conf.get(guild.id):
                 await self.prepare_league(guild)
-                log.debug(f"[{guild}] Preparing caches")
+                log.debug("Preparing caches", guild=guild)
                 try:
                     async with asyncio.TaskGroup() as tg:
                         tg.create_task(self.tiers(guild))
@@ -140,6 +142,7 @@ class RSC(
                             log.debug(
                                 f"Setup Error. Status: {err.status} Reason: P{err.args[0]}",
                                 exc_info=err,
+                                guild=guild,
                             )
                             match err.status:
                                 case 504:
@@ -162,7 +165,7 @@ class RSC(
                             raise err
                 except* ValidationError as eg:
                     for verr in eg.exceptions:
-                        log.error(f"*ValidationError: {verr!r}")
+                        log.error(f"*ValidationError: {verr!r}", guild=guild)
                     raise eg.exceptions[0]
         log.info("Finished preparing caches.")
 
@@ -171,7 +174,7 @@ class RSC(
         if league:
             self._league[guild.id] = league
         else:
-            log.warning(f"[{guild}] RSC API league has not been configured!")
+            log.warning("RSC API league has not been configured!", guild=guild)
 
     async def prepare_api(self, guild: discord.Guild):
         url = await self._get_api_url(guild)
@@ -183,7 +186,7 @@ class RSC(
                 api_key_prefix={"Api-Key": "Api-Key"},
             )
         else:
-            log.warning(f"[{guild}]RSC API key or url has not been configured!")
+            log.warning("RSC API key or url has not been configured!", guild=guild)
 
     # Listeners
 
@@ -370,7 +373,6 @@ class RSC(
         await setup_modal.wait()
         setup_modal.stop()
 
-        log.debug("Past modal.")
         if not (setup_modal.url and setup_modal.key):
             await interaction.response.send_message(
                 embed=ErrorEmbed(
@@ -457,7 +459,8 @@ class RSC(
     @app_commands.autocomplete(command=command_autocomplete)
     @app_commands.guild_only
     async def _help_cmd(self, interaction: discord.Interaction, command: str | None):
-        if not interaction.guild or not isinstance(interaction.user, discord.Member):
+        guild = interaction.guild
+        if not (guild and isinstance(interaction.user, discord.Member)):
             return
 
         cmds = self.get_app_commands()
@@ -473,7 +476,7 @@ class RSC(
                     ).value
                     == 0
                 ):
-                    log.debug(f"Insufficient Perms for help: {cmd.name}")
+                    log.debug(f"Insufficient Perms for help: {cmd.name}", guild=guild)
                     continue
 
                 # super secret tech
@@ -482,7 +485,7 @@ class RSC(
 
                 # Custom role permission validation
                 if cmd.name.lower() == "ballchasing":
-                    stats_role = await self._get_bc_manager_role(interaction.guild)
+                    stats_role = await self._get_bc_manager_role(guild)
                     if (
                         stats_role and stats_role in interaction.user.roles
                     ) or interaction.user.guild_permissions.manage_guild:
@@ -512,9 +515,9 @@ class RSC(
                 cmd_desc += f"**/{c.name}** - {c.description}\n"
             cmdembed.description = cmd_desc
 
-            if interaction.guild.icon:
-                gembed.set_thumbnail(url=interaction.guild.icon.url)
-                cmdembed.set_thumbnail(url=interaction.guild.icon.url)
+            if guild.icon:
+                gembed.set_thumbnail(url=guild.icon.url)
+                cmdembed.set_thumbnail(url=guild.icon.url)
             embeds.append(cmdembed)
 
             await interaction.response.send_message(embeds=embeds, ephemeral=True)
@@ -524,7 +527,7 @@ class RSC(
                 if c.name == "feet":
                     continue
                 if c.qualified_name == command:
-                    log.debug(f"Qualified Name: {c.qualified_name}")
+                    log.debug(f"Qualified Name: {c.qualified_name}", guild=guild)
                     cmd = c
 
             if not cmd:
@@ -551,8 +554,8 @@ class RSC(
                         desc += f"**{p.name}** - {p.description}\n"
             embed.description = desc
 
-            if interaction.guild.icon:
-                embed.set_thumbnail(url=interaction.guild.icon.url)
+            if guild.icon:
+                embed.set_thumbnail(url=guild.icon.url)
 
             await interaction.response.send_message(embed=embed)
 

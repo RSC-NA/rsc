@@ -19,7 +19,7 @@
 1.1.9.1. Players who are not in the server are subject to being removed from the league at the discretion of the Admins.
 1.1.10. When a player returns to the league as a FA (took the previous season off), they must remain FA for at least 24 hours.
 
-#### 1.2. Playing in RSC
+#### 1.2. Playing in RSC (Rocket Soccar Confederation)
 
 1.2.1. Players may play under any Rocket League account they have registered with RSC, so long as the name of the account matches their name in the discord. If you are using an account which cannot match your RSC discord name, you must submit this temporary name to the staff at least 1 hour in advance of an RSC match or event.
 1.2.1.1. If any of a player’s accounts are banned by Psyonix, the player is not allowed to participate in any RSC matches or events for the duration of the ban. Attempting to circumvent this may result in match bans.

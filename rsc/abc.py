@@ -553,6 +553,12 @@ class RSCMixIn(ABC):
     async def _trans_channel(self, guild: discord.Guild) -> discord.TextChannel | None:
         ...
 
+    # Welcome
+
+    @abstractmethod
+    async def _get_welcome_roles(self, guild: discord.Guild) -> list[discord.Role]:
+        ...
+
 
 class MixInMetaClass(RSCMixIn, ABCMeta):
     pass

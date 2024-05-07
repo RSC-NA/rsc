@@ -359,13 +359,13 @@ class LLMMixIn(RSCMixIn):
         await interaction.response.defer(ephemeral=True)
 
         try:
-            await self.create_chroma_db(guild)
+            chunks = await self.create_chroma_db(guild, interaction=interaction)
         except ValueError as exc:
             return await interaction.followup.send(content=str(exc), ephemeral=True)
 
         await interaction.followup.send(
             embed=BlueEmbed(
-                title="Chroma DB", description="Chroma DB has been successfully created"
+                title="Chroma DB", description=f"Saved {chunks} chunks to Chroma DB."
             ),
             ephemeral=True,
         )
@@ -441,7 +441,7 @@ class LLMMixIn(RSCMixIn):
 
     async def create_chroma_db(
         self, guild: discord.Guild, interaction: discord.Interaction | None = None
-    ):
+    ) -> int:
         org, key = await self.get_llm_credentials(guild)
         if not (org and key):
             raise ValueError(
@@ -532,8 +532,10 @@ class LLMMixIn(RSCMixIn):
             log.debug(f"Team Count: {len(teams)}")
             docs.extend(await load_team_docs(teams))
 
+        log.info(f"Chroma Document Total: {len(docs)}")
         await create_chroma_db(org_name=org, api_key=key, docs=docs)
         log.info("Chroma database created")
+        return len(docs)
 
     async def format_llm_sources(self, sources: list[str]) -> str:
         results = []

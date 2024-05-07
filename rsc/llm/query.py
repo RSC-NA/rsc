@@ -42,7 +42,7 @@ Answer the question based only on the following context:
 
 ---
 
-Answer the question based on the above context: {question}
+Answer the question based on the above context, do not create your own acronyms: {question}
 """
 
 
@@ -99,6 +99,7 @@ async def llm_query(
     log.debug(f"LLM Response: {response_text.content}")
     if len(response_text.content) > 2000:
         return ("Sorry that response is too long for me to put in discord.", [])
+
     return (response_text.content, sources)
 
 

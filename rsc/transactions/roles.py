@@ -232,7 +232,10 @@ async def update_team_captain_discord(
 
 
 async def update_nonplaying_discord(
-    guild: discord.Guild, member: discord.Member, tiers: list[Tier]
+    guild: discord.Guild,
+    member: discord.Member,
+    tiers: list[Tier],
+    default_roles: list[discord.Role] | None = None,
 ):
     # Bulk remove/add to help avoid rate limit
     roles_to_remove: list[discord.Role] = []
@@ -271,10 +274,11 @@ async def update_nonplaying_discord(
             case const.SUBBED_OUT_ROLE:
                 roles_to_remove.append(r)
 
-    # Spectator
-    spectator_role = await utils.get_spectator_role(guild)
-    if spectator_role not in member.roles:
-        roles_to_add.append(spectator_role)
+    # Default Roles
+    if default_roles:
+        for r in default_roles:
+            if r not in member.roles:
+                roles_to_add.append(r)
 
     # Remove Roles
     if roles_to_remove:

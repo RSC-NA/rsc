@@ -908,6 +908,7 @@ class AdminMixIn(RSCMixIn):
                     overwrites[trole] = discord.PermissionOverwrite(
                         manage_channels=True,
                         manage_permissions=True,
+                        manage_messages=True,
                         view_channel=True,
                         send_messages=True,
                         embed_links=True,
@@ -996,6 +997,8 @@ class AdminMixIn(RSCMixIn):
         if not sync_view.result:
             return
 
+        default_roles = await self._get_welcome_roles(guild)
+
         log.debug("Fetching all members", guild=guild)
         total = 0
         synced = 0
@@ -1020,7 +1023,9 @@ class AdminMixIn(RSCMixIn):
 
             if not dryrun:
                 try:
-                    await update_nonplaying_discord(guild=guild, member=m, tiers=tiers)
+                    await update_nonplaying_discord(
+                        guild=guild, member=m, tiers=tiers, default_roles=default_roles
+                    )
                 except (ValueError, AttributeError) as exc:
                     await interaction.followup.send(content=str(exc), ephemeral=True)
             synced += 1
