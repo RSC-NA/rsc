@@ -27,6 +27,7 @@
 "Project Teams" - Non-committee groups who have a non-critical role or task in the operation of RSC delegated to them.
 "Promotion" - A transaction type in which a player agrees to play for a team in a tier higher than their original tier.
 "Relegation" - A transaction type in which a player is brought back down from a previous promotion.
+"RSC", "Rocket Soccar Confederation" - A competitive online league for Rocket League
 "Inactive Reserve", "IR" - A position on a team for players who are unable to play for an extended period of time.
 "RSC MMR", "MMR" - A number calculated for each player, each season, by the Numbers Committee to numerically rank RSC players, using their best determination of skill.
 "RSC Rulebook" - The rulebook, maintained by the RSC Rules Committee, which outlines the functions of the RSC League itself.
