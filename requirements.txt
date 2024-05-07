@@ -1,4 +1,4 @@
-chromadb
+chromadb==0.4.14
 jq
 langchain
 langchain_community

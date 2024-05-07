@@ -62,7 +62,8 @@ class PlayerDocumentLoader(BaseLoader):
             match p.status:
                 case Status.ROSTERED | Status.RENEWED:
                     if not (
-                        p.player.name
+                        p.id
+                        and p.player.name
                         and p.team
                         and p.team.name
                         and p.team.franchise
@@ -87,11 +88,12 @@ class PlayerDocumentLoader(BaseLoader):
 
                     yield Document(
                         page_content=input,
-                        metadata={"source": "Rostered Player API"},
+                        metadata={"source": "Rostered Player API", "id": str(p.id)},
                     )
                 case Status.AGMIR | Status.IR:
                     if not (
-                        p.player.name
+                        p.id
+                        and p.player.name
                         and p.team
                         and p.team.name
                         and p.team.franchise
@@ -116,10 +118,10 @@ class PlayerDocumentLoader(BaseLoader):
 
                     yield Document(
                         page_content=input,
-                        metadata={"source": "IR Player API"},
+                        metadata={"source": "IR Player API", "id": str(p.id)},
                     )
                 case Status.FREE_AGENT:
-                    if not (p.player.name and p.tier and p.tier.name):
+                    if not (p.id and p.player.name and p.tier and p.tier.name):
                         log.warning(
                             f"Skipping player {p.id}. Missing required data for LLM input."
                         )
@@ -131,7 +133,7 @@ class PlayerDocumentLoader(BaseLoader):
                     )
                     yield Document(
                         page_content=input,
-                        metadata={"source": "Free Agent API"},
+                        metadata={"source": "Free Agent API", "id": str(p.id)},
                     )
                 case Status.PERM_FA:
                     if not (p.player.name and p.tier and p.tier.name):
@@ -149,7 +151,7 @@ class PlayerDocumentLoader(BaseLoader):
                         metadata={"source": "PermFA API"},
                     )
                 case Status.DRAFT_ELIGIBLE:
-                    if not p.player.name:
+                    if not (p.id and p.player.name):
                         log.warning(
                             f"Skipping player {p.id}. Missing required data for LLM input."
                         )
@@ -168,5 +170,5 @@ class PlayerDocumentLoader(BaseLoader):
                     )
                     yield Document(
                         page_content=input,
-                        metadata={"source": "Free Agent API"},
+                        metadata={"source": "Free Agent API", "id": str(p.id)},
                     )

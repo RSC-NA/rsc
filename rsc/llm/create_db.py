@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import asyncio
+import hashlib
 import logging
 import shutil
 import sys
@@ -8,12 +9,15 @@ import tempfile
 from pathlib import Path
 from typing import Callable
 
+import discord
+import httpx
 from langchain.document_loaders.directory import DirectoryLoader
 from langchain.vectorstores.chroma import Chroma
 from langchain_community.document_loaders import JSONLoader
 from langchain_core.documents import Document
 from langchain_openai.embeddings import OpenAIEmbeddings
 from langchain_text_splitters import MarkdownTextSplitter
+from pydantic.v1.types import SecretStr
 from rscapi.models.franchise_list import FranchiseList
 from rscapi.models.league_player import LeaguePlayer
 from rscapi.models.team import Team
@@ -24,8 +28,10 @@ from rsc.llm.loaders import (
     RuleDocumentLoader,
     TeamDocumentLoader,
 )
+from rsc.logs import GuildLogAdapter
 
-log = logging.getLogger("red.rsc.llm.create")
+logger = logging.getLogger("red.rsc.llm.create")
+log = GuildLogAdapter(logger)
 
 # Disable Loggers
 logging.getLogger("chromadb").setLevel(logging.ERROR)
@@ -140,26 +146,54 @@ async def load_team_docs(teams: list[Team]):
     return documents
 
 
-async def create_chroma_db(org_name: str, api_key: str, docs: list[Document]):
+async def generate_document_hashes(docs: list[Document]) -> list[str]:
+    hashes = []
+    for doc in docs:
+        source = doc.metadata.get("source")
+        api_id = doc.metadata.get("id")
+
+        if source and api_id:
+            ident = f"{source}/{api_id}"
+        elif source:
+            ident = f"{source}"
+        elif api_id:
+            log.warning(f"LLM Document has no source: {doc.page_content[:50]}")
+            ident = f"{api_id}"
+        else:
+            log.warning(f"LLM Document has no metadata: {doc.page_content[:50]}")
+            ident = doc.page_content
+
+        hash = hashlib.sha256(ident.encode("utf-8")).hexdigest()
+        hashes.append(hash)
+
+    return hashes
+
+
+async def create_chroma_db(
+    guild: discord.Guild, org_name: str, api_key: str, docs: list[Document]
+):
     # Clear out the database first.
     await rm_chroma_db()
 
-    # Load DB
+    # Create directory if needed
     if not CHROMA_PATH.absolute().exists():
-        log.debug("Creating Chroma DB Directory")
+        # Create brand new DB if it doesn't exist
+        log.debug("Creating Chroma DB Directory", guild=guild)
         CHROMA_PATH.absolute().mkdir(parents=True, exist_ok=True)
         await asyncio.sleep(5)
 
-    # Create a new DB from the documents.
-    log.debug("Saving Chroma DB.")
+    log.debug("Saving Chroma DB.", guild=guild)
     Chroma.from_documents(
-        docs,
-        OpenAIEmbeddings(organization=org_name, api_key=api_key),
+        documents=docs,
+        collection_name=str(guild.id),
+        embedding=OpenAIEmbeddings(
+            organization=org_name,
+            api_key=SecretStr(api_key),
+            async_client=httpx.AsyncClient(),
+        ),
         persist_directory=str(CHROMA_PATH.absolute()),
     )
-    log.debug("Persisting Chroma DB")
-    # db.persist()
-    log.info(f"Saved {len(docs)} chunks to {CHROMA_PATH}.")
+    log.info(f"Saved {len(docs)} chunks to {CHROMA_PATH}.", guild=guild)
 
 
 async def rm_chroma_db():

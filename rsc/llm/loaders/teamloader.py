@@ -28,7 +28,7 @@ class TeamDocumentLoader(BaseLoader):
         """A lazy loader that reads RSC Rule style documents."""
 
         for t in self.teams:
-            if not (t.name and t.players):
+            if not (t.id and t.name and t.players):
                 continue
 
             team_name: str = t.name
@@ -58,5 +58,5 @@ class TeamDocumentLoader(BaseLoader):
                     players=players_fmt,
                     captain=captain,
                 ),
-                metadata={"source": "Teams API"},
+                metadata={"source": "Teams API", "id": str(t.id)},
             )

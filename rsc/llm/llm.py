@@ -79,8 +79,9 @@ class LLMMixIn(RSCMixIn):
             return
 
         # Remove bot mention
-        botname = guild.me.display_name
-        cleaned_msg = message.clean_content.replace(f"@{botname}", "").strip()
+        cleaned_msg = message.clean_content.replace(
+            f"@{guild.me.display_name}", ""
+        ).strip()
         log.debug(f"Cleaned LLM Message: {cleaned_msg}")
 
         # Replace some key words
@@ -88,13 +89,18 @@ class LLMMixIn(RSCMixIn):
         cleaned_msg = cleaned_msg.replace("my", message.author.display_name)
         cleaned_msg = cleaned_msg.replace(" I ", message.author.display_name)
         cleaned_msg = cleaned_msg.replace(" i ", message.author.display_name)
+        cleaned_msg = cleaned_msg.replace(" I?", message.author.display_name)
+        cleaned_msg = cleaned_msg.replace(" i?", message.author.display_name)
         cleaned_msg = cleaned_msg.replace("Your", guild.me.display_name)
         cleaned_msg = cleaned_msg.replace("your", guild.me.display_name)
+        cleaned_msg = cleaned_msg.replace("You", guild.me.display_name)
+        cleaned_msg = cleaned_msg.replace("you", guild.me.display_name)
         cleaned_msg = cleaned_msg.replace("Me", message.author.display_name)
         cleaned_msg = cleaned_msg.replace("me", message.author.display_name)
 
         try:
             response, _sources = await llm_query(
+                guild=guild,
                 org_name=org,
                 api_key=key,
                 question=cleaned_msg,
@@ -309,6 +315,7 @@ class LLMMixIn(RSCMixIn):
         await interaction.response.defer()
         try:
             response, sources = await llm_query(
+                guild=guild,
                 org_name=org,
                 api_key=key,
                 question=question,
@@ -532,15 +539,23 @@ class LLMMixIn(RSCMixIn):
             log.debug(f"Team Count: {len(teams)}")
             docs.extend(await load_team_docs(teams))
 
+        if interaction:
+            await interaction.edit_original_response(
+                embed=YellowEmbed(
+                    title="Creating Chroma DB",
+                    description="Saving database to disk.",
+                )
+            )
+
         log.info(f"Chroma Document Total: {len(docs)}")
-        await create_chroma_db(org_name=org, api_key=key, docs=docs)
+        await create_chroma_db(guild=guild, org_name=org, api_key=key, docs=docs)
         log.info("Chroma database created")
         return len(docs)
 
-    async def format_llm_sources(self, sources: list[str]) -> str:
+    async def format_llm_sources(self, sources: list[str | None]) -> str:
         results = []
         for s in sources:
-            if s not in results:
+            if s and s not in results:
                 results.append(f"- {s}")
         return "\n".join(results)
 

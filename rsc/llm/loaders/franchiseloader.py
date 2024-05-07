@@ -64,5 +64,5 @@ class FranchiseDocumentLoader(BaseLoader):
 
         yield Document(
             page_content="\n".join(final),
-            metadata={"source": "Franchises API"},
+            metadata={"source": "Franchises API", "id": str(f.id)},
         )
