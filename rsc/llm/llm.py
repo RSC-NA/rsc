@@ -90,8 +90,8 @@ class LLMMixIn(RSCMixIn):
         cleaned_msg = cleaned_msg.replace(" i ", message.author.display_name)
         cleaned_msg = cleaned_msg.replace("Your", guild.me.display_name)
         cleaned_msg = cleaned_msg.replace("your", guild.me.display_name)
-        cleaned_msg = cleaned_msg.replace("Me", guild.me.display_name)
-        cleaned_msg = cleaned_msg.replace("me", guild.me.display_name)
+        cleaned_msg = cleaned_msg.replace("Me", message.author.display_name)
+        cleaned_msg = cleaned_msg.replace("me", message.author.display_name)
 
         try:
             response, _sources = await llm_query(

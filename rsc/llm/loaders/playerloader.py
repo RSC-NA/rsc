@@ -23,7 +23,7 @@ IR_INPUT = """
 """
 
 FA_INPUT = """
-{name} is a player in RSC and is currently a Free Agent. This means he is available to be picked up by a team!
+{name} is a player in RSC and is currently a Free Agent. Free Agent means he is not currently rostered on a team. However, {name} is available to be signed by a team!
 
 {name} is currently in the {tier} tier.
 """
