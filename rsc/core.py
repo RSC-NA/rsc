@@ -164,6 +164,7 @@ class RSC(
                     for verr in eg.exceptions:
                         log.error(f"*ValidationError: {verr!r}")
                     raise eg.exceptions[0]
+        log.info("Finished preparing caches.")
 
     async def prepare_league(self, guild: discord.Guild):
         league = await self._get_league(guild)
