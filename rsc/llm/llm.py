@@ -10,7 +10,7 @@ from rscapi.models.league_player import LeaguePlayer
 from rscapi.models.team import Team
 
 from rsc.abc import RSCMixIn
-from rsc.embeds import BlueEmbed, ErrorEmbed, GreenEmbed
+from rsc.embeds import BlueEmbed, ErrorEmbed, GreenEmbed, YellowEmbed
 from rsc.llm.create_db import (
     create_chroma_db,
     load_franchise_docs,
@@ -85,6 +85,8 @@ class LLMMixIn(RSCMixIn):
 
         # Replace some key words
         cleaned_msg = cleaned_msg.replace("my", message.author.display_name)
+        cleaned_msg = cleaned_msg.replace(" I ", message.author.display_name)
+        cleaned_msg = cleaned_msg.replace(" i ", message.author.display_name)
         cleaned_msg = cleaned_msg.replace("your", guild.me.display_name)
 
         try:
@@ -433,7 +435,9 @@ class LLMMixIn(RSCMixIn):
 
     # Helpers
 
-    async def create_chroma_db(self, guild: discord.Guild):
+    async def create_chroma_db(
+        self, guild: discord.Guild, interaction: discord.Interaction | None = None
+    ):
         org, key = await self.get_llm_credentials(guild)
         if not (org and key):
             raise ValueError(
@@ -443,6 +447,14 @@ class LLMMixIn(RSCMixIn):
         # Store
         docs: list[Document] = []
         rdocs: list[Document] = []
+
+        if interaction:
+            await interaction.edit_original_response(
+                embed=YellowEmbed(
+                    title="Creating Chroma DB",
+                    description="Loading markdown documents.",
+                )
+            )
 
         # Read in Markdown documents
         log.info("Creating rule documents.")
@@ -460,6 +472,14 @@ class LLMMixIn(RSCMixIn):
         funnydocs = await load_funny_docs()
         docs.extend(await markdown_to_documents(funnydocs))
 
+        if interaction:
+            await interaction.edit_original_response(
+                embed=YellowEmbed(
+                    title="Creating Chroma DB",
+                    description="Loading franchise documents.",
+                )
+            )
+
         # Get franchise data
         log.info("Creating franchise documents.")
         franchises: list[FranchiseList] = await self.franchises(guild)
@@ -467,11 +487,27 @@ class LLMMixIn(RSCMixIn):
             log.debug(f"Franchise Count: {len(franchises)}")
             docs.extend(await load_franchise_docs(franchises))
 
+        if interaction:
+            await interaction.edit_original_response(
+                embed=YellowEmbed(
+                    title="Creating Chroma DB",
+                    description="Loading player documents.",
+                )
+            )
+
         log.info("Creating player documents.")
         players: list[LeaguePlayer] = await self.players(guild, limit=5000)
         if players:
             log.debug(f"Player Count: {len(players)}")
             docs.extend(await load_player_docs(players))
+
+        if interaction:
+            await interaction.edit_original_response(
+                embed=YellowEmbed(
+                    title="Creating Chroma DB",
+                    description="Loading team documents.",
+                )
+            )
 
         # Get teams from franchise data to limit API calls
         log.info("Creating team documents.")
