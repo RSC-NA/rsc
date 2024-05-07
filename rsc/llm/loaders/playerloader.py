@@ -109,3 +109,8 @@ class PlayerDocumentLoader(BaseLoader):
                         name=p.player.name,
                         tier=p.tier.name,
                     )
+
+                    yield Document(
+                        page_content=input,
+                        metadata={"source": "LeaguePlayers API"},
+                    )
