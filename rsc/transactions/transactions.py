@@ -2300,6 +2300,10 @@ class TransactionMixIn(RSCMixIn):
         self, guild: discord.Guild, franchise: str, gm: discord.Member | int, **kwargs
     ) -> discord.Message | None:
         channel_name = f"{franchise.lower().replace(' ', '-')}-transactions"
+
+        # Some filters that discord won't allow
+        channel_name = channel_name.replace("\x27", "")
+
         channel = discord.utils.get(guild.text_channels, name=channel_name)
         if not channel:
             logchan = await self._trans_log_channel(guild)
