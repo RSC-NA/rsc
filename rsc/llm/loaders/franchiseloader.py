@@ -9,7 +9,7 @@ log = logging.getLogger("red.rsc.llm.loaders.franchiseloader")
 
 
 FRANCHISE_INPUT = """
-{name} is an RSC franchise and has the prefix or tag "{prefix}". The General Manager, also known as GM, of {name} is {gm}.
+{name} is an RSC (Rocket Soccar Confederation) franchise and has the prefix or tag "{prefix}". The General Manager, also known as GM, of {name} is {gm}.
 
 {name} has the following teams in their franchise: {teams}
 

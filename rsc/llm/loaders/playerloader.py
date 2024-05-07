@@ -11,21 +11,41 @@ log = logging.getLogger("red.rsc.llm.loaders.playerloader")
 
 
 PLAYER_INPUT = """
-{name} is a player in RSC and plays for the team "{team}". {team} is part of the franchise "{franchise}" and the general manager, also known as GM, of {franchise} is {gm}.
+{name} is a player in RSC (Rocket Soccar Confederation) and plays for the team "{team}".
+
+{team} is part of the franchise "{franchise}" and the general manager, also known as GM, of {franchise} is {gm}.
 
 {name} is currently in the {tier} tier.
 """
 
 IR_INPUT = """
-{name} is a player in RSC and is currently on Inactive Reserve for the team "{team}". {team} is part of the franchise "{franchise}" and the general manager, also known as GM, of {franchise} is {gm}.
+{name} is a player in RSC (Rocket Soccar Confederation) and is currently on Inactive Reserve for the team "{team}".
+
+{team} is part of the franchise "{franchise}" and the general manager, also known as GM, of {franchise} is {gm}.
 
 {name} is currently in the {tier} tier.
 """
 
 FA_INPUT = """
-{name} is a player in RSC and is currently a Free Agent. Free Agent means he is not currently rostered on a team. However, {name} is available to be signed by a team!
+{name} is a player in RSC (Rocket Soccar Confederation) and is currently a Free Agent. Free Agent means he is not currently rostered on a team. However, {name} is available to be signed by a team!
 
 {name} is currently in the {tier} tier.
+"""
+
+PERMFA_INPUT = """
+{name} is a player in RSC (Rocket Soccar Confederation) and is currently a Permanent Free Agent (PermFA).
+
+Permanent Free Agent means that {name} can not be rostered on a team but is available to sub in on match nights.
+
+{name} is currently in the {tier} tier.
+"""
+
+DE_INPUT = """
+{name} is a player in RSC (Rocket Soccar Confederation) and is currently Draft Eligible.
+
+Draft Eligible means he is able to be drafted in the RSC Draft.
+
+{tier}
 """
 
 
@@ -67,7 +87,7 @@ class PlayerDocumentLoader(BaseLoader):
 
                     yield Document(
                         page_content=input,
-                        metadata={"source": "LeaguePlayers API"},
+                        metadata={"source": "Rostered Player API"},
                     )
                 case Status.AGMIR | Status.IR:
                     if not (
@@ -96,9 +116,9 @@ class PlayerDocumentLoader(BaseLoader):
 
                     yield Document(
                         page_content=input,
-                        metadata={"source": "LeaguePlayers API"},
+                        metadata={"source": "IR Player API"},
                     )
-                case Status.FREE_AGENT | Status.PERM_FA:
+                case Status.FREE_AGENT:
                     if not (p.player.name and p.tier and p.tier.name):
                         log.warning(
                             f"Skipping player {p.id}. Missing required data for LLM input."
@@ -109,8 +129,44 @@ class PlayerDocumentLoader(BaseLoader):
                         name=p.player.name,
                         tier=p.tier.name,
                     )
-
                     yield Document(
                         page_content=input,
-                        metadata={"source": "LeaguePlayers API"},
+                        metadata={"source": "Free Agent API"},
+                    )
+                case Status.PERM_FA:
+                    if not (p.player.name and p.tier and p.tier.name):
+                        log.warning(
+                            f"Skipping player {p.id}. Missing required data for LLM input."
+                        )
+                        continue
+
+                    input = PERMFA_INPUT.format(
+                        name=p.player.name,
+                        tier=p.tier.name,
+                    )
+                    yield Document(
+                        page_content=input,
+                        metadata={"source": "PermFA API"},
+                    )
+                case Status.DRAFT_ELIGIBLE:
+                    if not p.player.name:
+                        log.warning(
+                            f"Skipping player {p.id}. Missing required data for LLM input."
+                        )
+                        continue
+
+                    if p.tier and p.tier.name:
+                        tier_fmt = (
+                            f"{p.player.name} is currently in the {p.tier.name} tier."
+                        )
+                    else:
+                        tier_fmt = f"{p.player.name} has not been assigned a tier yet."
+
+                    input = DE_INPUT.format(
+                        name=p.player.name,
+                        tier=tier_fmt,
+                    )
+                    yield Document(
+                        page_content=input,
+                        metadata={"source": "Free Agent API"},
                     )
