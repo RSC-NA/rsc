@@ -236,7 +236,9 @@ class MatchMixIn(RSCMixIn):
         except ValueError as exc:
             return await interaction.followup.send(embed=ExceptionErrorEmbed(str(exc)))
 
-        embed = await self.build_match_embed(guild, match, user_team=user_team)
+        embed = await self.build_match_embed(
+            guild, match, user_team=user_team, with_gm=True
+        )
         await interaction.followup.send(embed=embed, ephemeral=True)
 
     # Functions
@@ -281,6 +283,7 @@ class MatchMixIn(RSCMixIn):
         guild: discord.Guild,
         match: Match,
         user_team: MatchTeamEnum | None = None,
+        with_gm: bool = False,
     ) -> discord.Embed:
         """Build the match information embed"""
         # Get embed color by tier
@@ -307,7 +310,9 @@ class MatchMixIn(RSCMixIn):
         lobby_info = f"Name: **{match.game_name}**\nPass: **{match.game_pass}**"
 
         # Teams
-        home_fmt, away_fmt = await self.roster_fmt_from_match(guild, match)
+        home_fmt, away_fmt = await self.roster_fmt_from_match(
+            guild, match, with_gm=True
+        )
 
         # Create embed
         embed = discord.Embed(
@@ -342,7 +347,7 @@ class MatchMixIn(RSCMixIn):
         return embed
 
     async def roster_fmt_from_match(
-        self, guild: discord.Guild, match: Match
+        self, guild: discord.Guild, match: Match, with_gm: bool = False
     ) -> tuple[str, str]:
         """Return formatted roster string from Match"""
         home_players: list[str] = []
@@ -350,6 +355,18 @@ class MatchMixIn(RSCMixIn):
 
         if not (match.home_team.players and match.away_team.players):
             raise AttributeError("Match is missing players on home or away team.")
+
+        home_gm: str | None = None
+        away_gm: str | None = None
+
+        if with_gm:
+            hgm = await self.franchise_gm_by_name(guild, name=match.home_team.franchise)
+            if hgm and hgm.rsc_name:
+                home_gm = hgm.rsc_name
+
+            agm = await self.franchise_gm_by_name(guild, name=match.away_team.franchise)
+            if agm and agm.rsc_name:
+                away_gm = agm.rsc_name
 
         # Home
         for p in match.home_team.players:
@@ -370,12 +387,22 @@ class MatchMixIn(RSCMixIn):
                 away_players.append(name)
 
         home_fmt = "```\n"
-        home_fmt += f"{match.home_team.name} - {match.home_team.franchise} - {match.home_team.tier}\n"
+        if home_gm:
+            home_fmt += (
+                f"{match.home_team.name} - {match.home_team.franchise} ({home_gm})\n"
+            )
+        else:
+            home_fmt += f"{match.home_team.name} - {match.home_team.franchise}\n"
         home_fmt += "\n".join([f"\t{p}" for p in home_players])
         home_fmt += "\n```"
 
         away_fmt = "```\n"
-        away_fmt += f"{match.away_team.name} - {match.away_team.franchise} - {match.away_team.tier}\n"
+        if away_gm:
+            away_fmt += (
+                f"{match.away_team.name} - {match.away_team.franchise} ({away_gm})\n"
+            )
+        else:
+            away_fmt += f"{match.away_team.name} - {match.away_team.franchise}\n"
         away_fmt += "\n".join([f"\t{p}" for p in away_players])
         away_fmt += "\n```"
 

@@ -101,6 +101,24 @@ class FranchiseMixIn(RSCMixIn):
 
     # Functions
 
+    async def franchise_gm_by_name(
+        self, guild: discord.Guild, name: str
+    ) -> FranchiseGM | None:
+        result = await self.franchises(guild=guild, name=name)
+
+        if not result:
+            return None
+
+        if len(result) > 1:
+            raise ValueError(f"Found more than one franchise matching: {name}")
+
+        franchise = result.pop(0)
+
+        if not franchise.gm:
+            return None
+
+        return franchise.gm
+
     async def franchise_name_to_id(
         self, guild: discord.Guild, franchise_name: str
     ) -> int:

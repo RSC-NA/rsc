@@ -13,6 +13,7 @@ from rscapi import Configuration as ApiConfig
 from rscapi.models.activity_check import ActivityCheck
 from rscapi.models.deleted import Deleted
 from rscapi.models.franchise import Franchise
+from rscapi.models.franchise_gm import FranchiseGM
 from rscapi.models.franchise_list import FranchiseList
 from rscapi.models.franchise_standings import FranchiseStandings
 from rscapi.models.high_level_match import HighLevelMatch
@@ -130,6 +131,12 @@ class RSCMixIn(ABC):
         tier: int | None = None,
         tier_name: str | None = None,
     ) -> list[FranchiseList]:
+        ...
+
+    @abstractmethod
+    async def franchise_gm_by_name(
+        self, guild: discord.Guild, name: str
+    ) -> FranchiseGM | None:
         ...
 
     @abstractmethod
