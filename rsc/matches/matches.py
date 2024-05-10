@@ -283,7 +283,7 @@ class MatchMixIn(RSCMixIn):
         guild: discord.Guild,
         match: Match,
         user_team: MatchTeamEnum | None = None,
-        with_gm: bool = False,
+        with_gm: bool = True,
     ) -> discord.Embed:
         """Build the match information embed"""
         # Get embed color by tier
@@ -311,7 +311,7 @@ class MatchMixIn(RSCMixIn):
 
         # Teams
         home_fmt, away_fmt = await self.roster_fmt_from_match(
-            guild, match, with_gm=True
+            guild, match, with_gm=with_gm
         )
 
         # Create embed
@@ -347,7 +347,7 @@ class MatchMixIn(RSCMixIn):
         return embed
 
     async def roster_fmt_from_match(
-        self, guild: discord.Guild, match: Match, with_gm: bool = False
+        self, guild: discord.Guild, match: Match, with_gm: bool = True
     ) -> tuple[str, str]:
         """Return formatted roster string from Match"""
         home_players: list[str] = []

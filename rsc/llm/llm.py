@@ -85,18 +85,18 @@ class LLMMixIn(RSCMixIn):
         log.debug(f"Cleaned LLM Message: {cleaned_msg}")
 
         # Replace some key words
-        cleaned_msg = cleaned_msg.replace("My", message.author.display_name)
-        cleaned_msg = cleaned_msg.replace("my", message.author.display_name)
+        cleaned_msg = cleaned_msg.replace(" My ", message.author.display_name)
+        cleaned_msg = cleaned_msg.replace(" my ", message.author.display_name)
         cleaned_msg = cleaned_msg.replace(" I ", message.author.display_name)
         cleaned_msg = cleaned_msg.replace(" i ", message.author.display_name)
         cleaned_msg = cleaned_msg.replace(" I?", message.author.display_name)
         cleaned_msg = cleaned_msg.replace(" i?", message.author.display_name)
-        cleaned_msg = cleaned_msg.replace("Your", guild.me.display_name)
-        cleaned_msg = cleaned_msg.replace("your", guild.me.display_name)
-        cleaned_msg = cleaned_msg.replace("You", guild.me.display_name)
-        cleaned_msg = cleaned_msg.replace("you", guild.me.display_name)
-        cleaned_msg = cleaned_msg.replace("Me", message.author.display_name)
-        cleaned_msg = cleaned_msg.replace("me", message.author.display_name)
+        cleaned_msg = cleaned_msg.replace("Your ", guild.me.display_name)
+        cleaned_msg = cleaned_msg.replace("your ", guild.me.display_name)
+        cleaned_msg = cleaned_msg.replace("You ", guild.me.display_name)
+        cleaned_msg = cleaned_msg.replace("you ", guild.me.display_name)
+        cleaned_msg = cleaned_msg.replace(" Me ", message.author.display_name)
+        cleaned_msg = cleaned_msg.replace(" me ", message.author.display_name)
 
         try:
             response, _sources = await llm_query(
