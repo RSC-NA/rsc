@@ -402,9 +402,18 @@ class BallchasingMixIn(RSCMixIn):
             )
             log.debug(f"Match Result: {match_result}")
         except RscException as exc:
-            return await interaction.edit_original_response(
-                embed=ApiExceptionErrorEmbed(exc)
-            )
+            if hasattr(exc, "status") and exc.status == 400:
+                # Match already reported
+                return await interaction.edit_original_response(
+                    embed=YellowEmbed(
+                        title="Match Reported",
+                        description="This match has already been reported but all additional replays have been uploaded.",
+                    )
+                )
+            else:
+                return await interaction.edit_original_response(
+                    embed=ApiExceptionErrorEmbed(exc)
+                )
 
         # Final embed
         result_embed, result_view = await self.build_match_result_embed(
@@ -557,8 +566,8 @@ class BallchasingMixIn(RSCMixIn):
 
         # Get franchise logo
         if (
-            result.home_wins
-            and result.away_wins
+            result.home_wins is not None
+            and result.away_wins is not None
             and result.home_wins > result.away_wins
         ):
             winning_franchise = match.home_team.franchise
