@@ -791,7 +791,7 @@ class MemberMixIn(RSCMixIn):
             await interaction.followup.send(embed=embed)
             return
 
-        players.sort(key=lambda x: cast(int, x.current_mmr), reverse=True)
+        players.sort(key=lambda x: cast(str, x.player.name), reverse=True)
 
         waiver_dates = []
         members = []
@@ -807,11 +807,6 @@ class MemberMixIn(RSCMixIn):
                 waiver_dates.append("Unknown")
 
         embed.add_field(name="Player", value="\n".join(members), inline=True)
-        embed.add_field(
-            name="MMR",
-            value="\n".join([str(p.current_mmr) for p in players]),
-            inline=True,
-        )
         embed.add_field(name="End Date", value="\n".join(waiver_dates), inline=True)
 
         await interaction.followup.send(embed=embed)
