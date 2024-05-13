@@ -432,9 +432,29 @@ class BallchasingMixIn(RSCMixIn):
             link=await self.bc_group_full_url(bc_group),
         )
 
+        # Try to get GMs
+        gms: list[str] = []
+        if match.home_team.gm.discord_id:
+            home_gm = guild.get_member(match.home_team.gm.discord_id)
+            if home_gm:
+                gms.append(home_gm.mention)
+
+        if match.away_team.gm.discord_id:
+            away_gm = guild.get_member(match.away_team.gm.discord_id)
+            if away_gm:
+                gms.append(away_gm.mention)
+
+        gm_fmt = None
+        if gms:
+            gm_fmt = " ".join(gms)
+
         # Announce to score reporting
         await self.announce_to_score_reporting(
-            guild, tier=match.home_team.tier, embed=result_embed, view=result_view
+            guild,
+            tier=match.home_team.tier,
+            embed=result_embed,
+            view=result_view,
+            content=gm_fmt,
         )
 
         # Send to user
@@ -646,10 +666,19 @@ class BallchasingMixIn(RSCMixIn):
 
         if view:
             return await score_channel.send(
-                content=content, embed=embed, view=view, files=files
+                content=content,
+                embed=embed,
+                view=view,
+                files=files,
+                allowed_mentions=discord.AllowedMentions(users=True),
             )
         else:
-            return await score_channel.send(content=content, embed=embed, files=files)
+            return await score_channel.send(
+                content=content,
+                embed=embed,
+                files=files,
+                allowed_mentions=discord.AllowedMentions(users=True),
+            )
 
     async def has_bc_permissions(self, member: discord.Member) -> bool:
         """Determine if member is able to manage guild or part of manager role"""
