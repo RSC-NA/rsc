@@ -7,11 +7,14 @@ from rscapi import ApiClient, MatchesApi
 from rscapi.exceptions import ApiException
 from rscapi.models.match import Match
 from rscapi.models.match_list import MatchList
+from rscapi.models.match_results import MatchResults
+from rscapi.models.match_score_report import MatchScoreReport
 from rscapi.models.matches_list200_response import MatchesList200Response
 
 from rsc.abc import RSCMixIn
 from rsc.embeds import BlueEmbed, ErrorEmbed, ExceptionErrorEmbed, YellowEmbed
 from rsc.enums import MatchFormat, MatchTeamEnum, MatchType, Status
+from rsc.exceptions import RscException
 from rsc.logs import GuildLogAdapter
 from rsc.teams import TeamMixIn
 from rsc.utils.utils import tier_color_by_name
@@ -243,6 +246,26 @@ class MatchMixIn(RSCMixIn):
 
     # Functions
 
+    @staticmethod
+    async def get_match_from_list(
+        home: str, away: str, matches: list[Match]
+    ) -> Match | None:
+        match = None
+        for m in matches:
+            if not (m.home_team.name and m.away_team.name):
+                continue
+
+            log.debug(f"Match List Data: {m.home_team.name} v {m.away_team.name}")
+            if home.lower() in (
+                m.home_team.name.lower(),
+                m.away_team.name.lower(),
+            ) and away.lower() in (
+                m.home_team.name.lower(),
+                m.away_team.name.lower(),
+            ):
+                match = m
+        return match
+
     async def is_match_day(self, guild: discord.Guild) -> bool:
         season = await self.current_season(guild)
         if not season:
@@ -427,26 +450,29 @@ class MatchMixIn(RSCMixIn):
     ) -> list[MatchList]:
         async with ApiClient(self._api_conf[guild.id]) as client:
             api = MatchesApi(client)
-            matches: MatchesList200Response = await api.matches_list(
-                date__lt=date__lt.isoformat() if date__lt else None,
-                date__gt=date__gt.isoformat() if date__gt else None,
-                season=season,
-                season_number=season_number,
-                match_team_type=str(match_team_type),
-                team_name=team_name,
-                day=day,
-                match_type=str(match_type) if match_type else None,
-                match_format=str(match_format) if match_format else None,
-                league=self._league[guild.id],
-                limit=limit,
-                offset=offset,
-            )
-            return matches.results
+            try:
+                matches: MatchesList200Response = await api.matches_list(
+                    date__lt=date__lt.isoformat() if date__lt else None,
+                    date__gt=date__gt.isoformat() if date__gt else None,
+                    season=season,
+                    season_number=season_number,
+                    match_team_type=str(match_team_type),
+                    team_name=team_name,
+                    day=day,
+                    match_type=str(match_type) if match_type else None,
+                    match_format=str(match_format) if match_format else None,
+                    league=self._league[guild.id],
+                    limit=limit,
+                    offset=offset,
+                )
+                return matches.results
+            except ApiException as exc:
+                raise RscException(response=exc)
 
     async def find_match(
         self,
         guild: discord.Guild,
-        teams: str,
+        teams: list[str],
         date_lt: datetime | None = None,
         date_gt: datetime | None = None,
         season: int | None = None,
@@ -460,22 +486,52 @@ class MatchMixIn(RSCMixIn):
     ) -> list[Match]:
         async with ApiClient(self._api_conf[guild.id]) as client:
             api = MatchesApi(client)
-            return await api.matches_find_match(
-                teams=teams,
-                date__lt=date_lt.isoformat() if date_lt else None,
-                date__gt=date_gt.isoformat() if date_gt else None,
-                season=season,
-                season_number=season_number,
-                day=day,
-                match_type=str(match_type) if match_type else None,
-                match_format=str(match_format) if match_format else None,
-                league=self._league[guild.id],
-                limit=limit,
-                offset=offset,
-                preseason=preseason,
-            )
+            teams_fmt = ",".join(teams)
+            try:
+                return await api.matches_find_match(
+                    teams=teams_fmt,
+                    date__lt=date_lt.isoformat() if date_lt else None,
+                    date__gt=date_gt.isoformat() if date_gt else None,
+                    season=season,
+                    season_number=season_number,
+                    day=day,
+                    match_type=str(match_type) if match_type else None,
+                    match_format=str(match_format) if match_format else None,
+                    league=self._league[guild.id],
+                    limit=limit,
+                    offset=offset,
+                    preseason=preseason,
+                )
+            except ApiException as exc:
+                raise RscException(response=exc)
 
     async def match_by_id(self, guild: discord.Guild, id: int) -> Match:
         async with ApiClient(self._api_conf[guild.id]) as client:
             api = MatchesApi(client)
             return await api.matches_read(id)
+
+    async def report_match(
+        self,
+        guild: discord.Guild,
+        match_id: int,
+        ballchasing_group: str,
+        home_score: int,
+        away_score: int,
+        executor: discord.Member,
+        override: bool = False,
+    ) -> MatchResults:
+        async with ApiClient(self._api_conf[guild.id]) as client:
+            api = MatchesApi(client)
+            try:
+                data = MatchScoreReport(
+                    ballchasing_group=ballchasing_group,
+                    home_score=home_score,
+                    away_score=away_score,
+                    executor=executor.id,
+                    admin_override=override,
+                    stats_override=False,  # change this eventually to one override
+                )
+                log.debug(f"Match Score Report ({match_id}): {data}")
+                return await api.matches_score_report(match_id, data)
+            except ApiException as exc:
+                raise RscException(response=exc)

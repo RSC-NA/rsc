@@ -1,47 +1,38 @@
-import asyncio
-import difflib
 import logging
 import random
 
 # import statistics
 import string
-import time
-from datetime import datetime, timedelta, timezone
-from hashlib import md5
-from io import BytesIO
+from datetime import datetime, timedelta
+from pathlib import Path
 from urllib.parse import urljoin
 
 import ballchasing
 import discord
-
-# from discord.app_commands import Transform
 from redbot.core import app_commands
-from replay_parser import ReplayParser
-from replay_parser.models import Replay as ParsedReplay
 from rscapi.models.match import Match
-
-# from rscapi.models.match_list import MatchList
-from rscapi.models.tracker_link import TrackerLink
+from rscapi.models.match_results import MatchResults
 
 from rsc.abc import RSCMixIn
-
-# from rsc.ballchasing.views import BallchasingProcessingView
-from rsc.embeds import (  # BlueEmbed,; RedEmbed,; YellowEmbed,
+from rsc.ballchasing import groups, process, validation
+from rsc.embeds import (
+    ApiExceptionErrorEmbed,
     ErrorEmbed,
     ExceptionErrorEmbed,
     SuccessEmbed,
+    YellowEmbed,
 )
-from rsc.enums import MatchFormat, MatchType, TrackerLinksStatus
+from rsc.enums import MatchType
+from rsc.exceptions import RscException
+from rsc.logs import GuildLogAdapter
 from rsc.teams import TeamMixIn
-
-# from rsc.tiers import TierMixIn
-# from rsc.transformers import DateTransformer
-from rsc.types import BallchasingCollisions, BallchasingResult
 from rsc.utils import utils
+from rsc.views import LinkButton
 
 # from rsc.views import LinkButton
 
-log = logging.getLogger("red.rsc.ballchasing")
+logger = logging.getLogger("red.rsc.ballchasing")
+log = GuildLogAdapter(logger)
 
 defaults_guild = {
     "AuthToken": None,
@@ -71,8 +62,6 @@ class BallchasingMixIn(RSCMixIn):
         self.config.init_custom("Ballchasing", 1)
         self.config.register_custom("Ballchasing", **defaults_guild)
         self._ballchasing_api: dict[int, ballchasing.Api] = {}
-        # self.task = asyncio.create_task(self.pre_load_data())
-        # self.ffp = {}  # forfeit processing
         super().__init__()
 
     # Setup
@@ -221,7 +210,9 @@ class BallchasingMixIn(RSCMixIn):
     )
     @app_commands.describe(group='Ballchasing group string (Ex: "rsc-v4rxmuxj6o")')
     @app_commands.checks.has_permissions(manage_guild=True)
-    async def _bc_top_level_group(self, interaction: discord.Interaction, group: str):
+    async def _bc_top_level_group_cmd(
+        self, interaction: discord.Interaction, group: str
+    ):
         if not interaction.guild:
             return
         await self._save_top_level_group(interaction.guild, group)
@@ -272,6 +263,7 @@ class BallchasingMixIn(RSCMixIn):
         replay6="Rocket League replay file",
         replay7="Rocket League replay file",
         replay8="Rocket League replay file",
+        override="Admin or stats only override",
     )
     async def _reportmatch_cmd(
         self,
@@ -288,11 +280,20 @@ class BallchasingMixIn(RSCMixIn):
         replay6: discord.Attachment | None = None,
         replay7: discord.Attachment | None = None,
         replay8: discord.Attachment | None = None,
+        override: bool = False,
     ):
         guild = interaction.guild
         member = interaction.user
         if not (guild and isinstance(member, discord.Member)):
             return
+
+        # Check if override is allowed
+        if override and not self.has_bc_permissions(member):
+            return await interaction.response.send_message(
+                embed=ErrorEmbed(
+                    description="You do not have permission to override a match result."
+                )
+            )
 
         await interaction.response.defer(ephemeral=True)
 
@@ -301,7 +302,7 @@ class BallchasingMixIn(RSCMixIn):
         replay_files: list[discord.Attachment] = []
         for k, v in argv.items():
             if v and k.startswith("replay"):
-                if not await self.is_replay_file(v):
+                if not await validation.is_replay_file(v):
                     return await interaction.followup.send(
                         embed=ErrorEmbed(
                             description=f"`{v.filename}` is not a valid replay file."
@@ -313,7 +314,7 @@ class BallchasingMixIn(RSCMixIn):
 
         # Check for duplicates
         log.debug("Checking for duplicate replays")
-        if await self.duplicate_replay_files(replay_files):
+        if await validation.duplicate_replay_hashes(replay_files):
             return await interaction.followup.send(
                 embed=ErrorEmbed(
                     title="Duplicate Replays Found",
@@ -335,7 +336,7 @@ class BallchasingMixIn(RSCMixIn):
             guild,
             date_gt=start_date,
             date_lt=end_date,
-            teams=f"{home}, {away}",
+            teams=[home, away],
         )
 
         # No match found
@@ -347,13 +348,12 @@ class BallchasingMixIn(RSCMixIn):
                 ephemeral=True,
             )
 
-        match = None
-        for m in mlist:
-            if home in (m.home_team.name, m.away_team.name) and away in (
-                m.home_team.name,
-                m.away_team.name,
-            ):
-                match = m
+        log.debug("Searching for valid teams in match data")
+        log.debug(f"Home Team: {home}")
+        log.debug(f"Away Team: {away}")
+
+        # Check if we got a match with matching home/away team names
+        match = await self.get_match_from_list(home=home, away=away, matches=mlist)
 
         if not match:
             return await interaction.followup.send(
@@ -363,197 +363,151 @@ class BallchasingMixIn(RSCMixIn):
                 ephemeral=True,
             )
 
-        log.debug("Found match.")
+        # Make sure we have the match ID
+        if not match.id:
+            return await interaction.followup.send(
+                embed=ErrorEmbed(
+                    description=f"Found match for **{home}** vs **{away}** but it has no match ID in the API."
+                ),
+                ephemeral=True,
+            )
 
-        # Initialize python replay parser
-        parser = ReplayParser()
+        log.debug(f"Found match: {match}")
 
-        # Parse Replays first for validation
-        parsed_replays: list[ParsedReplay] = []
-        for rf in replay_files:
-            try:
-                rdata = BytesIO(await rf.read())
-                parsed = parser.parse(replay_file=rdata, net_stream=False)
-                parsed_replays.append(parsed)
-            except TypeError as exc:
-                return await interaction.followup.send(
-                    embed=ExceptionErrorEmbed(exc_message=str(exc)), ephemeral=True
-                )
+        # Send "working" message
+        embed = YellowEmbed(
+            title="Processing Match",
+            description=f"Processing replays for match **{home}** vs **{away}**.",
+        )
+        await interaction.followup.send(embed=embed, ephemeral=True)
 
-        # Validate them to some extent
+        try:
+            bc_group = await self.process_match_replays(
+                guild, match=match, replays=replay_files
+            )
+        except (TypeError, ValueError, RuntimeError) as exc:
+            return await interaction.edit_original_response(
+                embed=ExceptionErrorEmbed(exc_message=str(exc))
+            )
 
-        # # Check if match is already complete
-        # if await self.match_already_complete(match):
-        #     bc_view = discord.ui.View()
-        #     if match.results and match.results.ballchasing_group:
-        #         bc_view.add_item(
-        #             LinkButton(
-        #                 label="Ballchasing Link",
-        #                 url=await self.bc_group_full_url(
-        #                     match.results.ballchasing_group
-        #                 ),
-        #             )
-        #         )
-        #     await interaction.followup.send(
-        #         embed=ErrorEmbed(
-        #             title="Match Completed",
-        #             description="This match has already been completed and recorded.",
-        #         ),
-        #         view=bc_view,
-        #         ephemeral=True,
-        #     )
-        #     return
+        try:
+            match_result = await self.report_match(
+                guild,
+                match_id=match.id,
+                ballchasing_group=bc_group,
+                home_score=home_wins,
+                away_score=away_wins,
+                executor=member,
+                override=override,
+            )
+            log.debug(f"Match Result: {match_result}")
+        except RscException as exc:
+            return await interaction.edit_original_response(
+                embed=ApiExceptionErrorEmbed(exc)
+            )
 
-        # # Check valid number of replays
-        # min_games = await self.minimum_games_required(match)
-        # if len(replays) < min_games:
-        #     await interaction.followup.send(
-        #         embed=ErrorEmbed(
-        #             title="Not Enough Replays",
-        #             description=(
-        #                 f"You only provided **{len(replays)}** replay file,"
-        #                 f" expected at least **{match.num_games}**.\n\n"
-        #                 "If you don't all the replays, please coordinate with the other team captain."
-        #             ),
-        #         ),
-        #         ephemeral=True,
-        #     )
-        #     return
+        # Final embed
+        result_embed, result_view = await self.build_match_result_embed(
+            guild,
+            match=match,
+            result=match_result,
+            link=await self.bc_group_full_url(bc_group),
+        )
 
-        # log.debug("Checking for duplicate replays")
-        # if await self.duplicate_replay_files(replays):
-        #     await interaction.followup.send(
-        #         embed=ErrorEmbed(
-        #             title="Duplicate Replays Found",
-        #             description="Found duplicate replay files in the data submitted.",
-        #         ),
-        #         ephemeral=True,
-        #     )
-        #     return
+        # Announce to score reporting
+        await self.announce_to_score_reporting(
+            guild, tier=match.home_team.tier, embed=result_embed, view=result_view
+        )
 
-        # log.debug(f"Match ID: {match.id}")
-
-        # # Send "working" message
-        # await interaction.followup.send(
-        #     embed=YellowEmbed(
-        #         title="Processing Match",
-        #         description=f"Processing replays for match **{home}** vs **{away}** on **match day {matchday}**",
-        #     ),
-        #     ephemeral=True,
-        # )
-
-        # bcresult = BallchasingResult(
-        #     valid=True,
-        #     away_wins=0,
-        #     home_wins=0,
-        #     match=m,
-        #     replays=set(),
-        #     execution_time=0,
-        #     link=None,
-        # )
-
-        # # Upload
+        # Send to user
+        await interaction.edit_original_response(embed=result_embed, view=result_view)
 
     # Functions
 
-    @staticmethod
-    async def is_replay_file(replay: discord.Attachment) -> bool:
-        """Check if file provided is a replay file"""
-        if replay.filename.endswith(".replay"):
-            return True
-        return False
-
-    @staticmethod
-    async def duplicate_replay_files(replays: list[discord.Attachment]) -> bool:
-        hashes = []
-        for r in replays:
-            data = await r.read()
-            h = md5(data).hexdigest()
-            log.debug(f"Replay Hash: {h}")
-            if h in hashes:
-                return True
-            else:
-                hashes.append(h)
-        return False
-
-    async def group_replay_collisions(
-        self, guild: discord.Guild, group: str, result: BallchasingResult
-    ) -> BallchasingCollisions:
-        collisions = set()
-        unknown = set()
-        total_replays = 0
-        bapi = self._ballchasing_api.get(guild.id)
-
-        if not bapi:
-            raise RuntimeError("Ballchasing API is not configured.")
-
-        async for replay in bapi.get_group_replays(
-            group_id=group, deep=True, recurse=False
-        ):
-            total_replays += 1
-            if replay in result["replays"]:
-                collisions.add(replay)
-            else:
-                unknown.add(replay)
-
-        return BallchasingCollisions(
-            total_replays=total_replays,
-            unknown=unknown,
-            collisions=collisions,
+    async def process_match_replays(
+        self, guild: discord.Guild, match: Match, replays=list[discord.Attachment]
+    ):
+        log.debug(
+            f"Processing match: {match.home_team.name} vs {match.away_team.name}",
+            guild=guild,
         )
+        # Get BC top level group
+        tlg = await self._get_top_level_group(guild)
+        if not tlg:
+            raise ValueError("Top level ballchasing group is not configured in guild.")
+
+        # Get ballchasing API
+        bapi = self._ballchasing_api.get(guild.id)
+        if not bapi:
+            raise ValueError("Ballchasing API is not configured in guild.")
+
+        # Create or find RSC match group ID
+        match_group_id = await groups.rsc_match_bc_group(
+            bapi=bapi, guild=guild, tlg=tlg, match=match
+        )
+        log.debug(f"Match Group ID: {match_group_id}", guild=guild)
+        if not match_group_id:
+            raise RuntimeError("Unable to find or create ballchasing match group.")
+
+        # Get replays from group if any
+        log.debug(f"Getting existing replays from {match_group_id}", guild=guild)
+        bc_replays: list[ballchasing.models.Replay] = await utils.async_iter_gather(
+            bapi.get_group_replays(group_id=match_group_id, deep=True)
+        )
+        log.debug(f"Existing Replay Count: {len(bc_replays)}", guild=guild)
+
+        # Check for collisions in ballchasing (duplicate replays)
+        collisions = await process.replay_group_collisions(
+            replay_files=replays, bc_replays=bc_replays
+        )
+        log.debug(f"Replay Collisions: {collisions}", guild=guild)
+
+        # Remove collisions from upload list
+        for c in collisions:
+            replays.remove(c)
+
+        # Upload replays (only if we need to)
+        if replays:
+            await self.upload_replays(guild, group=match_group_id, replays=replays)
+
+        return match_group_id
 
     async def upload_replays(
-        self, guild: discord.Guild, group: str, result: BallchasingResult
+        self,
+        guild: discord.Guild,
+        group: str,
+        replays: list[discord.Attachment | str | bytes],
     ) -> list[str]:
+        if not replays:
+            raise ValueError("No replays provided for upload to ballchasing.")
+
+        # Get ballchasing API
         bapi = self._ballchasing_api.get(guild.id)
         if not bapi:
-            raise RuntimeError("Ballchasing API is not configured.")
+            raise ValueError("Ballchasing API is not configured in guild.")
 
-        if not result["replays"]:
-            return []
-
-        match = result["match"]
-
-        collisions = await self.group_replay_collisions(guild, group, result)
-        if not collisions:
-            return []
-
-        total_collisions = len(collisions["collisions"])
-        total_unknown = len(collisions["unknown"])
-        total_replays = collisions["total_replays"]
-
-        log.debug(
-            f"Collision Report. Total={total_replays} Unknown={total_unknown} Collisions={total_collisions}"
-        )
-        min_games = await self.minimum_games_required(match)
-
-        if total_collisions == min_games:
-            # Match already uploaded
-            log.debug("Match already uploaded. Skipping...")
-            return [r.id for r in result["replays"]]
-        elif total_unknown > 0:
-            # To save on complexity, purge the group if an unknown match_guid is found
-            log.warning("Unknown group replay found. Purging group...")
-            await self.purge_ballchasing_group(guild, group)
-        elif total_collisions > 0:
-            # Remove collisions from upload list
-            for replay in collisions["collisions"]:
-                log.debug(f"Removing replay collision: {replay.id}")
-                result["replays"].remove(replay)
-
-        replay_content = []
-        for replay in result["replays"]:
-            data = await bapi.download_replay_content(replay.id)
-            if data:
-                replay_content.append(data)
-
+        # Upload replays
+        log.debug(f"Uploading replays to group: {group}", guild=guild)
         replay_ids = []
-        for rbytes in replay_content:
-            rname = f"{''.join(random.choices(string.ascii_letters + string.digits, k=64))}.replay"
+        for replay in replays:
+            generated_name = "".join(
+                random.choices(string.ascii_letters + string.digits, k=64)
+            )
+            rname = f"{generated_name}.replay"
             try:
+                if isinstance(replay, discord.Attachment):
+                    rdata = await replay.read()
+                elif isinstance(replay, bytes):
+                    rdata = replay
+                elif isinstance(replay, str):
+                    # Read bytes from file
+                    fdata = Path(replay).read_bytes()
+                    rdata = fdata
+
+                # Upload to ballchasing group
                 resp = await bapi.upload_replay_from_bytes(
                     name=rname,
-                    replay_data=rbytes,
+                    replay_data=rdata,
                     visibility=ballchasing.Visibility.PUBLIC,
                     group=group,
                 )
@@ -565,189 +519,48 @@ class BallchasingMixIn(RSCMixIn):
                 if err.status == 409:
                     # duplicate replay. patch it under the BC group
                     err_info = await err.json()
-                    log.debug(f"Error uploading replay. {err.status} -- {err_info}")
+                    log.debug(
+                        f"Error uploading replay. {err.status} -- {err_info}",
+                        guild=guild,
+                    )
                     r_id = err_info.get("id")
                     if r_id:
-                        log.debug("Patching replay under correct group")
+                        log.debug("Patching replay under correct group", guild=guild)
                         await bapi.patch_replay(r_id, group=group)
                         replay_ids.append(r_id)
+        log.debug(f"Ballchasing IDs: {replay_ids}", guild=guild)
         return replay_ids
-
-    async def purge_ballchasing_group(self, guild: discord.Guild, group: str):
-        bapi = self._ballchasing_api.get(guild.id)
-        if not bapi:
-            raise RuntimeError("Ballchasing API is not configured.")
-        try:
-            async with asyncio.TaskGroup() as tg:
-                async for replay in bapi.get_group_replays(
-                    group_id=group, deep=False, recurse=False
-                ):
-                    tg.create_task(bapi.delete_replay(replay.id))
-        except ExceptionGroup as eg:
-            for err in eg.exceptions:
-                raise err
-
-    async def season_bc_group(self, guild: discord.Guild, match: Match) -> str | None:
-        tlg = await self._get_top_level_group(guild)
-        if not tlg:
-            return None
-
-        bapi = self._ballchasing_api.get(guild.id)
-        if not bapi:
-            return None
-
-        sname = f"Season {match.home_team.latest_season}"
-
-        season_group = None
-
-        # Find relevant season group
-        async for g in bapi.get_groups(group=tlg):
-            if g.name.lower() == sname.lower():
-                log.debug(f"Found existing ballchasing season group: {g.id}")
-                season_group = g.id
-                break
-
-        # Create group if not found
-        if not season_group:
-            log.debug(f"Creating ballchasing season group: {sname}")
-            result = await bapi.create_group(
-                name=sname,
-                parent=tlg,
-                player_identification=ballchasing.PlayerIdentificationBy.ID,
-                team_identification=ballchasing.TeamIdentificationBy.CLUSTERS,
-            )
-            season_group = result.id
-        return season_group
-
-    async def tier_bc_group(self, guild: discord.Guild, match: Match) -> str | None:
-        tlg = await self._get_top_level_group(guild)
-        if not tlg:
-            return None
-
-        bapi = self._ballchasing_api.get(guild.id)
-        if not bapi:
-            return None
-
-        season_group = await self.season_bc_group(guild, match)
-        if not season_group:
-            return None
-
-        tname = match.home_team.tier
-        tier_group = None
-
-        # Find relevant server group
-        async for g in bapi.get_groups(group=season_group):
-            if g.name.lower() == tname.lower():
-                log.debug(f"Found existing ballchasing tier group: {g.id}")
-                tier_group = g.id
-                break
-
-        # Create group if not found
-        if not tier_group:
-            log.debug(f"Creating ballchasing tier group: {tname}")
-            result = await bapi.create_group(
-                name=tname,
-                parent=season_group,
-                player_identification=ballchasing.PlayerIdentificationBy.ID,
-                team_identification=ballchasing.TeamIdentificationBy.CLUSTERS,
-            )
-            tier_group = result.id
-        return tier_group
-
-    async def match_day_bc_group(
-        self, guild: discord.Guild, match: Match
-    ) -> str | None:
-        tlg = await self._get_top_level_group(guild)
-        if not tlg:
-            return None
-
-        bapi = self._ballchasing_api.get(guild.id)
-        if not bapi:
-            return None
-
-        tier_group = await self.tier_bc_group(guild, match)
-        if not tier_group:
-            return None
-
-        mdname = f"Match Day {match.day:02d}"
-        md_group = None
-
-        # Find relevant server group
-        async for g in bapi.get_groups(group=tier_group):
-            if g.name.lower() == mdname.lower():
-                log.debug(f"Found existing ballchasing match day group: {g.id}")
-                md_group = g.id
-                break
-
-        # Create group if not found
-        if not md_group:
-            log.debug(f"Creating match day ballchasing group: {mdname}")
-            result = await bapi.create_group(
-                name=mdname,
-                parent=tier_group,
-                player_identification=ballchasing.PlayerIdentificationBy.ID,
-                team_identification=ballchasing.TeamIdentificationBy.CLUSTERS,
-            )
-            md_group = result.id
-        return md_group
-
-    async def rsc_match_bc_group(
-        self, guild: discord.Guild, match: Match
-    ) -> str | None:
-        tlg = await self._get_top_level_group(guild)
-        if not tlg:
-            return None
-
-        bapi = self._ballchasing_api.get(guild.id)
-        if not bapi:
-            return None
-
-        md_group = await self.match_day_bc_group(guild, match)
-        if not md_group:
-            return None
-
-        mname = f"{match.home_team.name} vs {match.away_team.name}"
-        match_group = None
-
-        # Find relevant server group
-        async for g in bapi.get_groups(group=md_group):
-            if g.name.lower() == mname.lower():
-                log.debug(f"Found existing ballchasing match group: {g.id}")
-                match_group = g.id
-                break
-
-        # Create group if not found
-        if not match_group:
-            log.debug(f"Creating match ballchasing group: {mname}")
-            result = await bapi.create_group(
-                name=mname,
-                parent=md_group,
-                player_identification=ballchasing.PlayerIdentificationBy.ID,
-                team_identification=ballchasing.TeamIdentificationBy.CLUSTERS,
-            )
-            match_group = result.id
-        return match_group
 
     async def build_match_result_embed(
         self,
         guild: discord.Guild,
-        result: BallchasingResult,
+        match: Match,
+        result: MatchResults,
         link: str | None = None,
-    ) -> discord.Embed:
-        match = result["match"]
+    ) -> tuple[discord.Embed, discord.ui.View | None]:
         tier_color = await utils.tier_color_by_name(guild, match.home_team.tier)
 
         embed = discord.Embed(
             title=f"MD {match.day}: {match.home_team.name} vs {match.away_team.name}",
             description=(
                 "Match Summary:\n"
-                f"**{match.home_team.name}** {result['home_wins']} - {result['away_wins']} **{match.away_team.name}**"
+                f"**{match.home_team.name}** {result.home_wins} - {result.away_wins} **{match.away_team.name}**"
             ),
             color=tier_color,
-            url=link,
         )
+        # Ballchasing group link button
+        bc_view = None
+        if link:
+            bc_view = discord.ui.View()
+            bcbutton = LinkButton(label="Ballchasing Group", url=link)
+            bc_view.add_item(bcbutton)
 
-        if result["home_wins"] > result["away_wins"]:
+        # Get franchise logo
+        if (
+            result.home_wins
+            and result.away_wins
+            and result.home_wins > result.away_wins
+        ):
             winning_franchise = match.home_team.franchise
         else:
             winning_franchise = match.away_team.franchise
@@ -758,15 +571,19 @@ class BallchasingMixIn(RSCMixIn):
             f = fsearch.pop()
             if f.id:
                 flogo = await self.franchise_logo(guild=guild, id=f.id)
-            if flogo:
-                embed.set_thumbnail(url=flogo)
 
-        return embed
+        if flogo:
+            embed.set_thumbnail(url=flogo)
+        elif guild.icon:
+            embed.set_thumbnail(url=guild.icon.url)
+
+        return embed, bc_view
 
     async def announce_to_stats_committee(
         self,
         guild: discord.Guild,
         embed: discord.Embed,
+        view: discord.ui.View | None = None,
         content: str | None = None,
         files: list[discord.File] | None = None,
     ) -> discord.Message | None:
@@ -783,6 +600,7 @@ class BallchasingMixIn(RSCMixIn):
         guild: discord.Guild,
         tier: str,
         embed: discord.Embed,
+        view: discord.ui.View | None = None,
         content: str | None = None,
         files: list[discord.File] | None = None,
     ) -> discord.Message | None:
@@ -808,347 +626,12 @@ class BallchasingMixIn(RSCMixIn):
         if not isinstance(score_channel, discord.TextChannel):
             return None
 
-        return await score_channel.send(content=content, embed=embed, files=files)
-
-    async def create_and_upload_replays(
-        self, guild: discord.Guild, result: BallchasingResult
-    ) -> str:
-        match = result["match"]
-        mgroup = await self.rsc_match_bc_group(guild, match)
-        if not mgroup:
-            raise RuntimeError("Failed to create ballchasing group")
-
-        await self.upload_replays(guild, mgroup, result)
-        return mgroup
-
-    async def process_match(
-        self, guild: discord.Guild, match: Match
-    ) -> BallchasingResult:
-        log.debug(
-            f"Searching ballchasing for {match.home_team.name} vs {match.away_team.name}"
-        )
-
-        st = time.time()
-
-        result = BallchasingResult(
-            valid=False,
-            match=match,
-            home_wins=0,
-            away_wins=0,
-            replays=set(),
-            execution_time=0,
-            link=None,
-        )
-
-        # Get trackers
-        log.debug("Fetching trackers")
-        trackers = await self.get_all_trackers(guild, match)
-        log.debug(f"Found {len(trackers)} trackers")
-
-        replays = set()
-        steam_trackers = [t for t in trackers if t.platform == "STEAM"]
-        other_trackers = [t for t in trackers if t.platform != "STEAM"]
-
-        min_games = await self.minimum_games_required(match)
-        log.debug(f"Minimum match games required for upload: {min_games}")
-
-        # Check steam first, provides better results by uploader search.
-        log.debug("Finding games from STEAM trackers")
-        for acc in steam_trackers:
-            found = await self.find_match_replays(guild, match, acc)
-            replays.update(found)
-            if len(replays) >= min_games:
-                break
-
-        # Search other trackers if set not found
-        if not replays or len(replays) < 4:
-            log.debug("Valid replay set not found. Checking other trackers.")
-            for acc in other_trackers:
-                found = await self.find_match_replays(guild, match, acc)
-                replays.update(found)
-                if len(replays) >= min_games:
-                    break
-
-        # Second chance check for valid replay set
-        if len(replays) != min_games:
-            log.warning(
-                f"[{match.home_team.name} vs {match.away_team.name}] Found {len(replays)} replays but expected {min_games}"
+        if view:
+            return await score_channel.send(
+                content=content, embed=embed, view=view, files=files
             )
         else:
-            log.debug(f"Found valid set of {len(replays)} replays")
-            result["valid"] = True
-
-        et = time.time()
-        exc_time = et - st
-
-        hwins, awins = await self.team_win_count(match, replays)
-
-        result["execution_time"] = exc_time
-        result["home_wins"] = hwins
-        result["away_wins"] = awins
-        result["replays"] = replays
-        return result
-
-    async def find_match_replays(
-        self, guild: discord.Guild, match: Match, tracker: TrackerLink
-    ) -> set[ballchasing.models.Replay]:
-        after, before = await self.get_bc_date_range(match)
-        log.debug(f"Ballchasing Date Range. After: {after} Before: {before}")
-        bapi = self._ballchasing_api[guild.id]
-
-        replays: set[ballchasing.models.Replay] = set()
-        min_games = await self.minimum_games_required(match)
-
-        if tracker.platform == "STEAM":
-            log.debug(f"Searching tracker: {tracker.platform_id}")
-            async for r in bapi.get_replays(
-                playlist=[ballchasing.Playlist.PRIVATE],
-                sort_by=ballchasing.ReplaySortBy.REPLAY_DATE,
-                sort_dir=ballchasing.SortDir.ASCENDING,
-                replay_after=after,
-                replay_before=before,
-                uploader=tracker.platform_id,
-                deep=True,
-            ):
-                if await self.valid_replay(match, r):
-                    log.debug(f"Found Match: {r.id}")
-                    replays.add(r)
-
-                if len(replays) == min_games:
-                    break
-        else:
-            if not tracker.name:
-                return replays
-
-            log.debug(f"Searching {tracker.platform} tracker: {tracker.name}")
-            async for r in bapi.get_replays(
-                playlist=[ballchasing.Playlist.PRIVATE],
-                sort_by=ballchasing.ReplaySortBy.REPLAY_DATE,
-                sort_dir=ballchasing.SortDir.ASCENDING,
-                replay_after=after,
-                replay_before=before,
-                player_name=[tracker.name],
-                deep=True,
-            ):
-                if await self.valid_replay(match, r):
-                    log.debug(f"Found Match: {r.id}")
-                    # Avoid duplicate match_guids
-                    if r in replays:
-                        log.debug("Duplicate replay")
-                    else:
-                        replays.add(r)
-
-                if len(replays) == min_games:
-                    break
-        return replays
-
-    async def get_all_trackers(
-        self, guild: discord.Guild, match: Match
-    ) -> list[TrackerLink]:
-        if not (match.home_team.players or match.away_team.players):
-            return []
-
-        tasks = []
-        trackers: list[TrackerLink] = []
-
-        if not (match.home_team.players and match.away_team.players):
-            return []
-
-        async with asyncio.TaskGroup() as tg:
-            for p in match.home_team.players:
-                log.debug(f"Fetching trackers for {p.name}")
-                tasks.append(
-                    tg.create_task(self.trackers(guild=guild, player=p.discord_id))
-                )
-
-            for p in match.away_team.players:
-                log.debug(f"Fetching trackers for {p.name}")
-                tasks.append(
-                    tg.create_task(self.trackers(guild=guild, player=p.discord_id))
-                )
-
-        for task in tasks:
-            trackers.extend(
-                [r for r in task.result() if r.status != TrackerLinksStatus.FAILED]
-            )
-        return trackers
-
-    async def get_bc_date_range(self, match: Match) -> tuple[datetime, datetime]:
-        """Return ballchasing match time search range"""
-        if not match.var_date:
-            raise ValueError("Match has no date attribute.")
-        match_date = match.var_date
-        log.debug(f"BC Match Date: {match_date}")
-        after = match_date.replace(hour=21, minute=55, second=0).astimezone(
-            tz=timezone.utc
-        )
-        before = match_date.replace(hour=23, minute=59, second=0).astimezone(
-            tz=timezone.utc
-        )
-        return after, before
-
-    async def valid_replay(
-        self, match: Match, replay: ballchasing.models.Replay
-    ) -> bool:
-        # Both team names are present
-        if not await self.validate_team_names(match, replay):
-            return False
-        # Duration >= 300 seconds (5 minute game)
-        if replay.duration and replay.duration < 280:
-            log.debug(f"Bad replay duration: {replay.duration}")
-            return False
-        if not (replay.blue and replay.orange):
-            log.debug("No data for blue or orange team in replay")
-            return False
-        # Deep relay search should return stats
-        if not (replay.blue.stats and replay.orange.stats):
-            log.debug("Stats not found in replay")
-            return False
-        # You can't win a game without a goal
-        log.debug(
-            f"Blue Goals: {replay.blue.stats.core.goals} Orange Goals: {replay.orange.stats.core.goals}"
-        )
-        total_goals = replay.blue.stats.core.goals + replay.orange.stats.core.goals
-        if total_goals <= 0:
-            return False
-        return True
-
-    async def validate_team_names(
-        self, match: Match, replay: ballchasing.models.Replay
-    ) -> bool:
-        home = match.home_team.name
-        away = match.away_team.name
-
-        if not (home and away):
-            return False
-
-        valid = (home.lower(), away.lower())
-
-        if not (replay.blue and replay.orange):
-            return False
-
-        if not (replay.blue.name and replay.orange.name):
-            return False
-
-        log.debug(f"Blue: {replay.blue.name} Orange: {replay.orange.name}")
-
-        if replay.blue.name.lower() in valid and replay.orange.name.lower() in valid:
-            log.debug("Valid team names")
-            return True
-
-        # Similarity check (Levenshtein ratio)
-        # Check both team names since people do dumb things
-        home_lev1 = difflib.SequenceMatcher(
-            None, valid[0], replay.blue.name.lower()
-        ).ratio()
-        home_lev2 = difflib.SequenceMatcher(
-            None, valid[0], replay.orange.name.lower()
-        ).ratio()
-
-        away_lev1 = difflib.SequenceMatcher(
-            None, valid[1], replay.blue.name.lower()
-        ).ratio()
-        away_lev2 = difflib.SequenceMatcher(
-            None, valid[1], replay.orange.name.lower()
-        ).ratio()
-
-        log.debug(
-            f"Levehstein Ratios. Home: {home_lev1:.3f} {home_lev2:.3f} Away: {away_lev1:.3f} {away_lev2:.3f}"
-        )
-        lev_threshold = 0.9
-        if (home_lev1 > lev_threshold or home_lev2 > lev_threshold) and (
-            away_lev1 > lev_threshold or away_lev2 > lev_threshold
-        ):
-            log.debug("Team names are close enough to threshold.")
-            return True
-
-        return False
-
-    async def team_win_count(
-        self, match: Match, replays: set[ballchasing.models.Replay]
-    ) -> tuple[int, int]:
-        home_wins = 0
-        away_wins = 0
-
-        if not (match.home_team.name and match.away_team.name):
-            raise ValueError("Match is missing team name for one or both of the teams")
-
-        home_name = match.home_team.name.lower()
-        away_name = match.away_team.name.lower()
-        for r in replays:
-            if not (r.blue and r.orange):
-                raise AttributeError(
-                    f"Replay {r.id} is missing team data for blue or orange"
-                )
-            if not (r.blue.stats and r.orange.stats):
-                raise AttributeError(
-                    f"Replay {r.id} is missing stats data for blue or orange"
-                )
-            if not (r.blue.name and r.orange.name):
-                raise AttributeError(
-                    f"Replay {r.id} is missing team name data for blue or orange"
-                )
-            if r.blue.stats.core.goals > r.orange.stats.core.goals:
-                if home_name == r.blue.name.lower():
-                    home_wins += 1
-                else:
-                    away_wins += 1
-            else:
-                if away_name == r.orange.name.lower():
-                    away_wins += 1
-                else:
-                    home_wins += 1
-        return (home_wins, away_wins)
-
-    async def minimum_games_required(self, match: Match) -> int:
-        match match.match_format:
-            case MatchFormat.GAME_SERIES:
-                if not match.num_games:
-                    raise ValueError("API Match does not have number of games set.")
-                return match.num_games
-            case MatchFormat.BEST_OF_THREE:
-                return 2
-            case MatchFormat.BEST_OF_FIVE:
-                return 3
-            case MatchFormat.BEST_OF_SEVEN:
-                return 4
-            case _:
-                raise ValueError(f"Unknown Match Format: {match.match_format}")
-
-    async def get_match_date_range(self, date: datetime) -> tuple[datetime, datetime]:
-        """Return a tuple of datetime objects that has a search range for specified date"""
-        date_gt = date - timedelta(minutes=1)
-        date_lt = date.replace(hour=23, minute=59, second=59)
-        return (date_gt, date_lt)
-
-    async def match_already_complete(self, match: Match) -> bool:
-        """Check if `Match` has been completed and recorded"""
-        if not match.results:
-            return False
-
-        if not (
-            hasattr(match.results, "home_wins") and hasattr(match.results, "away_wins")
-        ):
-            return False
-
-        if not (match.results.home_wins and match.results.away_wins):
-            return False
-
-        if (match.results.home_wins + match.results.away_wins) != match.num_games:
-            return False
-        return True
-
-    async def check_team_type_match(self, home: str, away: str, match: Match) -> bool:
-        """Check if home and away team are correct"""
-        if not (match.home_team.name and match.away_team.name):
-            return False
-
-        if home.lower() != match.home_team.name.lower():
-            return False
-
-        if away.lower() != match.away_team.name.lower():
-            return False
-        return True
+            return await score_channel.send(content=content, embed=embed, files=files)
 
     async def has_bc_permissions(self, member: discord.Member) -> bool:
         """Determine if member is able to manage guild or part of manager role"""

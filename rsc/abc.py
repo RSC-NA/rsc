@@ -22,6 +22,7 @@ from rscapi.models.league import League
 from rscapi.models.league_player import LeaguePlayer
 from rscapi.models.match import Match
 from rscapi.models.match_list import MatchList
+from rscapi.models.match_results import MatchResults
 from rscapi.models.member import Member as RSCMember
 from rscapi.models.player import Player
 from rscapi.models.player_season_stats import PlayerSeasonStats
@@ -245,6 +246,26 @@ class RSCMixIn(ABC):
 
     # Matches
 
+    @staticmethod
+    @abstractmethod
+    async def get_match_from_list(
+        home: str, away: str, matches: list[Match]
+    ) -> Match | None:
+        ...
+
+    @abstractmethod
+    async def report_match(
+        self,
+        guild: discord.Guild,
+        match_id: int,
+        ballchasing_group: str,
+        home_score: int,
+        away_score: int,
+        executor: discord.Member,
+        override: bool = False,
+    ) -> MatchResults:
+        ...
+
     @abstractmethod
     async def is_match_day(self, guild: discord.Guild) -> bool:
         ...
@@ -271,7 +292,7 @@ class RSCMixIn(ABC):
     async def find_match(
         self,
         guild: discord.Guild,
-        teams: str,
+        teams: list[str],
         date_lt: datetime | None = None,
         date_gt: datetime | None = None,
         season: int | None = None,

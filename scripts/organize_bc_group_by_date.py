@@ -37,6 +37,6 @@ if __name__ == "__main__":
 
     bapi = ballchasing.Api(auth_key=bckey, patreon_type=ballchasing.PatreonType.ORG)
 
-    loop.run_until_complete()
-
+    # loop.run_until_complete()
     loop.close()
+    raise NotImplementedError("Script not finished.")

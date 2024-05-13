@@ -541,7 +541,7 @@ async def fix_tracker_url(url: str) -> str:
     return url
 
 
-async def iter_gather(result):
+async def async_iter_gather(result):
     """Gather async iterator into list and return"""
     final = []
     async for r in result:
