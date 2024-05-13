@@ -447,8 +447,8 @@ class MatchMixIn(RSCMixIn):
         self,
         guild: discord.Guild,
         teams: str,
-        date__lt: datetime | None = None,
-        date__gt: datetime | None = None,
+        date_lt: datetime | None = None,
+        date_gt: datetime | None = None,
         season: int | None = None,
         season_number: int | None = None,
         day: int | None = None,
@@ -462,8 +462,8 @@ class MatchMixIn(RSCMixIn):
             api = MatchesApi(client)
             return await api.matches_find_match(
                 teams=teams,
-                date__lt=date__lt.isoformat() if date__lt else None,
-                date__gt=date__gt.isoformat() if date__gt else None,
+                date__lt=date_lt.isoformat() if date_lt else None,
+                date__gt=date_gt.isoformat() if date_gt else None,
                 season=season,
                 season_number=season_number,
                 day=day,
