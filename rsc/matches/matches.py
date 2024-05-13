@@ -293,7 +293,7 @@ class MatchMixIn(RSCMixIn):
         # Format match day
         if match.match_type == MatchType.PRESEASON:
             md = f"Preseason Match {match.day}"
-        elif match.match_type == MatchType.PRESEASON:
+        elif match.match_type == MatchType.REGULAR:
             md = f"Match Day {match.day}"
         else:
             md = f"Post-season match {match.day}"

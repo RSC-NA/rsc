@@ -294,15 +294,15 @@ class BallchasingMixIn(RSCMixIn):
         if not (guild and isinstance(member, discord.Member)):
             return
 
-        argv = locals()
-        replay_files: list[discord.Attachment] = []
+        await interaction.response.defer(ephemeral=True)
 
         # Aggregate replays into list
-        log.debug(f"Locals: {argv}")
+        argv = locals()
+        replay_files: list[discord.Attachment] = []
         for k, v in argv.items():
             if v and k.startswith("replay"):
                 if not await self.is_replay_file(v):
-                    return await interaction.response.send_message(
+                    return await interaction.followup.send(
                         embed=ErrorEmbed(
                             description=f"`{v.filename}` is not a valid replay file."
                         ),
@@ -311,7 +311,16 @@ class BallchasingMixIn(RSCMixIn):
                 replay_files.append(v)
         log.debug(f"Replay Count: {len(replay_files)}")
 
-        await interaction.response.defer(ephemeral=True)
+        # Check for duplicates
+        log.debug("Checking for duplicate replays")
+        if await self.duplicate_replay_files(replay_files):
+            return await interaction.followup.send(
+                embed=ErrorEmbed(
+                    title="Duplicate Replays Found",
+                    description="Duplicate replays found. Please make sure you hvae to right files attached.",
+                ),
+                ephemeral=True,
+            )
 
         # Get match search window
         tz = await self.timezone(guild)
@@ -1094,7 +1103,9 @@ class BallchasingMixIn(RSCMixIn):
     async def minimum_games_required(self, match: Match) -> int:
         match match.match_format:
             case MatchFormat.GAME_SERIES:
-                return match.num_games  # type: ignore
+                if not match.num_games:
+                    raise ValueError("API Match does not have number of games set.")
+                return match.num_games
             case MatchFormat.BEST_OF_THREE:
                 return 2
             case MatchFormat.BEST_OF_FIVE:
