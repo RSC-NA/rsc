@@ -246,6 +246,12 @@ class RSCMixIn(ABC):
 
     # Matches
 
+    @abstractmethod
+    async def discord_member_in_match(
+        self, member: discord.Member, match: Match
+    ) -> bool:
+        ...
+
     @staticmethod
     @abstractmethod
     async def get_match_from_list(

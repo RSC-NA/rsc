@@ -374,6 +374,15 @@ class BallchasingMixIn(RSCMixIn):
 
         log.debug(f"Found match: {match}")
 
+        # Make sure player is on one of those teams
+        if not await self.discord_member_in_match(member, match):
+            return await interaction.followup.send(
+                embed=ErrorEmbed(
+                    description="You are not on one of the teams in this match."
+                ),
+                ephemeral=True,
+            )
+
         # Send "working" message
         embed = YellowEmbed(
             title="Processing Match",

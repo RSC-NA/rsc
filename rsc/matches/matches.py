@@ -246,6 +246,21 @@ class MatchMixIn(RSCMixIn):
 
     # Functions
 
+    async def discord_member_in_match(
+        self, member: discord.Member, match: Match
+    ) -> bool:
+        if not (match.home_team.players and match.away_team.players):
+            return False
+
+        for hplayer in match.home_team.players:  # noqa: SIM110
+            if member.id == hplayer.discord_id:
+                return True
+
+        for aplayer in match.away_team.players:  # noqa: SIM110
+            if member.id == aplayer.discord_id:
+                return True
+        return False
+
     @staticmethod
     async def get_match_from_list(
         home: str, away: str, matches: list[Match]
