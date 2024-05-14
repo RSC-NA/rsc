@@ -150,8 +150,10 @@ class TransactionMixIn(RSCMixIn):
                     m_in = guild.get_member(s["player_in"])
                     m_out = guild.get_member(s["player_out"])
 
-                    m_in_fmt = m_in.mention if m_in else f"<@!{s['player_in']}>"
-                    m_out_fmt = m_out.mention if m_out else f"<@!{s['player_out']}>"
+                    m_in_fmt = m_in.display_name if m_in else f"<@!{s['player_in']}>"
+                    m_out_fmt = (
+                        m_out.display_name if m_out else f"<@!{s['player_out']}>"
+                    )
 
                     log.debug(f"Expiring Sub Contract: {s['player_in']}", guild=guild)
                     embed = discord.Embed(color=tier_color)
