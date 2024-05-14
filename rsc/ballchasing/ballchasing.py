@@ -594,21 +594,29 @@ class BallchasingMixIn(RSCMixIn):
             bc_view.add_item(bcbutton)
 
         # Get franchise logo
+        tie = False
         if (
             result.home_wins is not None
             and result.away_wins is not None
             and result.home_wins > result.away_wins
         ):
             winning_franchise = match.home_team.franchise
+        elif (
+            result.home_wins is not None
+            and result.away_wins is not None
+            and result.home_wins == result.away_wins
+        ):
+            tie = True
         else:
             winning_franchise = match.away_team.franchise
 
         flogo = None
-        fsearch = await self.franchises(guild, name=winning_franchise)
-        if fsearch:
-            f = fsearch.pop()
-            if f.id:
-                flogo = await self.franchise_logo(guild=guild, id=f.id)
+        if not tie:
+            fsearch = await self.franchises(guild, name=winning_franchise)
+            if fsearch:
+                f = fsearch.pop()
+                if f.id:
+                    flogo = await self.franchise_logo(guild=guild, id=f.id)
 
         if flogo:
             embed.set_thumbnail(url=flogo)

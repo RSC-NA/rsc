@@ -242,14 +242,11 @@ async def replay_group_collisions(
     for bcreplay in bc_replays:
         log.debug(f"{'='*20} BC Replay - {bcreplay.id} {'='*20}")
         for identifier, preplay in parsed_replays.items():
-            log.debug(f"BC Map: {bcreplay.map_code} Parsed Map: {preplay.map_code}")
             # Check map name
-            if (
-                bcreplay.map_code
-                and preplay.map_code
-                and bcreplay.map_code.lower() != preplay.map_code.lower()
-            ):
-                continue
+            if bcreplay.map_code and preplay.map_code:
+                log.debug(f"BC Map: {bcreplay.map_code} Parsed Map: {preplay.map_code}")
+                if bcreplay.map_code.lower() != preplay.map_code.lower():
+                    continue
 
             if not await duplicate_player_scores(
                 parsed_replay=preplay, bc_replay=bcreplay
