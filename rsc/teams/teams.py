@@ -533,6 +533,9 @@ class TeamMixIn(RSCMixIn):
         # Get Franchise Team names
         fteams = await self.teams(guild, franchise=captains[0].team.franchise.name)
 
+        # This is validated in franchise_captains()
+        fteams.sort(key=lambda t: cast(int, t.tier.position), reverse=True)  # type: ignore
+
         cpt_fmt: list[tuple[str, str, str]] = []
         for t in fteams:
             if not (t.name and t.tier and t.tier.name):

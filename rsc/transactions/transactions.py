@@ -126,7 +126,7 @@ class TransactionMixIn(RSCMixIn):
             subbed_out_role = await utils.get_subbed_out_role(guild)
 
             guild_tz = await self.timezone(guild)
-            yesterday = datetime.now(guild_tz) - timedelta(1)
+            yesterday = datetime.now(tz=guild_tz) - timedelta(1)
 
             # Get ContractExpired image
             img_path = (
