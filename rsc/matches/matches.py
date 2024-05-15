@@ -13,7 +13,7 @@ from rscapi.models.matches_list200_response import MatchesList200Response
 
 from rsc.abc import RSCMixIn
 from rsc.embeds import BlueEmbed, ErrorEmbed, ExceptionErrorEmbed, YellowEmbed
-from rsc.enums import MatchFormat, MatchTeamEnum, MatchType, Status
+from rsc.enums import MatchFormat, MatchTeamEnum, MatchType, Status, SubStatus
 from rsc.exceptions import RscException
 from rsc.logs import GuildLogAdapter
 from rsc.teams import TeamMixIn
@@ -397,6 +397,7 @@ class MatchMixIn(RSCMixIn):
         home_gm: str | None = None
         away_gm: str | None = None
 
+        # Get GM for each team.
         if with_gm:
             hgm = await self.franchise_gm_by_name(guild, name=match.home_team.franchise)
             if hgm and hgm.rsc_name:
@@ -410,20 +411,67 @@ class MatchMixIn(RSCMixIn):
         for p in match.home_team.players:
             m = guild.get_member(p.discord_id)
             name = m.display_name if m else p.name
+
+            # Captain
             if p.captain:
-                home_players.append(f"{name} (C)")
-            else:
-                home_players.append(name)
+                name = f"{name} (C)"
+
+            # Additional status formatting
+            match p.status:
+                case Status.FREE_AGENT | Status.PERM_FA:
+                    if p.sub_status == SubStatus.OUT:
+                        name = f"{name} (Subbed Out)"
+                    elif p.sub_status == SubStatus.IN:
+                        name = f"{name} (Subbed In)"
+                    else:
+                        name = f"{name} (Sub)"
+                case Status.AGMIR | Status.IR:
+                    name = f"{name} (IR)"
+                case Status.ROSTERED | Status.RENEWED:
+                    pass
+                case _:
+                    # Not a valid status for rostered player
+                    continue
+
+            # GM
+            if isinstance(m, discord.Member) and match.home_team.gm.discord_id == m.id:
+                name = f"{name} (GM)"
+
+            home_players.append(name)
 
         # Away
         for p in match.away_team.players:
             m = guild.get_member(p.discord_id)
             name = m.display_name if m else p.name
-            if p.captain:
-                away_players.append(f"{name} (C)")
-            else:
-                away_players.append(name)
 
+            # Captain
+            if p.captain:
+                name = f"{name} (C)"
+
+            # Additional status formatting
+            match p.status:
+                case Status.FREE_AGENT | Status.PERM_FA:
+                    if p.sub_status == SubStatus.OUT:
+                        name = f"{name} (Subbed Out)"
+                    elif p.sub_status == SubStatus.IN:
+                        name = f"{name} (Subbed In)"
+                    else:
+                        name = f"{name} (Sub)"
+                case Status.AGMIR | Status.IR:
+                    name = f"{name} (IR)"
+                case Status.ROSTERED | Status.RENEWED:
+                    pass
+                case _:
+                    # Not a valid status for rostered player
+                    continue
+
+            # GM
+            if isinstance(m, discord.Member) and match.away_team.gm.discord_id == m.id:
+                name = f"{name} (GM)"
+
+            away_players.append(name)
+
+        # Home team roster formatting
         home_fmt = "```\n"
         if home_gm:
             home_fmt += (
@@ -434,6 +482,7 @@ class MatchMixIn(RSCMixIn):
         home_fmt += "\n".join([f"\t{p}" for p in home_players])
         home_fmt += "\n```"
 
+        # Away team roster formatting
         away_fmt = "```\n"
         if away_gm:
             away_fmt += (
