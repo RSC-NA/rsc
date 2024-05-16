@@ -174,8 +174,14 @@ class MatchMixIn(RSCMixIn):
         name="match",
         description="Get information about your upcoming match",
     )
+    @app_commands.describe(
+        team="Get match information for a specific team (General Manager Only)"
+    )
+    @app_commands.autocomplete(team=TeamMixIn.teams_autocomplete)  # type: ignore
     @app_commands.guild_only
-    async def _match_cmd(self, interaction: discord.Interaction):
+    async def _match_cmd(
+        self, interaction: discord.Interaction, team: str | None = None
+    ):
         guild = interaction.guild
         if not (guild and isinstance(interaction.user, discord.Member)):
             return
@@ -183,31 +189,47 @@ class MatchMixIn(RSCMixIn):
         await interaction.response.defer(ephemeral=True)
 
         # Find the team ID of interaction user
-        player = await self.players(guild, discord_id=interaction.user.id, limit=1)
-        if not player:
-            await interaction.followup.send(
-                embed=ErrorEmbed(
-                    description="You are not currently signed up for the league."
-                ),
-                ephemeral=True,
-            )
-            return
-        if not (player[0].team and player[0].team.name):
-            await interaction.followup.send(
-                embed=ErrorEmbed(
-                    description="You are not currently rostered on a team."
-                ),
-                ephemeral=True,
-            )
-            return
+        if team:
+            # Get API id of team
+            try:
+                team_id = await self.team_id_by_name(guild, name=team)
+            except ValueError as exc:
+                return await interaction.followup.send(
+                    embed=ExceptionErrorEmbed(exc_message=str(exc)), ephemeral=True
+                )
+        else:
+            player = await self.players(guild, discord_id=interaction.user.id, limit=1)
+            if not player:
+                await interaction.followup.send(
+                    embed=ErrorEmbed(
+                        description="You are not currently signed up for the league."
+                    ),
+                    ephemeral=True,
+                )
+                return
+            if not (player[0].team and player[0].team.name):
+                await interaction.followup.send(
+                    embed=ErrorEmbed(
+                        description="You are not currently rostered on a team."
+                    ),
+                    ephemeral=True,
+                )
+                return
 
-        # Get API id of team
-        try:
-            team_id = await self.team_id_by_name(guild, name=player[0].team.name)
-        except ValueError as exc:
-            return await interaction.followup.send(
-                embed=ExceptionErrorEmbed(exc_message=str(exc)), ephemeral=True
-            )
+            # Get API id of team
+            try:
+                if team:
+                    log.debug(f"Getting Team ID: {team}")
+                    team_id = await self.team_id_by_name(guild, name=team)
+                else:
+                    log.debug(f"Getting Team ID: {player[0].team.name}")
+                    team_id = await self.team_id_by_name(
+                        guild, name=player[0].team.name
+                    )
+            except ValueError as exc:
+                return await interaction.followup.send(
+                    embed=ExceptionErrorEmbed(exc_message=str(exc)), ephemeral=True
+                )
 
         # Get teams next match
         try:
@@ -231,6 +253,17 @@ class MatchMixIn(RSCMixIn):
                     description="You do not have any upcoming matches.",
                 ),
                 ephemeral=True,
+            )
+
+        # If team was specified, user must be GM or admin
+        if team and not (
+            await self.is_match_franchise_gm(member=interaction.user, match=match)
+            or interaction.user.guild_permissions.manage_guild
+        ):
+            return await interaction.followup.send(
+                embed=ErrorEmbed(
+                    description="Only general managers can specify a team for match information. If you are not a GM, please simply run `/match` to get your teams match information."
+                )
             )
 
         # Is interaction user away/home
@@ -305,6 +338,14 @@ class MatchMixIn(RSCMixIn):
         self, match: Match, member: discord.Member
     ) -> MatchTeamEnum:
         """Determine if the user is on the home or away team"""
+        # Check if GM of team
+        if match.home_team.gm.discord_id == member.id:
+            return MatchTeamEnum.HOME
+
+        if match.away_team.gm.discord_id == member.id:
+            return MatchTeamEnum.AWAY
+
+        # Iterate players for member ID match
         if match.home_team.players:
             for p in match.home_team.players:
                 if p.discord_id == member.id:
@@ -314,6 +355,12 @@ class MatchMixIn(RSCMixIn):
             for p in match.away_team.players:
                 if p.discord_id == member.id:
                     return MatchTeamEnum.AWAY
+
+        # As a final check, we need to return a value to admins running the command.
+        # Without this, we block the use of commands that validate players.
+        if member.guild_permissions.manage_guild:
+            return MatchTeamEnum.HOME
+
         raise ValueError(f"{member.display_name} is not a valid player in this match")
 
     async def build_match_embed(
@@ -499,6 +546,27 @@ class MatchMixIn(RSCMixIn):
 
         return (home_fmt, away_fmt)
 
+    async def is_match_franchise_gm(self, member: discord.Member, match: Match) -> bool:
+        if (
+            member.id == match.home_team.gm.discord_id
+            or member.id == match.away_team.gm.discord_id
+        ):
+            return True
+        return False
+
+    async def is_future_match_date(
+        self, guild: discord.Guild, match: Match | MatchList
+    ) -> bool:
+        tz = await self.timezone(guild=guild)
+        today = datetime.now(tz=tz)
+
+        if not match.var_date:
+            raise AttributeError("Match has no date associated with it in the API.")
+
+        if today.date() < match.var_date.date():
+            return True
+        return False
+
     # Api
 
     async def matches(
@@ -596,8 +664,7 @@ class MatchMixIn(RSCMixIn):
                     home_score=home_score,
                     away_score=away_score,
                     executor=executor.id,
-                    admin_override=override,
-                    stats_override=False,  # change this eventually to one override
+                    override=override,
                 )
                 log.debug(f"Match Score Report ({match_id}): {data}")
                 return await api.matches_score_report(match_id, data)

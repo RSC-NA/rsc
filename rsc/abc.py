@@ -247,6 +247,16 @@ class RSCMixIn(ABC):
     # Matches
 
     @abstractmethod
+    async def is_future_match_date(
+        self, guild: discord.Guild, match: Match | MatchList
+    ) -> bool:
+        ...
+
+    @abstractmethod
+    async def is_match_franchise_gm(self, member: discord.Member, match: Match) -> bool:
+        ...
+
+    @abstractmethod
     async def discord_member_in_match(
         self, member: discord.Member, match: Match
     ) -> bool:

@@ -11,7 +11,6 @@ import ballchasing
 import discord
 from redbot.core import app_commands
 from rscapi.models.match import Match
-from rscapi.models.match_list import MatchList
 from rscapi.models.match_results import MatchResults
 
 from rsc.abc import RSCMixIn
@@ -388,8 +387,14 @@ class BallchasingMixIn(RSCMixIn):
 
         log.debug(f"Found match: {match}")
 
-        # Make sure player is on one of those teams
-        if not await self.discord_member_in_match(member, match) and not override:
+        # Make sure player is on one of those teams or GM of one of the teams
+        if (
+            not (
+                await self.discord_member_in_match(member, match)
+                or await self.is_match_franchise_gm(member=member, match=match)
+            )
+            and not override
+        ):
             return await interaction.followup.send(
                 embed=ErrorEmbed(
                     description="You are not on one of the teams in this match."
@@ -475,19 +480,6 @@ class BallchasingMixIn(RSCMixIn):
         await interaction.edit_original_response(embed=result_embed, view=result_view)
 
     # Functions
-
-    async def is_future_match_date(
-        self, guild: discord.Guild, match: Match | MatchList
-    ) -> bool:
-        tz = await self.timezone(guild=guild)
-        today = datetime.now(tz=tz)
-
-        if not match.var_date:
-            raise AttributeError("Match has no date associated with it in the API.")
-
-        if today.date() < match.var_date.date():
-            return True
-        return False
 
     async def process_match_replays(
         self, guild: discord.Guild, match: Match, replays=list[discord.Attachment]
