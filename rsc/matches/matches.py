@@ -425,8 +425,10 @@ class MatchMixIn(RSCMixIn):
                         name = f"{name} (Subbed In)"
                     else:
                         name = f"{name} (Sub)"
-                case Status.AGMIR | Status.IR:
+                case Status.IR:
                     name = f"{name} (IR)"
+                case Status.AGMIR | Status.IR:
+                    name = f"{name} (AGM IR)"
                 case Status.ROSTERED | Status.RENEWED:
                     pass
                 case _:
@@ -457,8 +459,10 @@ class MatchMixIn(RSCMixIn):
                         name = f"{name} (Subbed In)"
                     else:
                         name = f"{name} (Sub)"
-                case Status.AGMIR | Status.IR:
+                case Status.IR:
                     name = f"{name} (IR)"
+                case Status.AGMIR | Status.IR:
+                    name = f"{name} (AGM IR)"
                 case Status.ROSTERED | Status.RENEWED:
                     pass
                 case _:

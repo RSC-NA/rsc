@@ -11,6 +11,7 @@ import ballchasing
 import discord
 from redbot.core import app_commands
 from rscapi.models.match import Match
+from rscapi.models.match_list import MatchList
 from rscapi.models.match_results import MatchResults
 
 from rsc.abc import RSCMixIn
@@ -327,7 +328,7 @@ class BallchasingMixIn(RSCMixIn):
         tz = await self.timezone(guild)
         today = datetime.now(tz=tz)
         start_date = today - timedelta(days=7)
-        end_date = today + timedelta(days=7)
+        end_date = today + timedelta(days=1)
 
         log.debug(
             f"Searching for match: {home} vs {away}. Start: {start_date}, End: {end_date}"
@@ -370,6 +371,19 @@ class BallchasingMixIn(RSCMixIn):
                     description=f"Found match for **{home}** vs **{away}** but it has no match ID in the API."
                 ),
                 ephemeral=True,
+            )
+
+        # Don't allow reporting of future matches
+        try:
+            if await self.is_future_match_date(guild, match):
+                return await interaction.edit_original_response(
+                    embed=ErrorEmbed(
+                        description="You can not report a future match. Are you sure you specified the correct teams?"
+                    )
+                )
+        except AttributeError as exc:
+            return await interaction.edit_original_response(
+                embed=ExceptionErrorEmbed(exc_message=str(exc))
             )
 
         log.debug(f"Found match: {match}")
@@ -461,6 +475,19 @@ class BallchasingMixIn(RSCMixIn):
         await interaction.edit_original_response(embed=result_embed, view=result_view)
 
     # Functions
+
+    async def is_future_match_date(
+        self, guild: discord.Guild, match: Match | MatchList
+    ) -> bool:
+        tz = await self.timezone(guild=guild)
+        today = datetime.now(tz=tz)
+
+        if not match.var_date:
+            raise AttributeError("Match has no date associated with it in the API.")
+
+        if today.date() < match.var_date.date():
+            return True
+        return False
 
     async def process_match_replays(
         self, guild: discord.Guild, match: Match, replays=list[discord.Attachment]
