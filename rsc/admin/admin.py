@@ -1147,21 +1147,13 @@ class AdminMixIn(RSCMixIn):
 
         sync_view = ConfirmSyncView(interaction)
         await sync_view.prompt()
-        plist = await self.players(guild, status=Status.FREE_AGENT, limit=5000)
+        total_fa = await self.total_players(guild, status=Status.FREE_AGENT)
+        total_pfa = await self.total_players(guild, status=Status.PERM_FA)
         tiers: list[Tier] = await self.tiers(guild)
         await sync_view.wait()
 
         if not sync_view.result:
             return
-
-        # Exit if no FA's exist
-        if not plist:
-            return await interaction.edit_original_response(
-                embed=BlueEmbed(
-                    title="Free Agent Sync",
-                    description="League has no Free Agent players.",
-                )
-            )
 
         # No tier data
         if not tiers:
@@ -1181,27 +1173,27 @@ class AdminMixIn(RSCMixIn):
                 )
             )
 
-        total_fa = len(plist)
-        log.debug(f"Total FA: {total_fa}", guild=guild)
-
         loading_embed = BlueEmbed(
             title="Syncing Free Agents",
             description="Free Agent player synchronziation in progress",
         )
 
         # Send initial progress bar
+        total_players = total_fa + total_pfa
+        log.debug(f"Total FA: {total_fa}", guild=guild)
+        log.debug(f"Total PermFA: {total_pfa}", guild=guild)
+        log.debug(f"Combined Total: {total_players}", guild=guild)
         dFile = images.getProgressBar(
             x=10,
             y=10,
             w=225,
             h=30,
             progress=0.0,
-            progress_bounds=(0, total_fa),
+            progress_bounds=(0, total_players),
         )
 
         # Progress View
         progress_view = CancelView(interaction, timeout=0)
-
         loading_embed.set_image(url="attachment://progress.jpeg")
         await interaction.edit_original_response(
             embed=loading_embed, attachments=[dFile], view=progress_view
@@ -1209,7 +1201,7 @@ class AdminMixIn(RSCMixIn):
 
         idx = 0
         player: LeaguePlayer
-        for player in plist:
+        async for player in self.paged_players(guild, status=Status.FREE_AGENT):
             # Check if cancelled
             if progress_view.cancelled:
                 loading_embed.title = "Sync Cancelled"
@@ -1230,10 +1222,11 @@ class AdminMixIn(RSCMixIn):
             m = guild.get_member(player.player.discord_id)
             if not m:
                 log.warning(
-                    f"Couldn't find FA in guild: {player.player.name} ({player.id})"
+                    f"Couldn't find FA in guild: {player.player.name} ({player.id})",
+                    guild=guild,
                 )
                 continue
-            log.debug(f"Syncing FA: {m.display_name}")
+            log.debug(f"Syncing FA: {m.display_name}", guild=guild)
 
             # Check if dry run
             if not dryrun:
@@ -1246,8 +1239,8 @@ class AdminMixIn(RSCMixIn):
 
             # Update progress bar
             if (idx % 10) == 0:
-                log.debug("Updating progress bar")
-                progress = idx / total_fa
+                log.debug("Updating progress bar", guild=guild)
+                progress = idx / total_players
 
                 dFile = images.getProgressBar(
                     x=10,
@@ -1255,7 +1248,7 @@ class AdminMixIn(RSCMixIn):
                     w=225,
                     h=30,
                     progress=progress,
-                    progress_bounds=(idx, total_fa),
+                    progress_bounds=(idx, total_players),
                 )
 
                 try:
@@ -1264,7 +1257,91 @@ class AdminMixIn(RSCMixIn):
                     )
                 except discord.HTTPException as exc:
                     log.warning(
-                        f"Received {exc.status} (error code {exc.code}: {exc.text})"
+                        f"Received {exc.status} (error code {exc.code}: {exc.text})",
+                        guild=guild,
+                    )
+                    if exc.code == 50027:
+                        # Try passing on Invalid Webhook Token (401)
+                        pass
+
+        # Perm FA
+        loading_embed.title = "Syncing Perm FAs"
+        loading_embed.description = (
+            "Permanent Free Agent player synchronziation in progress"
+        )
+
+        # Reset progress bar for PermFA
+        dFile = images.getProgressBar(
+            x=10,
+            y=10,
+            w=225,
+            h=30,
+            progress=0.0,
+            progress_bounds=(0, total_players),
+        )
+        await interaction.edit_original_response(
+            embed=loading_embed, attachments=[dFile], view=progress_view
+        )
+
+        idx = 0
+        async for player in self.paged_players(guild, status=Status.PERM_FA):
+            # Check if cancelled
+            if progress_view.cancelled:
+                loading_embed.title = "Sync Cancelled"
+                loading_embed.description = (
+                    "Cancelled synchronizing all free agent players."
+                )
+                loading_embed.colour = discord.Color.red()
+                return await interaction.edit_original_response(
+                    embed=loading_embed, attachments=[dFile], view=None
+                )
+
+            idx += 1
+
+            if not (player.player and player.player.discord_id):
+                continue
+
+            # Get guild member from LeaguePlayer
+            m = guild.get_member(player.player.discord_id)
+            if not m:
+                log.warning(
+                    f"Couldn't find PermFA in guild: {player.player.name} ({player.id})",
+                    guild=guild,
+                )
+                continue
+            log.debug(f"Syncing PermFA: {m.display_name}", guild=guild)
+
+            # Check if dry run
+            if not dryrun:
+                try:
+                    await update_free_agent_discord(
+                        guild=guild, player=m, league_player=player, tiers=tiers
+                    )
+                except (ValueError, AttributeError) as exc:
+                    await interaction.followup.send(content=str(exc), ephemeral=True)
+
+            # Update progress bar
+            if (idx % 10) == 0:
+                log.debug("Updating progress bar", guild=guild)
+                progress = idx / total_players
+
+                dFile = images.getProgressBar(
+                    x=10,
+                    y=10,
+                    w=225,
+                    h=30,
+                    progress=progress,
+                    progress_bounds=(idx, total_players),
+                )
+
+                try:
+                    await interaction.edit_original_response(
+                        embed=loading_embed, attachments=[dFile], view=progress_view
+                    )
+                except discord.HTTPException as exc:
+                    log.warning(
+                        f"Received {exc.status} (error code {exc.code}: {exc.text})",
+                        guild=guild,
                     )
                     if exc.code == 50027:
                         # Try passing on Invalid Webhook Token (401)
@@ -1277,7 +1354,7 @@ class AdminMixIn(RSCMixIn):
             w=225,
             h=30,
             progress=1.0,
-            progress_bounds=(total_fa, total_fa),
+            progress_bounds=(total_players, total_players),
         )
 
         loading_embed.title = "Free Agent Sync"

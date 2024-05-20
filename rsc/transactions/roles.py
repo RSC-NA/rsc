@@ -428,7 +428,7 @@ async def update_free_agent_discord(
     league_player: LeaguePlayer,
     tiers: list[Tier],
 ):
-    if league_player.status != Status.FREE_AGENT:
+    if league_player.status not in (Status.FREE_AGENT, Status.PERM_FA):
         raise ValueError(f"{player.display_name} ({player.id}) is not a free agent.")
 
     if not league_player.tier:
@@ -472,9 +472,14 @@ async def update_free_agent_discord(
         roles_to_add.append(tier_role)
 
     # Free agent roles
-    fa_role = await utils.get_free_agent_role(guild)
-    if fa_role not in player.roles:
-        roles_to_add.append(fa_role)
+    if league_player.status == Status.FREE_AGENT:
+        fa_role = await utils.get_free_agent_role(guild)
+        if fa_role not in player.roles:
+            roles_to_add.append(fa_role)
+    elif league_player.status == Status.PERM_FA:
+        fa_role = await utils.get_permfa_role(guild)
+        if fa_role not in player.roles:
+            roles_to_add.append(fa_role)
 
     # Tier FA role
     tier_fa_role = await utils.get_tier_fa_role(guild, league_player.tier.name)
@@ -494,7 +499,10 @@ async def update_free_agent_discord(
         await player.add_roles(*roles_to_add)
 
     try:
-        new_nick = f"FA | {await utils.remove_prefix(player)}".strip()
+        if league_player.status == Status.FREE_AGENT:
+            new_nick = f"FA | {await utils.remove_prefix(player)}".strip()
+        elif league_player.status == Status.PERM_FA:
+            new_nick = f"PFA | {await utils.remove_prefix(player)}".strip()
         if new_nick != player.display_name:
             log.debug(f"Updating cut player nickname: {new_nick}", guild=guild)
             await player.edit(nick=new_nick)

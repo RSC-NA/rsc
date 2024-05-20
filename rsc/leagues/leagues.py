@@ -291,6 +291,40 @@ class LeagueMixIn(RSCMixIn):
             except ApiException as exc:
                 raise RscException(exc)
 
+    async def total_players(
+        self,
+        guild: discord.Guild,
+        status: Status | None = None,
+        name: str | None = None,
+        tier: int | None = None,
+        tier_name: str | None = None,
+        season: int | None = None,
+        season_number: int | None = None,
+        team_name: str | None = None,
+        franchise: str | None = None,
+        discord_id: int | None = None,
+    ) -> int:
+        async with ApiClient(self._api_conf[guild.id]) as client:
+            api = LeaguePlayersApi(client)
+            try:
+                players = await api.league_players_list(
+                    status=str(status) if status else None,
+                    name=name,
+                    tier=tier,
+                    tier_name=tier_name,
+                    season=season,
+                    season_number=season_number,
+                    league=self._league[guild.id],
+                    team_name=team_name,
+                    franchise=franchise,
+                    discord_id=discord_id,
+                    limit=1,
+                    offset=0,
+                )
+                return players.count
+            except ApiException as exc:
+                raise RscException(exc)
+
     async def paged_players(
         self,
         guild: discord.Guild,
