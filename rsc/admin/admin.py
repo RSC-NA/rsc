@@ -1594,6 +1594,8 @@ class AdminMixIn(RSCMixIn):
 
         await interaction.response.defer(ephemeral=True)
 
+        tier = tier.capitalize()
+
         try:
             result = await self.create_team(
                 guild, franchise=franchise, tier=tier, name=name
@@ -1632,6 +1634,8 @@ class AdminMixIn(RSCMixIn):
             return
 
         await interaction.response.defer(ephemeral=True)
+
+        tier = tier.capitalize()
 
         fteams = await self.teams(guild, franchise=franchise, tier=tier, name=team)
         if not fteams:

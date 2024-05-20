@@ -106,6 +106,8 @@ class LeagueMixIn(RSCMixIn):
             return
 
         await interaction.response.defer(ephemeral=True)
+
+        tier = tier.capitalize()
         delist = await self.players(
             guild,
             status=Status.DRAFT_ELIGIBLE,

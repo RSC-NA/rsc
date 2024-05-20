@@ -777,6 +777,8 @@ class MemberMixIn(RSCMixIn):
             return
 
         await interaction.response.defer()
+
+        tier = tier.capitalize()
         players = await self.players(guild, status=Status.WAIVERS, tier_name=tier)
 
         tier_color = await utils.tier_color_by_name(guild, tier)

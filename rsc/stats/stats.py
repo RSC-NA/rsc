@@ -111,6 +111,7 @@ class StatsMixIn(RSCMixIn):
     async def _tier_standings_cmd(
         self, interaction: discord.Interaction, tier: str, season: int | None = None
     ):
+        tier = tier.capitalize()
         await utils.not_implemented(interaction)
 
     @app_commands.command(  # type: ignore

@@ -94,6 +94,8 @@ class FreeAgentMixIn(RSCMixIn):
             return
 
         await interaction.response.defer()
+
+        tier = tier.capitalize()
         if not await self.is_valid_tier(guild, tier):
             await interaction.followup.send(
                 embed=ErrorEmbed(description=f"**{tier}** is not a valid tier."),
@@ -296,6 +298,7 @@ class FreeAgentMixIn(RSCMixIn):
         if not interaction.guild:
             return
 
+        tier = tier.capitalize()
         await self.clear_checkins_by_tier(interaction.guild, tier)
         await interaction.response.send_message(
             embed=SuccessEmbed(

@@ -437,6 +437,8 @@ class TeamMixIn(RSCMixIn):
             return
 
         await interaction.response.defer()
+
+        tier = tier.capitalize()
         captains = await self.tier_captains(guild, tier)
 
         fteams = await self.teams(guild, tier=tier)
