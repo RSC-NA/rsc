@@ -257,7 +257,7 @@ class FreeAgentMixIn(RSCMixIn):
         if not guild:
             return
 
-        checkins = await self.checkins_by_tier(guild, tier)
+        checkins = await self.checkins_by_tier(guild, tier.capitalize())
         tier_color = await utils.tier_color_by_name(guild, tier) or discord.Color.blue()
 
         # Filter out anyone who isn't in the guild
