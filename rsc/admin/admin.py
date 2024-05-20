@@ -1283,7 +1283,6 @@ class AdminMixIn(RSCMixIn):
             embed=loading_embed, attachments=[dFile], view=progress_view
         )
 
-        idx = 0
         async for player in self.paged_players(guild, status=Status.PERM_FA):
             # Check if cancelled
             if progress_view.cancelled:
