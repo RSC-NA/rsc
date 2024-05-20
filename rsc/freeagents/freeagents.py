@@ -72,6 +72,14 @@ class FreeAgentMixIn(RSCMixIn):
                     log.debug(f"[{guild.name} Expiring FA check in: {player['player']}")
                     await self.remove_checkin(guild, player)
 
+    # Groups
+
+    _free_agent_group = app_commands.Group(
+        name="freeagent",
+        description="List of free agent commands for match check in",
+        guild_only=True,
+    )
+
     # Commands
 
     @app_commands.command(  # type: ignore
@@ -122,12 +130,12 @@ class FreeAgentMixIn(RSCMixIn):
 
         await interaction.followup.send(embed=embed)
 
-    @app_commands.command(  # type: ignore
+    @_free_agent_group.command(  # type: ignore
         name="checkin",
         description="Check in as an available free agent for the current match day",
     )
     @app_commands.guild_only
-    async def _fa_checkin(self, interaction: discord.Interaction):
+    async def _fa_checkin_cmd(self, interaction: discord.Interaction):
         guild = interaction.guild
         if not guild or not isinstance(interaction.user, discord.Member):
             return
@@ -209,12 +217,12 @@ class FreeAgentMixIn(RSCMixIn):
             )
             await self.add_checkin(guild, checkin)
 
-    @app_commands.command(  # type: ignore
+    @_free_agent_group.command(  # type: ignore
         name="checkout",
         description="Check out as an available free agent for the current match day",
     )
     @app_commands.guild_only
-    async def _fa_checkout(self, interaction: discord.Interaction):
+    async def _fa_checkout_cmd(self, interaction: discord.Interaction):
         guild = interaction.guild
         if not guild or not isinstance(interaction.user, discord.Member):
             return
@@ -237,14 +245,14 @@ class FreeAgentMixIn(RSCMixIn):
         if checkout_view.result:
             await self.remove_checkin(guild, checkin)
 
-    @app_commands.command(  # type: ignore
+    @_free_agent_group.command(  # type: ignore
         name="availability",
         description="Get list of available free agents for specified tier",
     )
     @app_commands.describe(tier='Free agent tier (Ex: "Elite")')
     @app_commands.autocomplete(tier=TierMixIn.tier_autocomplete)  # type: ignore
     @app_commands.guild_only
-    async def _fa_availability(self, interaction: discord.Interaction, tier: str):
+    async def _fa_availability_cmd(self, interaction: discord.Interaction, tier: str):
         guild = interaction.guild
         if not guild:
             return

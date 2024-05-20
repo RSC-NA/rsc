@@ -1,6 +1,7 @@
 import logging
 from typing import AsyncIterator
 
+import aiohttp
 import discord
 from redbot.core import app_commands
 from rscapi import ApiClient, LeaguePlayersApi, LeaguesApi
@@ -24,6 +25,10 @@ class LeagueMixIn(RSCMixIn):
     def __init__(self):
         log.debug("Initializing LeagueMixIn")
         super().__init__()
+
+    # Web App
+    async def league_player_update_handler(self, request: aiohttp.web.Request):
+        log.debug("Got league player update event.")
 
     # Commands
 

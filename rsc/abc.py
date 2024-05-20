@@ -4,6 +4,7 @@ from os import PathLike
 from typing import TYPE_CHECKING, AsyncIterator
 from zoneinfo import ZoneInfo
 
+import aiohttp
 import discord
 from aiohttp.web_runner import AppRunner, TCPSite
 from discord.ext.commands import CogMeta as DPYCogMeta
@@ -188,6 +189,10 @@ class RSCMixIn(ABC):
         ...
 
     # League
+
+    @abstractmethod
+    async def league_player_update_handler(self, request: aiohttp.web.Request):
+        ...
 
     @abstractmethod
     async def leagues(self, guild: discord.Guild) -> list[League]:
