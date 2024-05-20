@@ -181,7 +181,7 @@ class FreeAgentMixIn(RSCMixIn):
         player: LeaguePlayer = players[0]
 
         # Check if player is a Free Agent or PermFA
-        if not (player.status == Status.FREE_AGENT or player.status == Status.PERM_FA):
+        if player.status not in (Status.FREE_AGENT, Status.PERM_FA, Status.WAIVERS):
             return await interaction.response.send_message(
                 embed=ErrorEmbed(
                     title="Check In Error",
