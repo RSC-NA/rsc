@@ -458,7 +458,7 @@ async def update_free_agent_discord(
 
     # League Role:
     league_role = await utils.get_league_role(guild)
-    if league_role in player.roles:
+    if league_role not in player.roles:
         roles_to_add.append(league_role)
 
     # Remove captain
@@ -551,8 +551,8 @@ async def update_draft_eligible_discord(
         roles_to_remove.extend(old_froles)
 
     # League Role:
-    league_role = await utils.get_captain_role(guild)
-    if league_role in player.roles:
+    league_role = await utils.get_league_role(guild)
+    if league_role not in player.roles:
         roles_to_add.append(league_role)
 
     # PermFA Role:
