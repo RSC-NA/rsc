@@ -457,7 +457,7 @@ async def update_free_agent_discord(
         roles_to_remove.extend(old_froles)
 
     # League Role:
-    league_role = await utils.get_captain_role(guild)
+    league_role = await utils.get_league_role(guild)
     if league_role in player.roles:
         roles_to_add.append(league_role)
 
