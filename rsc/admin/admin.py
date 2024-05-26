@@ -1270,14 +1270,14 @@ class AdminMixIn(RSCMixIn):
             "Permanent Free Agent player synchronziation in progress"
         )
 
-        # Reset progress bar for PermFA
+        # Update progress bar for PermFA
         dFile = images.getProgressBar(
             x=10,
             y=10,
             w=225,
             h=30,
-            progress=0.0,
-            progress_bounds=(0, total_players),
+            progress=idx / total_players,
+            progress_bounds=(idx, total_players),
         )
         await interaction.edit_original_response(
             embed=loading_embed, attachments=[dFile], view=progress_view

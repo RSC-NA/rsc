@@ -624,11 +624,18 @@ class TeamMixIn(RSCMixIn):
         if not players:
             return []
 
-        captains = [x for x in players if x.captain if x.tier and x.tier.position]
+        captains = [
+            x
+            for x in players
+            if x.captain
+            if x.tier
+            and x.tier.position
+            and x.status in (Status.ROSTERED, Status.RENEWED, Status.IR, Status.AGMIR)
+        ]
         for c in captains:
             if not (c.team and c.team.name):
                 raise AttributeError(
-                    f"LeaguePlayer {c.id} captain is missing tier data."
+                    f"LeaguePlayer {c.id} captain is missing team data."
                 )
 
         captains.sort(key=lambda c: cast(str, c.team.name))  # type: ignore

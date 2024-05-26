@@ -215,7 +215,7 @@ class TransactionMixIn(RSCMixIn):
 
         if not players:
             # Member is not a league player, do nothing
-            log.debug(
+            log.info(
                 f"{member.display_name} ({member.id}) has left the server but is not on a team. No action taken.",
                 guild=guild,
             )
