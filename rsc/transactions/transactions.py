@@ -51,6 +51,7 @@ from rsc.teams import TeamMixIn
 from rsc.transactions.modals import CutMsgModal
 from rsc.transactions.roles import (
     update_cut_player_discord,
+    update_nonplaying_discord,
     update_signed_player_discord,
     update_team_captain_discord,
 )
@@ -1628,6 +1629,7 @@ class TransactionMixIn(RSCMixIn):
                 override=override,
             )
             log.debug(f"Retire Result: {result}", guild=guild)
+            tiers = await self.tiers(guild=guild)
         except RscException as exc:
             await interaction.followup.send(
                 embed=ApiExceptionErrorEmbed(exc), ephemeral=True
@@ -1643,63 +1645,10 @@ class TransactionMixIn(RSCMixIn):
                 ephemeral=True,
             )
 
-        fname = None
-        if result.first_franchise:
-            fname = result.first_franchise.name
-
-        # Roles
-        old_tier_role = None
-        franchise_role = None
-        league_role = await utils.get_league_role(guild)
-        captain_role = await utils.get_captain_role(guild)
-        fa_role = await utils.get_free_agent_role(guild)
-        former_player_role = await utils.get_former_player_role(guild)
-        spectator_role = await utils.get_spectator_role(guild)
-        de_role = await utils.get_draft_eligible_role(guild)
-
-        if fname:
-            franchise_role = await utils.franchise_role_from_name(guild, fname)
-        if ptu.old_team and ptu.old_team.tier:
-            log.debug(f"Old Team Tier: {ptu.old_team.tier}", guild=guild)
-            old_tier_role = await utils.get_tier_role(guild, ptu.old_team.tier)
-
-        roles_to_remove = []
-
-        if old_tier_role:
-            roles_to_remove.append(old_tier_role)
-            tier_fa_role = await utils.get_tier_fa_role(guild, old_tier_role.name)
-            if tier_fa_role:
-                log.debug(f"Tier FA role: {tier_fa_role}")
-                roles_to_remove.append(tier_fa_role)
-
-        if fa_role:
-            roles_to_remove.append(fa_role)
-
-        if league_role:
-            roles_to_remove.append(league_role)
-
-        if franchise_role:
-            roles_to_remove.append(franchise_role)
-
-        if captain_role:
-            roles_to_remove.append(captain_role)
-
-        if de_role:
-            roles_to_remove.append(de_role)
-
-        if roles_to_remove:
-            await player.remove_roles(*roles_to_remove)
-
-        if spectator_role:
-            await player.add_roles(spectator_role)
-
-        if former_player_role:
-            await player.add_roles(former_player_role)
-
-        # Change name
-        new_name = await utils.remove_prefix(player)
-        log.debug(f"Changing retired players name: {new_name}")
-        await player.edit(nick=new_name)
+        default_roles = await self._get_welcome_roles(guild)
+        await update_nonplaying_discord(
+            guild=guild, member=player, tiers=tiers, default_roles=default_roles
+        )
 
         # Announce to Transaction channel
         if announce:
