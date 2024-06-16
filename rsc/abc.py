@@ -350,6 +350,12 @@ class RSCMixIn(ABC):
     # Members
 
     @abstractmethod
+    async def transfer_membership(
+        self, guild: discord.Guild, old: int, new: discord.Member
+    ) -> RSCMember:
+        ...
+
+    @abstractmethod
     async def league_player_from_member(
         self, guild: discord.Guild, member: RSCMember
     ) -> LeaguePlayer | None:

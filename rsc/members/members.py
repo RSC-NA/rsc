@@ -10,6 +10,7 @@ from rscapi.models.deleted import Deleted
 from rscapi.models.intent_to_play_schema import IntentToPlaySchema
 from rscapi.models.league_player import LeaguePlayer
 from rscapi.models.member import Member
+from rscapi.models.member_transfer_schema import MemberTransferSchema
 from rscapi.models.player_activity_check_schema import PlayerActivityCheckSchema
 from rscapi.models.player_season_stats import PlayerSeasonStats
 from rscapi.models.player_signup_schema import PlayerSignupSchema
@@ -28,12 +29,14 @@ from rsc.embeds import (
 from rsc.enums import Platform, PlayerType, Referrer, RegionPreference, Status
 from rsc.exceptions import LeagueNotConfigured, RscException
 from rsc.franchises import FranchiseMixIn
+from rsc.logs import GuildLogAdapter
 from rsc.members.views import IntentState, IntentToPlayView, SignupState, SignupView
 from rsc.teams import TeamMixIn
 from rsc.tiers import TierMixIn
 from rsc.utils import utils
 
-log = logging.getLogger("red.rsc.freeagents")
+logger = logging.getLogger("red.rsc.freeagents")
+log = GuildLogAdapter(logger)
 
 
 class MemberMixIn(RSCMixIn):
@@ -1073,5 +1076,17 @@ class MemberMixIn(RSCMixIn):
             try:
                 log.debug(f"[{player.id}] Activity Check: {data}")
                 return await api.members_activity_check(player.id, data)
+            except ApiException as exc:
+                raise RscException(response=exc)
+
+    async def transfer_membership(
+        self, guild: discord.Guild, old: int, new: discord.Member
+    ) -> Member:
+        async with ApiClient(self._api_conf[guild.id]) as client:
+            api = MembersApi(client)
+            data = MemberTransferSchema(new_account=new.id)
+            try:
+                log.debug(f"Transferring {old} membership to {new.id}", guild=guild)
+                return await api.members_transfer_account(id=old, data=data)
             except ApiException as exc:
                 raise RscException(response=exc)

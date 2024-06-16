@@ -279,6 +279,82 @@ class AdminMixIn(RSCMixIn):
             )
         )
 
+    @_members.command(name="transfer", description="Transfer membership to a new Discord account")  # type: ignore
+    @app_commands.describe(
+        old="Old Discord ID",
+        new="New Discord Member",
+    )
+    async def _member_transfer(
+        self,
+        interaction: discord.Interaction,
+        old: int,
+        new: discord.Member,
+    ):
+        guild = interaction.guild
+        if not guild:
+            return
+
+        await interaction.response.defer()
+        try:
+            await self.transfer_membership(
+                guild=guild,
+                old=old,
+                new=new,
+            )
+        except RscException as exc:
+            await interaction.followup.send(
+                embed=ApiExceptionErrorEmbed(exc), ephemeral=True
+            )
+            return
+
+        await interaction.followup.send(
+            embed=SuccessEmbed(
+                description=f"Transfered membership of {old} to {new.mention}"
+            ),
+        )
+
+    # @_members.command(name="patch", description="Patch a league player in the API")  # type: ignore
+    # @app_commands.describe(
+    #     player="Discord member to patch",
+    #     status="Player status",
+    #     tier="Tier name",
+    #     team="Team name",
+    #     base_mmr="Base MMR",
+    #     current_mmr="Current MMR"
+    # )
+    # @app_commands.autocomplete(
+    #     tier=TierMixIn.tier_autocomplete,
+    #     team=TeamMixIn.teams_autocomplete
+    # )
+    # async def _member_patch(
+    #     self,
+    #     interaction: discord.Interaction,
+    #     player: discord.Member,
+    #     status: Status|None=None,
+    #     tier: str|None=None,
+    #     team: str|None=None,
+    #     base_mmr: int|None=None,
+    #     current_mmr: int|None=None,
+    # ):
+    #     guild = interaction.guild
+    #     if not guild:
+    #         return
+
+    #     await interaction.response.defer()
+    #     try:
+
+    #     except RscException as exc:
+    #         await interaction.followup.send(
+    #             embed=ApiExceptionErrorEmbed(exc), ephemeral=True
+    #         )
+    #         return
+
+    #     await interaction.followup.send(
+    #         embed=SuccessEmbed(
+    #             description=f"Transfered membership of {old} to {new.mention}"
+    #         ),
+    #     )
+
     @_members.command(name="create", description="Create an RSC member in the API")  # type: ignore
     @app_commands.describe(
         member="Discord member being added",
