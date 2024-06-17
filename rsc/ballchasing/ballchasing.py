@@ -318,7 +318,7 @@ class BallchasingMixIn(RSCMixIn):
             return await interaction.followup.send(
                 embed=ErrorEmbed(
                     title="Duplicate Replays Found",
-                    description="Duplicate replays found. Please make sure you hvae to right files attached.",
+                    description="Duplicate replays found. Please make sure you have the correct files attached.",
                 ),
                 ephemeral=True,
             )

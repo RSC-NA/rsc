@@ -994,7 +994,7 @@ class TransactionMixIn(RSCMixIn):
         )
         await self._add_substitute(guild, sub_obj)
 
-        # Update visiblity in FA availability
+        # Update visibility in FA availability
         await self.update_freeagent_visibility(
             guild=guild, player=player_in, visibility=False
         )
