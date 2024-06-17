@@ -265,6 +265,14 @@ class RSCMixIn(ABC):
     async def league_seasons(self, guild: discord.Guild) -> list[Season]:
         ...
 
+    # Free Agents
+
+    @abstractmethod
+    async def update_freeagent_visibility(
+        self, guild: discord.Guild, player: discord.Member, visibility: bool
+    ):
+        ...
+
     # Matches
 
     @abstractmethod

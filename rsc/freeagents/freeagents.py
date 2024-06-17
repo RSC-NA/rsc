@@ -216,6 +216,7 @@ class FreeAgentMixIn(RSCMixIn):
                 date=str(datetime.now(tz)),
                 player=interaction.user.id,
                 tier=player.tier.name,
+                visible=True,
             )
             await self.add_checkin(guild, checkin)
 
@@ -267,6 +268,8 @@ class FreeAgentMixIn(RSCMixIn):
         # Filter out anyone who isn't in the guild
         available = []
         for c in checkins:
+            if not c["visible"]:
+                continue
             m = guild.get_member(c["player"])
             if m:
                 available.append(m)
@@ -362,6 +365,20 @@ class FreeAgentMixIn(RSCMixIn):
         current.remove(player)
         self._check_ins[guild.id] = current
         await self._save_check_ins(guild, current)
+
+    async def update_freeagent_visibility(
+        self, guild: discord.Guild, player: discord.Member, visibility: bool
+    ):
+        """Remove free agent check in for guild"""
+        log.debug(f"Changing checkin visibility for {player.id} to {visibility}")
+        checkins = await self._get_check_ins(guild)
+        log.debug(f"Current Checkins: {checkins}")
+        for c in checkins:
+            if c["player"] == player.id:
+                c["visible"] = visibility
+        log.debug(f"New Checkins: {checkins}")
+        self._check_ins[guild.id] = checkins
+        await self._save_check_ins(guild, checkins)
 
     async def is_checked_in(self, player: discord.Member) -> bool:
         """Check if discord.Member is checked in as FA"""

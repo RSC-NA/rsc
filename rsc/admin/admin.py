@@ -342,7 +342,7 @@ class AdminMixIn(RSCMixIn):
 
     #     await interaction.response.defer()
     #     try:
-
+    #         ...dosomething...
     #     except RscException as exc:
     #         await interaction.followup.send(
     #             embed=ApiExceptionErrorEmbed(exc), ephemeral=True

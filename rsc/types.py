@@ -26,6 +26,7 @@ class CheckIn(TypedDict):
     date: str
     player: int
     tier: str
+    visible: bool
 
 
 class Substitute(TypedDict):

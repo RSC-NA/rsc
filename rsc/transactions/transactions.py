@@ -994,6 +994,11 @@ class TransactionMixIn(RSCMixIn):
         )
         await self._add_substitute(guild, sub_obj)
 
+        # Update visiblity in FA availability
+        await self.update_freeagent_visibility(
+            guild=guild, player=player_in, visibility=False
+        )
+
         embed = SuccessEmbed(
             description=f"{player_out.mention} has been subbed out for {player_in.mention}"
         )
