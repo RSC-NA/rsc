@@ -268,7 +268,10 @@ class FreeAgentMixIn(RSCMixIn):
         # Filter out anyone who isn't in the guild
         available = []
         for c in checkins:
-            if not c["visible"]:
+            v = c.get("visible")
+            if v is None:
+                c["visible"] = True
+            if not v:
                 continue
             m = guild.get_member(c["player"])
             if m:
