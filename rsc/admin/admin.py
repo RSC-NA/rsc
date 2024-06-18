@@ -320,7 +320,7 @@ class AdminMixIn(RSCMixIn):
 
         await interaction.followup.send(
             embed=SuccessEmbed(
-                description=f"Transfered membership of {old} to {new.mention}"
+                description=f"Transferred membership of {old} to {new.mention}"
             ),
         )
 
@@ -362,7 +362,7 @@ class AdminMixIn(RSCMixIn):
 
     #     await interaction.followup.send(
     #         embed=SuccessEmbed(
-    #             description=f"Transfered membership of {old} to {new.mention}"
+    #             description=f"Transferred membership of {old} to {new.mention}"
     #         ),
     #     )
 
