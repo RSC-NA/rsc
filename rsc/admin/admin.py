@@ -298,51 +298,18 @@ class AdminMixIn(RSCMixIn):
         # Use a string and convert it
         try:
             old_discord_id = int(old.strip())
+            log.debug(f"Looking up league player discord ID: {old_discord_id}")
         except ValueError:
             return await interaction.response.send_message(
                 embed=ErrorEmbed(description="Old Discord ID must be a number")
             )
 
         await interaction.response.defer()
-        # Grab the ID from the database
-        try:
-            plist = await self.players(guild, discord_id=old_discord_id)
-        except RscException as exc:
-            return await interaction.followup.send(
-                embed=ApiExceptionErrorEmbed(exc), ephemeral=True
-            )
-
-        # Validate result
-        if not plist:
-            return await interaction.followup.send(
-                embed=ErrorEmbed(
-                    description=f"Unable to find member with discord ID: {old_discord_id}"
-                ),
-                ephemeral=True,
-            )
-
-        if len(plist) > 1:
-            return await interaction.followup.send(
-                embed=ErrorEmbed(
-                    description=f"Found more than one member with discord ID: {old_discord_id}"
-                ),
-                ephemeral=True,
-            )
-
-        old_member = plist.pop(0)
-        if not old_member.id:
-            return await interaction.followup.send(
-                embed=ErrorEmbed(
-                    description=f"League player result has no ID attached for {old_discord_id}"
-                ),
-                ephemeral=True,
-            )
-
         # Transfer membership to new account
         try:
             await self.transfer_membership(
                 guild=guild,
-                old=old_member.id,
+                old=old_discord_id,
                 new=new,
             )
         except RscException as exc:
