@@ -58,6 +58,16 @@ async def update_signed_player_discord(
                 ):
                     roles_to_remove.append(r)
 
+    # Remove Spectator
+    spec_role = await utils.get_spectator_role(guild)
+    if spec_role in player.roles:
+        roles_to_remove.append(spec_role)
+
+    # Remove Former Player
+    former_role = await utils.get_former_player_role(guild)
+    if former_role in player.roles:
+        roles_to_remove.append(former_role)
+
     # FA Role:
     fa_role = await utils.get_free_agent_role(guild)
     if fa_role in player.roles:
@@ -140,6 +150,16 @@ async def update_cut_player_discord(
 
     roles_to_remove: list[discord.Role] = []
     roles_to_add: list[discord.Role] = []
+
+    # Remove Spectator
+    spec_role = await utils.get_spectator_role(guild)
+    if spec_role in player.roles:
+        roles_to_remove.append(spec_role)
+
+    # Remove Former Player
+    former_role = await utils.get_former_player_role(guild)
+    if former_role in player.roles:
+        roles_to_remove.append(former_role)
 
     # Remove captain
     captain_role = await utils.get_captain_role(guild)
@@ -348,6 +368,16 @@ async def update_rostered_discord(
                 ):
                     roles_to_remove.append(r)
 
+    # Remove Spectator
+    spec_role = await utils.get_spectator_role(guild)
+    if spec_role in player.roles:
+        roles_to_remove.append(spec_role)
+
+    # Remove Former Player
+    former_role = await utils.get_former_player_role(guild)
+    if former_role in player.roles:
+        roles_to_remove.append(former_role)
+
     # PermFA role
     permfa_role = await utils.get_permfa_role(guild)
     if permfa_role in player.roles:
@@ -456,6 +486,16 @@ async def update_free_agent_discord(
     if old_froles:
         roles_to_remove.extend(old_froles)
 
+    # Remove Spectator
+    spec_role = await utils.get_spectator_role(guild)
+    if spec_role in player.roles:
+        roles_to_remove.append(spec_role)
+
+    # Remove Former Player
+    former_role = await utils.get_former_player_role(guild)
+    if former_role in player.roles:
+        roles_to_remove.append(former_role)
+
     # League Role:
     league_role = await utils.get_league_role(guild)
     if league_role not in player.roles:
@@ -549,6 +589,16 @@ async def update_draft_eligible_discord(
     old_froles = await utils.franchise_role_list_from_disord_member(player)
     if old_froles:
         roles_to_remove.extend(old_froles)
+
+    # Remove Spectator
+    spec_role = await utils.get_spectator_role(guild)
+    if spec_role in player.roles:
+        roles_to_remove.append(spec_role)
+
+    # Remove Former Player
+    former_role = await utils.get_former_player_role(guild)
+    if former_role in player.roles:
+        roles_to_remove.append(former_role)
 
     # League Role:
     league_role = await utils.get_league_role(guild)

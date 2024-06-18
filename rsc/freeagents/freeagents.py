@@ -269,8 +269,11 @@ class FreeAgentMixIn(RSCMixIn):
         available = []
         for c in checkins:
             v = c.get("visible")
+            # In the event that a player doesn't have the attribute
+            # Yes this happened... the first day I wrote this code.
             if v is None:
                 c["visible"] = True
+            # Skip if not visible (False)
             if not v:
                 continue
             m = guild.get_member(c["player"])
