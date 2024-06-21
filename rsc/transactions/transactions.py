@@ -1754,7 +1754,12 @@ class TransactionMixIn(RSCMixIn):
             else:
                 trans_type = TransactionType(t.type).full_name
 
-            fmt_list.append((date, trans_type, t.executor))
+            if t.executor.discord_id:
+                texc = str(t.executor.discord_id)
+            else:
+                texc = "None"
+
+            fmt_list.append((date, trans_type, texc))
 
         embed = BlueEmbed(
             title="Transaction History",
