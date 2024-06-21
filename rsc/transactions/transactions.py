@@ -1754,13 +1754,7 @@ class TransactionMixIn(RSCMixIn):
             else:
                 trans_type = TransactionType(t.type).full_name
 
-            # Get player informatioN?
-            # if not t.player_updates:
-            #     player = "Unknown"
-            # else:
-            #     player = t.player_updates
-
-            fmt_list.append((date, trans_type))
+            fmt_list.append((date, trans_type, t.executor))
 
         embed = BlueEmbed(
             title="Transaction History",
@@ -1772,6 +1766,9 @@ class TransactionMixIn(RSCMixIn):
         )
         embed.add_field(
             name="Type", value="\n".join([x[1] for x in fmt_list]), inline=True
+        )
+        embed.add_field(
+            name="Executor", value="\n".join([x[2] for x in fmt_list]), inline=True
         )
 
         await interaction.followup.send(embed=embed, ephemeral=True)

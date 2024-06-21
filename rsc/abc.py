@@ -625,6 +625,15 @@ class RSCMixIn(ABC):
     # Transactions
 
     @abstractmethod
+    async def expire_sub(
+        self,
+        guild: discord.Guild,
+        player: discord.Member,
+        executor: discord.Member,
+    ) -> LeaguePlayer:
+        ...
+
+    @abstractmethod
     async def _trans_role(self, guild: discord.Guild) -> discord.Role | None:
         ...
 
