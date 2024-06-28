@@ -4,6 +4,7 @@ import re
 from datetime import datetime, time, timedelta
 from pathlib import Path
 from pprint import pformat
+from typing import AsyncIterator
 
 import discord
 from discord.ext import tasks
@@ -1792,24 +1793,22 @@ class TransactionMixIn(RSCMixIn):
             return
 
         await interaction.response.defer()
+
+        leaders: dict[int, int] = {}
         try:
-            history = await self.transaction_history(guild, season=season, limit=10000)
+            t: TransactionResponse
+            async for t in self.paged_transaction_history(guild, season=season):
+                if not t.executor.discord_id:
+                    log.warning("Transaction executor has no discord ID.", guild=guild)
+                    continue
+                if not leaders.get(t.executor.discord_id):
+                    leaders[t.executor.discord_id] = 1
+                    continue
+                leaders[t.executor.discord_id] += 1
         except RscException as exc:
             return await interaction.followup.send(
                 embed=ApiExceptionErrorEmbed(exc), ephemeral=True
             )
-
-        log.debug(f"History Length: {len(history)}", guild=guild)
-
-        leaders: dict[int, int] = {}
-        for t in history:
-            if not t.executor.discord_id:
-                log.warning("Transaction executor has no discord ID.", guild=guild)
-                continue
-            if not leaders.get(t.executor.discord_id):
-                leaders[t.executor.discord_id] = 1
-                continue
-            leaders[t.executor.discord_id] += 1
 
         leader_fmt = sorted(leaders.items(), key=lambda i: i[1], reverse=True)
 
@@ -2874,7 +2873,7 @@ class TransactionMixIn(RSCMixIn):
         executor: discord.Member | None = None,
         season: int | None = None,
         trans_type: TransactionType | None = None,
-        limit: int = 0,
+        limit: int = 50,
         offset: int = 0,
     ) -> list[TransactionResponse]:
         """Fetch transaction history based on specified criteria"""
@@ -2900,6 +2899,56 @@ class TransactionMixIn(RSCMixIn):
                 return trans_list.results
             except ApiException as exc:
                 raise RscException(response=exc)
+
+    async def paged_transaction_history(
+        self,
+        guild: discord.Guild,
+        player: discord.Member | None = None,
+        executor: discord.Member | None = None,
+        season: int | None = None,
+        trans_type: TransactionType | None = None,
+        per_page: int = 50,
+    ) -> AsyncIterator[TransactionResponse]:
+        """Fetch transaction history based on specified criteria"""
+        player_id = player.id if player else None
+        executor_id = executor.id if executor else None
+        t_type = str(trans_type) if trans_type else None
+        log.debug(
+            f"Paged Transaction History Query. Player: {player_id} Executor: {executor_id} Season: {season} Type: {trans_type}",
+            guild=guild,
+        )
+
+        offset = 0
+        async with ApiClient(self._api_conf[guild.id]) as client:
+            api = TransactionsApi(client)
+            while True:
+                log.debug(f"Offset: {offset}")
+                try:
+                    trans_list = await api.transactions_history_list(
+                        league=self._league[guild.id],
+                        player=player_id,
+                        executor=executor_id,
+                        transaction_type=t_type,
+                        season_number=season,
+                        limit=per_page,
+                        offset=offset,
+                    )
+
+                    if not trans_list.results:
+                        break
+
+                    for transaction in trans_list.results:
+                        yield transaction
+
+                    if not trans_list:
+                        break
+
+                    if not trans_list.next:
+                        break
+
+                    offset += per_page
+                except ApiException as exc:
+                    raise RscException(response=exc)
 
     async def transaction_history_by_id(
         self, guild: discord.Guild, transaction_id: int
