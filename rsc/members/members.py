@@ -11,6 +11,7 @@ from rscapi.models.intent_to_play_schema import IntentToPlaySchema
 from rscapi.models.league_player import LeaguePlayer
 from rscapi.models.member import Member
 from rscapi.models.member_transfer_schema import MemberTransferSchema
+from rscapi.models.name_change_history import NameChangeHistory
 from rscapi.models.player_activity_check_schema import PlayerActivityCheckSchema
 from rscapi.models.player_season_stats import PlayerSeasonStats
 from rscapi.models.player_signup_schema import PlayerSignupSchema
@@ -1088,5 +1089,16 @@ class MemberMixIn(RSCMixIn):
             try:
                 log.debug(f"Transferring {old} membership to {new.id}", guild=guild)
                 return await api.members_transfer_account(id=old, data=data)
+            except ApiException as exc:
+                raise RscException(response=exc)
+
+    async def name_history(
+        self, guild: discord.Guild, member: discord.Member
+    ) -> list[NameChangeHistory]:
+        async with ApiClient(self._api_conf[guild.id]) as client:
+            api = MembersApi(client)
+            try:
+                log.debug(f"Fetching name history for {member.id}", guild=guild)
+                return await api.members_name_changes(member.id)
             except ApiException as exc:
                 raise RscException(response=exc)

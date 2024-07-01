@@ -25,6 +25,7 @@ from rscapi.models.match import Match
 from rscapi.models.match_list import MatchList
 from rscapi.models.match_results import MatchResults
 from rscapi.models.member import Member as RSCMember
+from rscapi.models.name_change_history import NameChangeHistory
 from rscapi.models.player import Player
 from rscapi.models.player_season_stats import PlayerSeasonStats
 from rscapi.models.rebrand_a_franchise import RebrandAFranchise
@@ -356,6 +357,12 @@ class RSCMixIn(ABC):
         ...
 
     # Members
+
+    @abstractmethod
+    async def name_history(
+        self, guild: discord.Guild, member: discord.Member
+    ) -> list[NameChangeHistory]:
+        ...
 
     @abstractmethod
     async def transfer_membership(

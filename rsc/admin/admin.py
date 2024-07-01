@@ -1,5 +1,6 @@
 import logging
 import tempfile
+from datetime import datetime
 from typing import MutableMapping, cast
 
 import discord
@@ -203,6 +204,59 @@ class AdminMixIn(RSCMixIn):
         )
 
     # Member Commands
+
+    @_members.command(name="namehistory", description="Get an RSC discord members API name history")  # type: ignore
+    @app_commands.describe(
+        member="RSC discord member",
+    )
+    async def _member_namehistory_cmd(
+        self,
+        interaction: discord.Interaction,
+        member: discord.Member,
+    ):
+        guild = interaction.guild
+        if not guild:
+            return
+
+        await interaction.response.defer(ephemeral=False)
+
+        try:
+            history = await self.name_history(guild, member)
+        except RscException as exc:
+            await interaction.followup.send(
+                embed=ApiExceptionErrorEmbed(exc), ephemeral=False
+            )
+            return
+
+        log.debug(f"History: {history}")
+        embed = BlueEmbed(title="Name History")
+
+        if not history:
+            embed.description = (
+                f"{member.mention} does not have any past name changes in the API."
+            )
+            return await interaction.followup.send(embed=embed)
+        else:
+            embed.description = f"Member: {member.mention}"
+
+        history.sort(
+            key=lambda x: x.date_changed if x.date_changed else "None", reverse=True
+        )
+        log.debug(f"Post sort: {history}")
+
+        embed.add_field(name="API Name", value="\n".join([h.old_name for h in history]))
+        embed.add_field(
+            name="Date",
+            value="\n".join(
+                [
+                    h.date_changed.strftime("%-m/%-d/%y")
+                    if isinstance(h.date_changed, datetime)
+                    else "None"
+                    for h in history
+                ]
+            ),
+        )
+        await interaction.followup.send(embed=embed)
 
     @_members.command(name="changename", description="Change RSC name for a member")  # type: ignore
     @app_commands.describe(
