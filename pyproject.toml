@@ -14,6 +14,7 @@ env_files = [
 
 [tool.mypy]
 check_untyped_defs = true
+mypy_path = ["/home/xentrick/dev/python-replay-parser"]
 
 [tool.isort]
 profile = "black"

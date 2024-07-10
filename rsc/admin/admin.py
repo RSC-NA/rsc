@@ -3474,27 +3474,48 @@ class AdminMixIn(RSCMixIn):
             )
 
         # Validate results
-        if not hlist or len(hlist) > 1:
+        hteam = None
+        if len(hlist) > 1:
+            for h in hlist:
+                if h.name == home_team:
+                    hteam = h
+                    break
+        elif hlist:
+            hteam = hlist.pop(0)
+
+        # Home team not found
+        if not hteam:
             return await interaction.followup.send(
                 embed=ErrorEmbed(
-                    description=f"No teams found or more than one result for **{home_team}**"
+                    f"No teams found or more than one result for **{home_team}**"
                 )
             )
-        elif not alist or len(alist) > 1:
+
+        ateam = None
+        if len(alist) > 1:
+            for a in alist:
+                if a.name == away_team:
+                    ateam = a
+                    break
+        elif alist:
+            ateam = alist.pop(0)
+
+        # Away team not found
+        if not ateam:
             return await interaction.followup.send(
                 embed=ErrorEmbed(
                     description=f"No teams found or more than one result for **{away_team}**"
                 )
             )
 
-        hteam = hlist.pop(0)
+        # Validate teams have an ID
         if not hteam.id:
             return await interaction.followup.send(
                 embed=ErrorEmbed(
                     description=f"**{home_team}** has no team ID in the API."
                 )
             )
-        ateam = alist.pop(0)
+
         if not ateam.id:
             return await interaction.followup.send(
                 embed=ErrorEmbed(
@@ -3502,6 +3523,7 @@ class AdminMixIn(RSCMixIn):
                 )
             )
 
+        # Teams must be in the same tier
         try:
             if not await self.teams_in_same_tier(teams=[hteam, ateam]):
                 return await interaction.followup.send(
@@ -3569,27 +3591,48 @@ class AdminMixIn(RSCMixIn):
             )
 
         # Validate results
-        if not hlist or len(hlist) > 1:
+        hteam = None
+        if len(hlist) > 1:
+            for h in hlist:
+                if h.name == home_team:
+                    hteam = h
+                    break
+        elif hlist:
+            hteam = hlist.pop(0)
+
+        # Home team not found
+        if not hteam:
             return await interaction.followup.send(
                 embed=ErrorEmbed(
-                    description=f"No teams found or more than one result for **{home_team}**"
+                    f"No teams found or more than one result for **{home_team}**"
                 )
             )
-        elif not alist or len(alist) > 1:
+
+        ateam = None
+        if len(alist) > 1:
+            for a in alist:
+                if a.name == away_team:
+                    ateam = a
+                    break
+        elif alist:
+            ateam = alist.pop(0)
+
+        # Away team not found
+        if not ateam:
             return await interaction.followup.send(
                 embed=ErrorEmbed(
                     description=f"No teams found or more than one result for **{away_team}**"
                 )
             )
 
-        hteam = hlist.pop(0)
+        # Validate teams have an ID
         if not hteam.id:
             return await interaction.followup.send(
                 embed=ErrorEmbed(
                     description=f"**{home_team}** has no team ID in the API."
                 )
             )
-        ateam = alist.pop(0)
+
         if not ateam.id:
             return await interaction.followup.send(
                 embed=ErrorEmbed(
@@ -3597,6 +3640,7 @@ class AdminMixIn(RSCMixIn):
                 )
             )
 
+        # Teams must be in the same tier
         try:
             if not await self.teams_in_same_tier(teams=[hteam, ateam]):
                 return await interaction.followup.send(
@@ -3683,26 +3727,28 @@ class AdminMixIn(RSCMixIn):
                 log.debug(f"Match Creation Result: {result}")
                 success.append(m)
             except (RscException, ValidationError) as exc:
-                embed = RedEmbed(
+                failembed = RedEmbed(
                     title="Bulk Match Error",
                     description=f"Exception:\n```{str(exc)}```\n\nThe following matches succeeded.",
                 )
-                embed.add_field(
+                failembed.add_field(
                     name="Day",
                     value="\n".join([str(s.day) for s in success]),
                     inline=True,
                 )
-                embed.add_field(
+                failembed.add_field(
                     name="Home",
                     value="\n".join([s.home_team for s in success]),
                     inline=True,
                 )
-                embed.add_field(
+                failembed.add_field(
                     name="Away",
                     value="\n".join([s.away_team for s in success]),
                     inline=True,
                 )
-                return await bulk_modal.interaction.edit_original_response(embed=embed)
+                return await bulk_modal.interaction.edit_original_response(
+                    embed=failembed
+                )
 
         embed = BlueEmbed(
             title="Bulk Matches Added",
