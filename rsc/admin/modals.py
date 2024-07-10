@@ -1,11 +1,31 @@
+import json
 import logging
 
 import discord
 from discord.ui import TextInput
+from pydantic import TypeAdapter
 
+from rsc.admin.models import CreateMatchData
 from rsc.embeds import SuccessEmbed
 
 log = logging.getLogger("red.rsc.franchises.modals")
+
+
+class BulkMatchModal(discord.ui.Modal, title="Import RSC matches into API"):
+    matches: TextInput = TextInput(
+        label="Match Data (JSON FORMAT)",
+        style=discord.TextStyle.long,
+        placeholder='[{"day":1,"type":"REG","format":"BO3","home":"Team1","away":"Team2"}]',
+        required=True,
+    )
+
+    async def on_submit(self, interaction: discord.Interaction):
+        self.interaction = interaction
+
+    async def parse_matches(self) -> list[CreateMatchData]:
+        matches = json.loads(self.matches.value)
+        adapter = TypeAdapter(list[CreateMatchData])
+        return adapter.validate_python(matches)
 
 
 class AgmMessageModal(discord.ui.Modal, title="AGM Promotion Message"):

@@ -5,6 +5,7 @@ import ballchasing
 import discord
 from rscapi.models import Match
 
+from rsc.enums import MatchType, PostSeasonType
 from rsc.logs import GuildLogAdapter
 
 logger = logging.getLogger("red.rsc.ballchasing.groups")
@@ -54,7 +55,7 @@ async def season_bc_group(
     return season_group
 
 
-async def tier_bc_group(
+async def match_type_group(
     bapi: ballchasing.Api, guild: discord.Guild, tlg: str, match: Match
 ) -> str | None:
     """Get tier group ID and or create it"""
@@ -62,11 +63,47 @@ async def tier_bc_group(
     if not season_group:
         return None
 
+    if not match.match_type:
+        raise ValueError("API match does not have a match type (Ex: Regular Season)")
+
+    tname = MatchType(match.match_type).full_name
+    match_type_group = None
+
+    # Find relevant server group
+    async for g in bapi.get_groups(group=season_group):
+        if g.name.lower() == tname.lower():
+            log.debug(
+                f"Found existing ballchasing match type group: {g.id}", guild=guild
+            )
+            match_type_group = g.id
+            break
+
+    # Create group if not found
+    if not match_type_group:
+        log.debug(f"Creating ballchasing match type group: {tname}", guild=guild)
+        result = await bapi.create_group(
+            name=tname,
+            parent=season_group,
+            player_identification=ballchasing.PlayerIdentificationBy.ID,
+            team_identification=ballchasing.TeamIdentificationBy.CLUSTERS,
+        )
+        match_type_group = result.id
+    return match_type_group
+
+
+async def tier_bc_group(
+    bapi: ballchasing.Api, guild: discord.Guild, tlg: str, match: Match
+) -> str | None:
+    """Get tier group ID and or create it"""
+    mtype_group = await match_type_group(bapi=bapi, guild=guild, tlg=tlg, match=match)
+    if not mtype_group:
+        return None
+
     tname = match.home_team.tier
     tier_group = None
 
     # Find relevant server group
-    async for g in bapi.get_groups(group=season_group):
+    async for g in bapi.get_groups(group=mtype_group):
         if g.name.lower() == tname.lower():
             log.debug(f"Found existing ballchasing tier group: {g.id}", guild=guild)
             tier_group = g.id
@@ -77,7 +114,7 @@ async def tier_bc_group(
         log.debug(f"Creating ballchasing tier group: {tname}", guild=guild)
         result = await bapi.create_group(
             name=tname,
-            parent=season_group,
+            parent=mtype_group,
             player_identification=ballchasing.PlayerIdentificationBy.ID,
             team_identification=ballchasing.TeamIdentificationBy.CLUSTERS,
         )
@@ -93,10 +130,20 @@ async def match_day_bc_group(
     if not tier_group:
         return None
 
-    mdname = f"Match Day {match.day:02d}"
-    md_group = None
+    if not match.match_type:
+        raise ValueError("API match does not have a match type (Ex: Regular Season)")
+
+    if not match.day:
+        raise ValueError("API match does not have a match day value")
+
+    if match.match_type == MatchType.POSTSEASON:
+        playoff_round = PostSeasonType(match.day)
+        mdname = playoff_round.name.capitalize()
+    else:
+        mdname = f"Match Day {match.day:02d}"
 
     # Find relevant server group
+    md_group = None
     async for g in bapi.get_groups(group=tier_group):
         if g.name.lower() == mdname.lower():
             log.debug(

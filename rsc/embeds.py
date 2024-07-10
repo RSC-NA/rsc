@@ -165,9 +165,9 @@ class SuccessEmbed(GreenEmbed):
 class ErrorEmbed(RedEmbed):
     """Generic Error Embed"""
 
-    def __init__(self, **kwargs):
+    def __init__(self, description: str, **kwargs):
         title = kwargs.pop("title", "Error")
-        super().__init__(title=title, **kwargs)
+        super().__init__(title=title, description=description, **kwargs)
 
 
 class WarningEmbed(OrangeEmbed):

@@ -8,6 +8,7 @@ from rscapi import ApiClient, LeaguePlayersApi, LeaguesApi
 from rscapi.exceptions import ApiException
 from rscapi.models.league import League
 from rscapi.models.league_player import LeaguePlayer
+from rscapi.models.league_player_patch import LeaguePlayerPatch
 from rscapi.models.season import Season
 
 from rsc.abc import RSCMixIn
@@ -27,6 +28,7 @@ class LeagueMixIn(RSCMixIn):
         super().__init__()
 
     # Web App
+
     async def league_player_update_handler(self, request: aiohttp.web.Request):
         log.debug("Got league player update event.")
 
@@ -380,14 +382,35 @@ class LeagueMixIn(RSCMixIn):
 
             offset += per_page
 
-    async def league_player_partial_update(
-        self, guild: discord.Guild, id: int, lp: LeaguePlayer
-    ) -> LeaguePlayer:
-        """Partial update to league player in API"""
+    async def update_league_player(
+        self,
+        guild: discord.Guild,
+        player_id: int,
+        base_mmr: int | None = None,
+        current_mmr: int | None = None,
+        tier: int | None = None,
+        status: Status | None = None,
+        team: str | None = None,
+    ) -> LeaguePlayerPatch:
+        data = LeaguePlayerPatch()
+        if base_mmr:
+            data.base_mmr = base_mmr
+        if current_mmr:
+            data.current_mmr = current_mmr
+        if tier:
+            log.debug(f"Tier: {type(tier)} {tier}")
+            data.tier = tier
+        if team:
+            data.team_name = team
+        if status:
+            data.status = status.value
+
         async with ApiClient(self._api_conf[guild.id]) as client:
             api = LeaguePlayersApi(client)
-            log.debug(f"[ID={id}] League Player Partial Update: {lp}")
+            log.debug(f"League Player Patch: {data}")
             try:
-                return await api.league_players_partial_update(id, lp)
+                result = await api.league_players_partial_update(player_id, data)
+                log.debug(f"Patch Result: {result}")
+                return result
             except ApiException as exc:
                 raise RscException(response=exc)

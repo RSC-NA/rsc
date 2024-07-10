@@ -94,6 +94,20 @@ class TierMixIn(RSCMixIn):
                 roles.append(r)
         return roles
 
+    async def tier_id_by_name(self, guild: discord.Guild, tier: str) -> int:
+        """Return a tier ID by its name"""
+        tiers = await self.tiers(guild, name=tier)
+        if not tiers:
+            raise ValueError(f"Tier does not exist: **{tier}**")
+        if len(tiers) > 1:
+            raise ValueError(f"Found more than one tier matching: **{tier}**")
+
+        t = tiers.pop(0)
+        if t.id is None:
+            raise ValueError("Found tier in API but it does not have an ID")
+
+        return t.id
+
     # API
 
     async def tier_by_id(self, guild: discord.Guild, id: int) -> Tier:

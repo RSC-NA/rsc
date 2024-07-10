@@ -39,6 +39,21 @@ class MatchType(StrEnum):
     PRESEASON = "PRE"  # Pre-season
     POSTSEASON = "PST"  # Post-Season
     FINALS = "FNL"  # Finals
+    ANY = "ANY"  # All Match Types
+
+    @property
+    def full_name(self):
+        match self:
+            case MatchType.REGULAR:
+                return "Regular Season"
+            case MatchType.PRESEASON:
+                return "Regular Season"
+            case MatchType.POSTSEASON:
+                return "Post Season"
+            case MatchType.FINALS:
+                return "Finals"
+            case MatchType.ANY:
+                return "Any"
 
 
 class MatchFormat(StrEnum):
@@ -46,6 +61,14 @@ class MatchFormat(StrEnum):
     BEST_OF_THREE = "BO3"  # Best of Three
     BEST_OF_FIVE = "BO5"  # Best of Five
     BEST_OF_SEVEN = "BO7"  # Best of Seven
+
+
+class PostSeasonType(IntEnum):
+    PLAYOFF = 0  # Default (Anything)
+    WILDCARD = 1  # Wildcard
+    QUARTERFINALS = 2  # Quarter Finals
+    SEMIFINALS = 3  # Semi Finals
+    FINALS = 4  # Finals
 
 
 class Division(StrEnum):

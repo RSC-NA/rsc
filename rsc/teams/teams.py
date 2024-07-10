@@ -592,11 +592,33 @@ class TeamMixIn(RSCMixIn):
 
     # Functions
 
+    async def teams_in_same_tier(self, teams: list[Team | TeamList]) -> bool:
+        base = None
+        for idx, team in enumerate(teams):
+            if isinstance(team, TeamList):
+                if not team.tier:
+                    raise ValueError(f"{team.name} has no tier in the API.")
+                tier = team.tier.name
+            elif isinstance(team, Team):
+                tier = team.tier
+            else:
+                raise ValueError("Team must be of type `Team` or `TeamList`")
+
+            if idx == 0:
+                base = tier
+                log.debug(f"Base Comparison Tier: {base}")
+                continue
+
+            log.debug(f"Team Tier: {tier}")
+            if tier != base:
+                return False
+        return True
+
     async def team_id_by_name(self, guild: discord.Guild, name: str) -> int:
         """Return a teams ID in the API by name. (Zero indicates not found)"""
         teams = await self.teams(guild, name=name)
         if not teams:
-            return 0
+            raise ValueError(f"No team found with name {name}")
         if len(teams) > 1:
             # See if there was an exact name match in the response
             for t in teams:
@@ -604,7 +626,7 @@ class TeamMixIn(RSCMixIn):
                     return t.id
             raise ValueError(f"More than one result for team: {name}")
         if not teams[0].id:
-            return 0
+            raise ValueError(f"Team has no ID in API: {name}")
         return teams[0].id
 
     async def team_captain(

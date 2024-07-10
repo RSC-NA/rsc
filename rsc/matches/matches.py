@@ -9,11 +9,19 @@ from rscapi.models.match import Match
 from rscapi.models.match_list import MatchList
 from rscapi.models.match_results import MatchResults
 from rscapi.models.match_score_report import MatchScoreReport
+from rscapi.models.match_submission import MatchSubmission
 from rscapi.models.matches_list200_response import MatchesList200Response
 
 from rsc.abc import RSCMixIn
 from rsc.embeds import BlueEmbed, ErrorEmbed, ExceptionErrorEmbed, YellowEmbed
-from rsc.enums import MatchFormat, MatchTeamEnum, MatchType, Status, SubStatus
+from rsc.enums import (
+    MatchFormat,
+    MatchTeamEnum,
+    MatchType,
+    PostSeasonType,
+    Status,
+    SubStatus,
+)
 from rsc.exceptions import RscException
 from rsc.logs import GuildLogAdapter
 from rsc.teams import TeamMixIn
@@ -105,7 +113,7 @@ class MatchMixIn(RSCMixIn):
             return
 
         # Fetch team schedule
-        log.debug(f"Fetching next match for team id: {team_id}")
+        log.debug(f"Fetching matches for team id: {team_id}")
         schedule = await self.season_matches(guild, team_id, preseason=preseason)
 
         if not schedule:
@@ -269,12 +277,11 @@ class MatchMixIn(RSCMixIn):
         # Is interaction user away/home
         try:
             user_team = await self.match_team_by_user(match, interaction.user)
+            embed = await self.build_match_embed(
+                guild, match, user_team=user_team, with_gm=True
+            )
         except ValueError as exc:
             return await interaction.followup.send(embed=ExceptionErrorEmbed(str(exc)))
-
-        embed = await self.build_match_embed(
-            guild, match, user_team=user_team, with_gm=True
-        )
         await interaction.followup.send(embed=embed, ephemeral=True)
 
     # Functions
@@ -381,7 +388,10 @@ class MatchMixIn(RSCMixIn):
         elif match.match_type == MatchType.REGULAR:
             md = f"Match Day {match.day}"
         else:
-            md = f"Post-season match {match.day}"
+            if match.day is None:
+                raise ValueError(f"Unknown postseason match day (round): {match.day}")
+            playoff_round = PostSeasonType(match.day)
+            md = f"{playoff_round.name} Match".title()
 
         # Format Date
         if not match.var_date:
@@ -668,5 +678,29 @@ class MatchMixIn(RSCMixIn):
                 )
                 log.debug(f"Match Score Report ({match_id}): {data}")
                 return await api.matches_score_report(match_id, data)
+            except ApiException as exc:
+                raise RscException(response=exc)
+
+    async def create_match(
+        self,
+        guild: discord.Guild,
+        match_type: MatchType,
+        match_format: MatchFormat,
+        home_team_id: int,
+        away_team_id: int,
+        day: int,
+    ) -> Match:
+        async with ApiClient(self._api_conf[guild.id]) as client:
+            api = MatchesApi(client)
+            try:
+                data = MatchSubmission(
+                    home_team=home_team_id,
+                    away_team=away_team_id,
+                    match_format=match_format,
+                    match_type=match_type,
+                    day=day,
+                )
+                log.debug(f"Match Create: {data}")
+                return await api.matches_create(data)
             except ApiException as exc:
                 raise RscException(response=exc)

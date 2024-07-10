@@ -22,7 +22,7 @@ from rsc.embeds import (
     SuccessEmbed,
     YellowEmbed,
 )
-from rsc.enums import MatchType
+from rsc.enums import MatchType, PostSeasonType
 from rsc.exceptions import RscException
 from rsc.logs import GuildLogAdapter
 from rsc.teams import TeamMixIn
@@ -73,12 +73,15 @@ class BallchasingMixIn(RSCMixIn):
             await self._ballchasing_api[guild.id].ping()
 
     # Settings
+
     _ballchasing: app_commands.Group = app_commands.Group(
         name="ballchasing",
         description="Ballchasing commands and configuration",
         guild_only=True,
         default_permissions=discord.Permissions(manage_guild=True),
     )
+
+    # Sub Commands
 
     @_ballchasing.command(  # type: ignore
         name="settings",
@@ -326,7 +329,7 @@ class BallchasingMixIn(RSCMixIn):
         # Get match search window
         tz = await self.timezone(guild)
         today = datetime.now(tz=tz)
-        start_date = today - timedelta(days=7)
+        start_date = today - timedelta(days=1)
         end_date = today + timedelta(days=1)
 
         log.debug(
@@ -334,6 +337,7 @@ class BallchasingMixIn(RSCMixIn):
         )
         mlist: list[Match] = await self.find_match(
             guild,
+            match_type=MatchType.ANY,
             date_gt=start_date,
             date_lt=end_date,
             teams=[home, away],
@@ -387,11 +391,12 @@ class BallchasingMixIn(RSCMixIn):
 
         log.debug(f"Found match: {match}")
 
-        # Make sure player is on one of those teams or GM of one of the teams
+        # Only GMs, Admins, and team members can report
         if (
             not (
                 await self.discord_member_in_match(member, match)
                 or await self.is_match_franchise_gm(member=member, match=match)
+                or member.guild_permissions.manage_guild
             )
             and not override
         ):
@@ -598,13 +603,32 @@ class BallchasingMixIn(RSCMixIn):
         tier_color = await utils.tier_color_by_name(guild, match.home_team.tier)
 
         embed = discord.Embed(
-            title=f"MD {match.day}: {match.home_team.name} vs {match.away_team.name}",
             description=(
                 "Match Summary:\n"
                 f"**{match.home_team.name}** {result.home_wins} - {result.away_wins} **{match.away_team.name}**"
             ),
             color=tier_color,
         )
+
+        # This is an `ValueError` but we still want to display the report
+        if not match.day:
+            match.day = 0
+
+        # Format embed title by match type
+        if match.match_type == MatchType.PRESEASON:
+            embed.title = (
+                f"Pre {match.day}: {match.home_team.name} vs {match.away_team.name}"
+            )
+        elif match.match_type == MatchType.POSTSEASON:
+            playoff_round = PostSeasonType(match.day).name.capitalize()
+            embed.title = (
+                f"{playoff_round}: {match.home_team.name} vs {match.away_team.name}"
+            )
+        else:
+            embed.title = (
+                f"MD {match.day}: {match.home_team.name} vs {match.away_team.name}"
+            )
+
         # Ballchasing group link button
         bc_view = None
         if link:

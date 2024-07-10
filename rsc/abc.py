@@ -21,6 +21,7 @@ from rscapi.models.high_level_match import HighLevelMatch
 from rscapi.models.intent_to_play import IntentToPlay
 from rscapi.models.league import League
 from rscapi.models.league_player import LeaguePlayer
+from rscapi.models.league_player_patch import LeaguePlayerPatch
 from rscapi.models.match import Match
 from rscapi.models.match_list import MatchList
 from rscapi.models.match_results import MatchResults
@@ -192,6 +193,19 @@ class RSCMixIn(ABC):
     # League
 
     @abstractmethod
+    async def update_league_player(
+        self,
+        guild: discord.Guild,
+        player_id: int,
+        base_mmr: int | None = None,
+        current_mmr: int | None = None,
+        tier: int | None = None,
+        status: Status | None = None,
+        team: str | None = None,
+    ) -> LeaguePlayerPatch:
+        ...
+
+    @abstractmethod
     async def league_player_update_handler(self, request: aiohttp.web.Request):
         ...
 
@@ -275,6 +289,18 @@ class RSCMixIn(ABC):
         ...
 
     # Matches
+
+    @abstractmethod
+    async def create_match(
+        self,
+        guild: discord.Guild,
+        match_type: MatchType,
+        match_format: MatchFormat,
+        home_team_id: int,
+        away_team_id: int,
+        day: int,
+    ) -> Match:
+        ...
 
     @abstractmethod
     async def is_future_match_date(
@@ -509,6 +535,14 @@ class RSCMixIn(ABC):
     # Teams
 
     @abstractmethod
+    async def team_id_by_name(self, guild: discord.Guild, name: str) -> int:
+        ...
+
+    @abstractmethod
+    async def teams_in_same_tier(self, teams: list[Team | TeamList]) -> bool:
+        ...
+
+    @abstractmethod
     async def teams(
         self,
         guild: discord.Guild,
@@ -535,10 +569,6 @@ class RSCMixIn(ABC):
         guild: discord.Guild,
         id: int,
     ) -> Match | None:
-        ...
-
-    @abstractmethod
-    async def team_id_by_name(self, guild: discord.Guild, name: str) -> int:
         ...
 
     @abstractmethod
@@ -588,6 +618,10 @@ class RSCMixIn(ABC):
 
     @abstractmethod
     async def is_valid_tier(self, guild: discord.Guild, name: str) -> bool:
+        ...
+
+    @abstractmethod
+    async def tier_id_by_name(self, guild: discord.Guild, tier: str) -> int:
         ...
 
     # Trackers

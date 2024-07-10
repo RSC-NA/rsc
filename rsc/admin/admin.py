@@ -1,9 +1,11 @@
+import json
 import logging
 import tempfile
 from datetime import datetime
 from typing import MutableMapping, cast
 
 import discord
+from pydantic import ValidationError
 from redbot.core import app_commands
 from rscapi.models.franchise import Franchise
 from rscapi.models.league_player import LeaguePlayer
@@ -16,10 +18,12 @@ from rsc import const
 from rsc.abc import RSCMixIn
 from rsc.admin.modals import (
     AgmMessageModal,
+    BulkMatchModal,
     FranchiseRebrandModal,
     IntentMissingModal,
     LeagueDatesModal,
 )
+from rsc.admin.models import CreateMatchData
 from rsc.admin.views import (
     ConfirmSyncView,
     CreateFranchiseView,
@@ -32,12 +36,20 @@ from rsc.embeds import (
     ApiExceptionErrorEmbed,
     BlueEmbed,
     ErrorEmbed,
+    ExceptionErrorEmbed,
     GreenEmbed,
     LoadingEmbed,
+    RedEmbed,
     SuccessEmbed,
     YellowEmbed,
 )
-from rsc.enums import ActivityCheckStatus, Status
+from rsc.enums import (
+    ActivityCheckStatus,
+    MatchFormat,
+    MatchType,
+    PostSeasonType,
+    Status,
+)
 from rsc.exceptions import LeagueNotConfigured, RscException
 from rsc.franchises import FranchiseMixIn
 from rsc.logs import GuildLogAdapter
@@ -46,6 +58,7 @@ from rsc.tiers import TierMixIn
 from rsc.transactions.roles import (
     update_draft_eligible_discord,
     update_free_agent_discord,
+    update_league_player_discord,
     update_nonplaying_discord,
     update_rostered_discord,
 )
@@ -165,8 +178,16 @@ class AdminMixIn(RSCMixIn):
         guild_only=True,
         default_permissions=discord.Permissions(manage_guild=True),
     )
+    _matches = app_commands.Group(
+        name="matches",
+        description="Manage RSC matches",
+        parent=_admin,
+        guild_only=True,
+        default_permissions=discord.Permissions(manage_guild=True),
+    )
 
     # Settings
+
     @_admin.command(name="settings", description="Display RSC Admin settings.")  # type: ignore
     async def _admin_settings_cmd(self, interaction: discord.Interaction):
         guild = interaction.guild
@@ -378,47 +399,127 @@ class AdminMixIn(RSCMixIn):
             ),
         )
 
-    # @_members.command(name="patch", description="Patch a league player in the API")  # type: ignore
-    # @app_commands.describe(
-    #     player="Discord member to patch",
-    #     status="Player status",
-    #     tier="Tier name",
-    #     team="Team name",
-    #     base_mmr="Base MMR",
-    #     current_mmr="Current MMR"
-    # )
-    # @app_commands.autocomplete(
-    #     tier=TierMixIn.tier_autocomplete,
-    #     team=TeamMixIn.teams_autocomplete
-    # )
-    # async def _member_patch(
-    #     self,
-    #     interaction: discord.Interaction,
-    #     player: discord.Member,
-    #     status: Status|None=None,
-    #     tier: str|None=None,
-    #     team: str|None=None,
-    #     base_mmr: int|None=None,
-    #     current_mmr: int|None=None,
-    # ):
-    #     guild = interaction.guild
-    #     if not guild:
-    #         return
+    @_members.command(name="patch", description="Patch a league player in the API")  # type: ignore
+    @app_commands.describe(
+        player="Discord member to patch",
+        status="Player status",
+        tier="Tier name",
+        team="Team name",
+        base_mmr="Base MMR",
+        current_mmr="Current MMR",
+    )
+    @app_commands.autocomplete(
+        tier=TierMixIn.tier_autocomplete, team=TeamMixIn.teams_autocomplete
+    )
+    async def _member_patch_cmd(
+        self,
+        interaction: discord.Interaction,
+        player: discord.Member,
+        status: Status | None = None,
+        tier: str | None = None,
+        team: str | None = None,
+        base_mmr: int | None = None,
+        current_mmr: int | None = None,
+    ):
+        guild = interaction.guild
+        if not guild:
+            return
+        await interaction.response.defer()
 
-    #     await interaction.response.defer()
-    #     try:
-    #         ...dosomething...
-    #     except RscException as exc:
-    #         await interaction.followup.send(
-    #             embed=ApiExceptionErrorEmbed(exc), ephemeral=True
-    #         )
-    #         return
+        # Get Tier ID
+        tid = None
+        tier_list = []
+        try:
+            plist = await self.players(guild, discord_id=player.id, limit=1)
+            if tier:
+                tier_list = await self.tiers(guild)
+                tid = await self.tier_id_by_name(guild, tier=tier)
+                log.debug(f"Tier ID: {tid}")
+        except RscException as exc:
+            return await interaction.followup.send(
+                embed=ApiExceptionErrorEmbed(exc), ephemeral=True
+            )
+        except ValueError as exc:
+            return await interaction.followup.send(
+                embed=ExceptionErrorEmbed(exc_message=str(exc))
+            )
 
-    #     await interaction.followup.send(
-    #         embed=SuccessEmbed(
-    #             description=f"Transferred membership of {old} to {new.mention}"
-    #         ),
-    #     )
+        if not plist:
+            return await interaction.response.send_message(
+                embed=ErrorEmbed(
+                    description="Player was updated but league player does not exist."
+                )
+            )
+
+        lplayer = plist.pop(0)
+        if not lplayer.id:
+            return await interaction.response.send_message(
+                embed=ErrorEmbed(description="LeaguePlayer object has no ID")
+            )
+
+        # Patch Player
+        try:
+            log.debug(f"Updating League Player ID: {lplayer.id}")
+            result = await self.update_league_player(
+                guild=guild,
+                player_id=lplayer.id,
+                current_mmr=current_mmr,
+                base_mmr=base_mmr,
+                tier=tid,
+                status=status,
+                team=team,
+            )
+            # Get updated league player object
+            plist = await self.players(guild, discord_id=player.id, limit=1)
+        except RscException as exc:
+            return await interaction.followup.send(
+                embed=ApiExceptionErrorEmbed(exc), ephemeral=True
+            )
+        except ValueError as exc:
+            return await interaction.followup.send(
+                embed=ExceptionErrorEmbed(exc_message=str(exc))
+            )
+
+        if not plist:
+            return await interaction.response.send_message(
+                embed=ErrorEmbed(
+                    description="Player was updated but league player does not exist."
+                )
+            )
+
+        # Update discord roles, etc
+        try:
+            log.debug("Updating player in discord")
+            lplayer = plist.pop(0)
+            await update_league_player_discord(
+                guild=guild, player=player, league_player=lplayer, tiers=tier_list
+            )
+        except (ValueError, AttributeError) as exc:
+            return await interaction.followup.send(
+                embed=ExceptionErrorEmbed(exc_message=str(exc))
+            )
+
+        # Craft embed
+        embed = BlueEmbed(title="Leauge Player Updated")
+        if tier:
+            tcolor = await utils.tier_color_by_name(guild, name=tier)
+            embed.colour = tcolor
+
+        # Format player status
+        pstatus = "Error"
+        if result.status:
+            pstatus = Status(result.status).full_name
+
+        embed.add_field(name="Player", value=player.mention, inline=True)
+        embed.add_field(name="Status", value=pstatus, inline=True)
+        embed.add_field(name="", value="", inline=False)  # Line Break
+        embed.add_field(name="Team", value=str(result.team_name), inline=True)
+        embed.add_field(name="Tier", value=str(result.tier), inline=True)
+        embed.add_field(name="", value="", inline=False)  # Line Break
+        embed.add_field(name="Base MMR", value=str(result.base_mmr), inline=True)
+        embed.add_field(name="Current MMR", value=str(result.current_mmr), inline=True)
+
+        await interaction.followup.send(embed=embed)
 
     @_members.command(name="create", description="Create an RSC member in the API")  # type: ignore
     @app_commands.describe(
@@ -3340,7 +3441,276 @@ class AdminMixIn(RSCMixIn):
             )
         )
 
-    # Other Group Commands
+    # Matches Group Commands
+    @_matches.command(name="create", description="Create a regular season RSC match")  # type: ignore
+    @app_commands.autocomplete(
+        home_team=TeamMixIn.teams_autocomplete, away_team=TeamMixIn.teams_autocomplete
+    )  # type: ignore
+    async def _matches_create_cmd(
+        self,
+        interaction: discord.Interaction,
+        match_type: MatchType,
+        format: MatchFormat,
+        home_team: str,
+        away_team: str,
+        day: app_commands.Range[int, 0, 20] = 0,
+    ):
+        guild = interaction.guild
+        if not guild:
+            return
+
+        await interaction.response.defer()
+        # Get team information
+        try:
+            log.debug(f"Searching for home team: {home_team}")
+            hlist = await self.teams(guild, name=home_team)
+            log.debug(f"Home Team Search: {hlist}")
+            log.debug(f"Searching for away team:{away_team}")
+            alist = await self.teams(guild, name=away_team)
+            log.debug(f"Away Team Search: {alist}")
+        except RscException as exc:
+            return await interaction.followup.send(
+                embed=ApiExceptionErrorEmbed(exc), ephemeral=True
+            )
+
+        # Validate results
+        if not hlist or len(hlist) > 1:
+            return await interaction.followup.send(
+                embed=ErrorEmbed(
+                    description=f"No teams found or more than one result for **{home_team}**"
+                )
+            )
+        elif not alist or len(alist) > 1:
+            return await interaction.followup.send(
+                embed=ErrorEmbed(
+                    description=f"No teams found or more than one result for **{away_team}**"
+                )
+            )
+
+        hteam = hlist.pop(0)
+        if not hteam.id:
+            return await interaction.followup.send(
+                embed=ErrorEmbed(
+                    description=f"**{home_team}** has no team ID in the API."
+                )
+            )
+        ateam = alist.pop(0)
+        if not ateam.id:
+            return await interaction.followup.send(
+                embed=ErrorEmbed(
+                    description=f"**{away_team}** has no team ID in the API."
+                )
+            )
+
+        try:
+            if not await self.teams_in_same_tier(teams=[hteam, ateam]):
+                return await interaction.followup.send(
+                    embed=ErrorEmbed(
+                        description=f"**{home_team}** and **{away_team}** are not in the same tier."
+                    )
+                )
+        except ValueError as exc:
+            return await interaction.followup.send(content=str(exc), ephemeral=True)
+
+        # Create Match
+        try:
+            result = await self.create_match(
+                guild,
+                match_type=match_type,
+                match_format=format,
+                home_team_id=hteam.id,
+                away_team_id=ateam.id,
+                day=day,
+            )
+            log.debug(f"Match Creation Result: {result}")
+        except RscException as exc:
+            return await interaction.followup.send(
+                embed=ApiExceptionErrorEmbed(exc), ephemeral=True
+            )
+
+        embed = BlueEmbed(title="Match Created")
+        embed.add_field(name="Match Type", value=str(match_type), inline=True)
+        embed.add_field(name="Format", value=str(format), inline=True)
+        embed.add_field(name="Day", value=str(day), inline=True)
+        embed.add_field(name="", value="", inline=False)
+        embed.add_field(name="Home Team", value=hteam.name, inline=True)
+        embed.add_field(name="Away Team", value=ateam.name, inline=True)
+        await interaction.followup.send(embed=embed)
+
+    # Matches Group Commands
+    @_matches.command(name="playoff", description="Create an RSC playoff match")  # type: ignore
+    @app_commands.autocomplete(
+        home_team=TeamMixIn.teams_autocomplete, away_team=TeamMixIn.teams_autocomplete
+    )  # type: ignore
+    async def _matches_playoff_cmd(
+        self,
+        interaction: discord.Interaction,
+        round: PostSeasonType,
+        format: MatchFormat,
+        home_team: str,
+        away_team: str,
+    ):
+        guild = interaction.guild
+        if not guild:
+            return
+
+        await interaction.response.defer()
+        # Get team information
+        try:
+            log.debug(f"Searching for home team: {home_team}")
+            hlist = await self.teams(guild, name=home_team)
+            log.debug(f"Home Team Search: {hlist}")
+            log.debug(f"Searching for away team:{away_team}")
+            alist = await self.teams(guild, name=away_team)
+            log.debug(f"Away Team Search: {alist}")
+        except RscException as exc:
+            return await interaction.followup.send(
+                embed=ApiExceptionErrorEmbed(exc), ephemeral=True
+            )
+
+        # Validate results
+        if not hlist or len(hlist) > 1:
+            return await interaction.followup.send(
+                embed=ErrorEmbed(
+                    description=f"No teams found or more than one result for **{home_team}**"
+                )
+            )
+        elif not alist or len(alist) > 1:
+            return await interaction.followup.send(
+                embed=ErrorEmbed(
+                    description=f"No teams found or more than one result for **{away_team}**"
+                )
+            )
+
+        hteam = hlist.pop(0)
+        if not hteam.id:
+            return await interaction.followup.send(
+                embed=ErrorEmbed(
+                    description=f"**{home_team}** has no team ID in the API."
+                )
+            )
+        ateam = alist.pop(0)
+        if not ateam.id:
+            return await interaction.followup.send(
+                embed=ErrorEmbed(
+                    description=f"**{away_team}** has no team ID in the API."
+                )
+            )
+
+        try:
+            if not await self.teams_in_same_tier(teams=[hteam, ateam]):
+                return await interaction.followup.send(
+                    embed=ErrorEmbed(
+                        description=f"**{home_team}** and **{away_team}** are not in the same tier."
+                    )
+                )
+        except ValueError as exc:
+            return await interaction.followup.send(content=str(exc), ephemeral=True)
+
+        # Create Match
+        try:
+            result = await self.create_match(
+                guild,
+                match_type=MatchType.POSTSEASON,
+                match_format=format,
+                home_team_id=hteam.id,
+                away_team_id=ateam.id,
+                day=round.value,
+            )
+            log.debug(f"Match Creation Result: {result}")
+        except RscException as exc:
+            return await interaction.followup.send(
+                embed=ApiExceptionErrorEmbed(exc), ephemeral=True
+            )
+
+        embed = BlueEmbed(title="Playoff Match Created")
+        embed.add_field(name="Match Type", value=str(MatchType.POSTSEASON), inline=True)
+        embed.add_field(name="Format", value=str(format), inline=True)
+        embed.add_field(name="Round", value=round.name, inline=True)
+        embed.add_field(name="", value="", inline=False)
+        embed.add_field(name="Home Team", value=hteam.name, inline=True)
+        embed.add_field(name="Away Team", value=ateam.name, inline=True)
+        await interaction.followup.send(embed=embed)
+
+    # Matches Group Commands
+    @_matches.command(name="bulk", description="Create bulk RSC matches")  # type: ignore
+    async def _matches_bulk_create_cmd(self, interaction: discord.Interaction):
+        guild = interaction.guild
+        if not guild:
+            return
+
+        bulk_modal = BulkMatchModal()
+        await interaction.response.send_modal(bulk_modal)
+        await bulk_modal.wait()
+        log.debug("Modal finished.")
+
+        # Loading embed
+        await bulk_modal.interaction.response.send_message(
+            embed=YellowEmbed(
+                title="Bulk Match Creation", description="Processing match data..."
+            )
+        )
+
+        # Parse JSON
+        try:
+            log.debug("Parsing match JSON")
+            matches = await bulk_modal.parse_matches()
+        except (json.JSONDecodeError, ValidationError) as exc:
+            return await bulk_modal.interaction.edit_original_response(
+                embed=ExceptionErrorEmbed(exc_message=str(exc))
+            )
+
+        # Create Match
+        success: list[CreateMatchData] = []
+        for m in matches:
+            log.debug(f"MD: {m.day} Home: {m.home_team} Away: {m.away_team}")
+            try:
+                # Get team IDs
+                log.debug(f"Searching for home team: {m.home_team}")
+                home_id = await self.team_id_by_name(guild, name=m.home_team)
+                log.debug(f"Home Team ID: {home_id}")
+                log.debug(f"Searching for away team:{m.away_team}")
+                away_id = await self.team_id_by_name(guild, name=m.away_team)
+                log.debug(f"Away Team ID: {away_id}")
+                result = await self.create_match(
+                    guild,
+                    match_type=m.match_type,
+                    match_format=m.match_format,
+                    home_team_id=home_id,
+                    away_team_id=away_id,
+                    day=m.day,
+                )
+                log.debug(f"Match Creation Result: {result}")
+                success.append(m)
+            except (RscException, ValidationError) as exc:
+                embed = RedEmbed(
+                    title="Bulk Match Error",
+                    description=f"Exception:\n```{str(exc)}```\n\nThe following matches succeeded.",
+                )
+                embed.add_field(
+                    name="Day",
+                    value="\n".join([str(s.day) for s in success]),
+                    inline=True,
+                )
+                embed.add_field(
+                    name="Home",
+                    value="\n".join([s.home_team for s in success]),
+                    inline=True,
+                )
+                embed.add_field(
+                    name="Away",
+                    value="\n".join([s.away_team for s in success]),
+                    inline=True,
+                )
+                return await bulk_modal.interaction.edit_original_response(embed=embed)
+
+        embed = BlueEmbed(
+            title="Bulk Matches Added",
+            description=f"**{len(success)}** matches have been created in the API.",
+        )
+        await bulk_modal.interaction.edit_original_response(embed=embed)
+
+    # Base Group Commands
 
     @_admin.command(name="dates", description="Configure the dates command output")  # type: ignore
     async def _admin_set_dates(self, interaction: discord.Interaction):
