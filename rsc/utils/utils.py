@@ -284,25 +284,24 @@ async def get_former_gm_role(guild: discord.Guild) -> discord.Role:
 
 async def remove_prefix(member: discord.Member) -> str:
     """Remove team prefix from guild members display name"""
-    result = member.display_name.split(" | ")
-    if len(result) == 2:
-        return result[1].strip()
-    elif len(result) > 2:
-        return " | ".join(result[1:]).strip()
+    result = member.display_name.split(" | ", maxsplit=1)
+    if not result:
+        raise ValueError(f"Unable to remove prefix from {member.display_name}")
     elif len(result) == 1:
         return result[0].strip()  # No prefix found
-    raise ValueError(f"Unable to remove prefix from {member.display_name}")
+    else:
+        return result[1].strip()
 
 
 async def get_prefix(member: discord.Member) -> str | None:
     """Get team prefix from guild members display name"""
-    result = member.display_name.split(" | ")
-
-    if len(result) == 2:
-        return result[0].strip()
+    result = member.display_name.split(" | ", maxsplit=1)
+    if not result:
+        raise ValueError(f"Error parsing prefix from {member.display_name}")
     elif len(result) == 1:
         return None  # No prefix found
-    raise ValueError(f"Error parsing prefix from {member.display_name}")
+    else:
+        return result[0].strip()
 
 
 async def give_fa_prefix(member: discord.Member):
