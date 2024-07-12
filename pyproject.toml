@@ -28,9 +28,4 @@ exclude = [
 ]
 
 [tool.codespell]
-ignore-words-list = [
-    "PTD",
-    "OCE",
-    "nd",
-    "CrOS",
-]
+ignore-words-list = "ptd,oce,nd,cros,recuse,checkin"

@@ -16,8 +16,8 @@ Follow the Red Discord Bot installation guide for [Windows](https://docs.discord
 ```
 <p>load downloader
 <p>repo add RSCBot https://github.com/RSC-NA/rsc.git [branch]
-<p>cog install RSCBot rsc 
-<p>load rsc 
+<p>cog install RSCBot rsc
+<p>load rsc
 ```
 
 ## Configuration
@@ -35,5 +35,4 @@ There are a variety of settings available in a large number of modules for the b
 - `/ballchasing` - Ballchasing Replay Settings
 - `/combines` - Combine Settings
 - `/moderation` - Mod Settings
-- `/transactions` - Transactions Setings
-
+- `/transactions` - Transactions Settings
