@@ -375,20 +375,6 @@ class BallchasingMixIn(RSCMixIn):
                 ),
                 ephemeral=True,
             )
-
-        # Don't allow reporting of future matches
-        try:
-            if await self.is_future_match_date(guild, match) and not override:
-                return await interaction.edit_original_response(
-                    embed=ErrorEmbed(
-                        description="You can not report a future match. Are you sure you specified the correct teams?"
-                    )
-                )
-        except AttributeError as exc:
-            return await interaction.edit_original_response(
-                embed=ExceptionErrorEmbed(exc_message=str(exc))
-            )
-
         log.debug(f"Found match: {match}")
 
         # Only GMs, Admins, and team members can report
