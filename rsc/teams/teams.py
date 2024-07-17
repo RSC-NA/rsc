@@ -17,7 +17,12 @@ from rscapi.models.team_season_stats import TeamSeasonStats
 from rscapi.models.tier import Tier
 
 from rsc.abc import RSCMixIn
-from rsc.embeds import ApiExceptionErrorEmbed, BlueEmbed, ErrorEmbed
+from rsc.embeds import (
+    ApiExceptionErrorEmbed,
+    BlueEmbed,
+    ErrorEmbed,
+    ExceptionErrorEmbed,
+)
 from rsc.enums import Status, SubStatus
 from rsc.exceptions import RscException
 from rsc.franchises import FranchiseMixIn
@@ -227,7 +232,7 @@ class TeamMixIn(RSCMixIn):
     @app_commands.describe(team="Team name to search")
     @app_commands.autocomplete(team=teams_autocomplete)  # type: ignore
     @app_commands.guild_only
-    async def _roster(
+    async def _roster_cmd(
         self,
         interaction: discord.Interaction,
         team: str,
@@ -238,7 +243,7 @@ class TeamMixIn(RSCMixIn):
             return
 
         await interaction.response.defer()
-        plist = await self.players(guild, team_name=team)
+        plist = await self.players(guild, team_name=team, limit=10)
 
         # Verify team exists and get data
         if not plist:
@@ -248,125 +253,12 @@ class TeamMixIn(RSCMixIn):
             )
             return
 
-        # Check if we got results for other teams
-        players: list[LeaguePlayer] = []
-        for p in plist:
-            if not (p.team and p.team.name and p.team.franchise):
-                log.error(
-                    "Malformed roster data received from API. Player has no team, team name, or franchise but is rostered.",
-                    guild=guild,
-                )
-                continue
-            if p.team.name.lower() == team.lower():
-                players.append(p)
-
-        if not players:
-            teams_found: set[str] = {
-                str(p.team.name) if p.team else "Error" for p in plist
-            }
-            names = ", ".join(list(teams_found))
+        try:
+            embed = await self.build_roster_embed(guild, plist)
+        except (ValueError, AttributeError) as exc:
             return await interaction.followup.send(
-                content=f"Found multiple results for team name.\n\n **{names}**",
-                ephemeral=True,
+                embed=ExceptionErrorEmbed(exc_message=str(exc))
             )
-
-        if not (players[0].team and players[0].team.franchise):
-            raise ValueError("Malformed roster data received from API")
-
-        gm_id = players[0].team.franchise.gm.discord_id
-        gm_name = players[0].team.franchise.gm.rsc_name
-        franchise = players[0].team.franchise.name
-
-        roster = []
-        subbed = []
-        ir = []
-        insertTop = False
-        for p in players:
-            m = None
-            if p.player.discord_id:
-                m = guild.get_member(p.player.discord_id)
-            name = m.display_name if m else p.player.name
-
-            # Check GM/Capatain
-            if p.captain and p.player.discord_id == gm_id:
-                name = f"{name} (GM|C)"
-                insertTop = True
-            elif p.player.discord_id == gm_id:
-                name = f"{name} (GM)"
-                insertTop = True
-            elif p.captain:
-                name = f"{name} (C)"
-                insertTop = True
-            else:
-                insertTop = False
-
-            # Sub status
-            match p.sub_status:
-                case SubStatus.OUT:
-                    subbed.append(name)
-                    continue
-                case SubStatus.IN:
-                    roster.append(f"{name} (Sub)")
-                    continue
-
-            match p.status:
-                case Status.IR:
-                    ir.append(f"{name} (IR)")
-                case Status.AGMIR:
-                    ir.append(f"{name} (AGM IR)")
-                case Status.ROSTERED | Status.RENEWED:
-                    if insertTop:
-                        roster.insert(0, name)
-                    else:
-                        roster.append(name)
-
-                case _:
-                    roster.append(name)
-
-        # Validate API data
-        if not (players[0].tier and players[0].tier.name):
-            return await interaction.followup.send(
-                embed=ErrorEmbed(
-                    description="Player has no tier or tier name. Please open a modmail ticket."
-                )
-            )
-
-        roster_str = "\n".join(roster)
-        tier_color = await utils.tier_color_by_name(guild, players[0].tier.name)
-
-        header = f"{team} - {franchise} ({gm_name}) - {players[0].tier.name}"
-        # desc = f"**{header}**\n```\n{roster_str}\n```"
-        # desc = f"\n```\n{roster_str}\n```"
-        desc = f"```\n{roster_str}\n```"
-
-        embed = discord.Embed(
-            # title=f"{team} - {franchise} ({gm_name}) - {players[0].tier.name}",
-            description=desc,
-            color=tier_color,
-        )
-
-        embed.set_author(name=header)
-
-        if subbed:
-            sub_str = "\n".join(subbed)
-            embed.add_field(
-                name="Subbed Out", value=f"```\n{sub_str}\n```", inline=True
-            )
-
-        if ir:
-            ir_str = "\n".join(ir)
-            embed.add_field(
-                name="Inactive Reserve", value=f"```\n{ir_str}\n```", inline=True
-            )
-
-        # Get Logo
-        flogo = None
-        if players[0].team.franchise.id:
-            flogo = await self.franchise_logo(guild, players[0].team.franchise.id)
-        if flogo:
-            embed.set_thumbnail(url=flogo)
-        elif guild.icon:
-            embed.set_thumbnail(url=guild.icon.url)
         await interaction.followup.send(embed=embed)
 
     # Captains Group
@@ -680,6 +572,107 @@ class TeamMixIn(RSCMixIn):
 
         captains.sort(key=lambda c: cast(int, c.tier.position), reverse=True)  # type: ignore
         return captains
+
+    async def build_roster_embed(
+        self, guild: discord.Guild, players: list[LeaguePlayer]
+    ) -> discord.Embed:
+        if not players:
+            raise ValueError("No players provided to build roster embed")
+
+        if not (players[0].team and players[0].team.franchise):
+            raise AttributeError(
+                f"{players[0].player.name} does not have franchise information."
+            )
+
+        if not (players[0].tier and players[0].tier.name):
+            raise AttributeError(f"{players[0].player.name} has no tier information.")
+
+        gm_id = players[0].team.franchise.gm.discord_id or "None"
+        gm_name = players[0].team.franchise.gm.rsc_name or "None"
+        franchise = players[0].team.franchise.name or "Error"
+
+        roster = []
+        subbed = []
+        ir = []
+        insertTop = False
+        for p in players:
+            m = None
+            if p.player.discord_id:
+                m = guild.get_member(p.player.discord_id)
+            name = m.display_name if m else p.player.name
+
+            # Check GM/Capatain
+            if p.captain and p.player.discord_id == gm_id:
+                name = f"{name} (GM|C)"
+                insertTop = True
+            elif p.player.discord_id == gm_id:
+                name = f"{name} (GM)"
+                insertTop = True
+            elif p.captain:
+                name = f"{name} (C)"
+                insertTop = True
+            else:
+                insertTop = False
+
+            # Sub status
+            match p.sub_status:
+                case SubStatus.OUT:
+                    subbed.append(name)
+                    continue
+                case SubStatus.IN:
+                    roster.append(f"{name} (Sub)")
+                    continue
+
+            match p.status:
+                case Status.IR:
+                    ir.append(f"{name} (IR)")
+                case Status.AGMIR:
+                    ir.append(f"{name} (AGM IR)")
+                case Status.ROSTERED | Status.RENEWED:
+                    if insertTop:
+                        roster.insert(0, name)
+                    else:
+                        roster.append(name)
+
+                case _:
+                    roster.append(name)
+
+        roster_str = "\n".join(roster)
+        tier_color = await utils.tier_color_by_name(guild, players[0].tier.name)
+
+        header = (
+            f"{players[0].team.name} - {franchise} ({gm_name}) - {players[0].tier.name}"
+        )
+        desc = f"```\n{roster_str}\n```"
+
+        embed = discord.Embed(
+            description=desc,
+            color=tier_color,
+        )
+        embed.set_author(name=header)
+
+        if subbed:
+            sub_str = "\n".join(subbed)
+            embed.add_field(
+                name="Subbed Out", value=f"```\n{sub_str}\n```", inline=True
+            )
+
+        if ir:
+            ir_str = "\n".join(ir)
+            embed.add_field(
+                name="Inactive Reserve", value=f"```\n{ir_str}\n```", inline=True
+            )
+
+        # Get Logo
+        flogo = None
+        if players[0].team.franchise.id:
+            flogo = await self.franchise_logo(guild, players[0].team.franchise.id)
+        if flogo:
+            embed.set_thumbnail(url=flogo)
+        elif guild.icon:
+            embed.set_thumbnail(url=guild.icon.url)
+
+        return embed
 
     # API
 
