@@ -1,1 +1,1 @@
-from rsc.extras.extras import ExtrasMixIn
+from rsc.extras.extras import ExtrasMixIn as ExtrasMixIn

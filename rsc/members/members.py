@@ -31,7 +31,13 @@ from rsc.enums import Platform, PlayerType, Referrer, RegionPreference, Status
 from rsc.exceptions import LeagueNotConfigured, RscException
 from rsc.franchises import FranchiseMixIn
 from rsc.logs import GuildLogAdapter
-from rsc.members.views import IntentState, IntentToPlayView, SignupState, SignupView
+from rsc.members.views import (
+    IntentState,
+    IntentToPlayView,
+    PlayerInfoView,
+    SignupState,
+    SignupView,
+)
 from rsc.teams import TeamMixIn
 from rsc.tiers import TierMixIn
 from rsc.utils import utils
@@ -666,7 +672,6 @@ class MemberMixIn(RSCMixIn):
             return
 
         embed = BlueEmbed(title=f"Player Info: {p.player.name}")
-
         embed.add_field(name="Player", value=player.mention, inline=True)
 
         if p.tier and p.tier.name:
@@ -698,7 +703,16 @@ class MemberMixIn(RSCMixIn):
         if not embed.thumbnail.url and player.avatar:
             embed.set_thumbnail(url=player.avatar.url)
 
-        await interaction.followup.send(embed=embed)
+        if p.team and p.team.name and p.team.franchise and p.team.franchise.name:
+            playerinfo_view = PlayerInfoView(
+                mixin=self,
+                player=player,
+                team=p.team.name,
+                franchise=p.team.franchise.name,
+            )
+            await interaction.followup.send(embed=embed, view=playerinfo_view)
+        else:
+            await interaction.followup.send(embed=embed)
 
     @app_commands.command(  # type: ignore
         name="waivers", description="Display players currently on waivers"

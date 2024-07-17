@@ -1,1 +1,1 @@
-from rsc.teams.teams import TeamMixIn
+from rsc.teams.teams import TeamMixIn as TeamMixIn

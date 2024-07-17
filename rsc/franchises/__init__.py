@@ -1,1 +1,1 @@
-from rsc.franchises.franchises import FranchiseMixIn
+from rsc.franchises.franchises import FranchiseMixIn as FranchiseMixIn

@@ -19,13 +19,14 @@ mypy_path = ["/home/xentrick/dev/python-replay-parser"]
 [tool.isort]
 profile = "black"
 
-[tool.flake8]
-max-line-length = 200
-extend-ignore = "E203,W503"
-per-file-ignores = "__init__.py:F401"
-exclude = [
-    "const.py",
-]
+[tool.ruff]
+line-length = 200
+indent-width = 4
+exclude = ["scripts/"]
+
+[tool.ruff.lint]
+select = ["E", "F", "B", "C4", "SIM", "PTH", "TID", "ASYNC"]
+ignore = ["B904","SIM103", "SIM108"]
 
 [tool.codespell]
 ignore-words-list = "ptd,oce,nd,cros,recuse,checkin"

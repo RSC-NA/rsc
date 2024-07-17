@@ -1,1 +1,1 @@
-from rsc.developer.developer import DeveloperMixIn
+from rsc.developer.developer import DeveloperMixIn as DeveloperMixIn

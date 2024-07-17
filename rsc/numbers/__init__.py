@@ -1,1 +1,1 @@
-from rsc.numbers.numbers import NumberMixIn
+from rsc.numbers.numbers import NumberMixIn as NumberMixIn

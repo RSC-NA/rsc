@@ -159,7 +159,7 @@ class ThreadMixIn(RSCMixIn):
         if not interaction.guild:
             return
         groups = await self._get_groups(interaction.guild)
-        if group not in groups.keys():
+        if group not in groups:
             await interaction.response.send_message(
                 embed=ErrorEmbed(
                     description=f"**{group}** is not a valid assignable ModMail group."

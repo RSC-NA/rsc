@@ -725,9 +725,7 @@ class BallchasingMixIn(RSCMixIn):
 
         # BC Manager Role
         manager_role = await self._get_bc_manager_role(member.guild)
-        if manager_role in member.roles:
-            return True
-        return False
+        return manager_role in member.roles
 
     @staticmethod
     async def bc_group_full_url(group: str) -> str:

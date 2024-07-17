@@ -1,1 +1,1 @@
-from rsc.seasons.seasons import SeasonsMixIn
+from rsc.seasons.seasons import SeasonsMixIn as SeasonsMixIn

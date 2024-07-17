@@ -1,1 +1,1 @@
-from rsc.devleague.devleague import DevLeagueMixIn
+from rsc.devleague.devleague import DevLeagueMixIn as DevLeagueMixIn

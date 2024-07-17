@@ -70,12 +70,12 @@ class GreedyMemberTransformer(Transformer):
             len(discriminator) == 4 and discriminator.isdigit()
         ):
             lookup = username
-            predicate = (
+            predicate = (  # noqa: E731
                 lambda m: m.name == username and m.discriminator == discriminator
             )
         else:
             lookup = argument
-            predicate = (
+            predicate = (  # noqa: E731
                 lambda m: m.nick == argument
                 or m.global_name == argument
                 or m.name == argument

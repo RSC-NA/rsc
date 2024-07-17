@@ -1,1 +1,1 @@
-from rsc.transactions.transactions import TransactionMixIn
+from rsc.transactions.transactions import TransactionMixIn as TransactionMixIn

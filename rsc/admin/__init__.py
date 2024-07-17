@@ -1,1 +1,1 @@
-from rsc.admin.admin import AdminMixIn
+from rsc.admin.admin import AdminMixIn as AdminMixIn

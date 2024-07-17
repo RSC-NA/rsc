@@ -1,1 +1,1 @@
-from rsc.matches.matches import MatchMixIn
+from rsc.matches.matches import MatchMixIn as MatchMixIn

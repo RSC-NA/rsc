@@ -103,59 +103,13 @@ class TeamMixIn(RSCMixIn):
             await interaction.followup.send(content="No results found.", ephemeral=True)
             return
 
-        # Validate API data
-        for t in teams:
-            if not t.name:
-                return await interaction.followup.send(
-                    embed=ErrorEmbed(
-                        description=f"`Team {t.id}` has no name. Please open a modmail ticket."
-                    )
-                )
-            if not t.tier:
-                return await interaction.followup.send(
-                    embed=ErrorEmbed(
-                        description=f"`Team {t.id}` has no tier. Please open a modmail ticket."
-                    )
-                )
-            if not t.tier.name:
-                return await interaction.followup.send(
-                    embed=ErrorEmbed(
-                        description=f"`Team {t.id}` has no tier name. Please open a modmail ticket."
-                    )
-                )
-            if not t.tier.position:
-                return await interaction.followup.send(
-                    embed=ErrorEmbed(
-                        description=f"`Team {t.id}` has no tier position. Please open a modmail ticket."
-                    )
-                )
-
-        if teams[0].franchise and teams[0].franchise.gm:
-            gm_id = teams[0].franchise.gm.discord_id
-
-        teams.sort(key=lambda t: cast(str, t.tier.position), reverse=True)  # type: ignore
-
-        embed = BlueEmbed(description=f"GM: <@!{gm_id}>")
-        embed.title = f"{franchise}"
-        embed.add_field(
-            name="Team",
-            value="\n".join([t.name or "Error" for t in teams]),
-            inline=True,
-        )
-        embed.add_field(
-            name="Tier",
-            value="\n".join([str(t.tier.name) if t.tier else "Error" for t in teams]),
-            inline=True,
-        )
-
-        flogo = None
-        if teams[0].franchise.id:
-            flogo = await self.franchise_logo(guild, teams[0].franchise.id)
-
-        if flogo:
-            embed.set_thumbnail(url=flogo)
-        elif guild.icon:
-            embed.set_thumbnail(url=guild.icon.url)
+        # Build Embed
+        try:
+            embed = await self.build_franchise_teams_embed(guild, teams)
+        except (ValueError, AttributeError) as exc:
+            return await interaction.followup.send(
+                embed=ExceptionErrorEmbed(exc_message=str(exc))
+            )
 
         await interaction.followup.send(embed=embed)
 
@@ -572,6 +526,63 @@ class TeamMixIn(RSCMixIn):
 
         captains.sort(key=lambda c: cast(int, c.tier.position), reverse=True)  # type: ignore
         return captains
+
+    async def build_franchise_teams_embed(
+        self, guild: discord.Guild, teams: list[TeamList]
+    ) -> discord.Embed:
+        if not teams:
+            raise ValueError("No teams provided to build embed")
+
+        # Validate API data
+        for t in teams:
+            if not t.franchise.name:
+                raise AttributeError(
+                    f"`Team {t.id}` has no franchise name. Please open a modmail ticket"
+                )
+            if not t.name:
+                raise AttributeError(
+                    f"`Team {t.id}` has no name. Please open a modmail ticket"
+                )
+            if not t.tier:
+                raise AttributeError(
+                    f"`Team {t.id}` has no tier. Please open a modmail ticket"
+                )
+            if not t.tier.name:
+                raise AttributeError(
+                    f"`Team {t.id}` has no tier name. Please open a modmail ticket"
+                )
+            if not t.tier.position:
+                raise AttributeError(
+                    f"`Team {t.id}` has no tier position. Please open a modmail ticket"
+                )
+
+        if teams[0].franchise and teams[0].franchise.gm:
+            gm_id = teams[0].franchise.gm.discord_id
+
+        teams.sort(key=lambda t: cast(str, t.tier.position), reverse=True)  # type: ignore
+
+        embed = BlueEmbed(description=f"GM: <@!{gm_id}>")
+        embed.title = f"{teams[0].franchise.name}"
+        embed.add_field(
+            name="Team",
+            value="\n".join([t.name or "Error" for t in teams]),
+            inline=True,
+        )
+        embed.add_field(
+            name="Tier",
+            value="\n".join([str(t.tier.name) if t.tier else "Error" for t in teams]),
+            inline=True,
+        )
+
+        flogo = None
+        if teams[0].franchise.id:
+            flogo = await self.franchise_logo(guild, teams[0].franchise.id)
+
+        if flogo:
+            embed.set_thumbnail(url=flogo)
+        elif guild.icon:
+            embed.set_thumbnail(url=guild.icon.url)
+        return embed
 
     async def build_roster_embed(
         self, guild: discord.Guild, players: list[LeaguePlayer]

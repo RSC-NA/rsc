@@ -1,1 +1,1 @@
-from rsc.llm.llm import LLMMixIn
+from rsc.llm.llm import LLMMixIn as LLMMixIn

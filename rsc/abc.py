@@ -73,54 +73,44 @@ class RSCMixIn(ABC):
     # Core
 
     @abstractmethod
-    async def timezone(self, guild: discord.Guild) -> ZoneInfo:
-        ...
+    async def timezone(self, guild: discord.Guild) -> ZoneInfo: ...
 
     @abstractmethod
-    async def _get_api_url(self, guild: discord.Guild) -> str | None:
-        ...
+    async def _get_api_url(self, guild: discord.Guild) -> str | None: ...
 
     # Admin
 
     @abstractmethod
-    async def _get_dates(self, guild: discord.Guild) -> str:
-        ...
+    async def _get_dates(self, guild: discord.Guild) -> str: ...
 
     # Combines
 
     @abstractmethod
     async def combine_players_from_lobby(
         self, guild: discord.Guild, lobby: "CombinesLobby"
-    ) -> list[discord.Member]:
-        ...
+    ) -> list[discord.Member]: ...
 
     @abstractmethod
     async def _set_combines_category(
         self, guild: discord.Guild, category: discord.CategoryChannel
-    ):
-        ...
+    ): ...
 
     @abstractmethod
     async def _get_combines_category(
         self, guild: discord.Guild
-    ) -> discord.CategoryChannel | None:
-        ...
+    ) -> discord.CategoryChannel | None: ...
 
     @abstractmethod
-    async def _get_combines_api(self, guild: discord.Guild) -> str | None:
-        ...
+    async def _get_combines_api(self, guild: discord.Guild) -> str | None: ...
 
     @abstractmethod
-    async def _set_combines_api(self, guild: discord.Guild, url: str):
-        ...
+    async def _set_combines_api(self, guild: discord.Guild, url: str): ...
 
     @abstractmethod
-    async def _get_combines_active(self, guild: discord.Guild) -> bool:
-        ...
+    async def _get_combines_active(self, guild: discord.Guild) -> bool: ...
 
     @abstractmethod
-    async def _set_combines_active(self, guild: discord.Guild, active: bool):
-        ...
+    async def _set_combines_active(self, guild: discord.Guild, active: bool): ...
 
     # Franchises
 
@@ -134,14 +124,12 @@ class RSCMixIn(ABC):
         name: str | None = None,
         tier: int | None = None,
         tier_name: str | None = None,
-    ) -> list[FranchiseList]:
-        ...
+    ) -> list[FranchiseList]: ...
 
     @abstractmethod
     async def franchise_gm_by_name(
         self, guild: discord.Guild, name: str
-    ) -> FranchiseGM | None:
-        ...
+    ) -> FranchiseGM | None: ...
 
     @abstractmethod
     async def upload_franchise_logo(
@@ -149,36 +137,31 @@ class RSCMixIn(ABC):
         guild: discord.Guild,
         id: int,
         logo: str | bytes | PathLike,
-    ) -> Franchise:
-        ...
+    ) -> Franchise: ...
 
     @abstractmethod
-    async def franchise_by_id(self, guild: discord.Guild, id: int) -> Franchise | None:
-        ...
+    async def franchise_by_id(
+        self, guild: discord.Guild, id: int
+    ) -> Franchise | None: ...
 
     @abstractmethod
-    async def franchise_logo(self, guild: discord.Guild, id: int) -> str | None:
-        ...
+    async def franchise_logo(self, guild: discord.Guild, id: int) -> str | None: ...
 
     @abstractmethod
-    async def full_logo_url(self, guild: discord.Guild, logo_url: str) -> str:
-        ...
+    async def full_logo_url(self, guild: discord.Guild, logo_url: str) -> str: ...
 
     @abstractmethod
     async def rebrand_franchise(
         self, guild: discord.Guild, id: int, rebrand: RebrandAFranchise
-    ) -> Franchise:
-        ...
+    ) -> Franchise: ...
 
     @abstractmethod
-    async def delete_franchise(self, guild: discord.Guild, id: int) -> None:
-        ...
+    async def delete_franchise(self, guild: discord.Guild, id: int) -> None: ...
 
     @abstractmethod
     async def transfer_franchise(
         self, guild: discord.Guild, id: int, gm: discord.Member
-    ) -> Franchise:
-        ...
+    ) -> Franchise: ...
 
     @abstractmethod
     async def create_franchise(
@@ -187,8 +170,7 @@ class RSCMixIn(ABC):
         name: str,
         prefix: str,
         gm: discord.Member,
-    ) -> Franchise:
-        ...
+    ) -> Franchise: ...
 
     # League
 
@@ -202,28 +184,22 @@ class RSCMixIn(ABC):
         tier: int | None = None,
         status: Status | None = None,
         team: str | None = None,
-    ) -> LeaguePlayerPatch:
-        ...
+    ) -> LeaguePlayerPatch: ...
 
     @abstractmethod
-    async def league_player_update_handler(self, request: aiohttp.web.Request):
-        ...
+    async def league_player_update_handler(self, request: aiohttp.web.Request): ...
 
     @abstractmethod
-    async def leagues(self, guild: discord.Guild) -> list[League]:
-        ...
+    async def leagues(self, guild: discord.Guild) -> list[League]: ...
 
     @abstractmethod
-    async def league(self, guild: discord.Guild) -> League | None:
-        ...
+    async def league(self, guild: discord.Guild) -> League | None: ...
 
     @abstractmethod
-    async def league_by_id(self, guild: discord.Guild, id: int) -> League | None:
-        ...
+    async def league_by_id(self, guild: discord.Guild, id: int) -> League | None: ...
 
     @abstractmethod
-    async def current_season(self, guild: discord.Guild) -> Season | None:
-        ...
+    async def current_season(self, guild: discord.Guild) -> Season | None: ...
 
     @abstractmethod
     async def players(
@@ -240,8 +216,7 @@ class RSCMixIn(ABC):
         discord_id: int | None = None,
         limit: int = 0,
         offset: int = 0,
-    ) -> list[LeaguePlayer]:
-        ...
+    ) -> list[LeaguePlayer]: ...
 
     @abstractmethod
     async def total_players(
@@ -256,8 +231,7 @@ class RSCMixIn(ABC):
         team_name: str | None = None,
         franchise: str | None = None,
         discord_id: int | None = None,
-    ) -> int:
-        ...
+    ) -> int: ...
 
     @abstractmethod
     def paged_players(
@@ -273,20 +247,17 @@ class RSCMixIn(ABC):
         franchise: str | None = None,
         discord_id: int | None = None,
         per_page: int = 100,
-    ) -> AsyncIterator[LeaguePlayer]:
-        ...
+    ) -> AsyncIterator[LeaguePlayer]: ...
 
     @abstractmethod
-    async def league_seasons(self, guild: discord.Guild) -> list[Season]:
-        ...
+    async def league_seasons(self, guild: discord.Guild) -> list[Season]: ...
 
     # Free Agents
 
     @abstractmethod
     async def update_freeagent_visibility(
         self, guild: discord.Guild, player: discord.Member, visibility: bool
-    ):
-        ...
+    ): ...
 
     # Matches
 
@@ -299,31 +270,28 @@ class RSCMixIn(ABC):
         home_team_id: int,
         away_team_id: int,
         day: int,
-    ) -> Match:
-        ...
+    ) -> Match: ...
 
     @abstractmethod
     async def is_future_match_date(
         self, guild: discord.Guild, match: Match | MatchList
-    ) -> bool:
-        ...
+    ) -> bool: ...
 
     @abstractmethod
-    async def is_match_franchise_gm(self, member: discord.Member, match: Match) -> bool:
-        ...
+    async def is_match_franchise_gm(
+        self, member: discord.Member, match: Match
+    ) -> bool: ...
 
     @abstractmethod
     async def discord_member_in_match(
         self, member: discord.Member, match: Match
-    ) -> bool:
-        ...
+    ) -> bool: ...
 
     @staticmethod
     @abstractmethod
     async def get_match_from_list(
         home: str, away: str, matches: list[Match]
-    ) -> Match | None:
-        ...
+    ) -> Match | None: ...
 
     @abstractmethod
     async def report_match(
@@ -335,12 +303,10 @@ class RSCMixIn(ABC):
         away_score: int,
         executor: discord.Member,
         override: bool = False,
-    ) -> MatchResults:
-        ...
+    ) -> MatchResults: ...
 
     @abstractmethod
-    async def is_match_day(self, guild: discord.Guild) -> bool:
-        ...
+    async def is_match_day(self, guild: discord.Guild) -> bool: ...
 
     @abstractmethod
     async def matches(
@@ -357,8 +323,7 @@ class RSCMixIn(ABC):
         match_format: MatchFormat | None = None,
         limit: int = 0,
         offset: int = 0,
-    ) -> list[MatchList]:
-        ...
+    ) -> list[MatchList]: ...
 
     @abstractmethod
     async def find_match(
@@ -375,32 +340,27 @@ class RSCMixIn(ABC):
         limit: int = 0,
         offset: int = 0,
         preseason: int = 0,
-    ) -> list[Match]:
-        ...
+    ) -> list[Match]: ...
 
     @abstractmethod
-    async def match_by_id(self, guild: discord.Guild, id: int) -> Match:
-        ...
+    async def match_by_id(self, guild: discord.Guild, id: int) -> Match: ...
 
     # Members
 
     @abstractmethod
     async def name_history(
         self, guild: discord.Guild, member: discord.Member
-    ) -> list[NameChangeHistory]:
-        ...
+    ) -> list[NameChangeHistory]: ...
 
     @abstractmethod
     async def transfer_membership(
         self, guild: discord.Guild, old: int, new: discord.Member
-    ) -> RSCMember:
-        ...
+    ) -> RSCMember: ...
 
     @abstractmethod
     async def league_player_from_member(
         self, guild: discord.Guild, member: RSCMember
-    ) -> LeaguePlayer | None:
-        ...
+    ) -> LeaguePlayer | None: ...
 
     @abstractmethod
     async def change_member_name(
@@ -408,8 +368,7 @@ class RSCMixIn(ABC):
         guild: discord.Guild,
         id: int,
         name: str,
-    ) -> RSCMember:
-        ...
+    ) -> RSCMember: ...
 
     @abstractmethod
     async def members(
@@ -420,8 +379,7 @@ class RSCMixIn(ABC):
         discord_id: int | None = None,
         limit: int = 0,
         offset: int = 0,
-    ) -> list[RSCMember]:
-        ...
+    ) -> list[RSCMember]: ...
 
     @abstractmethod
     def paged_members(
@@ -431,8 +389,7 @@ class RSCMixIn(ABC):
         discord_username: str | None = None,
         discord_id: int | None = None,
         per_page: int = 100,
-    ) -> AsyncIterator[RSCMember]:
-        ...
+    ) -> AsyncIterator[RSCMember]: ...
 
     @abstractmethod
     async def declare_intent(
@@ -442,8 +399,7 @@ class RSCMixIn(ABC):
         returning: bool,
         executor: discord.Member | None = None,
         admin_overrride: bool = False,
-    ) -> Deleted:
-        ...
+    ) -> Deleted: ...
 
     @abstractmethod
     async def player_stats(
@@ -452,16 +408,14 @@ class RSCMixIn(ABC):
         player: discord.Member,
         season: int | None = None,
         postseason: bool = False,
-    ) -> PlayerSeasonStats:
-        ...
+    ) -> PlayerSeasonStats: ...
 
     @abstractmethod
     async def delete_member(
         self,
         guild: discord.Guild,
         member: discord.Member,
-    ):
-        ...
+    ): ...
 
     @abstractmethod
     async def create_member(
@@ -469,8 +423,7 @@ class RSCMixIn(ABC):
         guild: discord.Guild,
         member: discord.Member,
         rsc_name: str | None = None,
-    ) -> RSCMember:
-        ...
+    ) -> RSCMember: ...
 
     @abstractmethod
     async def signup(
@@ -487,8 +440,7 @@ class RSCMixIn(ABC):
         accepted_match_nights: bool = True,
         executor: discord.Member | None = None,
         override: bool = False,
-    ) -> LeaguePlayer:
-        ...
+    ) -> LeaguePlayer: ...
 
     @abstractmethod
     async def activity_check(
@@ -498,18 +450,15 @@ class RSCMixIn(ABC):
         returning_status: bool,
         executor: discord.Member,
         override: bool = False,
-    ) -> ActivityCheck:
-        ...
+    ) -> ActivityCheck: ...
 
     # Seasons
 
     @abstractmethod
-    async def seasons(self, guild: discord.Guild) -> list[Season]:
-        ...
+    async def seasons(self, guild: discord.Guild) -> list[Season]: ...
 
     @abstractmethod
-    async def season_by_id(self, guild: discord.Guild, season_id: int) -> Season:
-        ...
+    async def season_by_id(self, guild: discord.Guild, season_id: int) -> Season: ...
 
     @abstractmethod
     async def player_intents(
@@ -519,28 +468,33 @@ class RSCMixIn(ABC):
         player: discord.Member | None = None,
         returning: bool | None = None,
         missing: bool | None = None,
-    ) -> list[IntentToPlay]:
-        ...
+    ) -> list[IntentToPlay]: ...
 
     @abstractmethod
     async def franchise_standings(
         self, guild: discord.Guild, season_id: int
-    ) -> list[FranchiseStandings]:
-        ...
+    ) -> list[FranchiseStandings]: ...
 
     @abstractmethod
-    async def next_season(self, guild: discord.Guild) -> Season | None:
-        ...
+    async def next_season(self, guild: discord.Guild) -> Season | None: ...
 
     # Teams
 
     @abstractmethod
-    async def team_id_by_name(self, guild: discord.Guild, name: str) -> int:
-        ...
+    async def build_franchise_teams_embed(
+        self, guild: discord.Guild, teams: list[TeamList]
+    ) -> discord.Embed: ...
 
     @abstractmethod
-    async def teams_in_same_tier(self, teams: list[Team | TeamList]) -> bool:
-        ...
+    async def build_roster_embed(
+        self, guild: discord.Guild, players: list[LeaguePlayer]
+    ) -> discord.Embed: ...
+
+    @abstractmethod
+    async def team_id_by_name(self, guild: discord.Guild, name: str) -> int: ...
+
+    @abstractmethod
+    async def teams_in_same_tier(self, teams: list[Team | TeamList]) -> bool: ...
 
     @abstractmethod
     async def teams(
@@ -550,8 +504,7 @@ class RSCMixIn(ABC):
         franchise: str | None = None,
         name: str | None = None,
         tier: str | None = None,
-    ) -> list[TeamList]:
-        ...
+    ) -> list[TeamList]: ...
 
     @abstractmethod
     async def season_matches(
@@ -560,32 +513,28 @@ class RSCMixIn(ABC):
         id: int,
         season: int | None = None,
         preseason: bool = True,
-    ) -> list[HighLevelMatch]:
-        ...
+    ) -> list[HighLevelMatch]: ...
 
     @abstractmethod
     async def next_match(
         self,
         guild: discord.Guild,
         id: int,
-    ) -> Match | None:
-        ...
+    ) -> Match | None: ...
 
     @abstractmethod
     async def team_by_id(
         self,
         guild: discord.Guild,
         id: int,
-    ) -> Team:
-        ...
+    ) -> Team: ...
 
     @abstractmethod
     async def team_players(
         self,
         guild: discord.Guild,
         id: int,
-    ) -> list[Player]:
-        ...
+    ) -> list[Player]: ...
 
     @abstractmethod
     async def team_stats(
@@ -593,8 +542,7 @@ class RSCMixIn(ABC):
         guild: discord.Guild,
         team_id: int,
         season: int | None = None,
-    ) -> TeamSeasonStats:
-        ...
+    ) -> TeamSeasonStats: ...
 
     @abstractmethod
     async def create_team(
@@ -603,26 +551,23 @@ class RSCMixIn(ABC):
         name: str,
         franchise: str,
         tier: str,
-    ) -> TeamCreate:
-        ...
+    ) -> TeamCreate: ...
 
     @abstractmethod
-    async def delete_team(self, guild: discord.Guild, team_id: int):
-        ...
+    async def delete_team(self, guild: discord.Guild, team_id: int): ...
 
     # Tiers
 
     @abstractmethod
-    async def tiers(self, guild: discord.Guild, name: str | None = None) -> list[Tier]:
-        ...
+    async def tiers(
+        self, guild: discord.Guild, name: str | None = None
+    ) -> list[Tier]: ...
 
     @abstractmethod
-    async def is_valid_tier(self, guild: discord.Guild, name: str) -> bool:
-        ...
+    async def is_valid_tier(self, guild: discord.Guild, name: str) -> bool: ...
 
     @abstractmethod
-    async def tier_id_by_name(self, guild: discord.Guild, tier: str) -> int:
-        ...
+    async def tier_id_by_name(self, guild: discord.Guild, tier: str) -> int: ...
 
     # Trackers
 
@@ -635,8 +580,7 @@ class RSCMixIn(ABC):
         name: str | None = None,
         limit: int = 0,
         offset: int = 0,
-    ) -> list[TrackerLink]:
-        ...
+    ) -> list[TrackerLink]: ...
 
     @abstractmethod
     async def tracker_stats(
@@ -660,8 +604,7 @@ class RSCMixIn(ABC):
         guild: discord.Guild,
         player: discord.Member,
         tracker: str,
-    ):
-        ...
+    ): ...
 
     # Transactions
 
@@ -671,22 +614,20 @@ class RSCMixIn(ABC):
         guild: discord.Guild,
         player: discord.Member,
         executor: discord.Member,
-    ) -> LeaguePlayer:
-        ...
+    ) -> LeaguePlayer: ...
 
     @abstractmethod
-    async def _trans_role(self, guild: discord.Guild) -> discord.Role | None:
-        ...
+    async def _trans_role(self, guild: discord.Guild) -> discord.Role | None: ...
 
     @abstractmethod
-    async def _trans_channel(self, guild: discord.Guild) -> discord.TextChannel | None:
-        ...
+    async def _trans_channel(
+        self, guild: discord.Guild
+    ) -> discord.TextChannel | None: ...
 
     # Welcome
 
     @abstractmethod
-    async def _get_welcome_roles(self, guild: discord.Guild) -> list[discord.Role]:
-        ...
+    async def _get_welcome_roles(self, guild: discord.Guild) -> list[discord.Role]: ...
 
 
 class MixInMetaClass(RSCMixIn, ABCMeta):

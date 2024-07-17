@@ -45,7 +45,6 @@ class BetterEmbed(discord.Embed):
 
         if c > EmbedLimits.Total:
             return False
-
         return True
 
     def total_field_chars(self) -> int:

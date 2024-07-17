@@ -27,9 +27,7 @@ async def duplicate_replay_hashes(replays: list[discord.Attachment]) -> bool:
 
 async def is_replay_file(replay: discord.Attachment) -> bool:
     """Check if file provided is a replay file"""
-    if replay.filename.endswith(".replay"):
-        return True
-    return False
+    return bool(replay.filename.endswith(".replay"))
 
 
 async def check_team_type_match(home: str, away: str, match: Match) -> bool:
@@ -40,9 +38,7 @@ async def check_team_type_match(home: str, away: str, match: Match) -> bool:
     if home.lower() != match.home_team.name.lower():
         return False
 
-    if away.lower() != match.away_team.name.lower():
-        return False
-    return True
+    return away.lower() == match.away_team.name.lower()
 
 
 async def match_already_complete(match: Match) -> bool:

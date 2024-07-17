@@ -19,7 +19,7 @@ class RuleDocumentLoader(BaseLoader):
 
     def lazy_load(self) -> Iterator[Document]:
         """A lazy loader that reads RSC Rule style documents."""
-        with open(self.file_path, encoding="utf-8") as fd:
+        with Path(self.file_path).open(encoding="utf-8") as fd:
             data = fd.read()
 
             source = None

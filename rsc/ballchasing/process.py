@@ -224,9 +224,7 @@ async def duplicate_player_scores(
         matching_players.append(match)
 
     # If we have 100% matching players, return True
-    if all(m for m in matching_players):
-        return True
-    return False
+    return bool(all(m for m in matching_players))
 
 
 async def replay_group_collisions(

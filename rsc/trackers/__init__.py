@@ -1,1 +1,1 @@
-from rsc.trackers.trackers import TrackerMixIn
+from rsc.trackers.trackers import TrackerMixIn as TrackerMixIn

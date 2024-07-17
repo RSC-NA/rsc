@@ -1,1 +1,1 @@
-from rsc.ballchasing.ballchasing import BallchasingMixIn
+from rsc.ballchasing.ballchasing import BallchasingMixIn as BallchasingMixIn

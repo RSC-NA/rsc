@@ -1,1 +1,1 @@
-from rsc.tiers.tiers import TierMixIn
+from rsc.tiers.tiers import TierMixIn as TierMixIn

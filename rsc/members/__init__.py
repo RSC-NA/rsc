@@ -1,1 +1,1 @@
-from rsc.members.members import MemberMixIn
+from rsc.members.members import MemberMixIn as MemberMixIn

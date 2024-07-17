@@ -1,1 +1,1 @@
-from rsc.leagues.leagues import LeagueMixIn
+from rsc.leagues.leagues import LeagueMixIn as LeagueMixIn
