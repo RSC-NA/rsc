@@ -523,7 +523,7 @@ class MemberMixIn(RSCMixIn):
                     return await interaction.edit_original_response(
                         embed=YellowEmbed(
                             title="RSC Sign-up",
-                            description="You are already signed up for the league. Please use `/intenttoplay` to declare your intent for next season.",
+                            description="You are already signed up for the league. Please use `/intent declare` to declare your intent for next season.",
                         ),
                         view=None,
                     )
