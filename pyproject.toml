@@ -22,7 +22,7 @@ profile = "black"
 [tool.ruff]
 line-length = 200
 indent-width = 4
-exclude = ["scripts/"]
+exclude = ["scripts/", "json_examples/"]
 
 [tool.ruff.lint]
 select = ["E", "F", "B", "C4", "SIM", "PTH", "TID", "ASYNC"]

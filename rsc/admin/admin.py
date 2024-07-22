@@ -270,9 +270,11 @@ class AdminMixIn(RSCMixIn):
             name="Date",
             value="\n".join(
                 [
-                    h.date_changed.strftime("%-m/%-d/%y")
-                    if isinstance(h.date_changed, datetime)
-                    else "None"
+                    (
+                        h.date_changed.strftime("%-m/%-d/%y")
+                        if isinstance(h.date_changed, datetime)
+                        else "None"
+                    )
                     for h in history
                 ]
             ),
@@ -2869,6 +2871,7 @@ class AdminMixIn(RSCMixIn):
                 )
             )
 
+        log.debug(f"Next Season ID: {next_season.id}")
         intents = await self.player_intents(guild, season_id=next_season.id)
 
         log.debug(f"Intent Count: {len(intents)}")
@@ -3052,6 +3055,48 @@ class AdminMixIn(RSCMixIn):
         )
 
         await interaction.followup.send(embed=embed)
+
+    @_intents.command(name="set", description="Manually set intent for a player")  # type: ignore
+    @app_commands.describe(
+        member="Discord member to declare intent for",
+        returning="Returning status. (True for returning, False for not returning)",
+    )
+    @app_commands.guild_only
+    async def _admin_intents_set_cmd(
+        self, interaction: discord.Interaction, member: discord.Member, returning: bool
+    ):
+        guild = interaction.guild
+        if not guild or not isinstance(interaction.user, discord.Member):
+            return
+
+        # Process intent
+        await interaction.response.defer()
+        try:
+            result = await self.declare_intent(
+                guild=guild,
+                member=interaction.user,
+                returning=returning,
+            )
+            log.debug(f"Intent Result: {result}")
+        except RscException as exc:
+            if exc.status == 409:
+                return await interaction.edit_original_response(
+                    embed=YellowEmbed(title="Intent to Play", description=exc.reason),
+                )
+            return await interaction.edit_original_response(
+                embed=ApiExceptionErrorEmbed(exc),
+            )
+
+        embed: discord.Embed = SuccessEmbed(title="Intent to Play Declared")
+        if returning:
+            embed.description = (
+                f"{member.mention} intent to play has been set to **RETURNING**"
+            )
+        else:
+            embed.description = (
+                f"{member.mention} intent to play has been set to **NOT RETURNING**"
+            )
+        await interaction.edit_original_response(embed=embed, view=None)
 
     @_intents.command(name="missingrole", description="Configure the Intent to Play missing discord role")  # type: ignore
     async def _intents_set_missing_role_cmd(

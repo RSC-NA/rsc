@@ -16,6 +16,11 @@ class ModActionType(StrEnum):
     BAN = "BAN"
 
 
+class PlayerIntent(StrEnum):
+    RETURNING = "returning"
+    NOTRETURNING = "not returning"
+
+
 class BulkRoleAction(StrEnum):
     ADD = "add"
     REMOVE = "remove"
