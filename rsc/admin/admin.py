@@ -3074,7 +3074,7 @@ class AdminMixIn(RSCMixIn):
         try:
             result = await self.declare_intent(
                 guild=guild,
-                member=interaction.user,
+                member=member,
                 returning=returning,
             )
             log.debug(f"Intent Result: {result}")
