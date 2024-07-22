@@ -3058,12 +3058,17 @@ class AdminMixIn(RSCMixIn):
 
     @_intents.command(name="set", description="Manually set intent for a player")  # type: ignore
     @app_commands.describe(
-        member="Discord member to declare intent for",
+        member="Discord member to declare intent on",
         returning="Returning status. (True for returning, False for not returning)",
+        override="Admin override",
     )
     @app_commands.guild_only
     async def _admin_intents_set_cmd(
-        self, interaction: discord.Interaction, member: discord.Member, returning: bool
+        self,
+        interaction: discord.Interaction,
+        member: discord.Member,
+        returning: bool,
+        override: bool = False,
     ):
         guild = interaction.guild
         if not guild or not isinstance(interaction.user, discord.Member):
@@ -3076,6 +3081,8 @@ class AdminMixIn(RSCMixIn):
                 guild=guild,
                 member=member,
                 returning=returning,
+                executor=interaction.user,
+                admin_overrride=override,
             )
             log.debug(f"Intent Result: {result}")
         except RscException as exc:
