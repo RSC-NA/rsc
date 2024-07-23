@@ -12,7 +12,7 @@ def send_webhook():
     print(f"Script path: {script_path}")
 
     json_path = Path(script_path).parent
-    json_path = json_path / "json_examples/combines/combines_webhook.json"
+    json_path = json_path / "data/combines/combines_webhook.json"
     print(f"JSON Path: {json_path.absolute}")
 
     with open(json_path, "r") as fd:
