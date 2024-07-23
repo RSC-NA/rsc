@@ -13,7 +13,14 @@ from rscapi import Configuration
 from rscapi.exceptions import ApiException
 
 from rsc.abc import CompositeMetaClass
-from rsc.admin import AdminMixIn
+from rsc.admin.agm import AdminAGMMixIn
+from rsc.admin.franchise import AdminFranchiseMixIn
+from rsc.admin.inactivity import AdminInactivityMixIn
+from rsc.admin.intents import AdminIntentsMixIn
+from rsc.admin.match import AdminMatchMixIn
+from rsc.admin.members import AdminMembersMixIn
+from rsc.admin.stats import AdminStatsMixIn
+from rsc.admin.sync import AdminSyncMixIn
 from rsc.ballchasing import BallchasingMixIn
 from rsc.combines import CombineMixIn
 from rsc.developer import DeveloperMixIn
@@ -54,7 +61,14 @@ defaults_guild = {
 
 
 class RSC(
-    AdminMixIn,
+    AdminAGMMixIn,
+    AdminFranchiseMixIn,
+    AdminInactivityMixIn,
+    AdminIntentsMixIn,
+    AdminMatchMixIn,
+    AdminMembersMixIn,
+    AdminStatsMixIn,
+    AdminSyncMixIn,
     BallchasingMixIn,
     CombineMixIn,
     DeveloperMixIn,
