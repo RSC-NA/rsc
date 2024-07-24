@@ -42,7 +42,7 @@ class AdminAGMMixIn(AdminMixIn):
         )
 
     @_agm.command(  # type: ignore
-        name="add", description="Add an Assistant GM to a franchise."
+        name="add", description="Add an Assistant GM to a franchise"
     )
     @app_commands.describe(franchise="Franchise name", agm="Player to promote to AGM")
     @app_commands.autocomplete(franchise=FranchiseMixIn.franchise_autocomplete)  # type: ignore
@@ -127,7 +127,7 @@ class AdminAGMMixIn(AdminMixIn):
         await interaction.followup.send(embed=embed, ephemeral=True)
 
     @_agm.command(  # type: ignore
-        name="remove", description="Remove an Assistant GM to a franchise."
+        name="remove", description="Remove an Assistant GM from a franchise"
     )
     @app_commands.describe(franchise="Franchise name", agm="Player to remove from AGM")
     @app_commands.autocomplete(franchise=FranchiseMixIn.franchise_autocomplete)  # type: ignore
