@@ -729,9 +729,15 @@ class AdminFranchiseMixIn(AdminMixIn):
             return
 
         # Create franchise role
-        frole = await guild.create_role(
-            name=f"{name} ({f.gm.rsc_name})", reason="New franchise created"
-        )
+        frole_name = f"{name} ({f.gm.rsc_name})"
+        existing_frole = discord.utils.get(guild.roles, name=frole_name)
+        if not existing_frole:
+            log.debug(f"Creating new franchise role: {frole_name}")
+            frole = await guild.create_role(
+                name=f"{name} ({f.gm.rsc_name})", reason="New franchise created"
+            )
+        else:
+            log.debug("Franchise role already exists")
 
         await gm.add_roles(frole, gm_role)
 
