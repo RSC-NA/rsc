@@ -364,10 +364,13 @@ class SignupView(AuthorOnlyView):
 
         embed = discord.Embed(
             title="RSC Game Times",
-            description="We play our games on **Monday** and **Wednesday** at **10PM EST**.\n\n"
-            "By selecting **Yes**, you are agreeing that you are available to play on those days and time.",
             color=discord.Color.blue(),
         )
+
+        if self.interaction.guild and self.interaction.guild.id == 809939294331994113:
+            embed.description = "We play our games on **Thursday** nights at **10PM**.\n\nBy selecting **Yes**, you are agreeing that you are available to play on those days and time."
+        else:
+            embed.description = "We play our games on **Monday** and **Wednesday** at **10PM EST**.\n\nBy selecting **Yes**, you are agreeing that you are available to play on those days and time."
         # First form, so we respond to the interaction instead of followup
         await self.interaction.response.send_message(
             embed=embed, view=self, ephemeral=True
