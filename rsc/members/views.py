@@ -290,6 +290,12 @@ class SignupView(AuthorOnlyView):
             ),
             inline=False,
         )
+
+        if self.interaction.guild and self.interaction.guild.id == 809939294331994113:
+            tracker_fmt = "**A tracker with 50 2v2 games played is required.**"
+        else:
+            tracker_fmt = "**A tracker with 50 3v3 games played is required.**"
+
         embed.add_field(
             name="Tracker Links",
             value=(
@@ -301,7 +307,7 @@ class SignupView(AuthorOnlyView):
                 "Note: Steam accounts must list your Steam64ID.\n"
                 "You can find your Steam64ID here: https://steamidfinder.com/\n"
                 "Find your tracker link here: https://rocketleague.tracker.network\n\n"
-                "**A tracker with 50 3v3 games played is required.**"
+                f"{tracker_fmt}"
             ),
             inline=False,
         )
