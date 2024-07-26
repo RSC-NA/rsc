@@ -576,10 +576,7 @@ class TeamMixIn(RSCMixIn):
 
         flogo = None
         if teams[0].franchise.id:
-            try:
-                flogo = await self.franchise_logo(guild, teams[0].franchise.id)
-            except RscException:
-                flogo = None
+            flogo = await self.franchise_logo(guild, teams[0].franchise.id)
 
         if flogo:
             embed.set_thumbnail(url=flogo)

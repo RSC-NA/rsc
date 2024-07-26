@@ -6,7 +6,7 @@ from urllib.parse import urljoin
 import discord
 from redbot.core import app_commands
 from rscapi import ApiClient, FranchisesApi
-from rscapi.exceptions import ApiException
+from rscapi.exceptions import ApiException, NotFoundException
 from rscapi.models.franchise import Franchise
 from rscapi.models.franchise_gm import FranchiseGM
 from rscapi.models.franchise_league import FranchiseLeague
@@ -289,5 +289,7 @@ class FranchiseMixIn(RSCMixIn):
                 full_url = urljoin(host, logo.logo)
                 log.debug(f"Franchise Logo: {full_url}")
                 return full_url
+            except NotFoundException:
+                return None
             except ApiException as exc:
                 raise RscException(response=exc)
