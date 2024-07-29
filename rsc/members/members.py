@@ -267,6 +267,7 @@ class MemberMixIn(RSCMixIn):
 
         try:
             next_season = await self.next_season(guild)
+            log.debug(f"Next Season: {next_season}")
         except LeagueNotConfigured:
             return await interaction.followup.send(
                 embed=YellowEmbed(
@@ -292,6 +293,13 @@ class MemberMixIn(RSCMixIn):
                 )
             )
 
+        if not next_season.number:
+            return await interaction.followup.send(
+                embed=ErrorEmbed(
+                    description="API returned a Season without a season number. Please open a modmail ticket."
+                )
+            )
+
         intent_list = await self.player_intents(
             guild,
             season_id=next_season.id,
@@ -309,8 +317,14 @@ class MemberMixIn(RSCMixIn):
                 )
             )
 
+        # Get last season
+        last_season = next_season.number - 1
+        log.debug(f"Last Season: {last_season}")
+
+        # Filter by season responded in
+        intents = [i for i in intent_list if i.season and i.season >= last_season]
+
         # Filter by franchise
-        intents = intent_list
         if franchise:
             intents = [
                 i
