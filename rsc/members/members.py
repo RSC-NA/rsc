@@ -317,12 +317,10 @@ class MemberMixIn(RSCMixIn):
                 )
             )
 
-        # Get last season
-        last_season = next_season.number - 1
-        log.debug(f"Last Season: {last_season}")
-
-        # Filter by season responded in
-        intents = [i for i in intent_list if i.season and i.season >= last_season]
+        # Filter by season response (API returns all of them)
+        intents = [
+            i for i in intent_list if i.season and i.season == next_season.number
+        ]
 
         # Filter by franchise
         if franchise:
