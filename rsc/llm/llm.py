@@ -53,16 +53,24 @@ class LLMMixIn(RSCMixIn):
         if not guild:
             return
 
-        # Skip a message reply to bot mention
-        if message.reference is not None and not message.is_system():
+        # Check if LLM active
+        if not await self._get_llm_status(guild):
+            return
+
+        # Ignore @everyone
+        if not message.mention_everyone:
+            return
+
+        # Ignore news channels
+        if hasattr(message.channel, "is_news") and message.channel.is_news():
             return
 
         # Replay to mention only
         if not guild.me.mentioned_in(message):
             return
 
-        # Check if LLM active
-        if not await self._get_llm_status(guild):
+        # Skip a message reply to bot mention
+        if message.reference is not None and not message.is_system():
             return
 
         # Check if channel in blacklist
