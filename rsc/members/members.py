@@ -324,6 +324,7 @@ class MemberMixIn(RSCMixIn):
 
         # Filter by franchise
         if franchise:
+            log.debug(f"Filtering intents by franchise: {franchise}")
             intents = [
                 i
                 for i in intents
@@ -334,6 +335,7 @@ class MemberMixIn(RSCMixIn):
 
         # Filter by team
         if team:
+            log.debug(f"Filtering intents by team: {franchise}")
             intents = [
                 i
                 for i in intents
@@ -342,10 +344,12 @@ class MemberMixIn(RSCMixIn):
 
         # Filter by returning value
         if returning is True or returning is False:
+            log.debug(f"Filtering intents by returning: {returning}")
             intents = [i for i in intents if i.returning == returning]
 
         # Filter by missing value
         if missing is True or missing is False:
+            log.debug(f"Filtering intents by missing: {missing}")
             intents = [i for i in intents if i.missing == missing]
 
         if not intents:
