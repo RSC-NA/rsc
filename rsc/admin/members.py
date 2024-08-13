@@ -12,7 +12,7 @@ from rsc.embeds import (
     ExceptionErrorEmbed,
     SuccessEmbed,
 )
-from rsc.enums import Platform, PlayerType, Referrer, Status
+from rsc.enums import Platform, PlayerType, Referrer, RegionPreference, Status
 from rsc.exceptions import RscException
 from rsc.logs import GuildLogAdapter
 from rsc.teams import TeamMixIn
@@ -526,6 +526,7 @@ class AdminMembersMixIn(AdminMixIn):
                 trackers=trackers,
                 player_type=player_type,
                 platform=platform,
+                region_preference=RegionPreference.EAST,
                 referrer=Referrer.OTHER,
                 executor=interaction.user,
                 override=override,
