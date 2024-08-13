@@ -61,12 +61,12 @@ class LLMMixIn(RSCMixIn):
         if not message.mention_everyone:
             return
 
-        # Ignore news channels
-        if hasattr(message.channel, "is_news") and message.channel.is_news():
-            return
-
         # Replay to mention only
         if not guild.me.mentioned_in(message):
+            return
+
+        # Ignore news channels
+        if hasattr(message.channel, "is_news") and message.channel.is_news():
             return
 
         # Skip a message reply to bot mention

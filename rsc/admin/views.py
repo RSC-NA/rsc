@@ -95,7 +95,7 @@ class InactiveCheckView(discord.ui.View):
         await interaction.followup.send(
             embed=RedEmbed(
                 title="Marked In-Active",
-                description="You have declared yourself as **in-active** for the RSC season.\n\n**You will be removed from playing this season.**",
+                description="You have declared yourself as **inactive** for the RSC season.\n\n**You will be removed from playing this season.**",
             ),
             ephemeral=True,
         )

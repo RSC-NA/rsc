@@ -12,7 +12,7 @@ from rsc.embeds import (
     ExceptionErrorEmbed,
     SuccessEmbed,
 )
-from rsc.enums import Status
+from rsc.enums import Platform, PlayerType, Referrer, Status
 from rsc.exceptions import RscException
 from rsc.logs import GuildLogAdapter
 from rsc.teams import TeamMixIn
@@ -493,3 +493,55 @@ class AdminMembersMixIn(AdminMixIn):
             return
 
         await interaction.followup.send(embed=embed, ephemeral=True)
+
+    @_members.command(name="signup", description="Sign a player up for the latest RSC season")  # type: ignore
+    @app_commands.describe(
+        player_type="New or Former Player",
+        member="Discord member being added",
+        rsc_name="RSC player name (Defaults to members display name)",
+        tracker="Rocket league tracker link",
+        platform="Preferred platform",
+        override="Admin override",
+    )
+    async def _member_create(
+        self,
+        interaction: discord.Interaction,
+        player_type: PlayerType,
+        member: discord.Member,
+        rsc_name: str | None = None,
+        tracker: str | None = None,
+        platform: Platform = Platform.STEAM,
+        override: bool = False,
+    ):
+        if not interaction.guild or not isinstance(interaction.user, discord.Member):
+            return
+
+        trackers = [tracker] if tracker else []
+
+        try:
+            await self.signup(
+                interaction.guild,
+                member=member,
+                rsc_name=rsc_name or member.display_name,
+                trackers=trackers,
+                player_type=player_type,
+                platform=platform,
+                referrer=Referrer.OTHER,
+                executor=interaction.user,
+                override=override,
+            )
+        except RscException as exc:
+            await interaction.response.send_message(
+                embed=ApiExceptionErrorEmbed(exc), ephemeral=True
+            )
+            return
+
+        # Change nickname if specified
+        if rsc_name:
+            await member.edit(nick=rsc_name)
+
+        await interaction.response.send_message(
+            embed=SuccessEmbed(
+                description=f"{member.mention} has been signed up for the latest season of RSC."
+            )
+        )
