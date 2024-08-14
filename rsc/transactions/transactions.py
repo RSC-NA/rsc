@@ -777,6 +777,7 @@ class TransactionMixIn(RSCMixIn):
         player="RSC Discord Member",
         team="Name of team player resigning player",
         notes="Transaction notes (Optional)",
+        announce="Announce to server (Default: True)",
         override="Admin only override",
     )
     async def _transactions_resign(
@@ -785,6 +786,7 @@ class TransactionMixIn(RSCMixIn):
         player: discord.Member,
         team: str,
         notes: str | None = None,
+        announce: bool = True,
         override: bool = False,
     ):
         guild = interaction.guild
@@ -854,9 +856,10 @@ class TransactionMixIn(RSCMixIn):
                 ephemeral=True,
             )
 
-        await self.announce_transaction(
-            guild=guild, embed=embed, files=files, player=player
-        )
+        if announce:
+            await self.announce_transaction(
+                guild=guild, embed=embed, files=files, player=player
+            )
 
         # Send result
         if ptu.new_team:
