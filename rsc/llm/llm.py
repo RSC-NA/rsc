@@ -53,16 +53,20 @@ class LLMMixIn(RSCMixIn):
         if not guild:
             return
 
+        log.debug("Received mention, generating LLM response.")
         # Check if LLM active
         if not await self._get_llm_status(guild):
+            log.debug("LLM is currently disabled.")
             return
 
         # Ignore @everyone
-        if not message.mention_everyone:
+        if message.mention_everyone:
+            log.debug("Mention is for @everyone. I gnoring")
             return
 
         # Replay to mention only
         if not guild.me.mentioned_in(message):
+            log.debug("Bot not mentioned in message...")
             return
 
         # Ignore news channels
