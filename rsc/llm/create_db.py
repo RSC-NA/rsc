@@ -63,6 +63,10 @@ async def load_funny_docs() -> list[Document]:
     return documents
 
 
+async def string_to_doc(text: str) -> Document:
+    return Document(page_content=text)
+
+
 async def load_help_docs() -> list[Document]:
     log.debug("Loading help documents")
     fpath = Path(__file__).parent.parent / "resources" / "help"

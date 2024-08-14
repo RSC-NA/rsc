@@ -20,6 +20,7 @@ from rsc.llm.create_db import (
     load_rule_style_docs,
     load_team_docs,
     markdown_to_documents,
+    string_to_doc,
 )
 from rsc.llm.query import llm_query
 from rsc.logs import GuildLogAdapter
@@ -483,6 +484,19 @@ class LLMMixIn(RSCMixIn):
             )
 
         # Read in Markdown documents
+        log.info("Create dates document.")
+        dates = await self._get_dates(guild)
+        if dates:
+            date_doc = await string_to_doc(dates)
+            docs.append(date_doc)
+
+        log.info("Creating rule documents.")
+        rulepath = Path(__file__).parent.parent / "resources" / "rules"
+        for fd in rulepath.glob("*.md"):
+            log.debug(f"Rule Doc: {fd}")
+            rdocs = await load_rule_style_docs(fd)
+            docs.extend(rdocs)
+
         log.info("Creating rule documents.")
         rulepath = Path(__file__).parent.parent / "resources" / "rules"
         for fd in rulepath.glob("*.md"):
