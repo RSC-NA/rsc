@@ -609,6 +609,11 @@ class RSCMixIn(ABC):
     # Transactions
 
     @abstractmethod
+    async def get_transaction_channel(
+        self, guild: discord.Guild, franchise_name: str
+    ) -> discord.TextChannel | None: ...
+
+    @abstractmethod
     async def expire_sub(
         self,
         guild: discord.Guild,
