@@ -67,14 +67,17 @@ class LLMMixIn(RSCMixIn):
 
         # Ignore news channels
         if hasattr(message.channel, "is_news") and message.channel.is_news():
+            log.debug(f"{message.channel} is a news channel!")
             return
 
         # Skip a message reply to bot mention
         if message.reference is not None and not message.is_system():
+            log.debug(f"{message.channel} is a system channel!")
             return
 
         # Check if channel in blacklist
         if message.channel.id in await self._get_llm_channel_blacklist(guild):
+            log.debug(f"{message.channel} is a blacklisted by the LLM!")
             return
 
         # Settings
