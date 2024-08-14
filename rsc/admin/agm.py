@@ -69,7 +69,7 @@ class AdminAGMMixIn(AdminMixIn):
         agm_role = await utils.get_agm_role(guild)
 
         # Find transaction channel
-        tchannel = await self.get_transaction_channel(guild, franchise)
+        tchannel = await self.get_franchise_transaction_channel(guild, franchise)
         if not tchannel:
             return await interaction.followup.send(
                 embed=ErrorEmbed(
@@ -136,15 +136,11 @@ class AdminAGMMixIn(AdminMixIn):
         agm_role = await utils.get_agm_role(guild)
 
         # Find transaction channel
-        franchise_fmt = franchise.lower().replace(" ", "-")
-        tchannel_name = f"{franchise_fmt}-transactions"
-        log.debug(f"Searching for transaction channel: {tchannel_name}")
-
-        tchannel = discord.utils.get(guild.channels, name=tchannel_name)
+        tchannel = await self.get_franchise_transaction_channel(guild, franchise)
         if not tchannel:
             return await interaction.followup.send(
                 embed=ErrorEmbed(
-                    description=f"Unable to find transaction channel: **{tchannel_name}**"
+                    description=f"Unable to find transaction channel for **{franchise}**"
                 )
             )
 

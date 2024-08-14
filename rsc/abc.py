@@ -609,7 +609,12 @@ class RSCMixIn(ABC):
     # Transactions
 
     @abstractmethod
-    async def get_transaction_channel(
+    async def get_franchise_transaction_channel_name(
+        self, franchise_name: str
+    ) -> str: ...
+
+    @abstractmethod
+    async def get_franchise_transaction_channel(
         self, guild: discord.Guild, franchise_name: str
     ) -> discord.TextChannel | None: ...
 

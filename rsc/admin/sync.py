@@ -483,13 +483,13 @@ class AdminSyncMixIn(AdminMixIn):
                 )
                 return
 
-            channel_name = f"{f.name.lower().replace(' ', '-')}-transactions"
-            channel = discord.utils.get(guild.text_channels, name=channel_name)
+            channel = await self.get_franchise_transaction_channel(guild, f.name)
 
             if channel:
                 log.debug(f"Found transaction channel: {channel.name}", guild=guild)
                 existing.append(channel)
             else:
+                channel_name = await self.get_franchise_transaction_channel_name(f.name)
                 log.info(
                     f"Creating new transaction channel: {channel_name}", guild=guild
                 )

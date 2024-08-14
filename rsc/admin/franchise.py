@@ -488,14 +488,13 @@ class AdminFranchiseMixIn(AdminMixIn):
             self._franchise_cache[guild.id].sort()
 
         # Update transaction channel
-        trans_channel = discord.utils.get(
-            guild.channels, name=f"{franchise.lower().replace(' ', '-')}-transactions"
-        )
+        trans_channel = await self.get_franchise_transaction_channel(guild, franchise)
         if trans_channel:
             log.debug(f"Before position: {trans_channel.position}")
-            trans_channel = await trans_channel.edit(
-                name=f"{rebrand_modal.name.lower().replace(' ','-')}-transactions"
+            rebrand_fmt = await self.get_franchise_transaction_channel_name(
+                rebrand_modal.name
             )
+            trans_channel = await trans_channel.edit(name=rebrand_fmt)
             if trans_channel.category:
                 # Debug print
                 log.debug(

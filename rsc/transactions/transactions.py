@@ -2686,16 +2686,13 @@ class TransactionMixIn(RSCMixIn):
 
         return gms, embed
 
-    async def get_transaction_channel(
+    async def get_franchise_transaction_channel(
         self, guild: discord.Guild, franchise_name: str
     ) -> discord.TextChannel | None:
         """Find franchise transaction channel"""
-        franchise_fmt = franchise_name.lower().replace(" ", "-")
-        franchise_fmt = re.sub(
-            r"[^a-z0-9\x2d]+", "", franchise_fmt, flags=re.IGNORECASE
+        tchannel_name = await self.get_franchise_transaction_channel_name(
+            franchise_name
         )
-
-        tchannel_name = f"{franchise_fmt}-transactions"
         log.debug(f"Searching for transaction channel: {tchannel_name}", guild=guild)
 
         tchannel = discord.utils.get(guild.channels, name=tchannel_name)
@@ -2705,6 +2702,14 @@ class TransactionMixIn(RSCMixIn):
         if not isinstance(tchannel, discord.TextChannel):
             return None
         return tchannel
+
+    async def get_franchise_transaction_channel_name(self, franchise_name: str) -> str:
+        franchise_fmt = franchise_name.lower().replace(" ", "-")
+        franchise_fmt = re.sub(
+            r"[^a-z0-9\x2d]+", "", franchise_fmt, flags=re.IGNORECASE
+        )
+        tchannel_name = f"{franchise_fmt}-transactions"
+        return tchannel_name
 
     # API
 
