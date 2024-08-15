@@ -533,7 +533,7 @@ class AdminMembersMixIn(AdminMixIn):
                 override=override,
             )
         except RscException as exc:
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 embed=ApiExceptionErrorEmbed(exc), ephemeral=True
             )
             return
