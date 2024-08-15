@@ -503,7 +503,7 @@ class AdminMembersMixIn(AdminMixIn):
         platform="Preferred platform",
         override="Admin override",
     )
-    async def _member_create(
+    async def _admin_member_signup_cmd(
         self,
         interaction: discord.Interaction,
         player_type: PlayerType,
@@ -516,6 +516,7 @@ class AdminMembersMixIn(AdminMixIn):
         if not interaction.guild or not isinstance(interaction.user, discord.Member):
             return
 
+        await interaction.response.defer()
         trackers = [tracker] if tracker else []
 
         try:
@@ -541,7 +542,7 @@ class AdminMembersMixIn(AdminMixIn):
         if rsc_name:
             await member.edit(nick=rsc_name)
 
-        await interaction.response.send_message(
+        await interaction.followup.send(
             embed=SuccessEmbed(
                 description=f"{member.mention} has been signed up for the latest season of RSC."
             )
