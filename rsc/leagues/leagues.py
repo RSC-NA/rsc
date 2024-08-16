@@ -391,7 +391,7 @@ class LeagueMixIn(RSCMixIn):
         tier: int | None = None,
         status: Status | None = None,
         team: str | None = None,
-    ) -> LeaguePlayerPatch:
+    ) -> LeaguePlayer:
         data = LeaguePlayerPatch()
         if base_mmr:
             data.base_mmr = base_mmr

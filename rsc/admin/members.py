@@ -314,7 +314,7 @@ class AdminMembersMixIn(AdminMixIn):
             )
 
         # Craft embed
-        embed = BlueEmbed(title="Leauge Player Updated")
+        embed = BlueEmbed(title="League Player Updated")
         if tier:
             tcolor = await utils.tier_color_by_name(guild, name=tier)
             embed.colour = tcolor
@@ -324,11 +324,19 @@ class AdminMembersMixIn(AdminMixIn):
         if result.status:
             pstatus = Status(result.status).full_name
 
+        team_name = "None"
+        if result.team and result.team.name:
+            team_name = result.team.name
+
+        tier = "None"
+        if result.tier and result.tier.name and result.tier.id:
+            tier = f"{result.tier.name} ({result.tier.id})"
+
         embed.add_field(name="Player", value=player.mention, inline=True)
         embed.add_field(name="Status", value=pstatus, inline=True)
         embed.add_field(name="", value="", inline=False)  # Line Break
-        embed.add_field(name="Team", value=str(result.team_name), inline=True)
-        embed.add_field(name="Tier", value=str(result.tier), inline=True)
+        embed.add_field(name="Team", value=team_name, inline=True)
+        embed.add_field(name="Tier", value=tier, inline=True)
         embed.add_field(name="", value="", inline=False)  # Line Break
         embed.add_field(name="Base MMR", value=str(result.base_mmr), inline=True)
         embed.add_field(name="Current MMR", value=str(result.current_mmr), inline=True)
