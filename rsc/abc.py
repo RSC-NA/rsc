@@ -82,21 +82,21 @@ class RSCMixIn(ABC):
     @abstractmethod
     async def _get_dates(self, guild: discord.Guild) -> str: ...
 
-    @abstractmethod
-    async def _set_permfa_announce_chnanel(
-        self, guild: discord.Guild, channel: discord.TextChannel
-    ): ...
+    # @abstractmethod
+    # async def _set_permfa_announce_chnanel(
+    #     self, guild: discord.Guild, channel: discord.TextChannel
+    # ): ...
 
-    @abstractmethod
-    async def _get_permfa_announce_channel(
-        self, guild: discord.Guild
-    ) -> discord.TextChannel | None: ...
+    # @abstractmethod
+    # async def _get_permfa_announce_channel(
+    #     self, guild: discord.Guild
+    # ) -> discord.TextChannel | None: ...
 
-    @abstractmethod
-    async def _set_permfa_msg_ids(self, guild: discord.Guild, msg_ids: list[int]): ...
+    # @abstractmethod
+    # async def _set_permfa_msg_ids(self, guild: discord.Guild, msg_ids: list[int]): ...
 
-    @abstractmethod
-    async def _get_permfa_msg_ids(self, guild: discord.Guild) -> list[int]: ...
+    # @abstractmethod
+    # async def _get_permfa_msg_ids(self, guild: discord.Guild) -> list[int]: ...
 
     # Combines
 
