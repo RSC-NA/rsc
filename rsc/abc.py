@@ -21,7 +21,6 @@ from rscapi.models.high_level_match import HighLevelMatch
 from rscapi.models.intent_to_play import IntentToPlay
 from rscapi.models.league import League
 from rscapi.models.league_player import LeaguePlayer
-from rscapi.models.league_player_patch import LeaguePlayerPatch
 from rscapi.models.match import Match
 from rscapi.models.match_list import MatchList
 from rscapi.models.match_results import MatchResults
@@ -82,6 +81,22 @@ class RSCMixIn(ABC):
 
     @abstractmethod
     async def _get_dates(self, guild: discord.Guild) -> str: ...
+
+    @abstractmethod
+    async def _set_permfa_announce_chnanel(
+        self, guild: discord.Guild, channel: discord.TextChannel
+    ): ...
+
+    @abstractmethod
+    async def _get_permfa_announce_channel(
+        self, guild: discord.Guild
+    ) -> discord.TextChannel | None: ...
+
+    @abstractmethod
+    async def _set_permfa_msg_ids(self, guild: discord.Guild, msg_ids: list[int]): ...
+
+    @abstractmethod
+    async def _get_permfa_msg_ids(self, guild: discord.Guild) -> list[int]: ...
 
     # Combines
 
@@ -184,7 +199,7 @@ class RSCMixIn(ABC):
         tier: int | None = None,
         status: Status | None = None,
         team: str | None = None,
-    ) -> LeaguePlayerPatch: ...
+    ) -> LeaguePlayer: ...
 
     @abstractmethod
     async def league_player_update_handler(self, request: aiohttp.web.Request): ...
