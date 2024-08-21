@@ -409,7 +409,9 @@ class LeagueMixIn(RSCMixIn):
             api = LeaguePlayersApi(client)
             log.debug(f"League Player Patch: {data}")
             try:
-                result = await api.league_players_partial_update(player_id, data)
+                result = await api.league_players_partial_update(
+                    id=player_id, data=data, league=self._league[guild.id]
+                )
                 log.debug(f"Patch Result: {result}")
                 return result
             except ApiException as exc:
