@@ -67,6 +67,7 @@ class AdminAGMMixIn(AdminMixIn):
 
         # Get AGM role
         agm_role = await utils.get_agm_role(guild)
+        league_role = await utils.get_league_role(guild)
 
         # Find transaction channel
         tchannel = await self.get_franchise_transaction_channel(guild, franchise)
@@ -78,7 +79,7 @@ class AdminAGMMixIn(AdminMixIn):
             )
 
         # Add AGM role to player
-        await agm.add_roles(agm_role)
+        await agm.add_roles(agm_role, league_role)
 
         # Add AGM permissions to transaction channel
         agm_overwrite = discord.PermissionOverwrite(
