@@ -555,11 +555,11 @@ class TransactionMixIn(RSCMixIn):
         if not guild or not isinstance(interaction.user, discord.Member):
             return
 
-        if override and not interaction.user.guild_permissions.manage_guild:
-            await interaction.response.send_message(
-                embed=ErrorEmbed(description="Only admins can process an override.")
-            )
-            return
+        # if override and not interaction.user.guild_permissions.manage_guild:
+        #     await interaction.response.send_message(
+        #         embed=ErrorEmbed(description="Only admins can process an override.")
+        #     )
+        #     return
 
         # Defer
         await interaction.response.defer(ephemeral=True)
@@ -674,11 +674,11 @@ class TransactionMixIn(RSCMixIn):
         if not guild or not isinstance(interaction.user, discord.Member):
             return
 
-        if override and not interaction.user.guild_permissions.manage_guild:
-            await interaction.response.send_message(
-                embed=ErrorEmbed(description="Only admins can process an override.")
-            )
-            return
+        # if override and not interaction.user.guild_permissions.manage_guild:
+        #     await interaction.response.send_message(
+        #         embed=ErrorEmbed(description="Only admins can process an override.")
+        #     )
+        #     return
 
         # Sign player
         await interaction.response.defer(ephemeral=True)
@@ -793,11 +793,11 @@ class TransactionMixIn(RSCMixIn):
         if not guild or not isinstance(interaction.user, discord.Member):
             return
 
-        if override and not interaction.user.guild_permissions.manage_guild:
-            await interaction.response.send_message(
-                embed=ErrorEmbed(description="Only admins can process an override.")
-            )
-            return
+        # if override and not interaction.user.guild_permissions.manage_guild:
+        #     await interaction.response.send_message(
+        #         embed=ErrorEmbed(description="Only admins can process an override.")
+        #     )
+        #     return
 
         await interaction.response.defer(ephemeral=True)
         # Process sign
@@ -898,11 +898,11 @@ class TransactionMixIn(RSCMixIn):
 
         await interaction.response.defer(ephemeral=True)
 
-        if override and not interaction.user.guild_permissions.manage_guild:
-            await interaction.followup.send(
-                embed=ErrorEmbed(description="Only admins can process an override.")
-            )
-            return
+        # if override and not interaction.user.guild_permissions.manage_guild:
+        #     await interaction.followup.send(
+        #         embed=ErrorEmbed(description="Only admins can process an override.")
+        #     )
+        #     return
 
         try:
             result = await self.substitution(
@@ -1102,11 +1102,11 @@ class TransactionMixIn(RSCMixIn):
         if not isinstance(interaction.user, discord.Member):
             return
 
-        if override and not interaction.user.guild_permissions.manage_guild:
-            await interaction.followup.send(
-                embed=ErrorEmbed(description="Only admins can process an override.")
-            )
-            return
+        # if override and not interaction.user.guild_permissions.manage_guild:
+        #     await interaction.followup.send(
+        #         embed=ErrorEmbed(description="Only admins can process an override.")
+        #     )
+        #     return
 
         trans_channel = await self._trans_channel(guild)
         if not trans_channel:
@@ -1458,11 +1458,11 @@ class TransactionMixIn(RSCMixIn):
         if not guild or not isinstance(interaction.user, discord.Member):
             return
 
-        if override and not interaction.user.guild_permissions.manage_guild:
-            await interaction.response.send_message(
-                embed=ErrorEmbed(description="Only admins can process an override.")
-            )
-            return
+        # if override and not interaction.user.guild_permissions.manage_guild:
+        #     await interaction.response.send_message(
+        #         embed=ErrorEmbed(description="Only admins can process an override.")
+        #     )
+        #     return
 
         log.debug(
             f"Moving AGM to Redshirt: {player.display_name} ({player.id})", guild=guild
@@ -1533,11 +1533,11 @@ class TransactionMixIn(RSCMixIn):
         if not guild or not isinstance(interaction.user, discord.Member):
             return
 
-        if override and not interaction.user.guild_permissions.manage_guild:
-            await interaction.response.send_message(
-                embed=ErrorEmbed(description="Only admins can process an override.")
-            )
-            return
+        # if override and not interaction.user.guild_permissions.manage_guild:
+        #     await interaction.response.send_message(
+        #         embed=ErrorEmbed(description="Only admins can process an override.")
+        #     )
+        #     return
         await interaction.response.defer(ephemeral=True)
 
         remove = bool(action.value)
@@ -1622,11 +1622,11 @@ class TransactionMixIn(RSCMixIn):
         if not guild or not isinstance(interaction.user, discord.Member):
             return
 
-        if override and not interaction.user.guild_permissions.manage_guild:
-            await interaction.response.send_message(
-                embed=ErrorEmbed(description="Only admins can process an override.")
-            )
-            return
+        # if override and not interaction.user.guild_permissions.manage_guild:
+        #     await interaction.response.send_message(
+        #         embed=ErrorEmbed(description="Only admins can process an override.")
+        #     )
+        #     return
 
         await interaction.response.defer(ephemeral=True)
         try:
@@ -1858,11 +1858,11 @@ class TransactionMixIn(RSCMixIn):
         if not isinstance(interaction.user, discord.Member):
             return
 
-        if override and not interaction.user.guild_permissions.manage_guild:
-            await interaction.response.send_message(
-                embed=ErrorEmbed(description="Only admins can process an override.")
-            )
-            return
+        # if override and not interaction.user.guild_permissions.manage_guild:
+        #     await interaction.response.send_message(
+        #         embed=ErrorEmbed(description="Only admins can process an override.")
+        #     )
+        #     return
 
         await interaction.response.defer()
         try:
