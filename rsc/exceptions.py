@@ -103,6 +103,14 @@ class CombinesError(RscException):
     """Combines returned error status message"""
 
 
+class NotInGuild(RscException):
+    """Combines returned error status message"""
+
+
+class CombinesNotActive(RscException):
+    """Combines returned error status message"""
+
+
 # Member
 
 
