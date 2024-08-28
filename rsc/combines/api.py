@@ -17,7 +17,7 @@ async def combines_active(
         url = urljoin(url, "active")
         log.debug(f"URL: {url}")
 
-        params = {"discord_id": player.id}
+        params = {"discord_id": player.id, "guild_id": player.guild.id}
 
         async with session.get(url, params=params) as resp:
             log.debug(f"Server Response: {resp.status}")
@@ -44,7 +44,7 @@ async def combines_lobby(
     url: str, executor: discord.Member, lobby_id: int | None = None
 ) -> models.CombinesLobby | models.CombinesStatus:
     async with aiohttp.ClientSession(trust_env=True) as session:
-        params = {"discord_id": executor.id}
+        params = {"discord_id": executor.id, "guild_id": executor.guild.id}
 
         url = urljoin(url, "lobby/")
         if lobby_id:
@@ -70,7 +70,7 @@ async def combines_check_in(url: str, player: discord.Member) -> models.Combines
     async with aiohttp.ClientSession(trust_env=True) as session:
         url = urljoin(url, "check_in")
         log.debug(f"URL: {url}")
-        params = {"discord_id": player.id}
+        params = {"discord_id": player.id, "guild_id": player.guild.id}
         async with session.get(url, params=params) as resp:
             log.debug(f"Server Response: {resp.status}")
             if resp.status == 502:
@@ -83,7 +83,7 @@ async def combines_check_out(url: str, player: discord.Member) -> models.Combine
     async with aiohttp.ClientSession(trust_env=True) as session:
         url = urljoin(url, "check_out")
         log.debug(f"URL: {url}")
-        params = {"discord_id": player.id}
+        params = {"discord_id": player.id, "guild_id": player.guild.id}
         async with session.get(url, params=params) as resp:
             log.debug(f"Server Response: {resp.status}")
             if resp.status == 502:

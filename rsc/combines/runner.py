@@ -38,6 +38,7 @@ class CombineRunnerMixIn(RSCMixIn):
             return aiohttp.web.Response(status=400)  # 400 Bad Request
 
         # Only support RSC NA 3v3 right now
+        log.debug(f"Looking for Guild ID: {event.guild_id}")
         guild: discord.Guild | None = None
         for g in self.bot.guilds:
             if g.id == event.guild_id:  # nickmdev
