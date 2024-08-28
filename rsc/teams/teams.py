@@ -198,6 +198,7 @@ class TeamMixIn(RSCMixIn):
 
         await interaction.response.defer()
         plist = await self.players(guild, team_name=team, limit=10)
+        plist = [p for p in plist if p.team and p.team.name == team]
 
         # Verify team exists and get data
         if not plist:
