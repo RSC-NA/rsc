@@ -1,7 +1,7 @@
 from datetime import datetime
 from enum import StrEnum
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class CombineStatusType(StrEnum):
@@ -63,6 +63,7 @@ class CombinesLobby(BaseModel):
     completed: bool
     cancelled: bool
     tier: str
+    guild_id: int = Field(strict=False)
     home: list[CombinesPlayer]
     away: list[CombinesPlayer]
 

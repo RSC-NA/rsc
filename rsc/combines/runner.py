@@ -9,6 +9,7 @@ import pydantic
 from rsc.abc import RSCMixIn
 from rsc.combines import models
 from rsc.embeds import BlueEmbed
+from rsc.exceptions import CombinesNotActive, NotInGuild
 from rsc.utils import utils
 from rsc.views import LinkButton
 
@@ -72,32 +73,6 @@ class CombineRunnerMixIn(RSCMixIn):
             log.warning("Received combines webhook with no JSON data")
             return aiohttp.web.Response(status=400)  # 400 Bad Request
 
-        guild: discord.Guild | None = None
-        for g in self.bot.guilds:
-            if g.id == 991044575567179856:  # nickmdev
-                guild = g
-                break
-            if g.id == 395806681994493964:  # RSC 3v3
-                guild = g
-                break
-
-        if not guild:
-            log.error("Bot is not in the configured combines guild")
-            return aiohttp.web.Response(status=503)  # 503 Service Unavailable
-
-        # Check if active
-        active = await self._get_combines_active(guild)
-        if not active:
-            log.warning("Received combine match but combines are not active.")
-            return aiohttp.web.Response(status=503)  # 503 Service Unavailable
-
-        category = await self._get_combines_category(guild)
-        if not category:
-            log.error(
-                "Received request to create combine game but combine category does not exist."
-            )
-            return aiohttp.web.Response(status=400)  # 400 Bad Request
-
         log.debug("Processing combine lobbies")
         lobby_list: list[models.CombinesLobby] = []
         try:
@@ -113,7 +88,10 @@ class CombineRunnerMixIn(RSCMixIn):
 
         log.debug("Sending combine lobbies to creation")
         for lobby in lobby_list:
-            await self.create_combine_lobby_channel(guild, lobby)
+            try:
+                await self.create_combine_lobby_channel(lobby)
+            except (NotInGuild, CombinesNotActive):
+                return aiohttp.web.Response(status=503)  # 503 Service Unavailable
 
         # Send HTTP 200 OK
         log.debug("Sending HTTP response.")
@@ -121,10 +99,28 @@ class CombineRunnerMixIn(RSCMixIn):
 
     async def create_combine_lobby_channel(
         self,
-        guild: discord.Guild,
         lobby: models.CombinesLobby,
     ) -> list[discord.VoiceChannel]:
         log.debug("Creating combine lobby channels.")
+
+        guild: discord.Guild | None = None
+        for g in self.bot.guilds:
+            if g.id == lobby.guild_id:
+                guild = g
+                break
+
+        if not guild:
+            log.warning(
+                f"Bot is not in the specified combine guild ID: {lobby.guild_id}"
+            )
+            raise NotInGuild()
+
+        # Check if active
+        active = await self._get_combines_active(guild)
+        if not active:
+            log.warning(f"Combines are not active in guild ID: {lobby.guild_id}")
+            raise CombinesNotActive()
+
         combine_category = await self._get_combines_category(guild)
         if not combine_category:
             log.error("Combine category not configured. Can't create game.")
