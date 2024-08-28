@@ -198,7 +198,9 @@ class TeamMixIn(RSCMixIn):
 
         await interaction.response.defer()
         plist = await self.players(guild, team_name=team, limit=10)
+        log.debug(f"Total Rostered Players: {len(plist)}")
         plist = [p for p in plist if p.team and p.team.name == team]
+        log.debug(f"Total filtered Players: {len(plist)}")
 
         # Verify team exists and get data
         if not plist:
@@ -481,6 +483,9 @@ class TeamMixIn(RSCMixIn):
     ) -> LeaguePlayer | None:
         """Return captain of a team by name"""
         players = await self.players(guild, team_name=team_name)
+        log.debug(f"Total Rostered Players: {len(players)}")
+        players = [p for p in players if p.team and p.team.name == team_name]
+        log.debug(f"Filtered Rostered Players: {len(players)}")
         if not players:
             return None
         return next((x for x in players if x.captain), None)
