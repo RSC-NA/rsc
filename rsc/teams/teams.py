@@ -197,9 +197,13 @@ class TeamMixIn(RSCMixIn):
             return
 
         await interaction.response.defer()
-        plist = await self.players(guild, team_name=team, limit=10)
+        plist = await self.players(guild, team_name=team)
         log.debug(f"Total Rostered Players: {len(plist)}")
-        plist = [p for p in plist if p.team and p.team.name == team]
+        plist = [
+            p
+            for p in plist
+            if p.team and p.team.name and p.team.name.lower() == team.lower()
+        ]
         log.debug(f"Total filtered Players: {len(plist)}")
 
         # Verify team exists and get data
