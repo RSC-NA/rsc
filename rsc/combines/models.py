@@ -74,3 +74,4 @@ class CombineEvent(BaseModel):
     message_type: CombineEventType
     message: str
     match_id: int | None
+    guild_id: int = Field(strict=False)

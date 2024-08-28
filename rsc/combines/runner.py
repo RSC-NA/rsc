@@ -40,10 +40,7 @@ class CombineRunnerMixIn(RSCMixIn):
         # Only support RSC NA 3v3 right now
         guild: discord.Guild | None = None
         for g in self.bot.guilds:
-            if g.id == 991044575567179856:  # nickmdev
-                guild = g
-                break
-            if g.id == 395806681994493964:  # RSC 3v3
+            if g.id == event.guild_id:  # nickmdev
                 guild = g
                 break
 
