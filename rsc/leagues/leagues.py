@@ -393,7 +393,7 @@ class LeagueMixIn(RSCMixIn):
         status: Status | None = None,
         team: str | None = None,
     ) -> LeaguePlayer:
-        data = LeaguePlayerPatch()
+        data = LeaguePlayerPatch(executor=executor.id)
         if base_mmr:
             data.base_mmr = base_mmr
         if current_mmr:
@@ -405,8 +405,6 @@ class LeagueMixIn(RSCMixIn):
             data.team_name = team
         if status:
             data.status = status.value
-
-        data.executor = executor.id
 
         async with ApiClient(self._api_conf[guild.id]) as client:
             api = LeaguePlayersApi(client)
