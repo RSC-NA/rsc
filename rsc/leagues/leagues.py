@@ -406,6 +406,8 @@ class LeagueMixIn(RSCMixIn):
         if status:
             data.status = status.value
 
+        data.executor = executor.id
+
         async with ApiClient(self._api_conf[guild.id]) as client:
             api = LeaguePlayersApi(client)
             log.debug(f"League Player Patch: {data}")
@@ -414,7 +416,6 @@ class LeagueMixIn(RSCMixIn):
                     id=player_id,
                     data=data,
                     league=self._league[guild.id],
-                    executor=executor.id,
                 )
                 log.debug(f"Patch Result: {result}")
                 return result
