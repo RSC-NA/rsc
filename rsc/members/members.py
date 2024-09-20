@@ -77,7 +77,9 @@ class MemberMixIn(RSCMixIn):
 
     # App Commands
 
-    @app_commands.command(name="signupstatus", description="Check your status for the next RSC season")  # type: ignore
+    @app_commands.command(
+        name="signupstatus", description="Check your status for the next RSC season"
+    )  # type: ignore
     @app_commands.guild_only
     async def _member_signup_status(self, interaction: discord.Interaction):
         guild = interaction.guild
@@ -164,7 +166,9 @@ class MemberMixIn(RSCMixIn):
             )
         )
 
-    @_intent.command(name="status", description="Display intent to play status for next season")  # type: ignore
+    @_intent.command(
+        name="status", description="Display intent to play status for next season"
+    )  # type: ignore
     @app_commands.guild_only
     async def _intents_status_cmd(self, interaction: discord.Interaction):
         guild = interaction.guild
@@ -229,7 +233,9 @@ class MemberMixIn(RSCMixIn):
 
         await interaction.followup.send(embed=embed)
 
-    @_intent.command(name="search", description="Search for intent to play status (Limit: 50)")  # type: ignore
+    @_intent.command(
+        name="search", description="Search for intent to play status (Limit: 50)"
+    )  # type: ignore
     @app_commands.autocomplete(
         franchise=FranchiseMixIn.franchise_autocomplete,
         team=TeamMixIn.teams_autocomplete,
@@ -405,7 +411,9 @@ class MemberMixIn(RSCMixIn):
 
         await interaction.followup.send(embed=embed)
 
-    @_intent.command(name="declare", description="Declare your intent to play next season of RSC")  # type: ignore
+    @_intent.command(
+        name="declare", description="Declare your intent to play next season of RSC"
+    )  # type: ignore
     @app_commands.guild_only
     async def _intents_declare_cmd(self, interaction: discord.Interaction):
         guild = interaction.guild
@@ -562,7 +570,9 @@ class MemberMixIn(RSCMixIn):
         )
         await interaction.edit_original_response(embed=success_embed, view=None)
 
-    @app_commands.command(name="permfa", description="Sign up as an permanent free agent")  # type: ignore
+    @app_commands.command(
+        name="permfa", description="Sign up as an permanent free agent"
+    )  # type: ignore
     @app_commands.guild_only
     async def _member_permfa_signup(self, interaction: discord.Interaction):
         guild = interaction.guild

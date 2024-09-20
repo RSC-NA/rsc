@@ -83,7 +83,10 @@ class AdminIntentsMixIn(AdminMixIn):
             )
         await interaction.edit_original_response(embed=embed, view=None)
 
-    @_intents.command(name="missingrole", description="Configure the Intent to Play missing discord role")  # type: ignore
+    @_intents.command(
+        name="missingrole",
+        description="Configure the Intent to Play missing discord role",
+    )  # type: ignore
     async def _intents_set_missing_role_cmd(
         self, interaction: discord.Interaction, role: discord.Role
     ):
@@ -100,7 +103,10 @@ class AdminIntentsMixIn(AdminMixIn):
             ephemeral=True,
         )
 
-    @_intents.command(name="missingchannel", description="Configure the Intent to Play missing channel")  # type: ignore
+    @_intents.command(
+        name="missingchannel",
+        description="Configure the Intent to Play missing channel",
+    )  # type: ignore
     async def _intents_set_missing_channel_cmd(
         self, interaction: discord.Interaction, channel: discord.TextChannel
     ):
@@ -117,7 +123,10 @@ class AdminIntentsMixIn(AdminMixIn):
             ephemeral=True,
         )
 
-    @_intents.command(name="missingmsg", description="Configure the Intent to Play missing message on ping")  # type: ignore
+    @_intents.command(
+        name="missingmsg",
+        description="Configure the Intent to Play missing message on ping",
+    )  # type: ignore
     async def _intents_set_missing_msg_cmd(self, interaction: discord.Interaction):
         guild = interaction.guild
         if not guild:
@@ -129,7 +138,9 @@ class AdminIntentsMixIn(AdminMixIn):
 
         await self._set_intent_missing_message(guild, intent_modal.intent_msg.value)
 
-    @_intents.command(name="populate", description="Apply Intent Missing role to applicable players")  # type: ignore
+    @_intents.command(
+        name="populate", description="Apply Intent Missing role to applicable players"
+    )  # type: ignore
     async def _intents_populate_role_cmd(self, interaction: discord.Interaction):
         guild = interaction.guild
         if not guild:
@@ -218,7 +229,9 @@ class AdminIntentsMixIn(AdminMixIn):
             )
         )
 
-    @_intents.command(name="ping", description="Send a ping to all players with missing intents")  # type: ignore
+    @_intents.command(
+        name="ping", description="Send a ping to all players with missing intents"
+    )  # type: ignore
     async def _intents_missing_ping_cmd(self, interaction: discord.Interaction):
         guild = interaction.guild
         if not guild:

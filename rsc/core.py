@@ -19,6 +19,8 @@ from rsc.admin.inactivity import AdminInactivityMixIn
 from rsc.admin.intents import AdminIntentsMixIn
 from rsc.admin.match import AdminMatchMixIn
 from rsc.admin.members import AdminMembersMixIn
+
+# from rsc.admin.permfa import AdminPermFAMixIn
 from rsc.admin.stats import AdminStatsMixIn
 from rsc.admin.sync import AdminSyncMixIn
 from rsc.ballchasing import BallchasingMixIn
@@ -67,6 +69,7 @@ class RSC(
     AdminIntentsMixIn,
     AdminMatchMixIn,
     AdminMembersMixIn,
+    # AdminPermFAMixIn,
     AdminStatsMixIn,
     AdminSyncMixIn,
     BallchasingMixIn,

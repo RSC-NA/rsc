@@ -1,4 +1,3 @@
-# import json
 import logging
 from pathlib import Path
 
@@ -6,7 +5,6 @@ import discord
 from langchain_core.documents import Document
 from redbot.core import app_commands, commands
 from rscapi.models.franchise_list import FranchiseList
-from rscapi.models.league_player import LeaguePlayer
 from rscapi.models.team import Team
 
 from rsc.abc import RSCMixIn
@@ -57,32 +55,26 @@ class LLMMixIn(RSCMixIn):
         log.debug("Received mention, generating LLM response.")
         # Check if LLM active
         if not await self._get_llm_status(guild):
-            log.debug("LLM is currently disabled.")
             return
 
         # Ignore @everyone
         if message.mention_everyone:
-            log.debug("Mention is for @everyone. I gnoring")
             return
 
         # Replay to mention only
         if not guild.me.mentioned_in(message):
-            log.debug("Bot not mentioned in message...")
             return
 
         # Ignore news channels
         if hasattr(message.channel, "is_news") and message.channel.is_news():
-            log.debug(f"{message.channel} is a news channel!")
             return
 
         # Skip a message reply to bot mention
         if message.reference is not None and not message.is_system():
-            log.debug(f"{message.channel} is a system channel!")
             return
 
         # Check if channel in blacklist
         if message.channel.id in await self._get_llm_channel_blacklist(guild):
-            log.debug(f"{message.channel} is a blacklisted by the LLM!")
             return
 
         # Settings
@@ -536,10 +528,10 @@ class LLMMixIn(RSCMixIn):
             )
 
         log.info("Creating player documents.")
-        players: list[LeaguePlayer] = await self.players(guild, limit=5000)
-        if players:
-            log.debug(f"Player Count: {len(players)}")
-            docs.extend(await load_player_docs(players))
+        pcount = await self.total_players(guild)
+        log.debug(f"Total Players: {pcount}")
+        async for player in self.paged_players(guild):
+            docs.extend(await load_player_docs([player]))
 
         if interaction:
             await interaction.edit_original_response(

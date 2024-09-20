@@ -194,6 +194,7 @@ class RSCMixIn(ABC):
         self,
         guild: discord.Guild,
         player_id: int,
+        executor: discord.Member,
         base_mmr: int | None = None,
         current_mmr: int | None = None,
         tier: int | None = None,

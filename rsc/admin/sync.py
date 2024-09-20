@@ -435,7 +435,9 @@ class AdminSyncMixIn(AdminMixIn):
             description="Synced all tier roles and created associated channels",
         )
         embed.add_field(
-            name="Name", value="\n".join([t.name for t in tiers]), inline=True  # type: ignore
+            name="Name",
+            value="\n".join([t.name for t in tiers]),
+            inline=True,  # type: ignore
         )
 
         role_fmt = []

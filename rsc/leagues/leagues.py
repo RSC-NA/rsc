@@ -386,6 +386,7 @@ class LeagueMixIn(RSCMixIn):
         self,
         guild: discord.Guild,
         player_id: int,
+        executor: discord.Member,
         base_mmr: int | None = None,
         current_mmr: int | None = None,
         tier: int | None = None,
@@ -410,7 +411,10 @@ class LeagueMixIn(RSCMixIn):
             log.debug(f"League Player Patch: {data}")
             try:
                 result = await api.league_players_partial_update(
-                    id=player_id, data=data, league=self._league[guild.id]
+                    id=player_id,
+                    data=data,
+                    league=self._league[guild.id],
+                    executor=executor.id,
                 )
                 log.debug(f"Patch Result: {result}")
                 return result

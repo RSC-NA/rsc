@@ -5,7 +5,7 @@ from redbot.core import app_commands
 
 from rsc.abc import RSCMixIn
 from rsc.admin.modals import LeagueDatesModal
-from rsc.embeds import BlueEmbed
+from rsc.embeds import BlueEmbed, SuccessEmbed
 from rsc.logs import GuildLogAdapter
 from rsc.types import AdminSettings
 
@@ -19,6 +19,8 @@ defaults_guild = AdminSettings(
     IntentChannel=None,
     IntentMissingRole=None,
     IntentMissingMsg=None,
+    PermFAChannel=None,
+    PermFAMsgIds=None,
 )
 
 
@@ -52,12 +54,15 @@ class AdminMixIn(RSCMixIn):
         intent_missing_msg = await self._get_intent_missing_message(guild)
         dates = await self._get_dates(guild)
         agm_msg = await self._get_agm_message(guild)
+        pfa_channel = await self._get_permfa_announce_channel(guild)
+
+        # Intents
 
         intent_role_fmt = intent_role.mention if intent_role else "None"
         intent_channel_fmt = intent_channel.mention if intent_channel else "None"
 
         intent_embed = BlueEmbed(
-            title="Admin Settings",
+            title="Admin Intent Settings",
             description="Displaying configured settings for RSC Admins",
         )
         intent_embed.add_field(
@@ -70,11 +75,23 @@ class AdminMixIn(RSCMixIn):
             name="Intent Missing Message", value=intent_missing_msg, inline=False
         )
 
+        # PermFA
+
+        pfa_channel_fmt = pfa_channel.mention if pfa_channel else "None"
+
+        permfa_embed = BlueEmbed(title="Admin PermFA Settings")
+        permfa_embed.add_field(
+            name="PermFA Announcement Channel", value=pfa_channel_fmt, inline=False
+        )
+
+        # AGM & Dates
+
         agm_msg_embed = BlueEmbed(title="Admin Dates Setting", description=dates)
         dates_embed = BlueEmbed(title="Admin AGM Message", description=agm_msg)
 
         await interaction.response.send_message(
-            embeds=[intent_embed, agm_msg_embed, dates_embed], ephemeral=True
+            embeds=[intent_embed, permfa_embed, agm_msg_embed, dates_embed],
+            ephemeral=True,
         )
 
     @_admin.command(name="dates", description="Configure the dates command output")  # type: ignore
@@ -87,6 +104,23 @@ class AdminMixIn(RSCMixIn):
         await dates_modal.wait()
 
         await self._set_dates(interaction.guild, value=dates_modal.date_input.value)
+
+    @_admin.command(
+        name="pfachnanel", description="Configure the PermFA announcement channel"
+    )  # type: ignore
+    @app_commands.describe(channel="Discord channel to announce PermFAs")
+    async def _admin_set_pfa_channel_cmd(
+        self, interaction: discord.Interaction, channel: discord.TextChannel
+    ):
+        if not interaction.guild:
+            return
+
+        await self._set_permfa_announce_chnanel(interaction.guild, channel)
+        await interaction.response.send_message(
+            embed=SuccessEmbed(
+                description=f"Configured PermFA announcement channel to {channel.mention}"
+            )
+        )
 
     # Config
 
@@ -139,3 +173,28 @@ class AdminMixIn(RSCMixIn):
 
     async def _get_activity_check_msg_id(self, guild: discord.Guild) -> int | None:
         return await self.config.custom("Admin", str(guild.id)).ActivityCheckMsgId()
+
+    async def _set_permfa_announce_chnanel(
+        self, guild: discord.Guild, channel: discord.TextChannel
+    ):
+        await self.config.custom("Admin", str(guild.id)).PermFAChannel.set(channel.id)
+
+    async def _get_permfa_announce_channel(
+        self, guild: discord.Guild
+    ) -> discord.TextChannel | None:
+        cid = await self.config.custom("Admin", str(guild.id)).PermFAChannel()
+        if not cid:
+            return None
+        c = guild.get_channel(cid)
+        if not isinstance(c, discord.TextChannel):
+            return None
+        return c
+
+    async def _set_permfa_msg_ids(self, guild: discord.Guild, msg_ids: list[int]):
+        await self.config.custom("Admin", str(guild.id)).PermFAMsgIds.set(msg_ids)
+
+    async def _get_permfa_msg_ids(self, guild: discord.Guild) -> list[int]:
+        ids = await self.config.custom("Admin", str(guild.id)).PermFAMsgIds()
+        if not ids:
+            return []
+        return ids

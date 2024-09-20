@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import argparse
 import json
 import os
 from pathlib import Path
@@ -7,12 +8,16 @@ from pathlib import Path
 import requests
 
 
-def send_webhook():
+def send_webhook(twos: bool=False):
     script_path = os.path.dirname(os.path.abspath(__file__))
     print(f"Script path: {script_path}")
 
     json_path = Path(script_path).parent
-    json_path = json_path / "data/combines/combines_webhook.json"
+
+    if twos:
+        json_path = json_path / "data/combines/combines_webhook_2s.json"
+    else:
+        json_path = json_path / "data/combines/combines_webhook.json"
     print(f"JSON Path: {json_path.absolute}")
 
     with open(json_path, "r") as fd:
@@ -24,4 +29,11 @@ def send_webhook():
 
 
 if __name__ == "__main__":
-    send_webhook()
+    parser = argparse.ArgumentParser(description="Test combines lobby webhook")
+    parser.add_argument(
+        "-2", dest="twos", action="store_true", default=False, help="Send 2s league event"
+    )
+
+    argv = parser.parse_args()
+
+    send_webhook(twos=argv.twos)

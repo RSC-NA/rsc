@@ -26,9 +26,9 @@ SPECTATOR_ROLE = "Spectator"
 SUBBED_OUT_ROLE = "Subbed Out"
 
 # Emoji
-TROPHY_EMOJI = "\U0001F3C6"  # :trophy:
-STAR_EMOJI = "\U00002B50"  # :star:
-DEV_LEAGUE_EMOJI = "\U0001F451"  # :crown:
+TROPHY_EMOJI = "\U0001f3c6"  # :trophy:
+STAR_EMOJI = "\U00002b50"  # :star:
+DEV_LEAGUE_EMOJI = "\U0001f451"  # :crown:
 
 # Links
 

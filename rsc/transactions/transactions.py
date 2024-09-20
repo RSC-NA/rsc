@@ -1782,7 +1782,9 @@ class TransactionMixIn(RSCMixIn):
 
         await interaction.followup.send(embed=embed, ephemeral=True)
 
-    @_transactions.command(name="leaderboard", description="Display transaction committee leaderboard")  # type: ignore
+    @_transactions.command(
+        name="leaderboard", description="Display transaction committee leaderboard"
+    )  # type: ignore
     @app_commands.describe(
         season='RSC Season Number. Example: "20" (Optional)',
     )
@@ -1833,7 +1835,9 @@ class TransactionMixIn(RSCMixIn):
         )
         await interaction.followup.send(embed=embed)
 
-    @_transactions.command(name="draft", description="Process a draft pick and announce it")  # type: ignore
+    @_transactions.command(
+        name="draft", description="Process a draft pick and announce it"
+    )  # type: ignore
     @app_commands.describe(
         player="RSC discord member being drafted",
         team="Team name",

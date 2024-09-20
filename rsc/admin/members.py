@@ -38,7 +38,9 @@ class AdminMembersMixIn(AdminMixIn):
         default_permissions=discord.Permissions(manage_guild=True),
     )
 
-    @_members.command(name="namehistory", description="Get an RSC discord members API name history")  # type: ignore
+    @_members.command(
+        name="namehistory", description="Get an RSC discord members API name history"
+    )  # type: ignore
     @app_commands.describe(
         member="RSC discord member",
     )
@@ -168,7 +170,9 @@ class AdminMembersMixIn(AdminMixIn):
             )
         )
 
-    @_members.command(name="transfer", description="Transfer membership to a new Discord account")  # type: ignore
+    @_members.command(
+        name="transfer", description="Transfer membership to a new Discord account"
+    )  # type: ignore
     @app_commands.describe(
         old="Old Discord ID",
         new="New Discord Member",
@@ -282,6 +286,7 @@ class AdminMembersMixIn(AdminMixIn):
                 tier=tid,
                 status=status,
                 team=team,
+                executor=interaction.user,
             )
             # Get updated league player object
             plist = await self.players(guild, discord_id=player.id, limit=1)
@@ -502,7 +507,9 @@ class AdminMembersMixIn(AdminMixIn):
 
         await interaction.followup.send(embed=embed, ephemeral=True)
 
-    @_members.command(name="signup", description="Sign a player up for the latest RSC season")  # type: ignore
+    @_members.command(
+        name="signup", description="Sign a player up for the latest RSC season"
+    )  # type: ignore
     @app_commands.describe(
         player_type="New or Former Player",
         member="Discord member being added",

@@ -31,17 +31,17 @@ log = logging.getLogger("red.rsc.utils")
 FRANCHISE_ROLE_REGEX = re.compile(r"^\w[\w\s\x27]+?\s\(.+?\)$")
 EMOJI_REGEX = re.compile(
     "["
-    "\U0001F600-\U0001F64F"  # emoticons
-    "\U0001F300-\U0001F5FF"  # symbols & pictographs
-    "\U0001F680-\U0001F6FF"  # transport & map symbols
-    "\U0001F1E0-\U0001F1FF"  # flags (iOS)
-    "\U00002500-\U00002BEF"  # chinese char
-    "\U00002702-\U000027B0"
-    "\U000024C2-\U0001F251"
+    "\U0001f600-\U0001f64f"  # emoticons
+    "\U0001f300-\U0001f5ff"  # symbols & pictographs
+    "\U0001f680-\U0001f6ff"  # transport & map symbols
+    "\U0001f1e0-\U0001f1ff"  # flags (iOS)
+    "\U00002500-\U00002bef"  # chinese char
+    "\U00002702-\U000027b0"
+    "\U000024c2-\U0001f251"
     "\U0001f926-\U0001f937"
     "\U00010000-\U0010ffff"
     "\u2640-\u2642"
-    "\u2600-\u2B55"
+    "\u2600-\u2b55"
     "\u200d"
     "\u23cf"
     "\u23e9"
@@ -848,11 +848,15 @@ class UtilsMixIn(RSCMixIn):
             )
             data.set_author(
                 name=guild.name,
-                icon_url="https://cdn.discordapp.com/emojis/457879292152381443.png"
-                if "VERIFIED" in guild.features
-                else "https://cdn.discordapp.com/emojis/508929941610430464.png"
-                if "PARTNERED" in guild.features
-                else None,
+                icon_url=(
+                    "https://cdn.discordapp.com/emojis/457879292152381443.png"
+                    if "VERIFIED" in guild.features
+                    else (
+                        "https://cdn.discordapp.com/emojis/508929941610430464.png"
+                        if "PARTNERED" in guild.features
+                        else None
+                    )
+                ),
             )
             if guild.icon:
                 data.set_thumbnail(url=guild.icon)
@@ -1242,9 +1246,9 @@ class UtilsMixIn(RSCMixIn):
             act = "Listening: [{title}{sep}{artist}]({url})".format(
                 title=discord.utils.escape_markdown(l_act.title),
                 sep=" | " if l_act.artist else "",
-                artist=discord.utils.escape_markdown(l_act.artist)
-                if l_act.artist
-                else "",
+                artist=(
+                    discord.utils.escape_markdown(l_act.artist) if l_act.artist else ""
+                ),
                 url=f"https://open.spotify.com/track/{l_act.track_id}",
             )
         else:

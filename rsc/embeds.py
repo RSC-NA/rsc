@@ -213,5 +213,5 @@ class NotImplementedEmbed(RedEmbed):
         super().__init__(
             title="Not Implemented",
             description="Command has not been implemented yet.",
-            **kwargs
+            **kwargs,
         )

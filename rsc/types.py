@@ -100,6 +100,8 @@ class AdminSettings(TypedDict):
     IntentChannel: discord.TextChannel | None
     IntentMissingRole: discord.Role | None
     IntentMissingMsg: str | None
+    PermFAChannel: int | None
+    PermFAMsgIds: list[int] | None
 
 
 class CombineSettings(TypedDict):
