@@ -301,9 +301,9 @@ class TrackerMixIn(RSCMixIn):
         """Fetch RSC tracker data"""
         player_id = None
         if isinstance(player, discord.Member):
-            player_id = str(player.id)
+            player_id = player.id
         elif isinstance(player, int):
-            player_id = str(player)
+            player_id = player
 
         async with ApiClient(self._api_conf[guild.id]) as client:
             api = TrackerLinksApi(client)
