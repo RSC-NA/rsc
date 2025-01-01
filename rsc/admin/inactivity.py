@@ -73,10 +73,10 @@ class AdminInactivityMixIn(AdminMixIn):
 
     # Commands
 
-    @_inactive.command(
+    @_inactive.command(  #  type: ignore
         name="start",
         description="Create a channel and ping for inactive check. (FA/DE players only)",
-    )  # type: ignore
+    )
     async def _admin_inactive_check_start_cmd(
         self, interaction: discord.Interaction, category: discord.CategoryChannel
     ):
@@ -85,14 +85,13 @@ class AdminInactivityMixIn(AdminMixIn):
             return
 
         de_role = await utils.get_draft_eligible_role(guild)
-        fa_role = await utils.get_free_agent_role(guild)
         gm_role = await utils.get_gm_role(guild)
         agm_role = await utils.get_agm_role(guild)
 
-        if not (de_role and fa_role and gm_role and agm_role):
+        if not (de_role and gm_role and agm_role):
             return await interaction.response.send_message(
                 embed=ErrorEmbed(
-                    description="Draft Eligible, Free Agent, General Manager, or Assistant GM role does not exist in guild."
+                    description="Draft Eligible, General Manager, or Assistant GM role does not exist in guild."
                 ),
                 ephemeral=True,
             )
@@ -139,7 +138,6 @@ class AdminInactivityMixIn(AdminMixIn):
                 add_reactions=False,
             ),
             de_role: view_perms,
-            fa_role: view_perms,
             gm_role: view_perms,
             agm_role: view_perms,
         }
@@ -152,11 +150,11 @@ class AdminInactivityMixIn(AdminMixIn):
         )
 
         # Send persistent embed
-        ping_fmt = f"{de_role.mention} {fa_role.mention}"
+        ping_fmt = f"{de_role.mention}"
         embed = BlueEmbed(
             title="Activity Check",
             description=(
-                "This is an activity check for all draft eligible and free agent players. **This MUST be completed to continue playing in RSC.**\n\n"
+                "This is an activity check for all draft eligible players. **This MUST be completed to continue playing in RSC.**\n\n"
                 "**Declare your activity with the buttons below.**"
             ),
         )
@@ -190,9 +188,9 @@ class AdminInactivityMixIn(AdminMixIn):
             ephemeral=True,
         )
 
-    @_inactive.command(
+    @_inactive.command(  # type: ignore
         name="stop", description="End inactivity check and delete channel."
-    )  # type: ignore
+    )
     async def _admin_inactive_check_stop_cmd(self, interaction: discord.Interaction):
         guild = interaction.guild
         if not guild:
@@ -223,9 +221,9 @@ class AdminInactivityMixIn(AdminMixIn):
             ephemeral=True,
         )
 
-    @_inactive.command(
+    @_inactive.command(  # type: ignore
         name="manual", description="Manually change a players activity check status"
-    )  # type: ignore
+    )
     @app_commands.describe(player="RSC discord member", status="Active or Not Active")
     async def _admin_inactive_check_manual_cmd(
         self,
