@@ -936,7 +936,7 @@ class AdminFranchiseMixIn(AdminMixIn):
             use_application_commands=True,
         )
 
-        await tchannel.edit(overwrites={gm: gm_overwrite})
+        await tchannel.set_permissions(gm, overwrite=gm_overwrite)
         if old_gm:
             await tchannel.set_permissions(old_gm, overwrite=None)
 
