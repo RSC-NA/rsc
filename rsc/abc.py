@@ -187,6 +187,11 @@ class RSCMixIn(ABC):
         gm: discord.Member,
     ) -> Franchise: ...
 
+    @abstractmethod
+    async def fetch_franchise(
+        self, guild: discord.Guild, name: str
+    ) -> Franchise | None: ...
+
     # League
 
     @abstractmethod
