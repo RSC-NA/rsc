@@ -9,6 +9,8 @@ from rscapi.models.activity_check import ActivityCheck
 from rscapi.models.deleted import Deleted
 from rscapi.models.intent_to_play_schema import IntentToPlaySchema
 from rscapi.models.league_player import LeaguePlayer
+from rscapi.models.league_player_patch import LeaguePlayerPatch
+from rscapi.models.league_player_signup import LeaguePlayerSignup
 from rscapi.models.member import Member
 from rscapi.models.member_transfer_schema import MemberTransferSchema
 from rscapi.models.name_change_history import NameChangeHistory
@@ -77,9 +79,9 @@ class MemberMixIn(RSCMixIn):
 
     # App Commands
 
-    @app_commands.command(
+    @app_commands.command(  # type: ignore  # type: ignore
         name="signupstatus", description="Check your status for the next RSC season"
-    )  # type: ignore
+    )
     @app_commands.guild_only
     async def _member_signup_status(self, interaction: discord.Interaction):
         guild = interaction.guild
@@ -166,9 +168,9 @@ class MemberMixIn(RSCMixIn):
             )
         )
 
-    @_intent.command(
+    @_intent.command(  # type: ignore  # type: ignore
         name="status", description="Display intent to play status for next season"
-    )  # type: ignore
+    )
     @app_commands.guild_only
     async def _intents_status_cmd(self, interaction: discord.Interaction):
         guild = interaction.guild
@@ -233,9 +235,9 @@ class MemberMixIn(RSCMixIn):
 
         await interaction.followup.send(embed=embed)
 
-    @_intent.command(
+    @_intent.command(  # type: ignore
         name="search", description="Search for intent to play status (Limit: 50)"
-    )  # type: ignore
+    )
     @app_commands.autocomplete(
         franchise=FranchiseMixIn.franchise_autocomplete,
         team=TeamMixIn.teams_autocomplete,
@@ -411,9 +413,9 @@ class MemberMixIn(RSCMixIn):
 
         await interaction.followup.send(embed=embed)
 
-    @_intent.command(
+    @_intent.command(  # type: ignore
         name="declare", description="Declare your intent to play next season of RSC"
-    )  # type: ignore
+    )
     @app_commands.guild_only
     async def _intents_declare_cmd(self, interaction: discord.Interaction):
         guild = interaction.guild
@@ -570,9 +572,9 @@ class MemberMixIn(RSCMixIn):
         )
         await interaction.edit_original_response(embed=success_embed, view=None)
 
-    @app_commands.command(
+    @app_commands.command(  # type: ignore
         name="permfa", description="Sign up as an permanent free agent"
-    )  # type: ignore
+    )
     @app_commands.guild_only
     async def _member_permfa_signup(self, interaction: discord.Interaction):
         guild = interaction.guild
@@ -1071,5 +1073,36 @@ class MemberMixIn(RSCMixIn):
             try:
                 log.debug(f"Fetching name history for {member.id}", guild=guild)
                 return await api.members_name_changes(member.id)
+            except ApiException as exc:
+                raise RscException(response=exc)
+
+    async def make_league_player(
+        self,
+        guild: discord.Guild,
+        member: discord.Member,
+        base_mmr: int,
+        current_mmr: int,
+        tier: int,
+        status: Status | None = None,
+        team_name: str | None = None,
+        contract_length: int | None = None,
+    ) -> LeaguePlayerPatch:
+        async with ApiClient(self._api_conf[guild.id]) as client:
+            api = MembersApi(client)
+            data = LeaguePlayerSignup(
+                league=self._league[guild.id],
+                base_mmr=base_mmr,
+                current_mmr=current_mmr,
+                tier=tier,
+                status=status,
+                team_name=team_name,
+                contract_length=contract_length,
+            )
+            try:
+                log.debug(
+                    f"Converting {member.display_name} ({member.id}) to league player.",
+                    guild=guild,
+                )
+                return await api.members_make_player(id=member.id, data=data)
             except ApiException as exc:
                 raise RscException(response=exc)

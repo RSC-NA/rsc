@@ -38,9 +38,9 @@ class AdminMembersMixIn(AdminMixIn):
         default_permissions=discord.Permissions(manage_guild=True),
     )
 
-    @_members.command(
+    @_members.command(  # type: ignore
         name="namehistory", description="Get an RSC discord members API name history"
-    )  # type: ignore
+    )
     @app_commands.describe(
         member="RSC discord member",
     )
@@ -170,9 +170,9 @@ class AdminMembersMixIn(AdminMixIn):
             )
         )
 
-    @_members.command(
+    @_members.command(  # type: ignore
         name="transfer", description="Transfer membership to a new Discord account"
-    )  # type: ignore
+    )
     @app_commands.describe(
         old="Old Discord ID",
         new="New Discord Member",
@@ -240,7 +240,7 @@ class AdminMembersMixIn(AdminMixIn):
         current_mmr: int | None = None,
     ):
         guild = interaction.guild
-        if not guild:
+        if not (guild and isinstance(interaction.user, discord.Member)):
             return
         await interaction.response.defer()
 
@@ -263,9 +263,9 @@ class AdminMembersMixIn(AdminMixIn):
             )
 
         if not plist:
-            return await interaction.response.send_message(
+            return await interaction.followup.send(
                 embed=ErrorEmbed(
-                    description="Player was updated but league player does not exist."
+                    description="League player does not exist. Please create the player first."
                 )
             )
 
@@ -507,9 +507,9 @@ class AdminMembersMixIn(AdminMixIn):
 
         await interaction.followup.send(embed=embed, ephemeral=True)
 
-    @_members.command(
+    @_members.command(  # type: ignore
         name="signup", description="Sign a player up for the latest RSC season"
-    )  # type: ignore
+    )
     @app_commands.describe(
         player_type="New or Former Player",
         member="Discord member being added",
