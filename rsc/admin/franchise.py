@@ -22,6 +22,7 @@ from rsc.embeds import (
     ErrorEmbed,
     GreenEmbed,
     LoadingEmbed,
+    OrangeEmbed,
     SuccessEmbed,
     YellowEmbed,
 )
@@ -913,6 +914,31 @@ class AdminFranchiseMixIn(AdminMixIn):
                     )
                     log.debug(f"Old GM Tier Role: {old_gm_tierfa_role}")
                     await old_gm.add_roles(old_gm_tierfa_role, reason="Removed from GM")
+
+        tchannel = await self.get_franchise_transaction_channel(guild, franchise)
+        if not tchannel:
+            return await interaction.followup.send(
+                embed=OrangeEmbed(
+                    description=f"**{franchise}** has been transferred to {gm.mention} but could not find transaction channel."
+                )
+            )
+
+        # Update transaction channel permissions
+        gm_overwrite = discord.PermissionOverwrite(
+            view_channel=True,
+            send_messages=True,
+            embed_links=True,
+            attach_files=True,
+            add_reactions=True,
+            use_external_emojis=False,
+            read_message_history=True,
+            read_messages=True,
+            use_application_commands=True,
+        )
+
+        await tchannel.edit(overwrites={gm: gm_overwrite})
+        if old_gm:
+            await tchannel.set_permissions(old_gm, overwrite=None)
 
         await interaction.edit_original_response(
             embed=SuccessEmbed(
