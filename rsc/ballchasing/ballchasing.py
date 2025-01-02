@@ -421,7 +421,7 @@ class BallchasingMixIn(RSCMixIn):
             )
             log.debug(f"Match Result: {match_result}")
         except RscException as exc:
-            if hasattr(exc, "status") and exc.status == 400:
+            if hasattr(exc, "status") and exc.status == 500:
                 # Match already reported
                 return await interaction.edit_original_response(
                     embed=YellowEmbed(
