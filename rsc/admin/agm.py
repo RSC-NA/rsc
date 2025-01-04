@@ -105,7 +105,7 @@ class AdminAGMMixIn(AdminMixIn):
         await agm.add_roles(agm_role, league_role, new_franchise_role)
 
         # Change Prefix
-        new_name = await utils.format_discord_prefix(agm, prefx=fdata.prefix)
+        new_name = await utils.format_discord_prefix(member=agm, prefix=fdata.prefix)
         await agm.edit(nick=new_name)
 
         # Add AGM permissions to transaction channel
