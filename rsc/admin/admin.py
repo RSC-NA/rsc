@@ -105,9 +105,9 @@ class AdminMixIn(RSCMixIn):
 
         await self._set_dates(interaction.guild, value=dates_modal.date_input.value)
 
-    @_admin.command(
+    @_admin.command(  # type: ignore
         name="pfachnanel", description="Configure the PermFA announcement channel"
-    )  # type: ignore
+    )
     @app_commands.describe(channel="Discord channel to announce PermFAs")
     async def _admin_set_pfa_channel_cmd(
         self, interaction: discord.Interaction, channel: discord.TextChannel
