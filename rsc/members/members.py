@@ -942,11 +942,12 @@ class MemberMixIn(RSCMixIn):
         guild: discord.Guild,
         id: int,
         name: str,
+        override: bool = False,
     ) -> Member:
         async with ApiClient(self._api_conf[guild.id]) as client:
             api = MembersApi(client)
             try:
-                data = UpdateMemberRSCName(name=name)
+                data = UpdateMemberRSCName(name=name, admin_override=override)
                 log.debug(f"Name Change Data: {data}")
                 return await api.members_name_change(id, data)
             except ApiException as exc:

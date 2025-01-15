@@ -42,9 +42,9 @@ def check_invalid_fa(players, df: pandas.DataFrame):
     return invalid
 
 
-def remove_cut_players(players):
+def remove_cut_players(players, season):
     r = session.get(
-        "https://api.rscna.com/api/v1/transactions/history/?season_number=20&league=1&transaction_type=CUT&limit=5000",
+        f"https://api.rscna.com/api/v1/transactions/history/?season_number={season}&league=1&transaction_type=CUT&limit=5000",
         timeout=10,
     )
 
@@ -76,6 +76,7 @@ def remove_cut_players(players):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Check contracts for inconsistencies")
+    parser.add_argument("season", type=int, help="RSC Season")
     parser.add_argument("csvfile", help="Path to CSV version of last seasons contracts")
     argv = parser.parse_args()
 
@@ -92,7 +93,7 @@ if __name__ == "__main__":
     invalid_fa = check_invalid_fa(players, two_season_contracts)
     print(f"Len FA unfiltered: {len(invalid_fa)}")
 
-    final_fa_invalid = remove_cut_players(invalid_fa)
+    final_fa_invalid = remove_cut_players(invalid_fa, argv.season)
     print(f"Invalid FA len: {len(final_fa_invalid)}")
     for fa in final_fa_invalid:
         print(f"Invalid FA: {fa}")

@@ -389,6 +389,7 @@ class RSCMixIn(ABC):
         guild: discord.Guild,
         id: int,
         name: str,
+        override: bool = False,
     ) -> RSCMember: ...
 
     @abstractmethod

@@ -100,6 +100,7 @@ class AdminMembersMixIn(AdminMixIn):
         member="RSC discord member",
         name="New player name",
         tracker="Add a tracker link to the user. (Optional)",
+        override="Admin override (Optional)",
     )
     async def _member_changename(
         self,
@@ -107,6 +108,7 @@ class AdminMembersMixIn(AdminMixIn):
         member: discord.Member,
         name: str,
         tracker: str | None = None,
+        override: bool = False,
     ):
         guild = interaction.guild
         if not guild:
@@ -117,7 +119,9 @@ class AdminMembersMixIn(AdminMixIn):
         try:
             if tracker:
                 await self.add_tracker(guild, member, tracker)
-            mdata = await self.change_member_name(guild, id=member.id, name=name)
+            mdata = await self.change_member_name(
+                guild, id=member.id, name=name, override=override
+            )
         except RscException as exc:
             await interaction.followup.send(
                 embed=ApiExceptionErrorEmbed(exc), ephemeral=False
