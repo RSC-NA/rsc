@@ -19,7 +19,7 @@ from rsc.embeds import (
     OrangeEmbed,
     SuccessEmbed,
 )
-from rsc.enums import BulkRoleAction, TransactionType
+from rsc.enums import BulkRoleAction, DiscordPermType, DiscordPermValue, TransactionType
 from rsc.transformers import GreedyMemberTransformer
 from rsc.types import Accolades
 from rsc.utils import filters
@@ -1106,7 +1106,7 @@ class UtilsMixIn(RSCMixIn):
                 failed.append(m)
 
         embed = SuccessEmbed(
-            description=f"Applied {role.mention} to **{count-len(failed)}/{count}** users(s)."
+            description=f"Applied {role.mention} to **{count - len(failed)}/{count}** users(s)."
         )
         if failed:
             embed.add_field(
@@ -1183,7 +1183,7 @@ class UtilsMixIn(RSCMixIn):
                 failed.append(m)
 
         embed = SuccessEmbed(
-            description=f"Removed {role.mention} from **{count-len(failed)}/{count}** users(s)."
+            description=f"Removed {role.mention} from **{count - len(failed)}/{count}** users(s)."
         )
         if failed:
             embed.add_field(
@@ -1192,6 +1192,58 @@ class UtilsMixIn(RSCMixIn):
                 inline=False,
             )
         await interaction.edit_original_response(embed=embed, view=None)
+
+    @app_commands.command(  # type: ignore
+        name="setchannelperm",
+        description="Modify channel permissions for a role or member",
+    )
+    @app_commands.describe(
+        channel="Channel to modify permissions",
+        target="Member or role",
+        permission="Permission to modify",
+        value="Value of permission (Allow/Inherit/Deny)",
+    )
+    @app_commands.checks.has_permissions(manage_guild=True)
+    @app_commands.checks.bot_has_permissions(manage_guild=True)
+    @app_commands.guild_only
+    async def _util_set_channel_perms_cmd(
+        self,
+        interaction: discord.Interaction,
+        channel: discord.TextChannel,
+        target: discord.Member | discord.Role,
+        permission: DiscordPermType,
+        value: DiscordPermValue,
+    ):
+        perms = channel.overwrites_for(target)
+        if permission not in perms.VALID_NAMES:
+            return await interaction.response.send_message(
+                embed=ErrorEmbed(
+                    description=f"Invalid permission type: `{permission}`"
+                ),
+                ephemeral=True,
+            )
+
+        match value:
+            case DiscordPermValue.ALLOW:
+                setattr(perms, permission, True)
+            case DiscordPermValue.DENY:
+                setattr(perms, permission, False)
+            case DiscordPermValue.INHERIT:
+                setattr(perms, permission, None)
+
+        await channel.set_permissions(target, overwrite=perms)
+        return await interaction.response.send_message(
+            embed=SuccessEmbed(
+                title="Permissions Updated",
+                description=(
+                    f"Permissions have been changed for {target.mention}\n\n"
+                    f"Channel: {channel.mention}\n"
+                    f"Permission: `{permission}`\n"
+                    f"Value: `{value}`"
+                ),
+            ),
+            ephemeral=True,
+        )
 
     def handle_custom(self, user):
         a = [c for c in user.activities if c.type == discord.ActivityType.custom]

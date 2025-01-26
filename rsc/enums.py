@@ -360,6 +360,42 @@ class StrikePunishment(IntEnum):
     BAN = 11  # Ban
 
 
+# Discord
+
+
+class DiscordPermType(StrEnum):
+    AddReactions = "add_reactions"
+    AttachFiles = "attach_files"
+    Connect = "connect"
+    EmbedLinks = "embed_links"
+    ExternalEmojis = "external_emojis"
+    ExternalStickers = "external_stickers"
+    MentionEveryone = "mention_everyone"
+    ReadMessageHistory = "read_message_history"
+    ReadMessages = "read_messages"
+    SendMessages = "send_messages"
+    SendMessagesInThread = "send_messages_in_threads"
+    SendPolls = "send_polls"
+    SendTTSMessages = "send_tts_messages"
+    SendVoiceMessages = "send_voice_messages"
+    Speak = "speak"
+    Stream = "stream"
+    UseAppCommands = "use_application_commands"
+    UseEmbeddedActivities = "use_embedded_activities"
+    UseExternalApps = "use_external_apps"
+    UseExternalEmojis = "use_external_emojis"
+    UseExternalSounds = "use_external_sounds"
+    UseExternalStickers = "use_external_stickers"
+    UseSoundsboard = "use_soundboard"
+    ViewChannel = "view_channel"
+
+
+class DiscordPermValue(StrEnum):
+    ALLOW = "allow"
+    INHERIT = "inherit"
+    DENY = "deny"
+
+
 # Other
 
 
