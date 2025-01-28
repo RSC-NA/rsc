@@ -27,9 +27,7 @@ async def update_signed_player_discord(
         raise AttributeError(f"{player.display_name} ({player.id}) has no tier data.")
 
     if not ptu.new_team:
-        raise AttributeError(
-            f"PlayerTransactionUpdate object has no new team data for signed player: {player.display_name} ({player.id})"
-        )
+        raise AttributeError(f"PlayerTransactionUpdate object has no new team data for signed player: {player.display_name} ({player.id})")
 
     if not ptu.new_team.tier:
         raise AttributeError(f"{ptu.new_team.name} has no tier data.")
@@ -38,9 +36,7 @@ async def update_signed_player_discord(
         raise AttributeError(f"{player.display_name} ({player.id}) has no team data.")
 
     if not ptu.player.team.franchise:
-        raise AttributeError(
-            f"{player.display_name} ({player.id}) has no franchise data."
-        )
+        raise AttributeError(f"{player.display_name} ({player.id}) has no franchise data.")
 
     roles_to_remove: list[discord.Role] = []
     roles_to_add: list[discord.Role] = []
@@ -52,10 +48,7 @@ async def update_signed_player_discord(
                 if r in roles_to_remove:
                     continue
 
-                if r.name.endswith("FA") or (
-                    r.name.lower() == tier.name.lower()
-                    and r.name.lower() != ptu.new_team.tier.lower()
-                ):
+                if r.name.endswith("FA") or (r.name.lower() == tier.name.lower() and r.name.lower() != ptu.new_team.tier.lower()):
                     roles_to_remove.append(r)
 
     # Remove Spectator
@@ -88,9 +81,7 @@ async def update_signed_player_discord(
     if frole:
         roles_to_add.append(frole)
     else:
-        raise ValueError(
-            f"New franchise role not found for {player.display_name} ({player.id})"
-        )
+        raise ValueError(f"New franchise role not found for {player.display_name} ({player.id})")
 
     # Verify player has tier role
     tier_role = await utils.get_tier_role(guild, name=ptu.new_team.tier)
@@ -109,19 +100,13 @@ async def update_signed_player_discord(
         await player.add_roles(*roles_to_add)
 
     # Update player prefix
-    new_nick = (
-        f"{ptu.player.team.franchise.prefix} | {await utils.remove_prefix(player)}"
-    )
+    new_nick = f"{ptu.player.team.franchise.prefix} | {await utils.remove_prefix(player)}"
     try:
         if new_nick != player.display_name:
-            log.debug(
-                f"Changing {player.id} signed player nick: {new_nick}", guild=guild
-            )
+            log.debug(f"Changing {player.id} signed player nick: {new_nick}", guild=guild)
             await player.edit(nick=new_nick)
     except discord.Forbidden as exc:
-        log.warning(
-            f"Unable to update nickname {player.display_name} ({player.id}): {exc}"
-        )
+        log.warning(f"Unable to update nickname {player.display_name} ({player.id}): {exc}")
 
 
 async def update_cut_player_discord(
@@ -131,22 +116,16 @@ async def update_cut_player_discord(
     ptu: PlayerTransactionUpdates,
 ):
     if not ptu.old_team:
-        raise AttributeError(
-            f"{player.display_name} ({player.id}) has no old team data."
-        )
+        raise AttributeError(f"{player.display_name} ({player.id}) has no old team data.")
 
     if not ptu.old_team.tier:
-        raise AttributeError(
-            f"{player.display_name} ({player.id}) has no old team tier data."
-        )
+        raise AttributeError(f"{player.display_name} ({player.id}) has no old team tier data.")
 
     if not ptu.player.tier:
         raise AttributeError(f"{player.display_name} ({player.id}) has no tier data.")
 
     if not response.first_franchise:
-        raise AttributeError(
-            f"{player.display_name} ({player.id}) has first franchise data."
-        )
+        raise AttributeError(f"{player.display_name} ({player.id}) has first franchise data.")
 
     roles_to_remove: list[discord.Role] = []
     roles_to_add: list[discord.Role] = []
@@ -187,17 +166,13 @@ async def update_cut_player_discord(
         roles_to_add.append(tier_fa_role)
 
     # Franchise Role
-    franchise_role = await utils.franchise_role_from_name(
-        guild, response.first_franchise.name
-    )
+    franchise_role = await utils.franchise_role_from_name(guild, response.first_franchise.name)
     if not franchise_role:
         log.error(
             f"Unable to find franchise name during cut: {response.first_franchise.name}",
             guild=guild,
         )
-        raise ValueError(
-            f"Unable to find franchise role for **{response.first_franchise.name}**"
-        )
+        raise ValueError(f"Unable to find franchise role for **{response.first_franchise.name}**")
 
     # Make changes for Non-GM player
     if response.first_franchise.gm.discord_id != player.id:
@@ -224,9 +199,7 @@ async def update_cut_player_discord(
     try:
         await player.edit(nick=new_nick)
     except discord.Forbidden as exc:
-        log.warning(
-            f"Unable to update nickname {player.display_name} ({player.id}): {exc}"
-        )
+        log.warning(f"Unable to update nickname {player.display_name} ({player.id}): {exc}")
 
 
 async def update_team_captain_discord(
@@ -238,9 +211,7 @@ async def update_team_captain_discord(
     for p in players:
         m = guild.get_member(p.discord_id)
         if not m:
-            log.error(
-                f"Unable to find rostered player in guild: {p.discord_id}", guild=guild
-            )
+            log.error(f"Unable to find rostered player in guild: {p.discord_id}", guild=guild)
             continue
 
         if p.captain and cpt_role not in m.roles:
@@ -298,7 +269,7 @@ async def update_nonplaying_discord(
     if default_roles:
         for r in default_roles:
             if r not in member.roles:
-                roles_to_add.append(r)
+                roles_to_add.append(r)  # noqa: PERF401
 
     # Remove Roles
     if roles_to_remove:
@@ -318,9 +289,7 @@ async def update_nonplaying_discord(
             log.debug(f"Updating nickname ({member.id}): {new_nick}", guild=guild)
             await member.edit(nick=new_nick)
         except discord.Forbidden as exc:
-            log.warning(
-                f"Unable to update nickname {member.display_name} ({member.id}): {exc}"
-            )
+            log.warning(f"Unable to update nickname {member.display_name} ({member.id}): {exc}")
 
     # Add Roles
     if roles_to_add:
@@ -344,9 +313,7 @@ async def update_rostered_discord(
         raise AttributeError(f"{player.display_name} ({player.id}) has no team data")
 
     if not league_player.team.franchise:
-        raise AttributeError(
-            f"{player.display_name} ({player.id}) has no franchise data."
-        )
+        raise AttributeError(f"{player.display_name} ({player.id}) has no franchise data.")
 
     # Do not sync dropped players
     if league_player.status == Status.DROPPED:
@@ -362,10 +329,7 @@ async def update_rostered_discord(
                 if r in roles_to_remove:
                     continue
 
-                if r.name.endswith("FA") or (
-                    r.name.lower() == tier.name.lower()
-                    and r.name.lower() != league_player.tier.name.lower()
-                ):
+                if r.name.endswith("FA") or (r.name.lower() == tier.name.lower() and r.name.lower() != league_player.tier.name.lower()):
                     roles_to_remove.append(r)
 
     # Remove Spectator
@@ -412,9 +376,7 @@ async def update_rostered_discord(
         if frole not in player.roles:
             roles_to_add.append(frole)
     elif not frole:
-        raise ValueError(
-            f"New franchise role not found for {player.display_name} ({player.id})"
-        )
+        raise ValueError(f"New franchise role not found for {player.display_name} ({player.id})")
 
     # Remove any old franchise role if it exists
     old_froles = await utils.franchise_role_list_from_disord_member(player)
@@ -442,14 +404,10 @@ async def update_rostered_discord(
     new_nick = f"{league_player.team.franchise.prefix} | {league_player.player.name} {accolades}".strip()
     try:
         if new_nick != player.display_name:
-            log.debug(
-                f"Changing {player.id} signed player nick: {new_nick}", guild=guild
-            )
+            log.debug(f"Changing {player.id} signed player nick: {new_nick}", guild=guild)
             await player.edit(nick=new_nick)
     except discord.Forbidden as exc:
-        log.warning(
-            f"Unable to update nickname {player.display_name} ({player.id}): {exc}"
-        )
+        log.warning(f"Unable to update nickname {player.display_name} ({player.id}): {exc}")
 
 
 async def update_free_agent_discord(
@@ -476,8 +434,7 @@ async def update_free_agent_discord(
 
                 if (
                     r.name.replace("FA", "").lower() == tier.name.lower()
-                    and r.name.replace("FA", "").lower()
-                    != league_player.tier.name.lower()
+                    and r.name.replace("FA", "").lower() != league_player.tier.name.lower()
                 ):
                     roles_to_remove.append(r)
 
@@ -547,9 +504,7 @@ async def update_free_agent_discord(
             log.debug(f"Updating cut player nickname: {new_nick}", guild=guild)
             await player.edit(nick=new_nick)
     except discord.Forbidden as exc:
-        log.warning(
-            f"Unable to update nickname {player.display_name} ({player.id}): {exc}"
-        )
+        log.warning(f"Unable to update nickname {player.display_name} ({player.id}): {exc}")
 
 
 async def update_draft_eligible_discord(
@@ -571,19 +526,14 @@ async def update_draft_eligible_discord(
                 if r in roles_to_remove:
                     continue
 
-                if (
-                    r.name.replace("FA", "").lower() == tier.name.lower()
-                    and r.name.lower() != league_player.tier.name.lower()
-                ):
+                if r.name.replace("FA", "").lower() == tier.name.lower() and r.name.lower() != league_player.tier.name.lower():
                     roles_to_remove.append(r)
     elif tiers:
-        log.warning(
-            f"{player.display_name} ({player.id}) has no tier data.", guild=guild
-        )
+        log.warning(f"{player.display_name} ({player.id}) has no tier data.", guild=guild)
         for r in player.roles:
             for tier in tiers:
                 if r.name.replace("FA", "").lower() == tier.name.lower():
-                    roles_to_remove.append(r)
+                    roles_to_remove.append(r)  # noqa: PERF401
 
     # Remove any old franchise role if it exists
     old_froles = await utils.franchise_role_list_from_disord_member(player)
@@ -645,9 +595,7 @@ async def update_draft_eligible_discord(
             log.debug(f"Updating cut player nickname: {new_nick}", guild=guild)
             await player.edit(nick=new_nick)
     except discord.Forbidden as exc:
-        log.warning(
-            f"Unable to update nickname {player.display_name} ({player.id}): {exc}"
-        )
+        log.warning(f"Unable to update nickname {player.display_name} ({player.id}): {exc}")
 
 
 async def update_league_player_discord(
@@ -661,16 +609,10 @@ async def update_league_player_discord(
 
     match league_player.status:
         case Status.ROSTERED | Status.RENEWED:
-            return await update_rostered_discord(
-                guild=guild, player=player, league_player=league_player, tiers=tiers
-            )
+            return await update_rostered_discord(guild=guild, player=player, league_player=league_player, tiers=tiers)
         case Status.DRAFT_ELIGIBLE:
-            return await update_draft_eligible_discord(
-                guild=guild, player=player, league_player=league_player, tiers=tiers
-            )
+            return await update_draft_eligible_discord(guild=guild, player=player, league_player=league_player, tiers=tiers)
         case Status.FREE_AGENT | Status.PERM_FA:
-            return await update_free_agent_discord(
-                guild=guild, player=player, league_player=league_player, tiers=tiers
-            )
+            return await update_free_agent_discord(guild=guild, player=player, league_player=league_player, tiers=tiers)
         case _:
             raise ValueError(f"**{league_player.status}** is not currently supported.")

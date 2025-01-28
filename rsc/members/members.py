@@ -79,7 +79,7 @@ class MemberMixIn(RSCMixIn):
 
     # App Commands
 
-    @app_commands.command(  # type: ignore  # type: ignore
+    @app_commands.command(  # type: ignore[type-var]  # type: ignore[type-var]
         name="signupstatus", description="Check your status for the next RSC season"
     )
     @app_commands.guild_only
@@ -117,15 +117,11 @@ class MemberMixIn(RSCMixIn):
 
         if not next_season.id:
             return await interaction.followup.send(
-                embed=ErrorEmbed(
-                    description="API returned a Season without an ID. Please open a modmail ticket."
-                )
+                embed=ErrorEmbed(description="API returned a Season without an ID. Please open a modmail ticket.")
             )
 
         log.debug(f"Player: {player.display_name} Discord ID: {player.id}")
-        lp_list = await self.players(
-            guild=guild, season=next_season.id, discord_id=player.id, limit=1
-        )
+        lp_list = await self.players(guild=guild, season=next_season.id, discord_id=player.id, limit=1)
         if not lp_list:
             return await interaction.followup.send(
                 embed=YellowEmbed(
@@ -168,7 +164,7 @@ class MemberMixIn(RSCMixIn):
             )
         )
 
-    @_intent.command(  # type: ignore  # type: ignore
+    @_intent.command(  # type: ignore[type-var]  # type: ignore[type-var]
         name="status", description="Display intent to play status for next season"
     )
     @app_commands.guild_only
@@ -203,20 +199,18 @@ class MemberMixIn(RSCMixIn):
 
         if not next_season.id:
             return await interaction.followup.send(
-                embed=ErrorEmbed(
-                    description="API returned a Season without an ID. Please open a modmail ticket."
-                )
+                embed=ErrorEmbed(description="API returned a Season without an ID. Please open a modmail ticket.")
             )
 
-        intent_list = await self.player_intents(
-            guild, season_id=next_season.id, player=interaction.user
-        )
+        intent_list = await self.player_intents(guild, season_id=next_season.id, player=interaction.user)
 
         if not intent_list:
             return await interaction.followup.send(
                 embed=OrangeEmbed(
                     title="Intent Not Found",
-                    description="You are not currently a league player or no intent information was found. Did you mean to sign up instead?",
+                    description=(
+                        "You are not currently a league player or no intent information was found. Did you mean to sign up instead?"
+                    ),
                 )
             )
 
@@ -228,14 +222,12 @@ class MemberMixIn(RSCMixIn):
         elif not intent.returning and not intent.missing:
             embed.description = "You are **not returning** to the league next season"
         else:
-            embed.description = (
-                "You have **not submitted** your intent status for next season"
-            )
+            embed.description = "You have **not submitted** your intent status for next season"
             embed.colour = discord.Color.yellow()
 
         await interaction.followup.send(embed=embed)
 
-    @_intent.command(  # type: ignore
+    @_intent.command(  # type: ignore[type-var]
         name="search", description="Search for intent to play status (Limit: 50)"
     )
     @app_commands.autocomplete(
@@ -296,16 +288,12 @@ class MemberMixIn(RSCMixIn):
 
         if not next_season.id:
             return await interaction.followup.send(
-                embed=ErrorEmbed(
-                    description="API returned a Season without an ID. Please open a modmail ticket."
-                )
+                embed=ErrorEmbed(description="API returned a Season without an ID. Please open a modmail ticket.")
             )
 
         if not next_season.number:
             return await interaction.followup.send(
-                embed=ErrorEmbed(
-                    description="API returned a Season without a season number. Please open a modmail ticket."
-                )
+                embed=ErrorEmbed(description="API returned a Season without a season number. Please open a modmail ticket.")
             )
 
         intent_list = await self.player_intents(
@@ -326,29 +314,17 @@ class MemberMixIn(RSCMixIn):
             )
 
         # Filter by season response (API returns all of them)
-        intents = [
-            i for i in intent_list if i.season and i.season == next_season.number
-        ]
+        intents = [i for i in intent_list if i.season and i.season == next_season.number]
 
         # Filter by franchise
         if franchise:
             log.debug(f"Filtering intents by franchise: {franchise}")
-            intents = [
-                i
-                for i in intents
-                if i.player
-                and i.player.franchise
-                and i.player.franchise.lower() == franchise.lower()
-            ]
+            intents = [i for i in intents if i.player and i.player.franchise and i.player.franchise.lower() == franchise.lower()]
 
         # Filter by team
         if team:
             log.debug(f"Filtering intents by team: {franchise}")
-            intents = [
-                i
-                for i in intents
-                if i.player and i.player.team and i.player.team.lower() == team.lower()
-            ]
+            intents = [i for i in intents if i.player and i.player.team and i.player.team.lower() == team.lower()]
 
         # Filter by returning value
         if returning is True or returning is False:
@@ -381,9 +357,7 @@ class MemberMixIn(RSCMixIn):
                 continue
             m = guild.get_member(i.player.player.discord_id)
             if not m:
-                log.debug(
-                    f"Couldn't find member in guild: {i.player.player.rsc_name} ({i.player.player.discord_id})"
-                )
+                log.debug(f"Couldn't find member in guild: {i.player.player.rsc_name} ({i.player.player.discord_id})")
                 continue
 
             if i.returning:
@@ -393,9 +367,7 @@ class MemberMixIn(RSCMixIn):
             elif i.missing:
                 intent_dict[m.mention] = "Missing"
             else:
-                log.warning(
-                    f"Unknown intent status for player: {i.player.player.discord_id}"
-                )
+                log.warning(f"Unknown intent status for player: {i.player.player.discord_id}")
 
         embed = BlueEmbed(
             title="Intent to Play Results",
@@ -413,7 +385,7 @@ class MemberMixIn(RSCMixIn):
 
         await interaction.followup.send(embed=embed)
 
-    @_intent.command(  # type: ignore
+    @_intent.command(  # type: ignore[type-var]
         name="declare", description="Declare your intent to play next season of RSC"
     )
     @app_commands.guild_only
@@ -477,12 +449,10 @@ class MemberMixIn(RSCMixIn):
                 "If you change your mind, please redeclare your intent."
             )
 
-        embed: discord.Embed = SuccessEmbed(
-            title="Intent to Play Declared", description=desc
-        )
+        embed: discord.Embed = SuccessEmbed(title="Intent to Play Declared", description=desc)
         await interaction.edit_original_response(embed=embed, view=None)
 
-    @app_commands.command(name="signup", description="Sign up for the next RSC season")  # type: ignore
+    @app_commands.command(name="signup", description="Sign up for the next RSC season")  # type: ignore[type-var]
     @app_commands.guild_only
     async def _member_signup(self, interaction: discord.Interaction):
         guild = interaction.guild
@@ -497,12 +467,9 @@ class MemberMixIn(RSCMixIn):
 
         # Create a member just in case
         try:
-            await self.create_member(
-                guild, interaction.user, rsc_name=interaction.user.display_name
-            )
+            await self.create_member(guild, interaction.user, rsc_name=interaction.user.display_name)
         except RscException as exc:
             log.warning(f"MemberCreate exception during sign-up: {exc.response.body}")
-            pass
 
         # Wait for embed finish.
         await signup_view.wait()
@@ -517,10 +484,7 @@ class MemberMixIn(RSCMixIn):
         if signup_view.state != SignupState.FINISHED:
             embed = ErrorEmbed(
                 title="Signup Failed",
-                description=(
-                    "Signup failed for an unknown reason."
-                    " Please try again, if the issue persists contact a staff member."
-                ),
+                description=("Signup failed for an unknown reason. Please try again, if the issue persists contact a staff member."),
             )
             await interaction.edit_original_response(embed=embed, view=None)
             return
@@ -549,7 +513,10 @@ class MemberMixIn(RSCMixIn):
                     return await interaction.edit_original_response(
                         embed=YellowEmbed(
                             title="RSC Sign-up",
-                            description="You are already signed up for the league. Please use `/intent declare` to declare your intent for next season.",
+                            description=(
+                                "You are already signed up for the league. "
+                                "Please use `/intent declare` to declare your intent for next season."
+                            ),
                         ),
                         view=None,
                     )
@@ -572,7 +539,7 @@ class MemberMixIn(RSCMixIn):
         )
         await interaction.edit_original_response(embed=success_embed, view=None)
 
-    @app_commands.command(  # type: ignore
+    @app_commands.command(  # type: ignore[type-var]
         name="permfa", description="Sign up as an permanent free agent"
     )
     @app_commands.guild_only
@@ -589,13 +556,9 @@ class MemberMixIn(RSCMixIn):
 
         # Create a member just in case
         try:
-            await self.create_member(
-                guild, interaction.user, rsc_name=interaction.user.display_name
-            )
+            await self.create_member(guild, interaction.user, rsc_name=interaction.user.display_name)
         except RscException as exc:
-            log.warning(
-                f"MemberCreate exception during PermFA sign-up: {exc.response.body}"
-            )
+            log.warning(f"MemberCreate exception during PermFA sign-up: {exc.response.body}")
 
         # Wait for embed finish.
         await signup_view.wait()
@@ -609,10 +572,7 @@ class MemberMixIn(RSCMixIn):
         if signup_view.state != SignupState.FINISHED:
             embed = ErrorEmbed(
                 title="Signup Failed",
-                description=(
-                    "Signup failed for an unknown reason."
-                    " Please try again, if the issue persists contact a staff member."
-                ),
+                description=("Signup failed for an unknown reason. Please try again, if the issue persists contact a staff member."),
             )
             return await interaction.edit_original_response(embed=embed, view=None)
 
@@ -646,9 +606,7 @@ class MemberMixIn(RSCMixIn):
                     )
                 case 405:
                     return await interaction.edit_original_response(
-                        embed=YellowEmbed(
-                            title="RSC PermFA Sign-up", description=exc.reason
-                        ),
+                        embed=YellowEmbed(title="RSC PermFA Sign-up", description=exc.reason),
                         view=None,
                     )
                 case _:
@@ -659,20 +617,17 @@ class MemberMixIn(RSCMixIn):
 
         success_embed = SuccessEmbed(
             description=(
-                "You have successfully signed up as a permenent free agent in RSC!\n\n"
-                "Please be patient while we process your request."
+                "You have successfully signed up as a permenent free agent in RSC!\n\nPlease be patient while we process your request."
             )
         )
         await interaction.edit_original_response(embed=success_embed, view=None)
 
-    @app_commands.command(  # type: ignore
+    @app_commands.command(  # type: ignore[type-var]
         name="playerinfo", description="Display league information about a player"
     )
     @app_commands.describe(player="Player discord name to query")
     @app_commands.guild_only
-    async def _playerinfo_cmd(
-        self, interaction: discord.Interaction, player: discord.Member
-    ):
+    async def _playerinfo_cmd(self, interaction: discord.Interaction, player: discord.Member):
         guild = interaction.guild
         if not guild:
             return
@@ -714,12 +669,7 @@ class MemberMixIn(RSCMixIn):
         if p.team:
             embed.add_field(name="Team", value=p.team.name, inline=True)
 
-        if (
-            p.team
-            and p.team.franchise
-            and p.team.franchise.name
-            and p.team.franchise.id
-        ):
+        if p.team and p.team.franchise and p.team.franchise.name and p.team.franchise.id:
             frole = await utils.franchise_role_from_name(guild, p.team.franchise.name)
             f_fmt = frole.mention if frole else p.team.franchise.name
             embed.add_field(name="Franchise", value=f_fmt, inline=True)
@@ -742,11 +692,11 @@ class MemberMixIn(RSCMixIn):
         else:
             await interaction.followup.send(embed=embed)
 
-    @app_commands.command(  # type: ignore
+    @app_commands.command(  # type: ignore[type-var]
         name="waivers", description="Display players currently on waivers"
     )
     @app_commands.describe(tier='Waiver tier name (Ex: "Elite")')
-    @app_commands.autocomplete(tier=TierMixIn.tier_autocomplete)  # type: ignore
+    @app_commands.autocomplete(tier=TierMixIn.tier_autocomplete)  # type: ignore[type-var]
     @app_commands.guild_only
     async def _waivers(self, interaction: discord.Interaction, tier: str):
         guild = interaction.guild
@@ -790,16 +740,14 @@ class MemberMixIn(RSCMixIn):
 
         await interaction.followup.send(embed=embed)
 
-    @app_commands.command(name="staff", description="Display RSC Committees and Staff")  # type: ignore
+    @app_commands.command(name="staff", description="Display RSC Committees and Staff")  # type: ignore[type-var]
     @app_commands.guild_only
     async def _staff_cmd(self, interaction: discord.Interaction):
         await utils.not_implemented(interaction)
 
     # Helper Functions
 
-    async def league_player_from_member(
-        self, guild: discord.Guild, member: Member
-    ) -> LeaguePlayer | None:
+    async def league_player_from_member(self, guild: discord.Guild, member: Member) -> LeaguePlayer | None:
         """Return `LeaguePlayer` object for the guilds league from `Member`"""
         if not member.player_leagues:
             return None
@@ -964,13 +912,9 @@ class MemberMixIn(RSCMixIn):
             api = MembersApi(client)
             try:
                 if postseason:
-                    return await api.members_postseason_stats(
-                        player.id, self._league[guild.id], season=season
-                    )
+                    return await api.members_postseason_stats(player.id, self._league[guild.id], season=season)
                 else:
-                    return await api.members_stats(
-                        player.id, self._league[guild.id], season=season
-                    )
+                    return await api.members_stats(player.id, self._league[guild.id], season=season)
             except ApiException as exc:
                 raise RscException(response=exc)
 
@@ -1054,9 +998,7 @@ class MemberMixIn(RSCMixIn):
             except ApiException as exc:
                 raise RscException(response=exc)
 
-    async def transfer_membership(
-        self, guild: discord.Guild, old: int, new: discord.Member
-    ) -> Member:
+    async def transfer_membership(self, guild: discord.Guild, old: int, new: discord.Member) -> Member:
         async with ApiClient(self._api_conf[guild.id]) as client:
             api = MembersApi(client)
             data = MemberTransferSchema(new_account=new.id)
@@ -1066,9 +1008,7 @@ class MemberMixIn(RSCMixIn):
             except ApiException as exc:
                 raise RscException(response=exc)
 
-    async def name_history(
-        self, guild: discord.Guild, member: discord.Member
-    ) -> list[NameChangeHistory]:
+    async def name_history(self, guild: discord.Guild, member: discord.Member) -> list[NameChangeHistory]:
         async with ApiClient(self._api_conf[guild.id]) as client:
             api = MembersApi(client)
             try:

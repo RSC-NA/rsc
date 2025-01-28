@@ -6,9 +6,10 @@ from zoneinfo import ZoneInfo
 import aiohttp
 import discord
 import pytz
-import validators  # type: ignore
+import validators  # type: ignore[import-untyped]
 from pydantic import ValidationError
 from redbot.core import Config, app_commands, commands
+from redbot.core.bot import Red
 from rscapi import Configuration
 from rscapi.exceptions import ApiException
 
@@ -97,11 +98,9 @@ class RSC(
     commands.Cog,
     metaclass=CompositeMetaClass,
 ):
-    def __init__(self, bot):
+    def __init__(self, bot: Red):
         self.bot = bot
-        self.config = Config.get_conf(
-            self, identifier=6349109713, force_registration=True
-        )
+        self.config = Config.get_conf(self, identifier=6349109713, force_registration=True)
 
         self.config.register_guild(**defaults_guild)
 
@@ -165,17 +164,13 @@ class RSC(
                                 case 504:
                                     log.error("Connection to RSC API timed out. (504)")
                                 case 502:
-                                    log.error(
-                                        "Bad gateway response from RSC API. (502)"
-                                    )
+                                    log.error("Bad gateway response from RSC API. (502)")
                                 case 500:
                                     log.error("API Internal Server Error. (500)")
                                 case 403:
                                     log.error("Forbidden response from RSC API. (403)")
                                 case 401:
-                                    log.error(
-                                        "Unauthorized response from RSC API. (401)"
-                                    )
+                                    log.error("Unauthorized response from RSC API. (401)")
                                 case _:
                                     raise err
                         else:
@@ -228,9 +223,7 @@ class RSC(
         # Combines
         self._web_app.router.add_post("/combines_match", self.start_combines_game)
         self._web_app.router.add_post("/combines_event", self.combines_event_handler)
-        self._web_app.router.add_post(
-            "/league_player_update", self.league_player_update_handler
-        )
+        self._web_app.router.add_post("/league_player_update", self.league_player_update_handler)
 
         # Runner and Site
         self._web_runner = aiohttp.web.AppRunner(self._web_app)
@@ -241,9 +234,7 @@ class RSC(
 
     # Autocomplete
 
-    async def command_autocomplete(
-        self, interaction: discord.Interaction, current: str
-    ) -> list[app_commands.Choice[str]]:
+    async def command_autocomplete(self, interaction: discord.Interaction, current: str) -> list[app_commands.Choice[str]]:
         cmds = self.walk_app_commands()
         if not cmds:
             return []
@@ -260,37 +251,19 @@ class RSC(
 
         choices = []
         for c in cmds:
-            if (
-                c.default_permissions
-                and (interaction.user.guild_permissions & c.default_permissions).value
-                == 0
-            ):
+            if c.default_permissions and (interaction.user.guild_permissions & c.default_permissions).value == 0:
                 continue
-            elif (
-                current.lower() in c.qualified_name.lower()
-                and c.name not in HIDDEN_COMMANDS
-            ):
-                choices.append(
-                    app_commands.Choice(name=c.qualified_name, value=c.qualified_name)
-                )
+            elif current.lower() in c.qualified_name.lower() and c.name not in HIDDEN_COMMANDS:
+                choices.append(app_commands.Choice(name=c.qualified_name, value=c.qualified_name))
             if len(choices) == 25:
                 return choices
         return choices
 
-    async def timezone_autocomplete(
-        self, interaction: discord.Interaction, current: str
-    ) -> list[app_commands.Choice[str]]:
+    async def timezone_autocomplete(self, interaction: discord.Interaction, current: str) -> list[app_commands.Choice[str]]:
         if not current:
-            return [
-                app_commands.Choice(name=tz, value=tz)
-                for tz in pytz.common_timezones[:25]
-            ]
+            return [app_commands.Choice(name=tz, value=tz) for tz in pytz.common_timezones[:25]]
 
-        return [
-            app_commands.Choice(name=tz, value=tz)
-            for tz in pytz.common_timezones
-            if current.lower() in tz.lower()
-        ]
+        return [app_commands.Choice(name=tz, value=tz) for tz in pytz.common_timezones if current.lower() in tz.lower()]
 
     # Settings
 
@@ -301,7 +274,7 @@ class RSC(
         default_permissions=discord.Permissions(manage_guild=True),
     )
 
-    @rsc_settings.command(name="key", description="Configure the RSC API key.")  # type: ignore
+    @rsc_settings.command(name="key", description="Configure the RSC API key.")  # type: ignore[type-var]
     async def _rsc_set_key(self, interaction: discord.Interaction, key: str):
         if not interaction.guild:
             return
@@ -314,7 +287,7 @@ class RSC(
             ephemeral=True,
         )
 
-    @rsc_settings.command(name="url", description="Configure the RSC API web address.")  # type: ignore
+    @rsc_settings.command(name="url", description="Configure the RSC API web address.")  # type: ignore[type-var]
     async def _rsc_set_url(self, interaction: discord.Interaction, url: str):
         if not interaction.guild:
             return
@@ -327,7 +300,7 @@ class RSC(
             ephemeral=True,
         )
 
-    @rsc_settings.command(  # type: ignore
+    @rsc_settings.command(  # type: ignore[type-var]
         name="settings", description="Display the current RSC API settings."
     )
     async def _rsc_settings(self, interaction: discord.Interaction):
@@ -359,7 +332,7 @@ class RSC(
         settings_embed.add_field(name="Time Zone", value=tz, inline=False)
         await interaction.response.send_message(embed=settings_embed, ephemeral=True)
 
-    @rsc_settings.command(  # type: ignore
+    @rsc_settings.command(  # type: ignore[type-var]
         name="league", description="Set the league this guild correlates to in the API"
     )
     async def _rsc_league(self, interaction: discord.Interaction):
@@ -374,14 +347,12 @@ class RSC(
 
         if league_view.result:
             await self._set_league(interaction.guild, league_view.result)
-            league_name = next((x.name for x in leagues if x.id == league_view.result))
+            league_name = next(x.name for x in leagues if x.id == league_view.result)
             await interaction.edit_original_response(
-                embed=SuccessEmbed(
-                    description=f"Configured the server league to **{league_name}**"
-                ),
+                embed=SuccessEmbed(description=f"Configured the server league to **{league_name}**"),
             )
 
-    @rsc_settings.command(  # type: ignore
+    @rsc_settings.command(  # type: ignore[type-var]
         name="setup", description="Perform some basic first time setup for the server"
     )
     async def _rsc_setup(self, interaction: discord.Interaction):
@@ -395,9 +366,7 @@ class RSC(
 
         if not (setup_modal.url and setup_modal.key):
             await interaction.response.send_message(
-                embed=ErrorEmbed(
-                    description="You must provide a valid URL and API key."
-                ),
+                embed=ErrorEmbed(description="You must provide a valid URL and API key."),
                 ephemeral=True,
             )
             return
@@ -406,10 +375,7 @@ class RSC(
         if not validators.url(setup_modal.url.value):
             await interaction.followup.send(
                 embed=ErrorEmbed(
-                    description=(
-                        f"The URL provided is invalid: **{setup_modal.url.value}**\n\n"
-                        'Did you remember to include **"https://"**?'
-                    )
+                    description=(f'The URL provided is invalid: **{setup_modal.url.value}**\n\nDid you remember to include **"https://"**?')
                 ),
                 ephemeral=True,
             )
@@ -417,13 +383,9 @@ class RSC(
 
         await self._set_api_url(interaction.guild, setup_modal.url.value)
         await self._set_api_key(interaction.guild, setup_modal.key.value)
-        await interaction.followup.send(
-            embed=SuccessEmbed(
-                description="Successfully configured RSC API key and url"
-            )
-        )
+        await interaction.followup.send(embed=SuccessEmbed(description="Successfully configured RSC API key and url"))
 
-    @rsc_settings.command(  # type: ignore
+    @rsc_settings.command(  # type: ignore[type-var]
         name="timezone", description="Set the desired time zone for the guild"
     )
     @app_commands.describe(timezone="Common time zone string (Ex: America/New_York)")
@@ -434,9 +396,7 @@ class RSC(
 
         if timezone not in pytz.common_timezones:
             await interaction.response.send_message(
-                embed=ErrorEmbed(
-                    description=f"Invalid time zone provided: **{timezone}**"
-                ),
+                embed=ErrorEmbed(description=f"Invalid time zone provided: **{timezone}**"),
                 ephemeral=True,
             )
             return
@@ -447,21 +407,17 @@ class RSC(
             ephemeral=True,
         )
 
-    @rsc_settings.command(  # type: ignore
+    @rsc_settings.command(  # type: ignore[type-var]
         name="loglevel",
         description="Modify the log level of the bot (Development Feature)",
     )
-    async def _rsc_dev_loglevel(
-        self, interaction: discord.Interaction, level: LogLevel
-    ):
+    async def _rsc_dev_loglevel(self, interaction: discord.Interaction, level: LogLevel):
         logging.getLogger("red.rsc").setLevel(level)
-        await interaction.response.send_message(
-            f"Logging level is now **{level}**", ephemeral=True
-        )
+        await interaction.response.send_message(f"Logging level is now **{level}**", ephemeral=True)
 
     # Non-Group Commands
 
-    @app_commands.command(name="whatami", description="What am I?")  # type: ignore
+    @app_commands.command(name="whatami", description="What am I?")  # type: ignore[type-var]
     async def _whatami(self, interaction: discord.Interaction):
         embed = BlueEmbed(
             title="What Am I?",
@@ -472,7 +428,7 @@ class RSC(
         )
         await interaction.response.send_message(embed=embed)
 
-    @app_commands.command(  # type: ignore
+    @app_commands.command(  # type: ignore[type-var]
         name="help", description="Display a help for RSC Bot or a specific command."
     )
     @app_commands.describe(command="Display help for a specific command.")
@@ -489,13 +445,7 @@ class RSC(
             groups: list[discord.app_commands.Group] = []
             cmd_list: list[discord.app_commands.Command] = []
             for cmd in cmds:
-                if (
-                    cmd.default_permissions
-                    and (
-                        interaction.user.guild_permissions & cmd.default_permissions
-                    ).value
-                    == 0
-                ):
+                if cmd.default_permissions and (interaction.user.guild_permissions & cmd.default_permissions).value == 0:
                     log.debug(f"Insufficient Perms for help: {cmd.name}", guild=guild)
                     continue
 
@@ -506,10 +456,8 @@ class RSC(
                 # Custom role permission validation
                 if cmd.name.lower() == "ballchasing":
                     stats_role = await self._get_bc_manager_role(guild)
-                    if (
-                        stats_role and stats_role in interaction.user.roles
-                    ) or interaction.user.guild_permissions.manage_guild:
-                        groups.append(cmd)  # type: ignore
+                    if (stats_role and stats_role in interaction.user.roles) or interaction.user.guild_permissions.manage_guild:
+                        groups.append(cmd)  # type: ignore[arg-type]
                     continue
 
                 if isinstance(cmd, discord.app_commands.Group):
@@ -543,7 +491,7 @@ class RSC(
             await interaction.response.send_message(embeds=embeds, ephemeral=True)
         else:
             cmd = None
-            for c in self.walk_app_commands():  # type: ignore
+            for c in self.walk_app_commands():  # type: ignore[assignment]
                 if c.name == "feet":
                     continue
                 if c.qualified_name == command:
@@ -551,9 +499,7 @@ class RSC(
                     cmd = c
 
             if not cmd:
-                await interaction.response.send_message(
-                    f"**{command}** is not a valid command name.", ephemeral=True
-                )
+                await interaction.response.send_message(f"**{command}** is not a valid command name.", ephemeral=True)
                 return
 
             desc = ""
@@ -564,10 +510,7 @@ class RSC(
                     desc += f"**/{c.qualified_name}** - {c.description}\n"
             else:
                 embed.title = f"{cmd.qualified_name.title()} Command Help"
-                desc = (
-                    f"**Command:** /{cmd.qualified_name}\n"
-                    f"**Description:** {cmd.description}\n"
-                )
+                desc = f"**Command:** /{cmd.qualified_name}\n**Description:** {cmd.description}\n"
                 if cmd.parameters:
                     desc += "\n__**Parameters**__\n\n"
                     for p in cmd.parameters:

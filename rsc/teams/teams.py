@@ -42,9 +42,7 @@ class TeamMixIn(RSCMixIn):
 
     # Autocomplete
 
-    async def teams_autocomplete(
-        self, interaction: discord.Interaction, current: str
-    ) -> list[app_commands.Choice[str]]:
+    async def teams_autocomplete(self, interaction: discord.Interaction, current: str) -> list[app_commands.Choice[str]]:
         if not interaction.guild_id:
             return []
 
@@ -53,10 +51,7 @@ class TeamMixIn(RSCMixIn):
             return []
 
         if not current:
-            return [
-                app_commands.Choice(name=t, value=t)
-                for t in self._team_cache[interaction.guild_id][:25]
-            ]
+            return [app_commands.Choice(name=t, value=t) for t in self._team_cache[interaction.guild_id][:25]]
 
         choices = []
         for t in self._team_cache[interaction.guild_id]:
@@ -68,16 +63,14 @@ class TeamMixIn(RSCMixIn):
 
     # Group Commands
 
-    _teams = app_commands.Group(
-        name="teams", description="Get a list of teams in RSC", guild_only=True
-    )
+    _teams = app_commands.Group(name="teams", description="Get a list of teams in RSC", guild_only=True)
 
     # Commands
 
-    @_teams.command(  # type: ignore
+    @_teams.command(  # type: ignore[type-var]
         name="franchise", description="Get a list of teams for a franchise"
     )
-    @app_commands.autocomplete(franchise=FranchiseMixIn.franchise_autocomplete)  # type: ignore
+    @app_commands.autocomplete(franchise=FranchiseMixIn.franchise_autocomplete)  # type: ignore[type-var]
     @app_commands.describe(franchise="Teams in a franchise")
     @app_commands.guild_only
     async def _teams_franchise_cmd(
@@ -95,9 +88,7 @@ class TeamMixIn(RSCMixIn):
         try:
             teams = await self.teams(guild, franchise=franchise)
         except RscException as exc:
-            return await interaction.followup.send(
-                embed=ApiExceptionErrorEmbed(exc), ephemeral=True
-            )
+            return await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc), ephemeral=True)
 
         if not teams:
             await interaction.followup.send(content="No results found.", ephemeral=True)
@@ -107,16 +98,14 @@ class TeamMixIn(RSCMixIn):
         try:
             embed = await self.build_franchise_teams_embed(guild, teams)
         except (ValueError, AttributeError) as exc:
-            return await interaction.followup.send(
-                embed=ExceptionErrorEmbed(exc_message=str(exc))
-            )
+            return await interaction.followup.send(embed=ExceptionErrorEmbed(exc_message=str(exc)))
 
         await interaction.followup.send(embed=embed)
 
-    @_teams.command(  # type: ignore
+    @_teams.command(  # type: ignore[type-var]
         name="tier", description="Get a list of teams in a tier"
     )
-    @app_commands.autocomplete(tier=TierMixIn.tier_autocomplete)  # type: ignore
+    @app_commands.autocomplete(tier=TierMixIn.tier_autocomplete)  # type: ignore[type-var]
     @app_commands.describe(tier="Teams in a league tier")
     @app_commands.guild_only
     async def _teams_tier_cmd(
@@ -141,21 +130,15 @@ class TeamMixIn(RSCMixIn):
         for t in teams:
             if not t.name:
                 return await interaction.followup.send(
-                    embed=ErrorEmbed(
-                        description=f"`Team {t.id}` has no name. Please open a modmail ticket."
-                    )
+                    embed=ErrorEmbed(description=f"`Team {t.id}` has no name. Please open a modmail ticket.")
                 )
             if not t.tier:
                 return await interaction.followup.send(
-                    embed=ErrorEmbed(
-                        description=f"`Team {t.id}` has no tier. Please open a modmail ticket."
-                    )
+                    embed=ErrorEmbed(description=f"`Team {t.id}` has no tier. Please open a modmail ticket.")
                 )
             if not t.tier.name:
                 return await interaction.followup.send(
-                    embed=ErrorEmbed(
-                        description=f"`Team {t.id}` has no tier name. Please open a modmail ticket."
-                    )
+                    embed=ErrorEmbed(description=f"`Team {t.id}` has no tier name. Please open a modmail ticket.")
                 )
 
         # Sort by Team Name
@@ -182,9 +165,9 @@ class TeamMixIn(RSCMixIn):
             embed.set_thumbnail(url=guild.icon.url)
         await interaction.followup.send(embed=embed)
 
-    @app_commands.command(name="roster", description="Get roster for a team")  # type: ignore
+    @app_commands.command(name="roster", description="Get roster for a team")  # type: ignore[type-var]
     @app_commands.describe(team="Team name to search")
-    @app_commands.autocomplete(team=teams_autocomplete)  # type: ignore
+    @app_commands.autocomplete(team=teams_autocomplete)  # type: ignore[type-var]
     @app_commands.guild_only
     async def _roster_cmd(
         self,
@@ -199,11 +182,7 @@ class TeamMixIn(RSCMixIn):
         await interaction.response.defer()
         plist = await self.players(guild, team_name=team)
         log.debug(f"Total Rostered Players: {len(plist)}")
-        plist = [
-            p
-            for p in plist
-            if p.team and p.team.name and p.team.name.lower() == team.lower()
-        ]
+        plist = [p for p in plist if p.team and p.team.name and p.team.name.lower() == team.lower()]
         log.debug(f"Total filtered Players: {len(plist)}")
 
         # Verify team exists and get data
@@ -217,19 +196,15 @@ class TeamMixIn(RSCMixIn):
         try:
             embed = await self.build_roster_embed(guild, plist)
         except (ValueError, AttributeError) as exc:
-            return await interaction.followup.send(
-                embed=ExceptionErrorEmbed(exc_message=str(exc))
-            )
+            return await interaction.followup.send(embed=ExceptionErrorEmbed(exc_message=str(exc)))
         await interaction.followup.send(embed=embed)
 
     # Captains Group
 
-    _captains = app_commands.Group(
-        name="captains", description="Get information on team captains", guild_only=True
-    )
+    _captains = app_commands.Group(name="captains", description="Get information on team captains", guild_only=True)
 
-    @_captains.command(name="team", description="Team to query")  # type: ignore
-    @app_commands.autocomplete(team=teams_autocomplete)  # type: ignore
+    @_captains.command(name="team", description="Team to query")  # type: ignore[type-var]
+    @app_commands.autocomplete(team=teams_autocomplete)  # type: ignore[type-var]
     async def _captains_team(
         self,
         interaction: discord.Interaction,
@@ -244,9 +219,7 @@ class TeamMixIn(RSCMixIn):
         captain = await self.team_captain(guild, team)
         if not captain:
             await interaction.followup.send(
-                embed=ErrorEmbed(
-                    description=f"**{team}** does not exist or a captain has not been elected."
-                ),
+                embed=ErrorEmbed(description=f"**{team}** does not exist or a captain has not been elected."),
                 ephemeral=True,
             )
             return
@@ -271,18 +244,16 @@ class TeamMixIn(RSCMixIn):
         frole = await utils.franchise_role_from_name(guild, captain.team.franchise.name)
         franchise_fmt = frole.mention if frole else captain.team.franchise.name
 
-        desc = f"**Captain:** {cpt_fmt}\n" f"**Franchise:** {franchise_fmt}"
+        desc = f"**Captain:** {cpt_fmt}\n**Franchise:** {franchise_fmt}"
 
-        embed = discord.Embed(
-            title=f"{team} Team Captain", description=desc, color=tier_color
-        )
+        embed = discord.Embed(title=f"{team} Team Captain", description=desc, color=tier_color)
         await interaction.followup.send(embed=embed)
 
-    @_captains.command(  # type: ignore
+    @_captains.command(  # type: ignore[type-var]
         name="tier", description="Display captains of all teams in a tier"
     )
     @app_commands.describe(tier="Tier to query")
-    @app_commands.autocomplete(tier=TierMixIn.tier_autocomplete)  # type: ignore
+    @app_commands.autocomplete(tier=TierMixIn.tier_autocomplete)  # type: ignore[type-var]
     async def _captains_tier(self, interaction: discord.Interaction, tier: str):
         """Get a list of captains by search criteria"""
         guild = interaction.guild
@@ -299,9 +270,7 @@ class TeamMixIn(RSCMixIn):
 
         if not fteams:
             await interaction.followup.send(
-                embed=ErrorEmbed(
-                    description=f"**{tier}** is not a valid tier or no exist in it."
-                ),
+                embed=ErrorEmbed(description=f"**{tier}** is not a valid tier or no exist in it."),
                 ephemeral=True,
             )
             return
@@ -310,22 +279,16 @@ class TeamMixIn(RSCMixIn):
         for t in fteams:
             if not (t.name and t.franchise and t.franchise.name):
                 return await interaction.followup.send(
-                    embed=ErrorEmbed(
-                        description=f"Team {t.id} has no name or franchise data. Please open a modmail ticket."
-                    )
+                    embed=ErrorEmbed(description=f"Team {t.id} has no name or franchise data. Please open a modmail ticket.")
                 )
             # Match captain to team
-            captain = next(
-                (c for c in captains if c.team and c.team.name == t.name), None
-            )
+            captain = next((c for c in captains if c.team and c.team.name == t.name), None)
             pname = "None"
             if captain:
                 # Fetch discord.Member
                 if not (captain.player and captain.player.discord_id):
                     return await interaction.followup.send(
-                        embed=ErrorEmbed(
-                            description=f"{captain.id} has no discord ID attached. Please open a modmail ticket."
-                        )
+                        embed=ErrorEmbed(description=f"{captain.id} has no discord ID attached. Please open a modmail ticket.")
                     )
                 m = guild.get_member(captain.player.discord_id)
                 pname = m.mention if m else captain.player.name
@@ -335,12 +298,8 @@ class TeamMixIn(RSCMixIn):
         tier_color = await utils.tier_color_by_name(guild, tier)
 
         embed = discord.Embed(title=f"{tier} Captains", color=tier_color)
-        embed.add_field(
-            name="Captain", value="\n".join([x[0] for x in cpt_fmt]), inline=True
-        )
-        embed.add_field(
-            name="Team", value="\n".join([c[1] for c in cpt_fmt]), inline=True
-        )
+        embed.add_field(name="Captain", value="\n".join([x[0] for x in cpt_fmt]), inline=True)
+        embed.add_field(name="Team", value="\n".join([c[1] for c in cpt_fmt]), inline=True)
         embed.add_field(
             name="Franchise",
             value="\n".join([c[2] for c in cpt_fmt]),
@@ -348,11 +307,11 @@ class TeamMixIn(RSCMixIn):
         )
         await interaction.followup.send(embed=embed)
 
-    @_captains.command(  # type: ignore
+    @_captains.command(  # type: ignore[type-var]
         name="franchise", description="Display captains of all teams in a franchise"
     )
     @app_commands.describe(franchise="Franchise name")
-    @app_commands.autocomplete(franchise=FranchiseMixIn.franchise_autocomplete)  # type: ignore
+    @app_commands.autocomplete(franchise=FranchiseMixIn.franchise_autocomplete)  # type: ignore[type-var]
     async def _captains_franchise(
         self,
         interaction: discord.Interaction,
@@ -367,17 +326,11 @@ class TeamMixIn(RSCMixIn):
         captains = await self.franchise_captains(guild, franchise)
         if not captains:
             return await interaction.followup.send(
-                embed=ErrorEmbed(
-                    description=f"**{franchise}** is not a valid franchise or no captains have been elected."
-                ),
+                embed=ErrorEmbed(description=f"**{franchise}** is not a valid franchise or no captains have been elected."),
                 ephemeral=True,
             )
 
-        if not (
-            captains[0].team
-            and captains[0].team.franchise
-            and captains[0].team.franchise.name
-        ):
+        if not (captains[0].team and captains[0].team.franchise and captains[0].team.franchise.name):
             return await interaction.followup.send(
                 embed=ErrorEmbed(
                     description=f"Captain **{captains[0].id}** is missing team or franchise data. Please open a modmail ticket."
@@ -389,27 +342,21 @@ class TeamMixIn(RSCMixIn):
         fteams = await self.teams(guild, franchise=captains[0].team.franchise.name)
 
         # This is validated in franchise_captains()
-        fteams.sort(key=lambda t: cast(int, t.tier.position), reverse=True)  # type: ignore
+        fteams.sort(key=lambda t: cast(int, t.tier.position), reverse=True)  # type: ignore[type-var]
 
         cpt_fmt: list[tuple[str, str, str]] = []
         for t in fteams:
             if not (t.name and t.tier and t.tier.name):
                 return await interaction.followup.send(
-                    embed=ErrorEmbed(
-                        description=f"Team {t.id} has no name or tier data. Please open a modmail ticket."
-                    )
+                    embed=ErrorEmbed(description=f"Team {t.id} has no name or tier data. Please open a modmail ticket.")
                 )
             # Match captain to team
-            captain = next(
-                (c for c in captains if c.tier and c.tier.id == t.tier.id), None
-            )
+            captain = next((c for c in captains if c.tier and c.tier.id == t.tier.id), None)
             pname = "None"
             if captain:
                 if not (captain.player and captain.player.discord_id):
                     return await interaction.followup.send(
-                        embed=ErrorEmbed(
-                            description=f"{captain.id} has no discord ID attached. Please open a modmail ticket."
-                        )
+                        embed=ErrorEmbed(description=f"{captain.id} has no discord ID attached. Please open a modmail ticket.")
                     )
                 # Fetch discord.Member
                 m = guild.get_member(captain.player.discord_id)
@@ -417,9 +364,7 @@ class TeamMixIn(RSCMixIn):
 
             cpt_fmt.append((pname, t.name, t.tier.name))
 
-        frole = await utils.franchise_role_from_name(
-            guild, captains[0].team.franchise.name
-        )
+        frole = await utils.franchise_role_from_name(guild, captains[0].team.franchise.name)
 
         gm = None
         if captains[0].team.franchise.gm.discord_id:
@@ -428,19 +373,11 @@ class TeamMixIn(RSCMixIn):
         embed = BlueEmbed(title=f"{franchise} Captains")
 
         if gm and frole:
-            embed.description = (
-                f"General Manager: {gm.mention}\nFranchise: {frole.mention}"
-            )
+            embed.description = f"General Manager: {gm.mention}\nFranchise: {frole.mention}"
 
-        embed.add_field(
-            name="Captain", value="\n".join([x[0] for x in cpt_fmt]), inline=True
-        )
-        embed.add_field(
-            name="Team", value="\n".join([x[1] for x in cpt_fmt]), inline=True
-        )
-        embed.add_field(
-            name="Tier", value="\n".join([x[2] for x in cpt_fmt]), inline=True
-        )
+        embed.add_field(name="Captain", value="\n".join([x[0] for x in cpt_fmt]), inline=True)
+        embed.add_field(name="Team", value="\n".join([x[1] for x in cpt_fmt]), inline=True)
+        embed.add_field(name="Tier", value="\n".join([x[2] for x in cpt_fmt]), inline=True)
         await interaction.followup.send(embed=embed)
 
     # Functions
@@ -482,9 +419,7 @@ class TeamMixIn(RSCMixIn):
             raise ValueError(f"Team has no ID in API: {name}")
         return teams[0].id
 
-    async def team_captain(
-        self, guild: discord.Guild, team_name: str
-    ) -> LeaguePlayer | None:
+    async def team_captain(self, guild: discord.Guild, team_name: str) -> LeaguePlayer | None:
         """Return captain of a team by name"""
         players = await self.players(guild, team_name=team_name)
         log.debug(f"Total Rostered Players: {len(players)}")
@@ -494,9 +429,7 @@ class TeamMixIn(RSCMixIn):
             return None
         return next((x for x in players if x.captain), None)
 
-    async def tier_captains(
-        self, guild: discord.Guild, tier_name: str
-    ) -> list[LeaguePlayer]:
+    async def tier_captains(self, guild: discord.Guild, tier_name: str) -> list[LeaguePlayer]:
         """Return all captains in a tier"""
         players = await self.players(guild, tier_name=tier_name, limit=1000)
         if not players:
@@ -506,22 +439,16 @@ class TeamMixIn(RSCMixIn):
             x
             for x in players
             if x.captain
-            if x.tier
-            and x.tier.position
-            and x.status in (Status.ROSTERED, Status.RENEWED, Status.IR, Status.AGMIR)
+            if x.tier and x.tier.position and x.status in (Status.ROSTERED, Status.RENEWED, Status.IR, Status.AGMIR)
         ]
         for c in captains:
             if not (c.team and c.team.name):
-                raise AttributeError(
-                    f"LeaguePlayer {c.id} captain is missing team data."
-                )
+                raise AttributeError(f"LeaguePlayer {c.id} captain is missing team data.")
 
-        captains.sort(key=lambda c: cast(str, c.team.name))  # type: ignore
+        captains.sort(key=lambda c: cast(str, c.team.name))  # type: ignore[type-var]
         return captains
 
-    async def franchise_captains(
-        self, guild: discord.Guild, franchise_name: str
-    ) -> list[LeaguePlayer]:
+    async def franchise_captains(self, guild: discord.Guild, franchise_name: str) -> list[LeaguePlayer]:
         """Return all captains in a franchise"""
         players = await self.players(guild, franchise=franchise_name)
         if not players:
@@ -530,46 +457,32 @@ class TeamMixIn(RSCMixIn):
         captains = [x for x in players if x.captain if x.tier and x.tier.position]
         for c in captains:
             if not (c.tier and c.tier.position):
-                raise AttributeError(
-                    f"LeaguePlayer {c.id} captain is missing tier data."
-                )
+                raise AttributeError(f"LeaguePlayer {c.id} captain is missing tier data.")
 
-        captains.sort(key=lambda c: cast(int, c.tier.position), reverse=True)  # type: ignore
+        captains.sort(key=lambda c: cast(int, c.tier.position), reverse=True)  # type: ignore[type-var]
         return captains
 
-    async def build_franchise_teams_embed(
-        self, guild: discord.Guild, teams: list[TeamList]
-    ) -> discord.Embed:
+    async def build_franchise_teams_embed(self, guild: discord.Guild, teams: list[TeamList]) -> discord.Embed:
         if not teams:
             raise ValueError("No teams provided to build embed")
 
         # Validate API data
         for t in teams:
             if not t.franchise.name:
-                raise AttributeError(
-                    f"`Team {t.id}` has no franchise name. Please open a modmail ticket"
-                )
+                raise AttributeError(f"`Team {t.id}` has no franchise name. Please open a modmail ticket")
             if not t.name:
-                raise AttributeError(
-                    f"`Team {t.id}` has no name. Please open a modmail ticket"
-                )
+                raise AttributeError(f"`Team {t.id}` has no name. Please open a modmail ticket")
             if not t.tier:
-                raise AttributeError(
-                    f"`Team {t.id}` has no tier. Please open a modmail ticket"
-                )
+                raise AttributeError(f"`Team {t.id}` has no tier. Please open a modmail ticket")
             if not t.tier.name:
-                raise AttributeError(
-                    f"`Team {t.id}` has no tier name. Please open a modmail ticket"
-                )
+                raise AttributeError(f"`Team {t.id}` has no tier name. Please open a modmail ticket")
             if not t.tier.position:
-                raise AttributeError(
-                    f"`Team {t.id}` has no tier position. Please open a modmail ticket"
-                )
+                raise AttributeError(f"`Team {t.id}` has no tier position. Please open a modmail ticket")
 
         if teams[0].franchise and teams[0].franchise.gm:
             gm_id = teams[0].franchise.gm.discord_id
 
-        teams.sort(key=lambda t: cast(str, t.tier.position), reverse=True)  # type: ignore
+        teams.sort(key=lambda t: cast(str, t.tier.position), reverse=True)  # type: ignore[type-var]
 
         embed = BlueEmbed(description=f"GM: <@!{gm_id}>")
         embed.title = f"{teams[0].franchise.name}"
@@ -594,16 +507,12 @@ class TeamMixIn(RSCMixIn):
             embed.set_thumbnail(url=guild.icon.url)
         return embed
 
-    async def build_roster_embed(
-        self, guild: discord.Guild, players: list[LeaguePlayer]
-    ) -> discord.Embed:
+    async def build_roster_embed(self, guild: discord.Guild, players: list[LeaguePlayer]) -> discord.Embed:
         if not players:
             raise ValueError("No players provided to build roster embed")
 
         if not (players[0].team and players[0].team.franchise):
-            raise AttributeError(
-                f"{players[0].player.name} does not have franchise information."
-            )
+            raise AttributeError(f"{players[0].player.name} does not have franchise information.")
 
         if not (players[0].tier and players[0].tier.name):
             raise AttributeError(f"{players[0].player.name} has no tier information.")
@@ -661,9 +570,7 @@ class TeamMixIn(RSCMixIn):
         roster_str = "\n".join(roster)
         tier_color = await utils.tier_color_by_name(guild, players[0].tier.name)
 
-        header = (
-            f"{players[0].team.name} - {franchise} ({gm_name}) - {players[0].tier.name}"
-        )
+        header = f"{players[0].team.name} - {franchise} ({gm_name}) - {players[0].tier.name}"
         desc = f"```\n{roster_str}\n```"
 
         embed = discord.Embed(
@@ -674,15 +581,11 @@ class TeamMixIn(RSCMixIn):
 
         if subbed:
             sub_str = "\n".join(subbed)
-            embed.add_field(
-                name="Subbed Out", value=f"```\n{sub_str}\n```", inline=True
-            )
+            embed.add_field(name="Subbed Out", value=f"```\n{sub_str}\n```", inline=True)
 
         if ir:
             ir_str = "\n".join(ir)
-            embed.add_field(
-                name="Inactive Reserve", value=f"```\n{ir_str}\n```", inline=True
-            )
+            embed.add_field(name="Inactive Reserve", value=f"```\n{ir_str}\n```", inline=True)
 
         # Get Logo
         flogo = None
@@ -725,9 +628,7 @@ class TeamMixIn(RSCMixIn):
                     cached = set(self._team_cache[guild.id])
                     different = {t.name for t in teams if t.name} - cached
                     if different:
-                        log.debug(
-                            f"[{guild.name}] Teams being added to cache: {different}"
-                        )
+                        log.debug(f"[{guild.name}] Teams being added to cache: {different}")
                         self._team_cache[guild.id] += list(different)
                 else:
                     log.debug(f"[{guild.name}] Starting fresh teams cache")
@@ -773,9 +674,7 @@ class TeamMixIn(RSCMixIn):
     ) -> list[HighLevelMatch]:
         async with ApiClient(self._api_conf[guild.id]) as client:
             api = TeamsApi(client)
-            matches = await api.teams_season_matches(
-                id, preseason=preseason, season=season
-            )
+            matches = await api.teams_season_matches(id, preseason=preseason, season=season)
             matches.sort(key=lambda x: cast(int, x.day))
             return matches
 
@@ -813,7 +712,6 @@ class TeamMixIn(RSCMixIn):
                 return result
         except (ApiException, BadRequestException) as exc:
             log.debug(f"Exception during team creation: {type(exc)}")
-            pass
             raise RscException(exc)
 
     async def delete_team(self, guild: discord.Guild, team_id: int):

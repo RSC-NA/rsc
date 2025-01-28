@@ -1,7 +1,7 @@
 import logging
 import re
 from pathlib import Path
-from typing import MutableMapping
+from typing import TYPE_CHECKING
 
 import discord
 from redbot.core import app_commands
@@ -21,6 +21,9 @@ from rsc.const import (
 from rsc.embeds import BlueEmbed, ErrorEmbed, GreenEmbed
 from rsc.types import CombineSettings
 from rsc.utils import utils
+
+if TYPE_CHECKING:
+    from collections.abc import MutableMapping
 
 log = logging.getLogger("red.rsc.combines.manager")
 
@@ -49,7 +52,7 @@ class CombineManagerMixIn(RSCMixIn):
 
     # Privileged Commands
 
-    @_combine_manager.command(name="settings", description="Display combine settings")  # type: ignore
+    @_combine_manager.command(name="settings", description="Display combine settings")  # type: ignore[type-var]
     async def _combines_settings_cmd(self, interaction: discord.Interaction):
         guild = interaction.guild
         if not guild:
@@ -72,13 +75,9 @@ class CombineManagerMixIn(RSCMixIn):
         )
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-    @_combine_manager.command(
-        name="category", description="Configure the combines category channel"
-    )  # type: ignore
+    @_combine_manager.command(name="category", description="Configure the combines category channel")  # type: ignore[type-var]
     @app_commands.describe(category="Combines Category Channel")
-    async def _combines_category_cmd(
-        self, interaction: discord.Interaction, category: discord.CategoryChannel
-    ):
+    async def _combines_category_cmd(self, interaction: discord.Interaction, category: discord.CategoryChannel):
         guild = interaction.guild
         if not guild:
             return
@@ -92,12 +91,8 @@ class CombineManagerMixIn(RSCMixIn):
             ephemeral=True,
         )
 
-    @_combine_manager.command(
-        name="api", description="Configure the API url for combines"
-    )  # type: ignore
-    @app_commands.describe(
-        url="Combines API location (Ex: https://devleague.rscna.com/c-api/)"
-    )
+    @_combine_manager.command(name="api", description="Configure the API url for combines")  # type: ignore[type-var]
+    @app_commands.describe(url="Combines API location (Ex: https://devleague.rscna.com/c-api/)")
     async def _combines_api_cmd(self, interaction: discord.Interaction, url: str):
         guild = interaction.guild
         if not guild:
@@ -112,7 +107,7 @@ class CombineManagerMixIn(RSCMixIn):
             ephemeral=True,
         )
 
-    @_combine_manager.command(  # type: ignore
+    @_combine_manager.command(  # type: ignore[type-var]
         name="start", description="Begin RSC combines and create channels"
     )
     async def _combines_start(self, interaction: discord.Interaction):
@@ -122,22 +117,16 @@ class CombineManagerMixIn(RSCMixIn):
 
         status = await self._get_combines_active(guild)
         if status:
-            return await interaction.response.send_message(
-                embed=ErrorEmbed(description="Combines are already active!")
-            )
+            return await interaction.response.send_message(embed=ErrorEmbed(description="Combines are already active!"))
 
         api = await self._get_combines_api(guild)
         category = await self._get_combines_category(guild)
 
         if not api:
-            return await interaction.response.send_message(
-                embed=ErrorEmbed(description="Combines API has not been configured!")
-            )
+            return await interaction.response.send_message(embed=ErrorEmbed(description="Combines API has not been configured!"))
         if not category:
             return await interaction.response.send_message(
-                embed=ErrorEmbed(
-                    description="Combines category channel has not been configured!"
-                )
+                embed=ErrorEmbed(description="Combines category channel has not been configured!")
             )
 
         await interaction.response.defer(ephemeral=True)
@@ -149,19 +138,13 @@ class CombineManagerMixIn(RSCMixIn):
         log.debug(f"[{guild}] Default Role: {guild.default_role}")
 
         if not league_role:
-            return await interaction.followup.send(
-                embed=ErrorEmbed(description="League role does not exist.")
-            )
+            return await interaction.followup.send(embed=ErrorEmbed(description="League role does not exist."))
 
         if not admin_role:
-            return await interaction.followup.send(
-                embed=ErrorEmbed(description="Admin role does not exist.")
-            )
+            return await interaction.followup.send(embed=ErrorEmbed(description="Admin role does not exist."))
 
         # Admin only overwrites
-        admin_overwrites: MutableMapping[
-            discord.Member | discord.Role, discord.PermissionOverwrite
-        ] = {
+        admin_overwrites: MutableMapping[discord.Member | discord.Role, discord.PermissionOverwrite] = {
             guild.default_role: discord.PermissionOverwrite(
                 view_channel=True,
                 connect=False,
@@ -192,9 +175,7 @@ class CombineManagerMixIn(RSCMixIn):
             if isinstance(combines_how_to_play, discord.TextChannel):
                 await self.send_combines_how_to_play(combines_how_to_play)
 
-        combines_announce = discord.utils.get(
-            category.channels, name="combines-announcements"
-        )
+        combines_announce = discord.utils.get(category.channels, name="combines-announcements")
         if not combines_announce:
             combines_announce = await guild.create_text_channel(
                 name="combines-announcements",
@@ -204,9 +185,7 @@ class CombineManagerMixIn(RSCMixIn):
             )
 
         # Configure permissions
-        player_overwrites: MutableMapping[
-            discord.Member | discord.Role, discord.PermissionOverwrite
-        ] = {
+        player_overwrites: MutableMapping[discord.Member | discord.Role, discord.PermissionOverwrite] = {
             guild.default_role: discord.PermissionOverwrite(
                 view_channel=True,
                 connect=False,
@@ -226,9 +205,7 @@ class CombineManagerMixIn(RSCMixIn):
             ),
         }
         if muted_role:
-            player_overwrites[muted_role] = discord.PermissionOverwrite(
-                view_channel=True, connect=False, speak=False
-            )
+            player_overwrites[muted_role] = discord.PermissionOverwrite(view_channel=True, connect=False, speak=False)
 
         combines_help = discord.utils.get(category.channels, name="combines-help")
         if not combines_help:
@@ -255,9 +232,7 @@ class CombineManagerMixIn(RSCMixIn):
             )
 
         # Waiting Room VC
-        combines_waiting = discord.utils.get(
-            category.channels, name="combines-waiting-room-1"
-        )
+        combines_waiting = discord.utils.get(category.channels, name="combines-waiting-room-1")
         if not combines_waiting:
             combines_waiting = await guild.create_voice_channel(
                 name="combines-waiting-room-1",
@@ -266,9 +241,7 @@ class CombineManagerMixIn(RSCMixIn):
                 reason="Starting combines",
             )
 
-        combines_waiting2 = discord.utils.get(
-            category.channels, name="combines-waiting-room-2"
-        )
+        combines_waiting2 = discord.utils.get(category.channels, name="combines-waiting-room-2")
         if not combines_waiting2:
             combines_waiting2 = await guild.create_voice_channel(
                 name="combines-waiting-room-2",
@@ -286,9 +259,7 @@ class CombineManagerMixIn(RSCMixIn):
             )
         )
 
-    @_combine_manager.command(
-        name="stop", description="End RSC combines and delete channels"
-    )  # type: ignore
+    @_combine_manager.command(name="stop", description="End RSC combines and delete channels")  # type: ignore[type-var]
     async def _combines_stop(self, interaction: discord.Interaction):
         guild = interaction.guild
         if not guild:
@@ -296,17 +267,13 @@ class CombineManagerMixIn(RSCMixIn):
 
         status = await self._get_combines_active(guild)
         if not status:
-            return await interaction.response.send_message(
-                embed=ErrorEmbed(description="Combines are not currently active.")
-            )
+            return await interaction.response.send_message(embed=ErrorEmbed(description="Combines are not currently active."))
 
         category = await self._get_combines_category(guild)
 
         if not category:
             return await interaction.response.send_message(
-                embed=ErrorEmbed(
-                    description="Combines category channel has not been configured!"
-                )
+                embed=ErrorEmbed(description="Combines category channel has not been configured!")
             )
 
         await interaction.response.defer(ephemeral=True)
@@ -326,10 +293,10 @@ class CombineManagerMixIn(RSCMixIn):
             )
         )
 
-    @_combine_manager.command(
+    @_combine_manager.command(  # type: ignore[type-var]
         name="delrooms",
         description="Delete all combine lobby channels. (Preserves general channels)",
-    )  # type: ignore
+    )
     async def _combines_delrooms_cmd(self, interaction: discord.Interaction):
         guild = interaction.guild
         if not guild:
@@ -338,9 +305,7 @@ class CombineManagerMixIn(RSCMixIn):
         category = await self._get_combines_category(guild)
         if not category:
             return await interaction.response.send_message(
-                embed=ErrorEmbed(
-                    description="Combines category channel has not been configured!"
-                )
+                embed=ErrorEmbed(description="Combines category channel has not been configured!")
             )
 
         await interaction.response.defer(ephemeral=True)
@@ -372,9 +337,7 @@ class CombineManagerMixIn(RSCMixIn):
 
     async def delete_combine_game_rooms(self, category: discord.CategoryChannel):
         """Delete a combine category and it's associated channels"""
-        log.debug(
-            f"[{category.guild}] Deleting combine category game rooms: {category.name}"
-        )
+        log.debug(f"[{category.guild}] Deleting combine category game rooms: {category.name}")
 
         combine_vc_regex = re.compile(r"^\w+-\d+-(home|away)$", flags=re.IGNORECASE)
 
@@ -414,16 +377,10 @@ class CombineManagerMixIn(RSCMixIn):
 
     # Config
 
-    async def _set_combines_category(
-        self, guild: discord.Guild, category: discord.CategoryChannel
-    ):
-        await self.config.custom("Combines", str(guild.id)).CombinesCategory.set(
-            category.id
-        )
+    async def _set_combines_category(self, guild: discord.Guild, category: discord.CategoryChannel):
+        await self.config.custom("Combines", str(guild.id)).CombinesCategory.set(category.id)
 
-    async def _get_combines_category(
-        self, guild: discord.Guild
-    ) -> discord.CategoryChannel | None:
+    async def _get_combines_category(self, guild: discord.Guild) -> discord.CategoryChannel | None:
         cat_id = await self.config.custom("Combines", str(guild.id)).CombinesCategory()
         if not cat_id:
             return None

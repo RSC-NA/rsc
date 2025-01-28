@@ -27,7 +27,7 @@ class AdminStatsMixIn(AdminMixIn):
         default_permissions=discord.Permissions(manage_guild=True),
     )
 
-    @_stats.command(name="intents", description="Intent to Play statistics")  # type: ignore
+    @_stats.command(name="intents", description="Intent to Play statistics")  # type: ignore[type-var]
     async def _intent_stats_cmd(self, interaction: discord.Interaction):
         guild = interaction.guild
         if not guild:
@@ -59,9 +59,7 @@ class AdminStatsMixIn(AdminMixIn):
 
         if not next_season.id:
             return await interaction.followup.send(
-                embed=ErrorEmbed(
-                    description="API returned a Season without an ID. Please open a modmail ticket."
-                )
+                embed=ErrorEmbed(description="API returned a Season without an ID. Please open a modmail ticket.")
             )
 
         log.debug(f"Next Season ID: {next_season.id}")
@@ -89,9 +87,7 @@ class AdminStatsMixIn(AdminMixIn):
             elif i.missing:
                 intent_dict["Missing"] += 1
             else:
-                log.warning(
-                    f"Unknown value in intent data. Player: {i.player.player.discord_id}"
-                )
+                log.warning(f"Unknown value in intent data. Player: {i.player.player.discord_id}")
 
         embed = BlueEmbed(
             title="Intent to Play Statistics",
@@ -106,7 +102,7 @@ class AdminStatsMixIn(AdminMixIn):
 
         await interaction.followup.send(embed=embed)
 
-    @_stats.command(name="current", description="Current season statistics")  # type: ignore
+    @_stats.command(name="current", description="Current season statistics")  # type: ignore[type-var]
     async def _current_season_stats_cmd(self, interaction: discord.Interaction):
         guild = interaction.guild
         if not guild:
@@ -140,9 +136,7 @@ class AdminStatsMixIn(AdminMixIn):
 
         if not season:
             return await interaction.followup.send(
-                embed=ErrorEmbed(
-                    description="API returned a Season without an ID. Please open a modmail ticket."
-                )
+                embed=ErrorEmbed(description="API returned a Season without an ID. Please open a modmail ticket.")
             )
 
         lplayers = await self.players(guild, season=season.id, limit=10000)
@@ -178,7 +172,7 @@ class AdminStatsMixIn(AdminMixIn):
 
         await interaction.followup.send(embed=embed)
 
-    @_stats.command(name="signups", description="RSC sign-up statistics")  # type: ignore
+    @_stats.command(name="signups", description="RSC sign-up statistics")  # type: ignore[type-var]
     async def _signups_stats_cmd(self, interaction: discord.Interaction):
         guild = interaction.guild
         if not guild:
@@ -212,9 +206,7 @@ class AdminStatsMixIn(AdminMixIn):
 
         if not next_season.id:
             return await interaction.followup.send(
-                embed=ErrorEmbed(
-                    description="API returned a Season without an ID. Please open a modmail ticket."
-                )
+                embed=ErrorEmbed(description="API returned a Season without an ID. Please open a modmail ticket.")
             )
 
         lplayers = await self.players(guild, season=next_season.id)
@@ -237,9 +229,7 @@ class AdminStatsMixIn(AdminMixIn):
 
         log.debug(f"Final Results:\n\n{pformat(status_dict)}")
 
-        embed = BlueEmbed(
-            title="Sign-up Stats", description="RSC stats for next season sign-ups"
-        )
+        embed = BlueEmbed(title="Sign-up Stats", description="RSC stats for next season sign-ups")
         embed.add_field(name="Status", value="\n".join(status_dict.keys()), inline=True)
         embed.add_field(
             name="Count",

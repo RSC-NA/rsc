@@ -45,12 +45,8 @@ class IntentState(IntEnum):
 
 
 class PlayerInfoModal(discord.ui.Modal, title="Rocket League Trackers"):
-    rsc_name: TextInput = TextInput(
-        label="In-game Name", style=discord.TextStyle.short, required=True
-    )
-    links: TextInput = TextInput(
-        label="Tracker Links", style=discord.TextStyle.paragraph, required=True
-    )
+    rsc_name: TextInput = TextInput(label="In-game Name", style=discord.TextStyle.short, required=True)
+    links: TextInput = TextInput(label="Tracker Links", style=discord.TextStyle.paragraph, required=True)
 
     async def on_submit(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
@@ -63,8 +59,9 @@ class ReferrerSelect(discord.ui.Select):
             self.add_option(label=p, value=p)
 
     async def callback(self, interaction: discord.Interaction):
-        self.view.referrer = Referrer(self.values[0])  # type: ignore
-        await self.view.confirm(interaction)  # type: ignore
+        if self.view:
+            self.view.referrer = Referrer(self.values[0])
+        await self.view.confirm(interaction)
 
 
 class PlatformSelect(discord.ui.Select):
@@ -74,8 +71,9 @@ class PlatformSelect(discord.ui.Select):
             self.add_option(label=p, value=p)
 
     async def callback(self, interaction: discord.Interaction):
-        self.view.platform = Platform(self.values[0])  # type: ignore
-        await self.view.confirm(interaction)  # type: ignore
+        if self.view:
+            self.view.platform = Platform(self.values[0])
+        await self.view.confirm(interaction)
 
 
 class RegionSelect(discord.ui.Select):
@@ -85,8 +83,9 @@ class RegionSelect(discord.ui.Select):
             self.add_option(label=p.full_name.upper(), value=p)
 
     async def callback(self, interaction: discord.Interaction):
-        self.view.region = RegionPreference(self.values[0])  # type: ignore
-        await self.view.confirm(interaction)  # type: ignore
+        if self.view:
+            self.view.region = RegionPreference(self.values[0])
+        await self.view.confirm(interaction)
 
 
 class PlayerTypeSelect(discord.ui.Select):
@@ -96,8 +95,9 @@ class PlayerTypeSelect(discord.ui.Select):
             self.add_option(label=f"{p.value} PLAYER", value=p)
 
     async def callback(self, interaction: discord.Interaction):
-        self.view.player_type = PlayerType(self.values[0])  # type: ignore
-        await self.view.confirm(interaction)  # type: ignore
+        if self.view:
+            self.view.player_type = PlayerType(self.values[0])
+        await self.view.confirm(interaction)
 
 
 class IntentSelect(discord.ui.Select):
@@ -107,14 +107,13 @@ class IntentSelect(discord.ui.Select):
         self.add_option(label="Not returning next season", value="no")
 
     async def callback(self, interaction: discord.Interaction):
-        self.view.result = self.values[0] == "yes"  # type: ignore
+        if self.view:
+            self.view.result = self.values[0] == "yes"
         await interaction.response.defer(ephemeral=True)
 
 
 class IntentToPlayView(AuthorOnlyView):
-    def __init__(
-        self, interaction: discord.Interaction, timeout: float = DEFAULT_TIMEOUT
-    ):
+    def __init__(self, interaction: discord.Interaction, timeout: float = DEFAULT_TIMEOUT):
         super().__init__(interaction=interaction, timeout=timeout)
         self.state = IntentState.DECLARE
         self.result = False
@@ -154,9 +153,7 @@ class IntentToPlayView(AuthorOnlyView):
             title="Intent to Play",
             description="Please declare your intent for the next season of RSC below.",
         )
-        await self.interaction.response.send_message(
-            embed=embed, view=self, ephemeral=True
-        )
+        await self.interaction.response.send_message(embed=embed, view=self, ephemeral=True)
 
     async def confirm(self, interaction: discord.Interaction):
         """User pressed Yes Button"""
@@ -374,13 +371,17 @@ class SignupView(AuthorOnlyView):
         )
 
         if self.interaction.guild and self.interaction.guild.id == 809939294331994113:
-            embed.description = "We play our games on **Thursday** nights at **10PM**.\n\nBy selecting **Yes**, you are agreeing that you are available to play on those days and time."
+            embed.description = (
+                "We play our games on **Thursday** nights at **10PM**.\n\n"
+                "By selecting **Yes**, you are agreeing that you are available to play on those days and time."
+            )
         else:
-            embed.description = "We play our games on **Monday** and **Wednesday** at **10PM EST**.\n\nBy selecting **Yes**, you are agreeing that you are available to play on those days and time."
+            embed.description = (
+                "We play our games on **Monday** and **Wednesday** at **10PM EST**.\n\n"
+                "By selecting **Yes**, you are agreeing that you are available to play on those days and time."
+            )
         # First form, so we respond to the interaction instead of followup
-        await self.interaction.response.send_message(
-            embed=embed, view=self, ephemeral=True
-        )
+        await self.interaction.response.send_message(embed=embed, view=self, ephemeral=True)
 
 
 class PlayerInfoView(discord.ui.View):
@@ -398,9 +399,7 @@ class PlayerInfoView(discord.ui.View):
         self.franchise = franchise
 
     @discord.ui.button(label="Team Roster", style=discord.ButtonStyle.primary)
-    async def display_team_roster(
-        self, interaction: discord.Interaction, button: discord.ui.Button
-    ):
+    async def display_team_roster(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.defer(ephemeral=True)
 
         guild = interaction.guild
@@ -411,20 +410,14 @@ class PlayerInfoView(discord.ui.View):
             plist = await self.mixin.players(guild, team_name=self.team, limit=10)
             embed = await self.mixin.build_roster_embed(guild, plist)
         except RscException as exc:
-            return await interaction.followup.send(
-                embed=ApiExceptionErrorEmbed(exc), ephemeral=True
-            )
+            return await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc), ephemeral=True)
         except (ValueError, AttributeError) as exc:
-            return await interaction.followup.send(
-                embed=ExceptionErrorEmbed(exc_message=str(exc))
-            )
+            return await interaction.followup.send(embed=ExceptionErrorEmbed(exc_message=str(exc)))
 
         await interaction.followup.send(embed=embed, ephemeral=True)
 
     @discord.ui.button(label="Franchise Info", style=discord.ButtonStyle.primary)
-    async def display_franchise_teams(
-        self, interaction: discord.Interaction, button: discord.ui.Button
-    ):
+    async def display_franchise_teams(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.defer(ephemeral=True)
         guild = interaction.guild
         if not guild:
@@ -434,9 +427,7 @@ class PlayerInfoView(discord.ui.View):
         try:
             teams = await self.mixin.teams(guild, franchise=self.franchise)
         except RscException as exc:
-            return await interaction.followup.send(
-                embed=ApiExceptionErrorEmbed(exc), ephemeral=True
-            )
+            return await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc), ephemeral=True)
 
         if not teams:
             await interaction.followup.send(content="No results found.", ephemeral=True)
@@ -446,8 +437,6 @@ class PlayerInfoView(discord.ui.View):
         try:
             embed = await self.mixin.build_franchise_teams_embed(guild, teams)
         except (ValueError, AttributeError) as exc:
-            return await interaction.followup.send(
-                embed=ExceptionErrorEmbed(exc_message=str(exc))
-            )
+            return await interaction.followup.send(embed=ExceptionErrorEmbed(exc_message=str(exc)))
 
         await interaction.followup.send(embed=embed, ephemeral=True)

@@ -1,7 +1,6 @@
 import logging
 import re
 from datetime import datetime
-from typing import List
 
 import discord
 from discord import AppCommandOptionType
@@ -15,9 +14,7 @@ _ID_REGEX = re.compile(r"([0-9]{15,20})$")
 class MemberTransformer(Transformer):
     """Transform space delimited string of Discord IDs into List[discord.Member] (Guild Only)"""
 
-    async def transform(
-        self, interaction: discord.Interaction, value: str
-    ) -> List[discord.Member]:
+    async def transform(self, interaction: discord.Interaction, value: str) -> list[discord.Member]:
         if not interaction.guild:
             return []
 
@@ -53,12 +50,10 @@ class GreedyMemberTransformer(Transformer):
     """
 
     @staticmethod
-    def _get_id_match(argument):
+    def _get_id_match(argument: str) -> re.Match | None:
         return _ID_REGEX.match(argument)
 
-    async def query_member_named(
-        self, guild: discord.Guild, argument: str
-    ) -> discord.Member | None:
+    async def query_member_named(self, guild: discord.Guild, argument: str) -> discord.Member | None:
         cache = guild._state.member_cache_flags.joined
         username, _, discriminator = argument.rpartition("#")
 
@@ -66,9 +61,7 @@ class GreedyMemberTransformer(Transformer):
         if not username:
             discriminator, username = username, discriminator
 
-        if discriminator == "0" or (
-            len(discriminator) == 4 and discriminator.isdigit()
-        ):
+        if discriminator == "0" or (len(discriminator) == 4 and discriminator.isdigit()):
             lookup = username
             predicate = (  # noqa: E731
                 lambda m: m.name == username and m.discriminator == discriminator
@@ -76,17 +69,13 @@ class GreedyMemberTransformer(Transformer):
         else:
             lookup = argument
             predicate = (  # noqa: E731
-                lambda m: m.nick == argument
-                or m.global_name == argument
-                or m.name == argument
+                lambda m: argument in (m.nick, m.global_name, m.name)
             )
 
         members = await guild.query_members(lookup, limit=100, cache=cache)
         return discord.utils.find(predicate, members)
 
-    async def transform(
-        self, interaction: discord.Interaction, value: str
-    ) -> List[discord.Member]:
+    async def transform(self, interaction: discord.Interaction, value: str) -> list[discord.Member]:
         guild = interaction.guild
 
         if not guild:
@@ -105,15 +94,8 @@ class GreedyMemberTransformer(Transformer):
                 user_id = int(match.group(1))
                 if user_id:
                     result = guild.get_member(user_id)
-                    if not result and (
-                        interaction.message
-                        and isinstance(
-                            interaction.message.mentions, (discord.Member, discord.User)
-                        )
-                    ):
-                        result = discord.utils.get(
-                            interaction.message.mentions, id=user_id
-                        )
+                    if not result and (interaction.message and isinstance(interaction.message.mentions, discord.Member | discord.User)):
+                        result = discord.utils.get(interaction.message.mentions, id=user_id)
 
             if not isinstance(result, discord.Member):
                 result = await self.query_member_named(guild, m)

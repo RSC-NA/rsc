@@ -48,7 +48,7 @@ class ExtrasMixIn(RSCMixIn):
         "Signs point to yes",
         "Without a doubt",
         "Yes",
-        "Yes – definitely",
+        "Yes - definitely",
         "You may rely on it",
         "Reply hazy, try again",
         "Ask again later",
@@ -68,7 +68,7 @@ class ExtrasMixIn(RSCMixIn):
 
     # App Commands
 
-    @app_commands.command(name="8ball", description="Ask the magic 8 ball a question")  # type: ignore
+    @app_commands.command(name="8ball", description="Ask the magic 8 ball a question")  # type: ignore[type-var]
     @app_commands.guild_only
     async def _magic_8ball(self, interaction: discord.Interaction, question: str):
         """Ask 8 ball a question.
@@ -76,15 +76,11 @@ class ExtrasMixIn(RSCMixIn):
         Question must end with a question mark.
         """
         if question.endswith("?") and question != "?":
-            await interaction.response.send_message(
-                f"{interaction.user.mention}: **{question}**\n\n`{choice(self.ball)}`"
-            )
+            await interaction.response.send_message(f"{interaction.user.mention}: **{question}**\n\n`{choice(self.ball)}`")  # noqa: S311
         else:
-            await interaction.response.send_message(
-                "That doesn't look like a question."
-            )
+            await interaction.response.send_message("That doesn't look like a question.")
 
-    @app_commands.command(name="roll", description="Roll a random number")  # type: ignore
+    @app_commands.command(name="roll", description="Roll a random number")  # type: ignore[type-var]
     @app_commands.guild_only
     async def _roll_number(self, interaction: discord.Interaction, number: int = 100):
         """Roll a random number.
@@ -95,33 +91,23 @@ class ExtrasMixIn(RSCMixIn):
         """
         author = interaction.user
         if 1 < number <= MAX_ROLL:
-            n = randint(1, number)
-            await interaction.response.send_message(
-                f"{author.mention} :game_die: {n} :game_die:"
-            )
+            n = randint(1, number)  # noqa: S311
+            await interaction.response.send_message(f"{author.mention} :game_die: {n} :game_die:")
         elif number <= 1:
-            await interaction.response.send_message(
-                f"{author.mention} Maybe higher than 1? ;P"
-            )
+            await interaction.response.send_message(f"{author.mention} Maybe higher than 1? ;P")
         else:
-            await interaction.response.send_message(
-                f"{author.mention} Max allowed number is {MAX_ROLL}."
-            )
+            await interaction.response.send_message(f"{author.mention} Max allowed number is {MAX_ROLL}.")
 
-    @app_commands.command(name="rps", description="Rock, Paper, Scissors")  # type: ignore
+    @app_commands.command(name="rps", description="Rock, Paper, Scissors")  # type: ignore[type-var]
     @app_commands.guild_only
-    async def _rock_paper_scissors(
-        self, interaction: discord.Interaction, your_choice: RPSOptions
-    ):
+    async def _rock_paper_scissors(self, interaction: discord.Interaction, your_choice: RPSOptions):
         """Play Rock Paper Scissors."""
         author = interaction.user
         player_choice = RPSParser(your_choice.value).choice
         if not player_choice:
-            return await interaction.response.send_message(
-                "This isn't a valid option. Try rock, paper, or scissors"
-            )
+            return await interaction.response.send_message("This isn't a valid option. Try rock, paper, or scissors")
 
-        red_choice = choice((RPS.rock, RPS.paper, RPS.scissors))
+        red_choice = choice((RPS.rock, RPS.paper, RPS.scissors))  # noqa: S311
         cond = {
             (RPS.rock, RPS.paper): False,
             (RPS.rock, RPS.scissors): True,
@@ -131,20 +117,14 @@ class ExtrasMixIn(RSCMixIn):
             (RPS.scissors, RPS.paper): True,
         }
 
-        if red_choice == player_choice:
+        if red_choice == player_choice:  # noqa: SIM108
             outcome = None  # Tie
         else:
             outcome = cond[(player_choice, red_choice)]
 
         if outcome is True:
-            await interaction.response.send_message(
-                f"{player_choice.value} beats {red_choice.value} You win {author.mention}!"
-            )
+            await interaction.response.send_message(f"{player_choice.value} beats {red_choice.value} You win {author.mention}!")
         elif outcome is False:
-            await interaction.response.send_message(
-                f"{red_choice.value} beats {player_choice.value} You lose {author.mention}!"
-            )
+            await interaction.response.send_message(f"{red_choice.value} beats {player_choice.value} You lose {author.mention}!")
         else:
-            await interaction.response.send_message(
-                f"{player_choice.value} tied {red_choice.value} We're square {author.mention}!"
-            )
+            await interaction.response.send_message(f"{player_choice.value} tied {red_choice.value} We're square {author.mention}!")

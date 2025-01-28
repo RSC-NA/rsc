@@ -46,17 +46,13 @@ async def match_already_complete(match: Match) -> bool:
     if not match.results:
         return False
 
-    if not (
-        hasattr(match.results, "home_wins") and hasattr(match.results, "away_wins")
-    ):
+    if not (hasattr(match.results, "home_wins") and hasattr(match.results, "away_wins")):
         return False
 
     if not (match.results.home_wins and match.results.away_wins):
         return False
 
-    if (match.results.home_wins + match.results.away_wins) != match.num_games:
-        return False
-    return True
+    return match.results.home_wins + match.results.away_wins == match.num_games
 
 
 async def minimum_games_required(match: Match) -> int:
@@ -98,27 +94,15 @@ async def validate_team_names(match: Match, replay: ballchasing.models.Replay) -
 
     # Similarity check (Levenshtein ratio)
     # Check both team names since people do dumb things
-    home_lev1 = difflib.SequenceMatcher(
-        None, valid[0], replay.blue.name.lower()
-    ).ratio()
-    home_lev2 = difflib.SequenceMatcher(
-        None, valid[0], replay.orange.name.lower()
-    ).ratio()
+    home_lev1 = difflib.SequenceMatcher(None, valid[0], replay.blue.name.lower()).ratio()
+    home_lev2 = difflib.SequenceMatcher(None, valid[0], replay.orange.name.lower()).ratio()
 
-    away_lev1 = difflib.SequenceMatcher(
-        None, valid[1], replay.blue.name.lower()
-    ).ratio()
-    away_lev2 = difflib.SequenceMatcher(
-        None, valid[1], replay.orange.name.lower()
-    ).ratio()
+    away_lev1 = difflib.SequenceMatcher(None, valid[1], replay.blue.name.lower()).ratio()
+    away_lev2 = difflib.SequenceMatcher(None, valid[1], replay.orange.name.lower()).ratio()
 
-    log.debug(
-        f"Levehstein Ratios. Home: {home_lev1:.3f} {home_lev2:.3f} Away: {away_lev1:.3f} {away_lev2:.3f}"
-    )
+    log.debug(f"Levehstein Ratios. Home: {home_lev1:.3f} {home_lev2:.3f} Away: {away_lev1:.3f} {away_lev2:.3f}")
     lev_threshold = 0.9
-    if (home_lev1 > lev_threshold or home_lev2 > lev_threshold) and (
-        away_lev1 > lev_threshold or away_lev2 > lev_threshold
-    ):
+    if (home_lev1 > lev_threshold or home_lev2 > lev_threshold) and (away_lev1 > lev_threshold or away_lev2 > lev_threshold):
         log.debug("Team names are close enough to threshold.")
         return True
 

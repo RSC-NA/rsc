@@ -1,5 +1,5 @@
 import logging
-from typing import Iterator
+from collections.abc import Iterator
 
 from langchain_core.document_loaders import BaseLoader
 from langchain_core.documents import Document
@@ -30,7 +30,7 @@ FA_INPUT = """
 {name} is a player in RSC (Rocket Soccar Confederation) and is currently a Free Agent. Free Agent means he is not currently rostered on a team. However, {name} is available to be signed by a team!
 
 {name} is currently in the {tier} tier.
-"""
+"""  # noqa: E501
 
 PERMFA_INPUT = """
 {name} is a player in RSC (Rocket Soccar Confederation) and is currently a Permanent Free Agent (PermFA).
@@ -73,9 +73,7 @@ class PlayerDocumentLoader(BaseLoader):
                         and p.tier
                         and p.tier.name
                     ):
-                        log.warning(
-                            f"Skipping player {p.id}. Missing required data for LLM input."
-                        )
+                        log.warning(f"Skipping player {p.id}. Missing required data for LLM input.")
                         continue
 
                     input = PLAYER_INPUT.format(
@@ -103,9 +101,7 @@ class PlayerDocumentLoader(BaseLoader):
                         and p.tier
                         and p.tier.name
                     ):
-                        log.warning(
-                            f"Skipping player {p.id}. Missing required data for LLM input."
-                        )
+                        log.warning(f"Skipping player {p.id}. Missing required data for LLM input.")
                         continue
 
                     input = IR_INPUT.format(
@@ -122,9 +118,7 @@ class PlayerDocumentLoader(BaseLoader):
                     )
                 case Status.FREE_AGENT:
                     if not (p.id and p.player.name and p.tier and p.tier.name):
-                        log.warning(
-                            f"Skipping player {p.id}. Missing required data for LLM input."
-                        )
+                        log.warning(f"Skipping player {p.id}. Missing required data for LLM input.")
                         continue
 
                     input = FA_INPUT.format(
@@ -137,9 +131,7 @@ class PlayerDocumentLoader(BaseLoader):
                     )
                 case Status.PERM_FA:
                     if not (p.player.name and p.tier and p.tier.name):
-                        log.warning(
-                            f"Skipping player {p.id}. Missing required data for LLM input."
-                        )
+                        log.warning(f"Skipping player {p.id}. Missing required data for LLM input.")
                         continue
 
                     input = PERMFA_INPUT.format(
@@ -152,15 +144,11 @@ class PlayerDocumentLoader(BaseLoader):
                     )
                 case Status.DRAFT_ELIGIBLE:
                     if not (p.id and p.player.name):
-                        log.warning(
-                            f"Skipping player {p.id}. Missing required data for LLM input."
-                        )
+                        log.warning(f"Skipping player {p.id}. Missing required data for LLM input.")
                         continue
 
                     if p.tier and p.tier.name:
-                        tier_fmt = (
-                            f"{p.player.name} is currently in the {p.tier.name} tier."
-                        )
+                        tier_fmt = f"{p.player.name} is currently in the {p.tier.name} tier."
                     else:
                         tier_fmt = f"{p.player.name} has not been assigned a tier yet."
 

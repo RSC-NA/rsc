@@ -1,5 +1,6 @@
 import json
 import logging
+from typing import TYPE_CHECKING
 
 import discord
 from pydantic import ValidationError
@@ -7,7 +8,6 @@ from redbot.core import app_commands
 
 from rsc.admin import AdminMixIn
 from rsc.admin.modals import BulkMatchModal
-from rsc.admin.models import CreateMatchData
 from rsc.embeds import (
     ApiExceptionErrorEmbed,
     BlueEmbed,
@@ -20,6 +20,9 @@ from rsc.enums import MatchFormat, MatchType, PostSeasonType
 from rsc.exceptions import RscException
 from rsc.logs import GuildLogAdapter
 from rsc.teams import TeamMixIn
+
+if TYPE_CHECKING:
+    from rsc.admin.models import CreateMatchData
 
 logger = logging.getLogger("red.rsc.admin.match")
 log = GuildLogAdapter(logger)
@@ -39,10 +42,8 @@ class AdminMatchMixIn(AdminMixIn):
         default_permissions=discord.Permissions(manage_guild=True),
     )
 
-    @_matches.command(name="create", description="Create a regular season RSC match")  # type: ignore
-    @app_commands.autocomplete(
-        home_team=TeamMixIn.teams_autocomplete, away_team=TeamMixIn.teams_autocomplete
-    )  # type: ignore
+    @_matches.command(name="create", description="Create a regular season RSC match")  # type: ignore[type-var]
+    @app_commands.autocomplete(home_team=TeamMixIn.teams_autocomplete, away_team=TeamMixIn.teams_autocomplete)  # type: ignore[type-var]
     async def _matches_create_cmd(
         self,
         interaction: discord.Interaction,
@@ -66,9 +67,7 @@ class AdminMatchMixIn(AdminMixIn):
             alist = await self.teams(guild, name=away_team)
             log.debug(f"Away Team Search: {alist}")
         except RscException as exc:
-            return await interaction.followup.send(
-                embed=ApiExceptionErrorEmbed(exc), ephemeral=True
-            )
+            return await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc), ephemeral=True)
 
         # Validate results
         hteam = None
@@ -82,11 +81,7 @@ class AdminMatchMixIn(AdminMixIn):
 
         # Home team not found
         if not hteam:
-            return await interaction.followup.send(
-                embed=ErrorEmbed(
-                    f"No teams found or more than one result for **{home_team}**"
-                )
-            )
+            return await interaction.followup.send(embed=ErrorEmbed(f"No teams found or more than one result for **{home_team}**"))
 
         ateam = None
         if len(alist) > 1:
@@ -100,33 +95,21 @@ class AdminMatchMixIn(AdminMixIn):
         # Away team not found
         if not ateam:
             return await interaction.followup.send(
-                embed=ErrorEmbed(
-                    description=f"No teams found or more than one result for **{away_team}**"
-                )
+                embed=ErrorEmbed(description=f"No teams found or more than one result for **{away_team}**")
             )
 
         # Validate teams have an ID
         if not hteam.id:
-            return await interaction.followup.send(
-                embed=ErrorEmbed(
-                    description=f"**{home_team}** has no team ID in the API."
-                )
-            )
+            return await interaction.followup.send(embed=ErrorEmbed(description=f"**{home_team}** has no team ID in the API."))
 
         if not ateam.id:
-            return await interaction.followup.send(
-                embed=ErrorEmbed(
-                    description=f"**{away_team}** has no team ID in the API."
-                )
-            )
+            return await interaction.followup.send(embed=ErrorEmbed(description=f"**{away_team}** has no team ID in the API."))
 
         # Teams must be in the same tier
         try:
             if not await self.teams_in_same_tier(teams=[hteam, ateam]):
                 return await interaction.followup.send(
-                    embed=ErrorEmbed(
-                        description=f"**{home_team}** and **{away_team}** are not in the same tier."
-                    )
+                    embed=ErrorEmbed(description=f"**{home_team}** and **{away_team}** are not in the same tier.")
                 )
         except ValueError as exc:
             return await interaction.followup.send(content=str(exc), ephemeral=True)
@@ -143,9 +126,7 @@ class AdminMatchMixIn(AdminMixIn):
             )
             log.debug(f"Match Creation Result: {result}")
         except RscException as exc:
-            return await interaction.followup.send(
-                embed=ApiExceptionErrorEmbed(exc), ephemeral=True
-            )
+            return await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc), ephemeral=True)
 
         embed = BlueEmbed(title="Match Created")
         embed.add_field(name="Match Type", value=str(match_type), inline=True)
@@ -157,10 +138,8 @@ class AdminMatchMixIn(AdminMixIn):
         await interaction.followup.send(embed=embed)
 
     # Matches Group Commands
-    @_matches.command(name="playoff", description="Create an RSC playoff match")  # type: ignore
-    @app_commands.autocomplete(
-        home_team=TeamMixIn.teams_autocomplete, away_team=TeamMixIn.teams_autocomplete
-    )  # type: ignore
+    @_matches.command(name="playoff", description="Create an RSC playoff match")  # type: ignore[type-var]
+    @app_commands.autocomplete(home_team=TeamMixIn.teams_autocomplete, away_team=TeamMixIn.teams_autocomplete)  # type: ignore[type-var]
     async def _matches_playoff_cmd(
         self,
         interaction: discord.Interaction,
@@ -183,9 +162,7 @@ class AdminMatchMixIn(AdminMixIn):
             alist = await self.teams(guild, name=away_team)
             log.debug(f"Away Team Search: {alist}")
         except RscException as exc:
-            return await interaction.followup.send(
-                embed=ApiExceptionErrorEmbed(exc), ephemeral=True
-            )
+            return await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc), ephemeral=True)
 
         # Validate results
         hteam = None
@@ -199,11 +176,7 @@ class AdminMatchMixIn(AdminMixIn):
 
         # Home team not found
         if not hteam:
-            return await interaction.followup.send(
-                embed=ErrorEmbed(
-                    f"No teams found or more than one result for **{home_team}**"
-                )
-            )
+            return await interaction.followup.send(embed=ErrorEmbed(f"No teams found or more than one result for **{home_team}**"))
 
         ateam = None
         if len(alist) > 1:
@@ -217,33 +190,21 @@ class AdminMatchMixIn(AdminMixIn):
         # Away team not found
         if not ateam:
             return await interaction.followup.send(
-                embed=ErrorEmbed(
-                    description=f"No teams found or more than one result for **{away_team}**"
-                )
+                embed=ErrorEmbed(description=f"No teams found or more than one result for **{away_team}**")
             )
 
         # Validate teams have an ID
         if not hteam.id:
-            return await interaction.followup.send(
-                embed=ErrorEmbed(
-                    description=f"**{home_team}** has no team ID in the API."
-                )
-            )
+            return await interaction.followup.send(embed=ErrorEmbed(description=f"**{home_team}** has no team ID in the API."))
 
         if not ateam.id:
-            return await interaction.followup.send(
-                embed=ErrorEmbed(
-                    description=f"**{away_team}** has no team ID in the API."
-                )
-            )
+            return await interaction.followup.send(embed=ErrorEmbed(description=f"**{away_team}** has no team ID in the API."))
 
         # Teams must be in the same tier
         try:
             if not await self.teams_in_same_tier(teams=[hteam, ateam]):
                 return await interaction.followup.send(
-                    embed=ErrorEmbed(
-                        description=f"**{home_team}** and **{away_team}** are not in the same tier."
-                    )
+                    embed=ErrorEmbed(description=f"**{home_team}** and **{away_team}** are not in the same tier.")
                 )
         except ValueError as exc:
             return await interaction.followup.send(content=str(exc), ephemeral=True)
@@ -260,9 +221,7 @@ class AdminMatchMixIn(AdminMixIn):
             )
             log.debug(f"Match Creation Result: {result}")
         except RscException as exc:
-            return await interaction.followup.send(
-                embed=ApiExceptionErrorEmbed(exc), ephemeral=True
-            )
+            return await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc), ephemeral=True)
 
         embed = BlueEmbed(title="Playoff Match Created")
         embed.add_field(name="Match Type", value=str(MatchType.POSTSEASON), inline=True)
@@ -274,7 +233,7 @@ class AdminMatchMixIn(AdminMixIn):
         await interaction.followup.send(embed=embed)
 
     # Matches Group Commands
-    @_matches.command(name="bulk", description="Create bulk RSC matches")  # type: ignore
+    @_matches.command(name="bulk", description="Create bulk RSC matches")  # type: ignore[type-var]
     async def _matches_bulk_create_cmd(self, interaction: discord.Interaction):
         guild = interaction.guild
         if not guild:
@@ -287,9 +246,7 @@ class AdminMatchMixIn(AdminMixIn):
 
         # Loading embed
         await bulk_modal.interaction.response.send_message(
-            embed=YellowEmbed(
-                title="Bulk Match Creation", description="Processing match data..."
-            )
+            embed=YellowEmbed(title="Bulk Match Creation", description="Processing match data...")
         )
 
         # Parse JSON
@@ -297,9 +254,7 @@ class AdminMatchMixIn(AdminMixIn):
             log.debug("Parsing match JSON")
             matches = await bulk_modal.parse_matches()
         except (json.JSONDecodeError, ValidationError) as exc:
-            return await bulk_modal.interaction.edit_original_response(
-                embed=ExceptionErrorEmbed(exc_message=str(exc))
-            )
+            return await bulk_modal.interaction.edit_original_response(embed=ExceptionErrorEmbed(exc_message=str(exc)))
 
         # Create Match
         success: list[CreateMatchData] = []
@@ -326,7 +281,7 @@ class AdminMatchMixIn(AdminMixIn):
             except (RscException, ValidationError) as exc:
                 failembed = RedEmbed(
                     title="Bulk Match Error",
-                    description=f"Exception:\n```{str(exc)}```\n\nThe following matches succeeded.",
+                    description=f"Exception:\n```{exc!s}```\n\nThe following matches succeeded.",
                 )
                 failembed.add_field(
                     name="Day",
@@ -343,9 +298,7 @@ class AdminMatchMixIn(AdminMixIn):
                     value="\n".join([s.away_team for s in success]),
                     inline=True,
                 )
-                return await bulk_modal.interaction.edit_original_response(
-                    embed=failembed
-                )
+                return await bulk_modal.interaction.edit_original_response(embed=failembed)
 
         embed = BlueEmbed(
             title="Bulk Matches Added",

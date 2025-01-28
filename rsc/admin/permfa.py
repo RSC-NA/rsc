@@ -60,7 +60,7 @@
 
 #     # Commands
 
-#     @_permfa.command(name="convert", description="Convert PermFAs in the API and discord")  # type: ignore
+#     @_permfa.command(name="convert", description="Convert PermFAs in the API and discord")  # type: ignore[type-var]
 #     async def _admin_convert_permfa_cmd(self, interaction: discord.Interaction):
 #         guild = interaction.guild
 #         if not (guild and isinstance(interaction.user, discord.Member)):
@@ -139,11 +139,11 @@
 #         embed.add_field(
 #             name="What is a Permanent Free Agent?",
 #             value="""
-#             If you missed the draft or just don't have time to be a full player in RSC this season, this is a great way to still be involved, but with no commitment!
+#             If you missed the draft or just don't have time to be a full player in RSC this season, this is a great way to still be involved, but with no commitment!  # noqa: E501
 
-#             Permanent Free Agents (PermFAs) can **check in on match nights** like all other Free Agents, and **substitute in for a missing player as needed**. However, they **may not be rostered** by a team full-time.
+#             Permanent Free Agents (PermFAs) can **check in on match nights** like all other Free Agents, and **substitute in for a missing player as needed**. However, they **may not be rostered** by a team full-time.  # noqa: E501
 
-#             As the season goes on, if the free agent pool in a tier runs low, we will select PermFAs to convert to **full time free agency on a first come**, first serve basis, as long as the player wants to convert.
+#             As the season goes on, if the free agent pool in a tier runs low, we will select PermFAs to convert to **full time free agency on a first come**, first serve basis, as long as the player wants to convert.  # noqa: E501
 #             """,
 #             inline=False,
 #         )
@@ -153,7 +153,7 @@
 #             value="""
 #             Matches are played at **10PM EST** and scrims begin at **9PM EST** on **Mondays and Wednesdays**, excluding holidays.
 
-#             In order to check in and mark yourself available as a sub, all you need to do is head over to <#436741172560527361> and use the **bot command on an valid match day**:
+#             In order to check in and mark yourself available as a sub, all you need to do is head over to <#436741172560527361> and use the **bot command on an valid match day**:  # noqa: E501
 
 #             `/freeagent checkin`
 

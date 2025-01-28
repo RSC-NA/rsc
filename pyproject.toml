@@ -1,3 +1,8 @@
+[project]
+name = "RSC-Discord-Bot"
+version = "1.0.0"
+requires-python = ">3.11"
+
 [tool.mypy]
 check_untyped_defs = true
 mypy_path = ["/home/xentrick/dev/python-replay-parser"]
@@ -6,13 +11,104 @@ mypy_path = ["/home/xentrick/dev/python-replay-parser"]
 profile = "black"
 
 [tool.ruff]
-# line-length = 200
+line-length = 140
 indent-width = 4
 exclude = ["scripts/", "data/"]
 
 [tool.ruff.lint]
-select = ["E", "F", "B", "C4", "SIM", "PTH", "TID", "ASYNC"]
-ignore = ["E501", "B904", "SIM103", "SIM108"]
+select = [
+    "ANN",   # annotations
+    "ASYNC", # async
+    "B",     # bugbear
+    "C4",    # comprehensions
+    "COM",   # trailing comma
+    "DJ",    # Django
+    "DTZ",   # naive datetime
+    "E",     # style errors
+    "EXE",   # shebang
+    "F",     # flakes
+    "FLY",   # string formatting
+    "FURB",  # refurbishing
+    "G",     # logging format
+    # "I", # import sorting
+    "INT",  # gettext
+    "ISC",  # string concatenation
+    "LOG",  # logging
+    "N",    # naming
+    "PERF", # performance
+    "PGH",  # pygrep-hooks
+    "PIE",  # miscellaneous
+    "PL",   # pylint
+    "PTH",  # path
+    "PYI",  # typing stubs
+    "Q",    # quotes
+    "RSE",  # raise
+    "RUF",  # Ruff
+    "S",    # security
+    "SLOT", # __slots__
+    "SIM",  # simplify
+    "T10",  # debugger
+    "TC",   # type-checking
+    "TID",  # tidy imports
+    "UP",   # upgrade
+    "W",    # style warnings
+    "YTT",  # sys.version
+]
+ignore = [
+    "ANN002", # Missing type annotation for `*args`
+    "ANN003", # Missing type annotation for `**kwargs`
+    "ANN201", # Missing return type annotation
+    "ANN202", # Missing return type annotation
+    "ANN204", # Missing return type annotation for special method `__init__`
+    # "ANN401", # Dynamically typed expressions (typing.Any) are disallowed
+    # "B007", # Loop control variable not used within the loop body
+    "B904", # Within an except clause, raise exceptions with raise ... from err or raise ... from None to distinguish them from errors in exception handling
+    # "C408", # Unnecessary `dict` call (rewrite as a literal)
+    "COM812", # Trailing comma missing
+    # "DJ001", # Avoid using `null=True` on string-based fields
+    "DJ008", # Model does not define `__str__` method
+    # "E402", # Module level import not at top of file
+    # "E501", # Line too long
+    # "E731", # Do not assign a lambda expression, use a def
+    "G004", # Logging statement uses f-string
+    # "N802", # Function name should be lowercase
+    "N806", # Variable in function should be lowercase
+    # "PERF203", # `try`-`except` within a loop incurs performance overhead
+    "PLC0414", # Import alias does not rename original package
+    # "PLC1901", # `s == ""` can be simplified to `not s` as an empty string is falsey
+    "PLR0911", # Too many return statements
+    "PLR0912", # Too many branches
+    "PLR0913", # Too many arguments to function call
+    "PLR0915", # Too many statements
+    "PLR2004", # Magic value used in comparison
+    # "PLR5501", # Consider using `elif` instead of `else` then `if` to remove one indentation level
+    # "PLW0603", # Using the global statement is discouraged
+    "PLW2901", # Outer for loop variable overwritten by inner for loop target
+    # "RUF001", # String contains ambiguous unicode character
+    # "RUF002", # Docstring contains ambiguous unicode character
+    # "RUF003", # Comment contains ambiguous unicode character
+    "RUF012", # Mutable class attributes should be annotated with `typing.ClassVar`
+    # "S101", # Use of `assert` detected
+    "S105", # Possible hardcoded password
+    # "S106", # Possible hardcoded password
+    # "S107", # Possible hardcoded password
+    # "S110", # `try`-`except`-`pass` detected, consider logging the exception
+    # "S113", # Probable use of requests call without timeout
+    # "S310", # Audit URL open for permitted schemes. Allowing use of `file:` or custom schemes is often unexpected.
+    # "S311", # Standard pseudo-random generators are not suitable for cryptographic purposes
+    "S324", # Probable use of insecure hash functions in `hashlib`
+    # "S603", # `subprocess` call: check for execution of untrusted input
+    # "S606", # Starting a process without a shell
+    # "S607", # Starting a process with a partial executable path
+    # "SIM103", # Return the condition directly
+    # "SIM108", # Use ternary operator `action = "[commented]" if action == "created" else f"{action} a [comment]"` instead of if-else-block
+    # "SIM114", # Combine `if` branches using logical `or` operator
+    "SIM105", # Use `contextlib.suppress(ValueError)` instead of `try`-`except`-`pass`
+    # "SIM401", # Use `d.get(key, default)` instead of an `if` block
+    # "TC001", # Move application import into a type-checking block
+    # "TC002", # Move third-party import into a type-checking block
+    # "TC003", # Move standard library import into a type-checking block
+]
 
 [tool.ruff.format]
 # Like Black, use double quotes for strings.

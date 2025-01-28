@@ -42,8 +42,8 @@ class InactiveCheckView(discord.ui.View):
     def __init__(
         self,
         guild: discord.Guild,
-        league_id=int,
-        api_conf=Configuration,
+        league_id: int,
+        api_conf: Configuration,
         timeout: float | None = None,
     ):
         super().__init__(timeout=timeout)
@@ -66,9 +66,7 @@ class InactiveCheckView(discord.ui.View):
             log.debug(f"Active Result: {result}")
         except RscException as exc:
             log.warning(f"[{self._guild.name}] Activity Check Error: {exc.reason}")
-            return await interaction.followup.send(
-                embed=ApiExceptionErrorEmbed(exc), ephemeral=True
-            )
+            return await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc), ephemeral=True)
 
         await interaction.followup.send(
             embed=GreenEmbed(
@@ -83,9 +81,7 @@ class InactiveCheckView(discord.ui.View):
         style=discord.ButtonStyle.red,
         custom_id="inactive_check_view:red",
     )
-    async def withdraw(
-        self, interaction: discord.Interaction, button: discord.ui.Button
-    ):
+    async def withdraw(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not isinstance(interaction.user, discord.Member):
             return
 
@@ -95,21 +91,19 @@ class InactiveCheckView(discord.ui.View):
             log.debug(f"Active Result: {result}")
         except RscException as exc:
             log.warning(f"[{self._guild.name}] Activity Check Error: {exc.reason}")
-            return await interaction.followup.send(
-                embed=ApiExceptionErrorEmbed(exc), ephemeral=True
-            )
+            return await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc), ephemeral=True)
 
         await interaction.followup.send(
             embed=RedEmbed(
                 title="Marked In-Active",
-                description="You have declared yourself as **inactive** for the RSC season.\n\n**You will be removed from playing this season.**",
+                description=(
+                    "You have declared yourself as **inactive** for the RSC season.\n\n**You will be removed from playing this season.**"
+                ),
             ),
             ephemeral=True,
         )
 
-    async def call_api(
-        self, player: discord.Member, returning_status: bool
-    ) -> ActivityCheck:
+    async def call_api(self, player: discord.Member, returning_status: bool) -> ActivityCheck:
         async with ApiClient(self._api_conf) as client:
             api = MembersApi(client)
             data = PlayerActivityCheckSchema(
@@ -141,13 +135,10 @@ class ConfirmSyncView(AuthorOnlyView):
         prompt = OrangeEmbed(
             title="API Sync",
             description=(
-                "You are about to sync data from the API directly into the discord server.\n\n"
-                "**Are you sure you want to do this?**"
+                "You are about to sync data from the API directly into the discord server.\n\n**Are you sure you want to do this?**"
             ),
         )
-        await self.interaction.response.send_message(
-            embed=prompt, view=self, ephemeral=True
-        )
+        await self.interaction.response.send_message(embed=prompt, view=self, ephemeral=True)
 
     async def confirm(self, interaction: discord.Interaction):
         self.result = True
@@ -199,12 +190,8 @@ class RebrandFranchiseView(AuthorOnlyView):
                 f"**Prefix**: {self.prefix}"
             ),
         )
-        embed.add_field(
-            name="Tier", value="\n".join([t["tier"] for t in self.teams]), inline=True
-        )
-        embed.add_field(
-            name="Teams", value="\n".join(t["name"] for t in self.teams), inline=True
-        )
+        embed.add_field(name="Tier", value="\n".join([t["tier"] for t in self.teams]), inline=True)
+        embed.add_field(name="Teams", value="\n".join(t["name"] for t in self.teams), inline=True)
         await self.interaction.response.send_message(
             embed=embed,
             view=self,
@@ -396,7 +383,6 @@ class PermFAConsentView(discord.ui.View):
         #     view=None,
         # )
         # self.stop()
-        pass
 
     async def decline(self, interaction: discord.Interaction):
         log.debug("Player declined to PermFA")
@@ -409,4 +395,3 @@ class PermFAConsentView(discord.ui.View):
         #     view=None,
         # )
         # self.stop()
-        pass

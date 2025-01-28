@@ -1,7 +1,7 @@
 import logging
+from collections.abc import Sequence
 from io import BytesIO
 from pathlib import Path
-from typing import Sequence
 
 import ballchasing
 import discord
@@ -58,9 +58,7 @@ async def parse_replays(
     return parsed_replays
 
 
-async def duplicate_player_scores(
-    parsed_replay: ParsedReplay, bc_replay: ballchasing.models.Replay
-) -> bool:
+async def duplicate_player_scores(parsed_replay: ParsedReplay, bc_replay: ballchasing.models.Replay) -> bool:
     parsed_players = parsed_replay.player_stats
     if not parsed_players:
         raise ValueError("A replay is missing player data.")
@@ -115,41 +113,31 @@ async def duplicate_player_scores(
 
                 # Check for matching score
                 pplayer_score = pplayer.get("Score")
-                log.debug(
-                    f"PPlayer Score: {pplayer_score} BC Score: {blueplayer.stats.core.score}"
-                )
+                log.debug(f"PPlayer Score: {pplayer_score} BC Score: {blueplayer.stats.core.score}")
                 if pplayer_score != blueplayer.stats.core.score:
                     continue
 
                 # Check for matching goals
                 pplayer_goals = pplayer.get("Goals")
-                log.debug(
-                    f"PPlayer Goals: {pplayer_goals} BC Goals: {blueplayer.stats.core.goals}"
-                )
+                log.debug(f"PPlayer Goals: {pplayer_goals} BC Goals: {blueplayer.stats.core.goals}")
                 if pplayer_goals != blueplayer.stats.core.goals:
                     continue
 
                 # Check for matching assists
                 pplayer_assists = pplayer.get("Assists")
-                log.debug(
-                    f"PPlayer Assists: {pplayer_assists} BC Assists: {blueplayer.stats.core.assists}"
-                )
+                log.debug(f"PPlayer Assists: {pplayer_assists} BC Assists: {blueplayer.stats.core.assists}")
                 if pplayer_assists != blueplayer.stats.core.assists:
                     continue
 
                 # Check for matching saves
                 pplayer_saves = pplayer.get("Saves")
-                log.debug(
-                    f"PPlayer Saves: {pplayer_saves} BC Saves: {blueplayer.stats.core.saves}"
-                )
+                log.debug(f"PPlayer Saves: {pplayer_saves} BC Saves: {blueplayer.stats.core.saves}")
                 if pplayer_saves != blueplayer.stats.core.saves:
                     continue
 
                 # Check for matching shots
                 pplayer_shots = pplayer.get("Shots")
-                log.debug(
-                    f"PPlayer Shots: {pplayer_shots} BC Shots: {blueplayer.stats.core.shots}"
-                )
+                log.debug(f"PPlayer Shots: {pplayer_shots} BC Shots: {blueplayer.stats.core.shots}")
                 if pplayer_shots != blueplayer.stats.core.shots:
                     continue
 
@@ -177,41 +165,31 @@ async def duplicate_player_scores(
 
                 # Check for matching score
                 pplayer_score = pplayer.get("Score")
-                log.debug(
-                    f"PPlayer Score: {pplayer_score} BC Score: {orangeplayer.stats.core.score}"
-                )
+                log.debug(f"PPlayer Score: {pplayer_score} BC Score: {orangeplayer.stats.core.score}")
                 if pplayer_score != orangeplayer.stats.core.score:
                     continue
 
                 # Check for matching goals
                 pplayer_goals = pplayer.get("Goals")
-                log.debug(
-                    f"PPlayer Goals: {pplayer_goals} BC Goals: {orangeplayer.stats.core.goals}"
-                )
+                log.debug(f"PPlayer Goals: {pplayer_goals} BC Goals: {orangeplayer.stats.core.goals}")
                 if pplayer_goals != orangeplayer.stats.core.goals:
                     continue
 
                 # Check for matching assists
                 pplayer_assists = pplayer.get("Assists")
-                log.debug(
-                    f"PPlayer Assists: {pplayer_assists} BC Assists: {orangeplayer.stats.core.assists}"
-                )
+                log.debug(f"PPlayer Assists: {pplayer_assists} BC Assists: {orangeplayer.stats.core.assists}")
                 if pplayer_assists != orangeplayer.stats.core.assists:
                     continue
 
                 # Check for matching saves
                 pplayer_saves = pplayer.get("Saves")
-                log.debug(
-                    f"PPlayer Saves: {pplayer_saves} BC Saves: {orangeplayer.stats.core.saves}"
-                )
+                log.debug(f"PPlayer Saves: {pplayer_saves} BC Saves: {orangeplayer.stats.core.saves}")
                 if pplayer_saves != orangeplayer.stats.core.saves:
                     continue
 
                 # Check for matching shots
                 pplayer_shots = pplayer.get("Shots")
-                log.debug(
-                    f"PPlayer Shots: {pplayer_shots} BC Shots: {orangeplayer.stats.core.shots}"
-                )
+                log.debug(f"PPlayer Shots: {pplayer_shots} BC Shots: {orangeplayer.stats.core.shots}")
                 if pplayer_shots != orangeplayer.stats.core.shots:
                     continue
 
@@ -238,7 +216,7 @@ async def replay_group_collisions(
 
     collisions: list[discord.Attachment | str | bytes] = []
     for bcreplay in bc_replays:
-        log.debug(f"{'='*20} BC Replay - {bcreplay.id} {'='*20}")
+        log.debug(f"{'=' * 20} BC Replay - {bcreplay.id} {'=' * 20}")
         for identifier, preplay in parsed_replays.items():
             # Check map name
             if bcreplay.map_code and preplay.map_code:
@@ -246,9 +224,7 @@ async def replay_group_collisions(
                 if bcreplay.map_code.lower() != preplay.map_code.lower():
                     continue
 
-            if not await duplicate_player_scores(
-                parsed_replay=preplay, bc_replay=bcreplay
-            ):
+            if not await duplicate_player_scores(parsed_replay=preplay, bc_replay=bcreplay):
                 continue
 
             # Found collision. Track and move on

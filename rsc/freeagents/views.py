@@ -23,15 +23,11 @@ class CheckInView(AuthorOnlyView):
     async def prompt(self):
         prompt = discord.Embed(
             title="Check In",
-            description=(
-                "By checking in you are letting GMs know that you are available to play."
-            ),
+            description=("By checking in you are letting GMs know that you are available to play."),
             color=self.color,
         )
         prompt.add_field(name="Tier", value=self.tier, inline=False)
-        await self.interaction.response.send_message(
-            embed=prompt, view=self, ephemeral=True
-        )
+        await self.interaction.response.send_message(embed=prompt, view=self, ephemeral=True)
         await self.wait()
 
     async def confirm(self, interaction: discord.Interaction):
@@ -82,9 +78,7 @@ class CheckOutView(AuthorOnlyView):
             color=self.color,
         )
         prompt.add_field(name="Tier", value=self.tier, inline=False)
-        await self.interaction.response.send_message(
-            embed=prompt, view=self, ephemeral=True
-        )
+        await self.interaction.response.send_message(embed=prompt, view=self, ephemeral=True)
         await self.wait()
 
     async def confirm(self, interaction: discord.Interaction):
@@ -92,10 +86,7 @@ class CheckOutView(AuthorOnlyView):
         await self.interaction.edit_original_response(
             embed=SuccessEmbed(
                 title="Checked Out",
-                description=(
-                    "You have been removed from the available free agent list.\n\n"
-                    "Thank you for updating your availability."
-                ),
+                description=("You have been removed from the available free agent list.\n\nThank you for updating your availability."),
             ),
             view=None,
         )

@@ -43,9 +43,7 @@ class BetterEmbed(discord.Embed):
                 if len(field.value) > EmbedLimits.Field.Value:
                     return False
 
-        if c > EmbedLimits.Total:
-            return False
-        return True
+        return not c > EmbedLimits.Total
 
     def total_field_chars(self) -> int:
         c = 0
@@ -102,10 +100,7 @@ class BetterEmbed(discord.Embed):
                 return True
 
         # Total Characters
-        if total_chars > EmbedLimits.Total:
-            return True
-
-        return False
+        return total_chars > EmbedLimits.Total
 
 
 class BlueEmbed(BetterEmbed):
@@ -148,9 +143,7 @@ class LoadingEmbed(YellowEmbed):
 
     def __init__(self, **kwargs):
         title = kwargs.pop("title", "Processing")
-        super().__init__(
-            title=title, description="Working on your request. Please wait...", **kwargs
-        )
+        super().__init__(title=title, description="Working on your request. Please wait...", **kwargs)
 
 
 class SuccessEmbed(GreenEmbed):

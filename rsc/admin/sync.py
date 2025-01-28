@@ -1,11 +1,8 @@
 import logging
-from typing import MutableMapping
+from typing import TYPE_CHECKING
 
 import discord
 from redbot.core import app_commands
-from rscapi.models.league_player import LeaguePlayer
-from rscapi.models.member import Member as RSCMember
-from rscapi.models.tier import Tier
 
 from rsc import const
 from rsc.admin import AdminMixIn
@@ -22,6 +19,13 @@ from rsc.transactions.roles import (
 )
 from rsc.utils import images, utils
 from rsc.views import CancelView
+
+if TYPE_CHECKING:
+    from collections.abc import MutableMapping
+
+    from rscapi.models.league_player import LeaguePlayer
+    from rscapi.models.member import Member as RSCMember
+    from rscapi.models.tier import Tier
 
 logger = logging.getLogger("red.rsc.admin.sync")
 log = GuildLogAdapter(logger)
@@ -41,7 +45,7 @@ class AdminSyncMixIn(AdminMixIn):
         default_permissions=discord.Permissions(manage_guild=True),
     )
 
-    @_sync.command(  # type: ignore
+    @_sync.command(  # type: ignore[type-var]
         name="requiredroles",
         description="Check if all base required roles exist. If not, create them.",
     )
@@ -71,7 +75,7 @@ class AdminSyncMixIn(AdminMixIn):
             result = await guild.create_role(
                 name=const.LEAGUE_ROLE,
                 hoist=False,
-                display_icon=guild_icon if icons_allowed else None,  # type: ignore
+                display_icon=guild_icon if icons_allowed else None,  # type: ignore[arg-type]
                 permissions=const.GENERIC_ROLE_PERMS,
                 reason="Syncing required roles.",
             )
@@ -83,7 +87,7 @@ class AdminSyncMixIn(AdminMixIn):
             result = await guild.create_role(
                 name=const.GM_ROLE,
                 hoist=False,
-                display_icon=guild_icon if icons_allowed else None,  # type: ignore
+                display_icon=guild_icon if icons_allowed else None,  # type: ignore[arg-type]
                 permissions=const.GENERIC_ROLE_PERMS,
                 color=0x00D9FF,
                 reason="Syncing required roles.",
@@ -108,7 +112,7 @@ class AdminSyncMixIn(AdminMixIn):
             result = await guild.create_role(
                 name=const.FREE_AGENT_ROLE,
                 hoist=False,
-                display_icon=guild_icon if icons_allowed else None,  # type: ignore
+                display_icon=guild_icon if icons_allowed else None,  # type: ignore[arg-type]
                 permissions=const.GENERIC_ROLE_PERMS,
                 reason="Syncing required roles.",
             )
@@ -223,15 +227,11 @@ class AdminSyncMixIn(AdminMixIn):
             description="All of the following roles have been added to the server.",
         )
 
-        embed.add_field(
-            name="Name", value="\n".join([r.name for r in role_list]), inline=True
-        )
-        embed.add_field(
-            name="Role", value="\n".join([r.mention for r in role_list]), inline=True
-        )
+        embed.add_field(name="Name", value="\n".join([r.name for r in role_list]), inline=True)
+        embed.add_field(name="Role", value="\n".join([r.mention for r in role_list]), inline=True)
         await interaction.followup.send(embed=embed, ephemeral=True)
 
-    @_sync.command(  # type: ignore
+    @_sync.command(  # type: ignore[type-var]
         name="tiers",
         description="Check if all tier roles and channels exist. If not, create them.",
     )
@@ -255,9 +255,7 @@ class AdminSyncMixIn(AdminMixIn):
         # Validate response tier data
         if any(not t.name for t in tiers):
             return await interaction.followup.send(
-                embed=ErrorEmbed(
-                    description="API returned malformed tier data. One or more tiers have no name."
-                ),
+                embed=ErrorEmbed(description="API returned malformed tier data. One or more tiers have no name."),
                 ephemeral=True,
             )
 
@@ -273,11 +271,7 @@ class AdminSyncMixIn(AdminMixIn):
         for t in tiers:
             if not t.name:
                 log.error(f"{t.id} has no name associated with it.")
-                await interaction.followup.send(
-                    embed=ErrorEmbed(
-                        description=f"{t.id} has no name associated with it."
-                    )
-                )
+                await interaction.followup.send(embed=ErrorEmbed(description=f"{t.id} has no name associated with it."))
                 return
 
             schannel = None
@@ -313,7 +307,7 @@ class AdminSyncMixIn(AdminMixIn):
                 farole = await guild.create_role(
                     name=f"{t.name}FA",
                     hoist=False,
-                    display_icon=fa_icon,  # type: ignore
+                    display_icon=fa_icon,  # type: ignore[arg-type]
                     permissions=const.GENERIC_ROLE_PERMS,
                     color=t.color or discord.Color.default(),
                     reason="Syncing tier roles from API.",
@@ -323,12 +317,8 @@ class AdminSyncMixIn(AdminMixIn):
 
             if scorecategory:
                 # Score Reporting Permissions
-                s_overwrites: MutableMapping[
-                    discord.Member | discord.Role, discord.PermissionOverwrite
-                ] = {
-                    guild.default_role: discord.PermissionOverwrite(
-                        view_channel=False, send_messages=False, add_reactions=False
-                    ),
+                s_overwrites: MutableMapping[discord.Member | discord.Role, discord.PermissionOverwrite] = {
+                    guild.default_role: discord.PermissionOverwrite(view_channel=False, send_messages=False, add_reactions=False),
                     league_role: discord.PermissionOverwrite(
                         view_channel=True,
                         read_messages=True,
@@ -367,9 +357,7 @@ class AdminSyncMixIn(AdminMixIn):
                 }
 
                 log.debug(f"Syncing {t.name} score reporting channel", guild=guild)
-                schannel = discord.utils.get(
-                    scorecategory.channels, name=f"{t.name}-score-reporting".lower()
-                )
+                schannel = discord.utils.get(scorecategory.channels, name=f"{t.name}-score-reporting".lower())
                 if not schannel:
                     # Create score reporting channel
                     schannel = await guild.create_text_channel(
@@ -379,16 +367,12 @@ class AdminSyncMixIn(AdminMixIn):
                         reason="Syncing tier channels from API",
                     )
                 elif isinstance(schannel, discord.TextChannel):
-                    await schannel.edit(overwrites=s_overwrites)  # type: ignore
+                    await schannel.edit(overwrites=s_overwrites)  # type: ignore[arg-type]
 
             if chatcategory:
                 # Tier Chat Permissions
-                t_overwrites: MutableMapping[
-                    discord.Member | discord.Role, discord.PermissionOverwrite
-                ] = {
-                    guild.default_role: discord.PermissionOverwrite(
-                        view_channel=False, send_messages=False
-                    ),
+                t_overwrites: MutableMapping[discord.Member | discord.Role, discord.PermissionOverwrite] = {
+                    guild.default_role: discord.PermissionOverwrite(view_channel=False, send_messages=False),
                     trole: discord.PermissionOverwrite(
                         view_channel=True,
                         read_messages=True,
@@ -413,9 +397,7 @@ class AdminSyncMixIn(AdminMixIn):
                 }
 
                 log.debug(f"Syncing {t.name} tier chat", guild=guild)
-                tchannel = discord.utils.get(
-                    chatcategory.channels, name=f"{t.name}-chat".lower()
-                )
+                tchannel = discord.utils.get(chatcategory.channels, name=f"{t.name}-chat".lower())
                 if not tchannel:
                     # Create tier chat channel
                     tchannel = await guild.create_text_channel(
@@ -425,7 +407,7 @@ class AdminSyncMixIn(AdminMixIn):
                         reason="Syncing tier channels from API",
                     )
                 elif isinstance(tchannel, discord.TextChannel):
-                    await tchannel.edit(overwrites=t_overwrites)  # type: ignore
+                    await tchannel.edit(overwrites=t_overwrites)  # type: ignore[arg-type]
 
             # Store roles for response
             roles[t.name] = [trole, farole]
@@ -437,17 +419,18 @@ class AdminSyncMixIn(AdminMixIn):
         embed.add_field(
             name="Name",
             value="\n".join([t.name for t in tiers]),
-            inline=True,  # type: ignore
+            inline=True,  # type: ignore[type-var]
         )
 
         role_fmt = []
         for v in roles.values():
-            role_fmt.append(", ".join([r.mention for r in v]))
+            role_fmt.append(", ".join([r.mention for r in v]))  # noqa: PERF401
+
         embed.add_field(name="Roles", value="\n".join(role_fmt), inline=True)
 
         await interaction.followup.send(embed=embed, ephemeral=True)
 
-    @_sync.command(  # type: ignore
+    @_sync.command(  # type: ignore[type-var]
         name="transactionchannels",
         description="Check if all franchise transaction channels. If not, create them.",
     )
@@ -478,11 +461,7 @@ class AdminSyncMixIn(AdminMixIn):
         for f in franchises:
             if not f.name:
                 log.error(f"Franchise {f.id} has no name.")
-                await interaction.edit_original_response(
-                    embed=ErrorEmbed(
-                        description=f"Franchise {f.id} has no name in the API..."
-                    )
-                )
+                await interaction.edit_original_response(embed=ErrorEmbed(description=f"Franchise {f.id} has no name in the API..."))
                 return
 
             channel = await self.get_franchise_transaction_channel(guild, f.name)
@@ -492,16 +471,12 @@ class AdminSyncMixIn(AdminMixIn):
                 existing.append(channel)
             else:
                 channel_name = await self.get_franchise_transaction_channel_name(f.name)
-                log.info(
-                    f"Creating new transaction channel: {channel_name}", guild=guild
-                )
+                log.info(f"Creating new transaction channel: {channel_name}", guild=guild)
                 content = None
                 gm = None
 
                 # Default Permissions
-                overwrites: dict[
-                    discord.Role | discord.Member, discord.PermissionOverwrite
-                ] = {
+                overwrites: dict[discord.Role | discord.Member, discord.PermissionOverwrite] = {
                     guild.default_role: discord.PermissionOverwrite(view_channel=False)
                 }
 
@@ -565,20 +540,16 @@ class AdminSyncMixIn(AdminMixIn):
                 inline=True,
             )
         if added:
-            embed.add_field(
-                name="Created", value="\n".join([r.mention for r in added]), inline=True
-            )
+            embed.add_field(name="Created", value="\n".join([r.mention for r in added]), inline=True)
 
         await interaction.edit_original_response(embed=embed)
 
-    @_sync.command(  # type: ignore
+    @_sync.command(  # type: ignore[type-var]
         name="nonplaying",
         description="Sync all non playing discord members. (Long Execution Time)",
     )
     @app_commands.describe(dryrun="Do not modify any users.")
-    async def _sync_nonplaying_cmd(
-        self, interaction: discord.Interaction, dryrun: bool = False
-    ):
+    async def _sync_nonplaying_cmd(self, interaction: discord.Interaction, dryrun: bool = False):
         guild = interaction.guild
         if not guild:
             return
@@ -590,9 +561,7 @@ class AdminSyncMixIn(AdminMixIn):
             log.debug("Fetching tiers", guild=guild)
             tiers: list[Tier] = await self.tiers(guild)
         except RscException as exc:
-            return await interaction.edit_original_response(
-                embed=ApiExceptionErrorEmbed(exc)
-            )
+            return await interaction.edit_original_response(embed=ApiExceptionErrorEmbed(exc))
 
         # Wait for confirmation
         await sync_view.wait()
@@ -620,15 +589,11 @@ class AdminSyncMixIn(AdminMixIn):
             if not m:
                 continue
 
-            log.debug(
-                f"Syncing non-playing member: {m.display_name} ({m.id})", guild=guild
-            )
+            log.debug(f"Syncing non-playing member: {m.display_name} ({m.id})", guild=guild)
 
             if not dryrun:
                 try:
-                    await update_nonplaying_discord(
-                        guild=guild, member=m, tiers=tiers, default_roles=default_roles
-                    )
+                    await update_nonplaying_discord(guild=guild, member=m, tiers=tiers, default_roles=default_roles)
                 except (ValueError, AttributeError) as exc:
                     await interaction.followup.send(content=str(exc), ephemeral=True)
             synced += 1
@@ -643,14 +608,12 @@ class AdminSyncMixIn(AdminMixIn):
         embed.set_footer(text=f"Synced {synced}/{total} RSC member(s).")
         await interaction.edit_original_response(embed=embed)
 
-    @_sync.command(  # type: ignore
+    @_sync.command(  # type: ignore[type-var]
         name="players",
         description="Sync all players in discord members. (Long Execution Time)",
     )
     @app_commands.describe(dryrun="Do not modify any users.")
-    async def _sync_players_cmd(
-        self, interaction: discord.Interaction, dryrun: bool = False
-    ):
+    async def _sync_players_cmd(self, interaction: discord.Interaction, dryrun: bool = False):
         guild = interaction.guild
         if not guild:
             return
@@ -662,9 +625,7 @@ class AdminSyncMixIn(AdminMixIn):
             log.debug("Fetching tiers", guild=guild)
             tiers: list[Tier] = await self.tiers(guild)
         except RscException as exc:
-            return await interaction.edit_original_response(
-                embed=ApiExceptionErrorEmbed(exc)
-            )
+            return await interaction.edit_original_response(embed=ApiExceptionErrorEmbed(exc))
 
         # Wait for confirmation
         await sync_view.wait()
@@ -695,9 +656,7 @@ class AdminSyncMixIn(AdminMixIn):
             synced += 1
             if not dryrun:
                 try:
-                    await update_rostered_discord(
-                        guild=guild, player=m, league_player=api_player, tiers=tiers
-                    )
+                    await update_rostered_discord(guild=guild, player=m, league_player=api_player, tiers=tiers)
                 except (ValueError, AttributeError) as exc:
                     await interaction.followup.send(content=str(exc), ephemeral=True)
 
@@ -720,9 +679,7 @@ class AdminSyncMixIn(AdminMixIn):
             synced += 1
             if not dryrun:
                 try:
-                    await update_rostered_discord(
-                        guild=guild, player=m, league_player=api_player, tiers=tiers
-                    )
+                    await update_rostered_discord(guild=guild, player=m, league_player=api_player, tiers=tiers)
                 except (ValueError, AttributeError) as exc:
                     await interaction.followup.send(content=str(exc), ephemeral=True)
 
@@ -736,14 +693,12 @@ class AdminSyncMixIn(AdminMixIn):
         embed.set_footer(text=f"Synced {synced}/{total} RSC players(s).")
         await interaction.edit_original_response(embed=embed)
 
-    @_sync.command(  # type: ignore
+    @_sync.command(  # type: ignore[type-var]
         name="freeagent",
         description="Sync all free agent players in discord",
     )
     @app_commands.describe(dryrun="Do not modify any users.")
-    async def _sync_freeagent_cmd(
-        self, interaction: discord.Interaction, dryrun: bool = False
-    ):
+    async def _sync_freeagent_cmd(self, interaction: discord.Interaction, dryrun: bool = False):
         guild = interaction.guild
         if not guild:
             return
@@ -798,9 +753,7 @@ class AdminSyncMixIn(AdminMixIn):
         # Progress View
         progress_view = CancelView(interaction, timeout=0)
         loading_embed.set_image(url="attachment://progress.jpeg")
-        await interaction.edit_original_response(
-            embed=loading_embed, attachments=[dFile], view=progress_view
-        )
+        await interaction.edit_original_response(embed=loading_embed, attachments=[dFile], view=progress_view)
 
         idx = 0
         player: LeaguePlayer
@@ -808,13 +761,9 @@ class AdminSyncMixIn(AdminMixIn):
             # Check if cancelled
             if progress_view.cancelled:
                 loading_embed.title = "Sync Cancelled"
-                loading_embed.description = (
-                    "Cancelled synchronizing all free agent players."
-                )
+                loading_embed.description = "Cancelled synchronizing all free agent players."
                 loading_embed.colour = discord.Color.red()
-                return await interaction.edit_original_response(
-                    embed=loading_embed, attachments=[dFile], view=None
-                )
+                return await interaction.edit_original_response(embed=loading_embed, attachments=[dFile], view=None)
 
             idx += 1
 
@@ -834,9 +783,7 @@ class AdminSyncMixIn(AdminMixIn):
             # Check if dry run
             if not dryrun:
                 try:
-                    await update_free_agent_discord(
-                        guild=guild, player=m, league_player=player, tiers=tiers
-                    )
+                    await update_free_agent_discord(guild=guild, player=m, league_player=player, tiers=tiers)
                 except (ValueError, AttributeError) as exc:
                     await interaction.followup.send(content=str(exc), ephemeral=True)
 
@@ -855,9 +802,7 @@ class AdminSyncMixIn(AdminMixIn):
                 )
 
                 try:
-                    await interaction.edit_original_response(
-                        embed=loading_embed, attachments=[dFile], view=progress_view
-                    )
+                    await interaction.edit_original_response(embed=loading_embed, attachments=[dFile], view=progress_view)
                 except discord.HTTPException as exc:
                     log.warning(
                         f"Received {exc.status} (error code {exc.code}: {exc.text})",
@@ -869,9 +814,7 @@ class AdminSyncMixIn(AdminMixIn):
 
         # Perm FA
         loading_embed.title = "Syncing Perm FAs"
-        loading_embed.description = (
-            "Permanent Free Agent player synchronziation in progress"
-        )
+        loading_embed.description = "Permanent Free Agent player synchronziation in progress"
 
         # Update progress bar for PermFA
         dFile = images.getProgressBar(
@@ -882,21 +825,15 @@ class AdminSyncMixIn(AdminMixIn):
             progress=idx / total_players,
             progress_bounds=(idx, total_players),
         )
-        await interaction.edit_original_response(
-            embed=loading_embed, attachments=[dFile], view=progress_view
-        )
+        await interaction.edit_original_response(embed=loading_embed, attachments=[dFile], view=progress_view)
 
         async for player in self.paged_players(guild, status=Status.PERM_FA):
             # Check if cancelled
             if progress_view.cancelled:
                 loading_embed.title = "Sync Cancelled"
-                loading_embed.description = (
-                    "Cancelled synchronizing all free agent players."
-                )
+                loading_embed.description = "Cancelled synchronizing all free agent players."
                 loading_embed.colour = discord.Color.red()
-                return await interaction.edit_original_response(
-                    embed=loading_embed, attachments=[dFile], view=None
-                )
+                return await interaction.edit_original_response(embed=loading_embed, attachments=[dFile], view=None)
 
             idx += 1
 
@@ -916,9 +853,7 @@ class AdminSyncMixIn(AdminMixIn):
             # Check if dry run
             if not dryrun:
                 try:
-                    await update_free_agent_discord(
-                        guild=guild, player=m, league_player=player, tiers=tiers
-                    )
+                    await update_free_agent_discord(guild=guild, player=m, league_player=player, tiers=tiers)
                 except (ValueError, AttributeError) as exc:
                     await interaction.followup.send(content=str(exc), ephemeral=True)
 
@@ -937,9 +872,7 @@ class AdminSyncMixIn(AdminMixIn):
                 )
 
                 try:
-                    await interaction.edit_original_response(
-                        embed=loading_embed, attachments=[dFile], view=progress_view
-                    )
+                    await interaction.edit_original_response(embed=loading_embed, attachments=[dFile], view=progress_view)
                 except discord.HTTPException as exc:
                     log.warning(
                         f"Received {exc.status} (error code {exc.code}: {exc.text})",
@@ -961,18 +894,14 @@ class AdminSyncMixIn(AdminMixIn):
 
         loading_embed.title = "Free Agent Sync"
         loading_embed.description = "Successfully synchronized all free agent players."
-        await interaction.edit_original_response(
-            embed=loading_embed, attachments=[dFile], view=None
-        )
+        await interaction.edit_original_response(embed=loading_embed, attachments=[dFile], view=None)
 
-    @_sync.command(  # type: ignore
+    @_sync.command(  # type: ignore[type-var]
         name="drafteligible",
         description="Sync all draft eligibile players in discord",
     )
     @app_commands.describe(dryrun="Do not modify any users.")
-    async def _sync_drafteligible_cmd(
-        self, interaction: discord.Interaction, dryrun: bool = False
-    ):
+    async def _sync_drafteligible_cmd(self, interaction: discord.Interaction, dryrun: bool = False):
         guild = interaction.guild
         if not guild:
             return
@@ -1026,21 +955,15 @@ class AdminSyncMixIn(AdminMixIn):
         progress_view = CancelView(interaction, timeout=0)
 
         loading_embed.set_image(url="attachment://progress.jpeg")
-        await interaction.edit_original_response(
-            embed=loading_embed, attachments=[dFile], view=progress_view
-        )
+        await interaction.edit_original_response(embed=loading_embed, attachments=[dFile], view=progress_view)
 
         for idx, player in enumerate(plist):
             # Check if cancelled
             if progress_view.cancelled:
                 loading_embed.title = "Sync Cancelled"
-                loading_embed.description = (
-                    "Cancelled synchronizing all draft eligible players."
-                )
+                loading_embed.description = "Cancelled synchronizing all draft eligible players."
                 loading_embed.colour = discord.Color.red()
-                return await interaction.edit_original_response(
-                    embed=loading_embed, attachments=[dFile], view=None
-                )
+                return await interaction.edit_original_response(embed=loading_embed, attachments=[dFile], view=None)
 
             idx += 1
 
@@ -1049,17 +972,13 @@ class AdminSyncMixIn(AdminMixIn):
 
             m = guild.get_member(player.player.discord_id)
             if not m:
-                log.warning(
-                    f"Couldn't find DE in guild: {player.player.name} ({player.player.discord_id})"
-                )
+                log.warning(f"Couldn't find DE in guild: {player.player.name} ({player.player.discord_id})")
                 continue
             log.debug(f"Updating DE: {m.display_name}")
 
             if not dryrun:
                 try:
-                    await update_draft_eligible_discord(
-                        guild=guild, player=m, league_player=player, tiers=tiers
-                    )
+                    await update_draft_eligible_discord(guild=guild, player=m, league_player=player, tiers=tiers)
                 except (ValueError, AttributeError) as exc:
                     await interaction.followup.send(content=str(exc), ephemeral=True)
 
@@ -1077,9 +996,7 @@ class AdminSyncMixIn(AdminMixIn):
                     progress_bounds=(idx, total_de),
                 )
 
-                await interaction.edit_original_response(
-                    embed=loading_embed, attachments=[dFile]
-                )
+                await interaction.edit_original_response(embed=loading_embed, attachments=[dFile])
 
         # Draw 100%
         dFile = images.getProgressBar(
@@ -1092,14 +1009,10 @@ class AdminSyncMixIn(AdminMixIn):
         )
 
         loading_embed.title = "Draft Eligible Sync"
-        loading_embed.description = (
-            "Successfully synchronized all draft eligible players."
-        )
-        await interaction.edit_original_response(
-            embed=loading_embed, attachments=[dFile], view=None
-        )
+        loading_embed.description = "Successfully synchronized all draft eligible players."
+        await interaction.edit_original_response(embed=loading_embed, attachments=[dFile], view=None)
 
-    @_sync.command(  # type: ignore
+    @_sync.command(  # type: ignore[type-var]
         name="franchiseroles",
         description="Check if all franchise roles exist. If not, create them.",
     )
@@ -1128,9 +1041,7 @@ class AdminSyncMixIn(AdminMixIn):
         for f in franchises:
             if not (f.name and f.gm):
                 return await interaction.edit_original_response(
-                    embed=ErrorEmbed(
-                        description=f"API returned no franchise name or GM name for ID: {f.id}"
-                    )
+                    embed=ErrorEmbed(description=f"API returned no franchise name or GM name for ID: {f.id}")
                 )
 
             fname = f"{f.name} ({f.gm.rsc_name})"
@@ -1148,7 +1059,7 @@ class AdminSyncMixIn(AdminMixIn):
                 nrole = await guild.create_role(
                     name=fname,
                     hoist=True,
-                    display_icon=f.logo if icons_allowed else None,  # type: ignore
+                    display_icon=f.logo if icons_allowed else None,  # type: ignore[arg-type]
                     permissions=const.FRANCHISE_ROLE_PERMS,
                     reason="Syncing franchise roles from API",
                 )
@@ -1168,12 +1079,8 @@ class AdminSyncMixIn(AdminMixIn):
                 inline=True,
             )
         if fixed:
-            embed.add_field(
-                name="Fixed", value="\n".join([r.mention for r in fixed]), inline=True
-            )
+            embed.add_field(name="Fixed", value="\n".join([r.mention for r in fixed]), inline=True)
         if added:
-            embed.add_field(
-                name="Created", value="\n".join([r.mention for r in added]), inline=True
-            )
+            embed.add_field(name="Created", value="\n".join([r.mention for r in added]), inline=True)
 
         await interaction.edit_original_response(embed=embed)

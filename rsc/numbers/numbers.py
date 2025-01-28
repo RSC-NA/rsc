@@ -53,7 +53,7 @@ class NumberMixIn(RSCMixIn):
 
     # App Commands
 
-    @_numbers.command(  # type: ignore
+    @_numbers.command(  # type: ignore[type-var]
         name="settings", description="Configure numbers module settings"
     )
     @app_commands.checks.has_permissions(manage_guild=True)
@@ -77,13 +77,11 @@ class NumberMixIn(RSCMixIn):
 
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-    @_numbers.command(  # type: ignore
+    @_numbers.command(  # type: ignore[type-var]
         name="role", description="Configure the Number Committee role"
     )
     @app_commands.checks.has_permissions(manage_guild=True)
-    async def _set_numbers_role_cmd(
-        self, interaction: discord.Interaction, role: discord.Role
-    ):
+    async def _set_numbers_role_cmd(self, interaction: discord.Interaction, role: discord.Role):
         guild = interaction.guild
         if not guild:
             return
@@ -96,12 +94,10 @@ class NumberMixIn(RSCMixIn):
         )
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-    @_numbers.command(  # type: ignore
+    @_numbers.command(  # type: ignore[type-var]
         name="peaks", description="Display player MMR peaks for a psyonix season"
     )
-    @app_commands.describe(
-        player="RSC Discord Member", psyonix_season="Pysonix season to display"
-    )
+    @app_commands.describe(player="RSC Discord Member", psyonix_season="Pysonix season to display")
     async def _numbers_peaks_cmd(
         self,
         interaction: discord.Interaction,
@@ -123,9 +119,7 @@ class NumberMixIn(RSCMixIn):
                 psyonix_season=str(psyonix_season) if psyonix_season else None,
             )
         except RscException as exc:
-            await interaction.followup.send(
-                embed=ApiExceptionErrorEmbed(exc), ephemeral=True
-            )
+            await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc), ephemeral=True)
 
         log.debug(f"Total MMR pulls: {len(pulls)}")
 
@@ -136,9 +130,7 @@ class NumberMixIn(RSCMixIn):
         )
 
         if psyonix_season:
-            embed.description = (
-                f"MMR peaks for {player.mention} in season **{psyonix_season}**"
-            )
+            embed.description = f"MMR peaks for {player.mention} in season **{psyonix_season}**"
         else:
             embed.description = f"MMR peaks for {player.mention} all seasons"
 
@@ -159,13 +151,11 @@ class NumberMixIn(RSCMixIn):
         )
         await interaction.followup.send(embed=embed)
 
-    @_numbers.command(  # type: ignore
+    @_numbers.command(  # type: ignore[type-var]
         name="gamesplayed",
         description="Display tracker games played for a pysonix season",
     )
-    @app_commands.describe(
-        player="RSC Discord Member", psyonix_season="Pysonix season to display"
-    )
+    @app_commands.describe(player="RSC Discord Member", psyonix_season="Pysonix season to display")
     async def _numbers_gamesplayed_cmd(
         self,
         interaction: discord.Interaction,
@@ -181,13 +171,9 @@ class NumberMixIn(RSCMixIn):
         await interaction.response.defer(ephemeral=True)
 
         try:
-            pulls = await self.mmr_pulls(
-                interaction.guild, player=player, psyonix_season=str(psyonix_season)
-            )
+            pulls = await self.mmr_pulls(interaction.guild, player=player, psyonix_season=str(psyonix_season))
         except RscException as exc:
-            await interaction.followup.send(
-                embed=ApiExceptionErrorEmbed(exc), ephemeral=True
-            )
+            await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc), ephemeral=True)
 
         log.debug(f"Total MMR pulls: {len(pulls)}")
 
@@ -219,17 +205,13 @@ class NumberMixIn(RSCMixIn):
 
     # Functions
 
-    async def filter_no_games_played_mmr_pulls(
-        self, pulls: list[PlayerMMR]
-    ) -> list[PlayerMMR]:
+    async def filter_no_games_played_mmr_pulls(self, pulls: list[PlayerMMR]) -> list[PlayerMMR]:
         log.debug(f"Filter pulls len: {len(pulls)}")
         pulls_filtered: list[PlayerMMR] = []
         for p in pulls:
             log.debug(p)
             # Remove pulls with no games played in any playlist
-            if not (
-                p.threes_games_played or p.twos_games_played or p.ones_games_played
-            ):
+            if not (p.threes_games_played or p.twos_games_played or p.ones_games_played):
                 log.debug("Removing above pull.")
                 continue
 

@@ -3,17 +3,20 @@
 import logging
 import sys
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import discord
 import httpx
 from langchain.prompts import ChatPromptTemplate
 from langchain.vectorstores.chroma import Chroma
-from langchain_core.documents import Document
 from langchain_openai import ChatOpenAI
 from langchain_openai.embeddings import OpenAIEmbeddings
 from pydantic.v1.types import SecretStr
 
 from rsc.logs import GuildLogAdapter
+
+if TYPE_CHECKING:
+    from langchain_core.documents import Document
 
 logger = logging.getLogger("red.rsc.llm.query")
 log = GuildLogAdapter(logger)
@@ -70,9 +73,7 @@ async def llm_query(
     llm_db = Chroma(
         collection_name=str(guild.id),
         persist_directory=str(CHROMA_PATH),
-        embedding_function=OpenAIEmbeddings(
-            organization=org_name, api_key=secret_key, async_client=http_client
-        ),
+        embedding_function=OpenAIEmbeddings(organization=org_name, api_key=secret_key, async_client=http_client),
     )
 
     if not llm_db:
@@ -104,9 +105,7 @@ async def llm_query(
     prompt = prompt_template.format(context=context_text, question=question)
     log.debug(prompt)
 
-    model = ChatOpenAI(
-        organization=org_name, api_key=secret_key, async_client=http_client
-    )
+    model = ChatOpenAI(organization=org_name, api_key=secret_key, async_client=http_client)
     response_text = model.invoke(prompt)
 
     await http_client.aclose()

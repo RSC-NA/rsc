@@ -1,5 +1,5 @@
 import logging
-from typing import Iterator
+from collections.abc import Iterator
 
 from langchain_core.document_loaders import BaseLoader
 from langchain_core.documents import Document
@@ -42,7 +42,7 @@ class TeamDocumentLoader(BaseLoader):
                     captain = f"The current captain of {team_name} is {p.name}."
                 players.append(p.name)
 
-            if players:
+            if players:  # noqa: SIM108
                 players_fmt = "\n".join([f"- {pname}" for pname in players])
             else:
                 players_fmt = f"No players currently rostered on {team_name}."

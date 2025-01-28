@@ -34,7 +34,7 @@ class AdminIntentsMixIn(AdminMixIn):
         default_permissions=discord.Permissions(manage_guild=True),
     )
 
-    @_intents.command(name="set", description="Manually set intent for a player")  # type: ignore
+    @_intents.command(name="set", description="Manually set intent for a player")  # type: ignore[type-var]
     @app_commands.describe(
         member="Discord member to declare intent on",
         returning="Returning status. (True for returning, False for not returning)",
@@ -74,22 +74,16 @@ class AdminIntentsMixIn(AdminMixIn):
 
         embed: discord.Embed = SuccessEmbed(title="Intent to Play Declared")
         if returning:
-            embed.description = (
-                f"{member.mention} intent to play has been set to **RETURNING**"
-            )
+            embed.description = f"{member.mention} intent to play has been set to **RETURNING**"
         else:
-            embed.description = (
-                f"{member.mention} intent to play has been set to **NOT RETURNING**"
-            )
+            embed.description = f"{member.mention} intent to play has been set to **NOT RETURNING**"
         await interaction.edit_original_response(embed=embed, view=None)
 
-    @_intents.command(
+    @_intents.command(  # type: ignore[type-var]
         name="missingrole",
         description="Configure the Intent to Play missing discord role",
-    )  # type: ignore
-    async def _intents_set_missing_role_cmd(
-        self, interaction: discord.Interaction, role: discord.Role
-    ):
+    )
+    async def _intents_set_missing_role_cmd(self, interaction: discord.Interaction, role: discord.Role):
         guild = interaction.guild
         if not guild:
             return
@@ -103,13 +97,11 @@ class AdminIntentsMixIn(AdminMixIn):
             ephemeral=True,
         )
 
-    @_intents.command(
+    @_intents.command(  # type: ignore[type-var]
         name="missingchannel",
         description="Configure the Intent to Play missing channel",
-    )  # type: ignore
-    async def _intents_set_missing_channel_cmd(
-        self, interaction: discord.Interaction, channel: discord.TextChannel
-    ):
+    )
+    async def _intents_set_missing_channel_cmd(self, interaction: discord.Interaction, channel: discord.TextChannel):
         guild = interaction.guild
         if not guild:
             return
@@ -123,10 +115,10 @@ class AdminIntentsMixIn(AdminMixIn):
             ephemeral=True,
         )
 
-    @_intents.command(
+    @_intents.command(  # type: ignore[type-var]
         name="missingmsg",
         description="Configure the Intent to Play missing message on ping",
-    )  # type: ignore
+    )
     async def _intents_set_missing_msg_cmd(self, interaction: discord.Interaction):
         guild = interaction.guild
         if not guild:
@@ -138,9 +130,7 @@ class AdminIntentsMixIn(AdminMixIn):
 
         await self._set_intent_missing_message(guild, intent_modal.intent_msg.value)
 
-    @_intents.command(
-        name="populate", description="Apply Intent Missing role to applicable players"
-    )  # type: ignore
+    @_intents.command(name="populate", description="Apply Intent Missing role to applicable players")  # type: ignore[type-var]
     async def _intents_populate_role_cmd(self, interaction: discord.Interaction):
         guild = interaction.guild
         if not guild:
@@ -149,11 +139,7 @@ class AdminIntentsMixIn(AdminMixIn):
         # Check for intent missing role
         intent_role = await self._get_intent_missing_role(guild)
         if not intent_role:
-            return await interaction.response.send_message(
-                embed=ErrorEmbed(
-                    description="Intent missing role has not been configured."
-                )
-            )
+            return await interaction.response.send_message(embed=ErrorEmbed(description="Intent missing role has not been configured."))
 
         # Loading embed
         await interaction.response.send_message(
@@ -175,14 +161,10 @@ class AdminIntentsMixIn(AdminMixIn):
 
             if not next_season.id:
                 return await interaction.edit_original_response(
-                    embed=ErrorEmbed(
-                        description="API returned a Season without an ID. Please open a modmail ticket."
-                    )
+                    embed=ErrorEmbed(description="API returned a Season without an ID. Please open a modmail ticket.")
                 )
 
-            intents = await self.player_intents(
-                guild, season_id=next_season.id, missing=True
-            )
+            intents = await self.player_intents(guild, season_id=next_season.id, missing=True)
         except LeagueNotConfigured:
             return await interaction.followup.send(
                 embed=YellowEmbed(
@@ -229,9 +211,7 @@ class AdminIntentsMixIn(AdminMixIn):
             )
         )
 
-    @_intents.command(
-        name="ping", description="Send a ping to all players with missing intents"
-    )  # type: ignore
+    @_intents.command(name="ping", description="Send a ping to all players with missing intents")  # type: ignore[type-var]
     async def _intents_missing_ping_cmd(self, interaction: discord.Interaction):
         guild = interaction.guild
         if not guild:
@@ -239,27 +219,15 @@ class AdminIntentsMixIn(AdminMixIn):
 
         intent_msg = await self._get_intent_missing_message(guild)
         if not intent_msg:
-            return await interaction.response.send_message(
-                embed=ErrorEmbed(
-                    description="Intent missing message has not been configured."
-                )
-            )
+            return await interaction.response.send_message(embed=ErrorEmbed(description="Intent missing message has not been configured."))
 
         intent_role = await self._get_intent_missing_role(guild)
         if not intent_role:
-            return await interaction.response.send_message(
-                embed=ErrorEmbed(
-                    description="Intent missing role has not been configured."
-                )
-            )
+            return await interaction.response.send_message(embed=ErrorEmbed(description="Intent missing role has not been configured."))
 
         intent_channel = await self._get_intent_channel(guild)
         if not intent_channel:
-            return await interaction.response.send_message(
-                embed=ErrorEmbed(
-                    description="Intent missing channel has not been configured."
-                )
-            )
+            return await interaction.response.send_message(embed=ErrorEmbed(description="Intent missing channel has not been configured."))
 
         await intent_channel.send(
             content=f"{intent_role.mention} {intent_msg}",

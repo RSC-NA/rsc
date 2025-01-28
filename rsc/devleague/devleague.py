@@ -28,7 +28,7 @@ class DevLeagueMixIn(RSCMixIn):
 
     # Commands
 
-    @_dev_league.command(  # type: ignore
+    @_dev_league.command(  # type: ignore[type-var]
         name="status",
         description="Check your status for Dev League",
     )
@@ -47,15 +47,11 @@ class DevLeagueMixIn(RSCMixIn):
         try:
             result = await api.dev_league_status(interaction.user)
         except ClientConnectionError as exc:
-            await interaction.followup.send(
-                embed=ErrorEmbed(description="Error connecting to dev league API")
-            )
+            await interaction.followup.send(embed=ErrorEmbed(description="Error connecting to dev league API"))
             raise exc
 
         if result.error:
-            return await interaction.followup.send(
-                embed=ErrorEmbed(description=result.error), ephemeral=True
-            )
+            return await interaction.followup.send(embed=ErrorEmbed(description=result.error), ephemeral=True)
 
         status_fmt = "**checked in**" if result.checked_in else "**not checked in**"
 
@@ -69,7 +65,7 @@ class DevLeagueMixIn(RSCMixIn):
 
         await interaction.followup.send(embed=embed)
 
-    @_dev_league.command(  # type: ignore
+    @_dev_league.command(  # type: ignore[type-var]
         name="checkin",
         description="Check in for dev league",
     )
@@ -88,15 +84,11 @@ class DevLeagueMixIn(RSCMixIn):
         try:
             result = await api.dev_league_check_in(interaction.user)
         except ClientConnectionError as exc:
-            await interaction.followup.send(
-                embed=ErrorEmbed(description="Error connecting to dev league API")
-            )
+            await interaction.followup.send(embed=ErrorEmbed(description="Error connecting to dev league API"))
             raise exc
 
         if result.error:
-            return await interaction.followup.send(
-                embed=ErrorEmbed(description=result.error), ephemeral=True
-            )
+            return await interaction.followup.send(embed=ErrorEmbed(description=result.error), ephemeral=True)
 
         embed = SuccessEmbed(
             title="Checked In",
@@ -104,7 +96,7 @@ class DevLeagueMixIn(RSCMixIn):
         )
         await interaction.followup.send(embed=embed)
 
-    @_dev_league.command(  # type: ignore
+    @_dev_league.command(  # type: ignore[type-var]
         name="checkout",
         description="Check out of dev league",
     )
@@ -124,15 +116,11 @@ class DevLeagueMixIn(RSCMixIn):
         try:
             result = await api.dev_league_check_out(interaction.user)
         except ClientConnectionError as exc:
-            await interaction.followup.send(
-                embed=ErrorEmbed(description="Error connecting to dev league API")
-            )
+            await interaction.followup.send(embed=ErrorEmbed(description="Error connecting to dev league API"))
             raise exc
 
         if result.error:
-            return await interaction.followup.send(
-                embed=ErrorEmbed(description=result.error), ephemeral=True
-            )
+            return await interaction.followup.send(embed=ErrorEmbed(description=result.error), ephemeral=True)
 
         embed = OrangeEmbed(
             title="Checked Out",

@@ -34,7 +34,7 @@ class AdminMixIn(RSCMixIn):
 
     # Top Level Group
 
-    _admin = app_commands.Group(
+    _admin: app_commands.Group = app_commands.Group(
         name="admin",
         description="Admin Only Commands",
         guild_only=True,
@@ -43,7 +43,7 @@ class AdminMixIn(RSCMixIn):
 
     # Settings
 
-    @_admin.command(name="settings", description="Display RSC Admin settings.")  # type: ignore
+    @_admin.command(name="settings", description="Display RSC Admin settings.")  # type: ignore[type-var]
     async def _admin_settings_cmd(self, interaction: discord.Interaction):
         guild = interaction.guild
         if not guild:
@@ -65,24 +65,16 @@ class AdminMixIn(RSCMixIn):
             title="Admin Intent Settings",
             description="Displaying configured settings for RSC Admins",
         )
-        intent_embed.add_field(
-            name="Intent Missing Channel", value=intent_channel_fmt, inline=False
-        )
-        intent_embed.add_field(
-            name="Intent Missing Role", value=intent_role_fmt, inline=False
-        )
-        intent_embed.add_field(
-            name="Intent Missing Message", value=intent_missing_msg, inline=False
-        )
+        intent_embed.add_field(name="Intent Missing Channel", value=intent_channel_fmt, inline=False)
+        intent_embed.add_field(name="Intent Missing Role", value=intent_role_fmt, inline=False)
+        intent_embed.add_field(name="Intent Missing Message", value=intent_missing_msg, inline=False)
 
         # PermFA
 
         pfa_channel_fmt = pfa_channel.mention if pfa_channel else "None"
 
         permfa_embed = BlueEmbed(title="Admin PermFA Settings")
-        permfa_embed.add_field(
-            name="PermFA Announcement Channel", value=pfa_channel_fmt, inline=False
-        )
+        permfa_embed.add_field(name="PermFA Announcement Channel", value=pfa_channel_fmt, inline=False)
 
         # AGM & Dates
 
@@ -94,7 +86,7 @@ class AdminMixIn(RSCMixIn):
             ephemeral=True,
         )
 
-    @_admin.command(name="dates", description="Configure the dates command output")  # type: ignore
+    @_admin.command(name="dates", description="Configure the dates command output")  # type: ignore[type-var]
     async def _admin_set_dates(self, interaction: discord.Interaction):
         if not interaction.guild:
             return
@@ -105,21 +97,17 @@ class AdminMixIn(RSCMixIn):
 
         await self._set_dates(interaction.guild, value=dates_modal.date_input.value)
 
-    @_admin.command(  # type: ignore
+    @_admin.command(  # type: ignore[type-var]
         name="pfachnanel", description="Configure the PermFA announcement channel"
     )
     @app_commands.describe(channel="Discord channel to announce PermFAs")
-    async def _admin_set_pfa_channel_cmd(
-        self, interaction: discord.Interaction, channel: discord.TextChannel
-    ):
+    async def _admin_set_pfa_channel_cmd(self, interaction: discord.Interaction, channel: discord.TextChannel):
         if not interaction.guild:
             return
 
         await self._set_permfa_announce_chnanel(interaction.guild, channel)
         await interaction.response.send_message(
-            embed=SuccessEmbed(
-                description=f"Configured PermFA announcement channel to {channel.mention}"
-            )
+            embed=SuccessEmbed(description=f"Configured PermFA announcement channel to {channel.mention}")
         )
 
     # Config
@@ -136,14 +124,10 @@ class AdminMixIn(RSCMixIn):
     async def _get_dates(self, guild: discord.Guild) -> str:
         return await self.config.custom("Admin", str(guild.id)).Dates()
 
-    async def _set_intent_channel(
-        self, guild: discord.Guild, channel: discord.TextChannel
-    ):
+    async def _set_intent_channel(self, guild: discord.Guild, channel: discord.TextChannel):
         await self.config.custom("Admin", str(guild.id)).IntentChannel.set(channel.id)
 
-    async def _get_intent_channel(
-        self, guild: discord.Guild
-    ) -> discord.TextChannel | None:
+    async def _get_intent_channel(self, guild: discord.Guild) -> discord.TextChannel | None:
         channel_id = await self.config.custom("Admin", str(guild.id)).IntentChannel()
         channel = guild.get_channel(channel_id)
         if not isinstance(channel, discord.TextChannel):
@@ -154,9 +138,7 @@ class AdminMixIn(RSCMixIn):
     async def _set_intent_missing_role(self, guild: discord.Guild, role: discord.Role):
         await self.config.custom("Admin", str(guild.id)).IntentMissingRole.set(role.id)
 
-    async def _get_intent_missing_role(
-        self, guild: discord.Guild
-    ) -> discord.Role | None:
+    async def _get_intent_missing_role(self, guild: discord.Guild) -> discord.Role | None:
         role_id = await self.config.custom("Admin", str(guild.id)).IntentMissingRole()
         role = guild.get_role(role_id)
         log.debug(f"Intent Missing Role: {role}")
@@ -174,14 +156,10 @@ class AdminMixIn(RSCMixIn):
     async def _get_activity_check_msg_id(self, guild: discord.Guild) -> int | None:
         return await self.config.custom("Admin", str(guild.id)).ActivityCheckMsgId()
 
-    async def _set_permfa_announce_chnanel(
-        self, guild: discord.Guild, channel: discord.TextChannel
-    ):
+    async def _set_permfa_announce_chnanel(self, guild: discord.Guild, channel: discord.TextChannel):
         await self.config.custom("Admin", str(guild.id)).PermFAChannel.set(channel.id)
 
-    async def _get_permfa_announce_channel(
-        self, guild: discord.Guild
-    ) -> discord.TextChannel | None:
+    async def _get_permfa_announce_channel(self, guild: discord.Guild) -> discord.TextChannel | None:
         cid = await self.config.custom("Admin", str(guild.id)).PermFAChannel()
         if not cid:
             return None

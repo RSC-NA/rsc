@@ -1,5 +1,5 @@
 import logging
-from typing import Iterator
+from collections.abc import Iterator
 
 from langchain_core.document_loaders import BaseLoader
 from langchain_core.documents import Document
@@ -14,7 +14,7 @@ FRANCHISE_INPUT = """
 {name} has the following teams in their franchise: {teams}
 
 {name} has the following tiers in their franchise: {tiers}
-"""
+"""  # noqa: E501
 
 
 class FranchiseDocumentLoader(BaseLoader):
@@ -28,12 +28,8 @@ class FranchiseDocumentLoader(BaseLoader):
 
         final = []
         for f in self.franchises:
-            if not (
-                f.name and f.prefix and f.gm and f.gm.rsc_name and f.tiers and f.teams
-            ):
-                log.warning(
-                    f"Skipping franchise {f.id}. Missing required data for LLM input."
-                )
+            if not (f.name and f.prefix and f.gm and f.gm.rsc_name and f.tiers and f.teams):
+                log.warning(f"Skipping franchise {f.id}. Missing required data for LLM input.")
                 continue
 
             # Gather tiers

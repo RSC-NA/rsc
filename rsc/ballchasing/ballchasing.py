@@ -83,7 +83,7 @@ class BallchasingMixIn(RSCMixIn):
 
     # Sub Commands
 
-    @_ballchasing.command(  # type: ignore
+    @_ballchasing.command(  # type: ignore[type-var]
         name="settings",
         description="Display settings for ballchasing replay management",
     )
@@ -95,9 +95,7 @@ class BallchasingMixIn(RSCMixIn):
             return
 
         url = BALLCHASING_URL
-        token = (
-            "Configured" if await self._get_bc_auth_token(guild) else "Not Configured"
-        )
+        token = "Configured" if await self._get_bc_auth_token(guild) else "Not Configured"
         log_channel = await self._get_bc_log_channel(guild)
         score_category = await self._get_score_reporting_category(guild)
         role = await self._get_bc_manager_role(guild)
@@ -116,9 +114,7 @@ class BallchasingMixIn(RSCMixIn):
 
         embed.add_field(name="Ballchasing URL", value=url, inline=False)
         embed.add_field(name="Ballchasing API Token", value=token, inline=False)
-        embed.add_field(
-            name="Management Role", value=role.mention if role else "None", inline=False
-        )
+        embed.add_field(name="Management Role", value=role.mention if role else "None", inline=False)
         embed.add_field(
             name="Log Channel",
             value=log_channel.mention if log_channel else "None",
@@ -137,7 +133,7 @@ class BallchasingMixIn(RSCMixIn):
 
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-    @_ballchasing.command(  # type: ignore
+    @_ballchasing.command(  # type: ignore[type-var]
         name="key", description="Configure the Ballchasing API key for the server"
     )
     @app_commands.checks.has_permissions(manage_guild=True)
@@ -146,76 +142,60 @@ class BallchasingMixIn(RSCMixIn):
             return
         await self._save_bc_auth_token(interaction.guild, key)
         await interaction.response.send_message(
-            embed=SuccessEmbed(
-                description="Ballchasing API key have been successfully configured"
-            ),
+            embed=SuccessEmbed(description="Ballchasing API key have been successfully configured"),
             ephemeral=True,
         )
 
-    @_ballchasing.command(  # type: ignore
+    @_ballchasing.command(  # type: ignore[type-var]
         name="manager",
         description="Configure the ballchasing management role (Ex: @Stats Committee)",
     )
     @app_commands.checks.has_permissions(manage_guild=True)
-    async def _bc_management_role(
-        self, interaction: discord.Interaction, role: discord.Role
-    ):
+    async def _bc_management_role(self, interaction: discord.Interaction, role: discord.Role):
         if not interaction.guild:
             return
         await self._save_bc_manager_role(interaction.guild, role)
         await interaction.response.send_message(
-            embed=SuccessEmbed(
-                description=f"Ballchasing management role set to {role.mention}"
-            ),
+            embed=SuccessEmbed(description=f"Ballchasing management role set to {role.mention}"),
             ephemeral=True,
         )
 
-    @_ballchasing.command(  # type: ignore
+    @_ballchasing.command(  # type: ignore[type-var]
         name="log",
         description="Configure the logging channel for Ballchasing commands (Ex: #stats-committee)",
     )
     @app_commands.checks.has_permissions(manage_guild=True)
-    async def _bc_log_channel(
-        self, interaction: discord.Interaction, channel: discord.TextChannel
-    ):
+    async def _bc_log_channel(self, interaction: discord.Interaction, channel: discord.TextChannel):
         if not interaction.guild:
             return
         await self._save_bc_log_channel(interaction.guild, channel)
         await interaction.response.send_message(
-            embed=SuccessEmbed(
-                description=f"Ballchasing log channel set to {channel.mention}"
-            ),
+            embed=SuccessEmbed(description=f"Ballchasing log channel set to {channel.mention}"),
             ephemeral=True,
         )
 
-    @_ballchasing.command(  # type: ignore
+    @_ballchasing.command(  # type: ignore[type-var]
         name="category",
         description="Configure the score reporting category for the server",
     )
     @app_commands.checks.has_permissions(manage_guild=True)
-    async def _bc_score_category(
-        self, interaction: discord.Interaction, category: discord.CategoryChannel
-    ):
+    async def _bc_score_category(self, interaction: discord.Interaction, category: discord.CategoryChannel):
         if not interaction.guild:
             return
 
         await self._save_score_reporting_category(interaction.guild, category)
         await interaction.response.send_message(
-            embed=SuccessEmbed(
-                description=f"Score reporting category set to **{category.name}**"
-            ),
+            embed=SuccessEmbed(description=f"Score reporting category set to **{category.name}**"),
             ephemeral=True,
         )
 
-    @_ballchasing.command(  # type: ignore
+    @_ballchasing.command(  # type: ignore[type-var]
         name="toplevelgroup",
         description="Configure the top level ballchasing group for RSC",
     )
     @app_commands.describe(group='Ballchasing group string (Ex: "rsc-v4rxmuxj6o")')
     @app_commands.checks.has_permissions(manage_guild=True)
-    async def _bc_top_level_group_cmd(
-        self, interaction: discord.Interaction, group: str
-    ):
+    async def _bc_top_level_group_cmd(self, interaction: discord.Interaction, group: str):
         if not interaction.guild:
             return
         await self._save_top_level_group(interaction.guild, group)
@@ -231,7 +211,7 @@ class BallchasingMixIn(RSCMixIn):
 
     # Commands
 
-    @_ballchasing.command(  # type: ignore
+    @_ballchasing.command(  # type: ignore[type-var]
         name="scanmissing",
         description="Find missing matches in ballchasing",
     )
@@ -247,14 +227,14 @@ class BallchasingMixIn(RSCMixIn):
     ):
         await utils.not_implemented(interaction)
 
-    @app_commands.command(  # type: ignore
+    @app_commands.command(  # type: ignore[type-var]
         name="reportmatch",
         description="Report the results of your RSC match",
     )
     @app_commands.autocomplete(
         home=TeamMixIn.teams_autocomplete,
         away=TeamMixIn.teams_autocomplete,
-    )  # type: ignore
+    )  # type: ignore[type-var]
     @app_commands.describe(
         home="Home team name",
         away="Away team name",
@@ -293,9 +273,7 @@ class BallchasingMixIn(RSCMixIn):
         # Check if override is allowed
         if override and not self.has_bc_permissions(member):
             return await interaction.response.send_message(
-                embed=ErrorEmbed(
-                    description="You do not have permission to override a match result."
-                )
+                embed=ErrorEmbed(description="You do not have permission to override a match result.")
             )
 
         await interaction.response.defer(ephemeral=True)
@@ -307,9 +285,7 @@ class BallchasingMixIn(RSCMixIn):
             if v and k.startswith("replay"):
                 if not await validation.is_replay_file(v):
                     return await interaction.followup.send(
-                        embed=ErrorEmbed(
-                            description=f"`{v.filename}` is not a valid replay file."
-                        ),
+                        embed=ErrorEmbed(description=f"`{v.filename}` is not a valid replay file."),
                         ephemeral=True,
                     )
                 replay_files.append(v)
@@ -332,9 +308,7 @@ class BallchasingMixIn(RSCMixIn):
         start_date = today - timedelta(days=1)
         end_date = today + timedelta(days=1)
 
-        log.debug(
-            f"Searching for match: {home} vs {away}. Start: {start_date}, End: {end_date}"
-        )
+        log.debug(f"Searching for match: {home} vs {away}. Start: {start_date}, End: {end_date}")
         mlist: list[Match] = await self.find_match(
             guild,
             match_type=MatchType.ANY,
@@ -346,9 +320,7 @@ class BallchasingMixIn(RSCMixIn):
         # No match found
         if not mlist:
             return await interaction.followup.send(
-                embed=ErrorEmbed(
-                    description=f"No matches found for **{home}** vs **{away}**."
-                ),
+                embed=ErrorEmbed(description=f"No matches found for **{home}** vs **{away}**."),
                 ephemeral=True,
             )
 
@@ -361,18 +333,14 @@ class BallchasingMixIn(RSCMixIn):
 
         if not match:
             return await interaction.followup.send(
-                embed=ErrorEmbed(
-                    description=f"No matches found for **{home}** vs **{away}**."
-                ),
+                embed=ErrorEmbed(description=f"No matches found for **{home}** vs **{away}**."),
                 ephemeral=True,
             )
 
         # Make sure we have the match ID
         if not match.id:
             return await interaction.followup.send(
-                embed=ErrorEmbed(
-                    description=f"Found match for **{home}** vs **{away}** but it has no match ID in the API."
-                ),
+                embed=ErrorEmbed(description=f"Found match for **{home}** vs **{away}** but it has no match ID in the API."),
                 ephemeral=True,
             )
         log.debug(f"Found match: {match}")
@@ -387,9 +355,7 @@ class BallchasingMixIn(RSCMixIn):
             and not override
         ):
             return await interaction.followup.send(
-                embed=ErrorEmbed(
-                    description="You are not on one of the teams in this match."
-                ),
+                embed=ErrorEmbed(description="You are not on one of the teams in this match."),
                 ephemeral=True,
             )
 
@@ -401,13 +367,9 @@ class BallchasingMixIn(RSCMixIn):
         await interaction.followup.send(embed=embed, ephemeral=True)
 
         try:
-            bc_group = await self.process_match_replays(
-                guild, match=match, replays=replay_files
-            )
+            bc_group = await self.process_match_replays(guild, match=match, replays=replay_files)  # type: ignore[arg-type]
         except (TypeError, ValueError, RuntimeError) as exc:
-            return await interaction.edit_original_response(
-                embed=ExceptionErrorEmbed(exc_message=str(exc))
-            )
+            return await interaction.edit_original_response(embed=ExceptionErrorEmbed(exc_message=str(exc)))
 
         try:
             match_result = await self.report_match(
@@ -430,9 +392,7 @@ class BallchasingMixIn(RSCMixIn):
                     )
                 )
             else:
-                return await interaction.edit_original_response(
-                    embed=ApiExceptionErrorEmbed(exc)
-                )
+                return await interaction.edit_original_response(embed=ApiExceptionErrorEmbed(exc))
 
         # Final embed
         result_embed, result_view = await self.build_match_result_embed(
@@ -472,9 +432,7 @@ class BallchasingMixIn(RSCMixIn):
 
     # Functions
 
-    async def process_match_replays(
-        self, guild: discord.Guild, match: Match, replays=list[discord.Attachment]
-    ):
+    async def process_match_replays(self, guild: discord.Guild, match: Match, replays: list[discord.Attachment | str | bytes]):
         log.debug(
             f"Processing match: {match.home_team.name} vs {match.away_team.name}",
             guild=guild,
@@ -490,9 +448,7 @@ class BallchasingMixIn(RSCMixIn):
             raise ValueError("Ballchasing API is not configured in guild.")
 
         # Create or find RSC match group ID
-        match_group_id = await groups.rsc_match_bc_group(
-            bapi=bapi, guild=guild, tlg=tlg, match=match
-        )
+        match_group_id = await groups.rsc_match_bc_group(bapi=bapi, guild=guild, tlg=tlg, match=match)
         log.debug(f"Match Group ID: {match_group_id}", guild=guild)
         if not match_group_id:
             raise RuntimeError("Unable to find or create ballchasing match group.")
@@ -505,9 +461,7 @@ class BallchasingMixIn(RSCMixIn):
         log.debug(f"Existing Replay Count: {len(bc_replays)}", guild=guild)
 
         # Check for collisions in ballchasing (duplicate replays)
-        collisions = await process.replay_group_collisions(
-            replay_files=replays, bc_replays=bc_replays
-        )
+        collisions = await process.replay_group_collisions(replay_files=replays, bc_replays=bc_replays)
         log.debug(f"Replay Collisions: {collisions}", guild=guild)
 
         # Remove collisions from upload list
@@ -538,9 +492,7 @@ class BallchasingMixIn(RSCMixIn):
         log.debug(f"Uploading replays to group: {group}", guild=guild)
         replay_ids = []
         for replay in replays:
-            generated_name = "".join(
-                random.choices(string.ascii_letters + string.digits, k=64)
-            )
+            generated_name = "".join(random.choices(string.ascii_letters + string.digits, k=64))  # noqa: S311
             rname = f"{generated_name}.replay"
             try:
                 if isinstance(replay, discord.Attachment):
@@ -589,10 +541,7 @@ class BallchasingMixIn(RSCMixIn):
         tier_color = await utils.tier_color_by_name(guild, match.home_team.tier)
 
         embed = discord.Embed(
-            description=(
-                "Match Summary:\n"
-                f"**{match.home_team.name}** {result.home_wins} - {result.away_wins} **{match.away_team.name}**"
-            ),
+            description=(f"Match Summary:\n**{match.home_team.name}** {result.home_wins} - {result.away_wins} **{match.away_team.name}**"),
             color=tier_color,
         )
 
@@ -602,18 +551,12 @@ class BallchasingMixIn(RSCMixIn):
 
         # Format embed title by match type
         if match.match_type == MatchType.PRESEASON:
-            embed.title = (
-                f"Pre {match.day}: {match.home_team.name} vs {match.away_team.name}"
-            )
+            embed.title = f"Pre {match.day}: {match.home_team.name} vs {match.away_team.name}"
         elif match.match_type == MatchType.POSTSEASON:
             playoff_round = PostSeasonType(match.day).name.capitalize()
-            embed.title = (
-                f"{playoff_round}: {match.home_team.name} vs {match.away_team.name}"
-            )
+            embed.title = f"{playoff_round}: {match.home_team.name} vs {match.away_team.name}"
         else:
-            embed.title = (
-                f"MD {match.day}: {match.home_team.name} vs {match.away_team.name}"
-            )
+            embed.title = f"MD {match.day}: {match.home_team.name} vs {match.away_team.name}"
 
         # Ballchasing group link button
         bc_view = None
@@ -624,17 +567,9 @@ class BallchasingMixIn(RSCMixIn):
 
         # Get franchise logo
         tie = False
-        if (
-            result.home_wins is not None
-            and result.away_wins is not None
-            and result.home_wins > result.away_wins
-        ):
+        if result.home_wins is not None and result.away_wins is not None and result.home_wins > result.away_wins:
             winning_franchise = match.home_team.franchise
-        elif (
-            result.home_wins is not None
-            and result.away_wins is not None
-            and result.home_wins == result.away_wins
-        ):
+        elif result.home_wins is not None and result.away_wins is not None and result.home_wins == result.away_wins:
             tie = True
         else:
             winning_franchise = match.away_team.franchise
@@ -684,18 +619,14 @@ class BallchasingMixIn(RSCMixIn):
 
         category = await self._get_score_reporting_category(guild)
         if not category:
-            log.warning(
-                f"[{guild.name}] Ballchasing score report category is not configured"
-            )
+            log.warning(f"[{guild.name}] Ballchasing score report category is not configured")
             return None
 
         cname = f"{tier.lower()}-score-reporting"
 
         score_channel = discord.utils.get(category.channels, name=cname)
         if not score_channel:
-            log.warning(
-                f"[{guild.name}] Unable to find tier score report channel: {cname}"
-            )
+            log.warning(f"[{guild.name}] Unable to find tier score report channel: {cname}")
             return None
 
         if not isinstance(score_channel, discord.TextChannel):
@@ -748,17 +679,13 @@ class BallchasingMixIn(RSCMixIn):
     async def _save_bc_auth_token(self, guild: discord.Guild, key: str):
         await self.config.custom("Ballchasing", str(guild.id)).AuthToken.set(key)
 
-    async def _save_top_level_group(self, guild: discord.Guild, group_id):
-        await self.config.custom("Ballchasing", str(guild.id)).TopLevelGroup.set(
-            group_id
-        )
+    async def _save_top_level_group(self, guild: discord.Guild, group_id: str):
+        await self.config.custom("Ballchasing", str(guild.id)).TopLevelGroup.set(group_id)
 
     async def _get_top_level_group(self, guild: discord.Guild) -> str | None:
         return await self.config.custom("Ballchasing", str(guild.id)).TopLevelGroup()
 
-    async def _get_bc_log_channel(
-        self, guild: discord.Guild
-    ) -> discord.TextChannel | None:
+    async def _get_bc_log_channel(self, guild: discord.Guild) -> discord.TextChannel | None:
         id = await self.config.custom("Ballchasing", str(guild.id)).LogChannel()
         if not id:
             return None
@@ -767,12 +694,8 @@ class BallchasingMixIn(RSCMixIn):
             return None
         return c
 
-    async def _save_bc_log_channel(
-        self, guild: discord.Guild, channel: discord.TextChannel
-    ):
-        await self.config.custom("Ballchasing", str(guild.id)).LogChannel.set(
-            channel.id
-        )
+    async def _save_bc_log_channel(self, guild: discord.Guild, channel: discord.TextChannel):
+        await self.config.custom("Ballchasing", str(guild.id)).LogChannel.set(channel.id)
 
     async def _get_bc_manager_role(self, guild: discord.Guild) -> discord.Role | None:
         r = await self.config.custom("Ballchasing", str(guild.id)).ManagerRole()
@@ -783,24 +706,16 @@ class BallchasingMixIn(RSCMixIn):
     async def _save_bc_manager_role(self, guild: discord.Guild, role: discord.Role):
         await self.config.custom("Ballchasing", str(guild.id)).ManagerRole.set(role.id)
 
-    async def _save_score_reporting_category(
-        self, guild: discord.Guild, category: discord.CategoryChannel
-    ):
-        await self.config.custom("Ballchasing", str(guild.id)).ReportCategory.set(
-            category.id
-        )
+    async def _save_score_reporting_category(self, guild: discord.Guild, category: discord.CategoryChannel):
+        await self.config.custom("Ballchasing", str(guild.id)).ReportCategory.set(category.id)
 
-    async def _get_score_reporting_category(
-        self, guild: discord.Guild
-    ) -> discord.CategoryChannel | None:
+    async def _get_score_reporting_category(self, guild: discord.Guild) -> discord.CategoryChannel | None:
         c = await self.config.custom("Ballchasing", str(guild.id)).ReportCategory()
         if not c:
             return None
 
         category = guild.get_channel(c)
         if not isinstance(category, discord.CategoryChannel):
-            log.warning(
-                f"[{guild.name}] Score report channel is not a category channel."
-            )
+            log.warning(f"[{guild.name}] Score report channel is not a category channel.")
             return None
         return category

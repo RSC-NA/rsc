@@ -19,7 +19,7 @@ class BulkMatchModal(discord.ui.Modal, title="Import RSC matches into API"):
         required=True,
     )
 
-    async def on_submit(self, interaction: discord.Interaction):
+    async def on_submit(self, interaction: discord.Interaction) -> None:
         self.interaction = interaction
 
     async def parse_matches(self) -> list[CreateMatchData]:
@@ -36,7 +36,7 @@ class AgmMessageModal(discord.ui.Modal, title="AGM Promotion Message"):
         required=True,
     )
 
-    async def on_submit(self, interaction: discord.Interaction):
+    async def on_submit(self, interaction: discord.Interaction) -> None:
         embed = SuccessEmbed(description="AGM promotion message has been configured.")
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
@@ -63,9 +63,7 @@ class IntentMissingModal(discord.ui.Modal, title="Missing Intent to Play Message
     )
 
     async def on_submit(self, interaction: discord.Interaction):
-        embed = SuccessEmbed(
-            description="Missing intent ping message has been configured."
-        )
+        embed = SuccessEmbed(description="Missing intent ping message has been configured.")
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
@@ -75,9 +73,7 @@ class FranchiseRebrandModal(discord.ui.Modal, title="Franchise Rebrand"):
         style=discord.TextStyle.short,
         required=True,
     )
-    prefix_input: TextInput = TextInput(
-        label="Prefix", style=discord.TextStyle.short, required=True
-    )
+    prefix_input: TextInput = TextInput(label="Prefix", style=discord.TextStyle.short, required=True)
     team_input: TextInput = TextInput(
         label="Teams (New line separated, high to low tiers)",
         style=discord.TextStyle.paragraph,

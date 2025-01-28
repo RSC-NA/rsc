@@ -20,16 +20,16 @@ FONT_22 = ImageFont.truetype(str(RSC_FONT), 22)
 FONT_32 = ImageFont.truetype(str(RSC_FONT), 32)
 
 
-def drawProgressBar(
+def drawProgressBar(  # noqa: N802
     d: ImageDraw.ImageDraw,
     x: int,
     y: int,
     w: int,
     h: int,
-    progress,
+    progress: float,
     progress_bounds: tuple[int, int] | None = None,
-    bg=(17, 17, 17),
-    fg=(0, 102, 153),
+    bg: tuple[int, int, int] = (17, 17, 17),
+    fg: tuple[int, int, int] = (0, 102, 153),
 ) -> ImageDraw.ImageDraw:
     # draw background
     d.ellipse((x + w, y, x + h + w, y + h), fill=bg)
@@ -45,9 +45,7 @@ def drawProgressBar(
 
     # draw progress
     if progress_bounds:
-        message = (
-            f"{progress_bounds[0]} / {progress_bounds[1]} ({int(progress * 100)}%)"
-        )
+        message = f"{progress_bounds[0]} / {progress_bounds[1]} ({int(progress * 100)}%)"
         d.text(((w / 2) + (x * 2), (h / 2) + y), message, font=FONT_16, anchor="mm")
     else:
         message = f"{progress * 100}%"
@@ -56,7 +54,7 @@ def drawProgressBar(
     return d
 
 
-def getProgressBar(
+def getProgressBar(  # noqa: N802
     x: int,
     y: int,
     w: int,

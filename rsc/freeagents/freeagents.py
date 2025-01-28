@@ -56,9 +56,7 @@ class FreeAgentMixIn(RSCMixIn):
 
             # Validate the guild exists
             if not guild:
-                log.error(
-                    f"Unable to resolve guild during expire FA check in loop: {k}"
-                )
+                log.error(f"Unable to resolve guild during expire FA check in loop: {k}")
                 continue
 
             log.info(f"[{guild.name}] Removing expired free agents.")
@@ -82,11 +80,11 @@ class FreeAgentMixIn(RSCMixIn):
 
     # Commands
 
-    @app_commands.command(  # type: ignore
+    @app_commands.command(  # type: ignore[type-var]
         name="freeagents", description="List free agents in a specified tier"
     )
     @app_commands.describe(tier='Free agent tier (Ex: "Elite")')
-    @app_commands.autocomplete(tier=TierMixIn.tier_autocomplete)  # type: ignore
+    @app_commands.autocomplete(tier=TierMixIn.tier_autocomplete)  # type: ignore[type-var]
     @app_commands.guild_only
     async def _free_agents(self, interaction: discord.Interaction, tier: str):
         guild = interaction.guild
@@ -132,7 +130,7 @@ class FreeAgentMixIn(RSCMixIn):
 
         await interaction.followup.send(embed=embed)
 
-    @_free_agent_group.command(  # type: ignore
+    @_free_agent_group.command(  # type: ignore[type-var]
         name="checkin",
         description="Check in as an available free agent for the current match day",
     )
@@ -155,9 +153,7 @@ class FreeAgentMixIn(RSCMixIn):
         # Check if match day
         if not await self.is_match_day(guild):
             return await interaction.response.send_message(
-                embed=ErrorEmbed(
-                    title="Check In Error", description="There are no matches today!"
-                ),
+                embed=ErrorEmbed(title="Check In Error", description="There are no matches today!"),
                 ephemeral=True,
             )
 
@@ -220,7 +216,7 @@ class FreeAgentMixIn(RSCMixIn):
             )
             await self.add_checkin(guild, checkin)
 
-    @_free_agent_group.command(  # type: ignore
+    @_free_agent_group.command(  # type: ignore[type-var]
         name="checkout",
         description="Check out as an available free agent for the current match day",
     )
@@ -248,12 +244,12 @@ class FreeAgentMixIn(RSCMixIn):
         if checkout_view.result:
             await self.remove_checkin(guild, checkin)
 
-    @_free_agent_group.command(  # type: ignore
+    @_free_agent_group.command(  # type: ignore[type-var]
         name="availability",
         description="Get list of available free agents for specified tier",
     )
     @app_commands.describe(tier='Free agent tier (Ex: "Elite")')
-    @app_commands.autocomplete(tier=TierMixIn.tier_autocomplete)  # type: ignore
+    @app_commands.autocomplete(tier=TierMixIn.tier_autocomplete)  # type: ignore[type-var]
     @app_commands.guild_only
     async def _fa_availability_cmd(self, interaction: discord.Interaction, tier: str):
         guild = interaction.guild
@@ -295,12 +291,12 @@ class FreeAgentMixIn(RSCMixIn):
             )
         await interaction.response.send_message(embed=embed)
 
-    @app_commands.command(  # type: ignore
+    @app_commands.command(  # type: ignore[type-var]
         name="clearavailability",
         description="Clear free agent availability for a specified tier",
     )
     @app_commands.describe(tier='Free agent tier (Ex: "Elite")')
-    @app_commands.autocomplete(tier=TierMixIn.tier_autocomplete)  # type: ignore
+    @app_commands.autocomplete(tier=TierMixIn.tier_autocomplete)  # type: ignore[type-var]
     @app_commands.checks.has_permissions(manage_guild=True)
     @app_commands.guild_only
     async def _clear_fa_availability(self, interaction: discord.Interaction, tier: str):
@@ -309,13 +305,9 @@ class FreeAgentMixIn(RSCMixIn):
 
         tier = tier.capitalize()
         await self.clear_checkins_by_tier(interaction.guild, tier)
-        await interaction.response.send_message(
-            embed=SuccessEmbed(
-                description=f"Cleared all free agent availability for **{tier}**"
-            )
-        )
+        await interaction.response.send_message(embed=SuccessEmbed(description=f"Cleared all free agent availability for **{tier}**"))
 
-    @app_commands.command(  # type: ignore
+    @app_commands.command(  # type: ignore[type-var]
         name="clearallavailability",
         description="Clear free agent availability for all tiers",
     )
@@ -326,9 +318,7 @@ class FreeAgentMixIn(RSCMixIn):
             return
 
         await self.clear_all_checkins(interaction.guild)
-        await interaction.response.send_message(
-            embed=SuccessEmbed(description="Cleared all free agent availability")
-        )
+        await interaction.response.send_message(embed=SuccessEmbed(description="Cleared all free agent availability"))
 
     # Functions
 
@@ -372,9 +362,7 @@ class FreeAgentMixIn(RSCMixIn):
         self._check_ins[guild.id] = current
         await self._save_check_ins(guild, current)
 
-    async def update_freeagent_visibility(
-        self, guild: discord.Guild, player: discord.Member, visibility: bool
-    ):
+    async def update_freeagent_visibility(self, guild: discord.Guild, player: discord.Member, visibility: bool):
         """Remove free agent check in for guild"""
         log.debug(f"Changing checkin visibility for {player.id} to {visibility}")
         checkins = await self._get_check_ins(guild)
@@ -390,12 +378,7 @@ class FreeAgentMixIn(RSCMixIn):
         """Check if discord.Member is checked in as FA"""
         if not self._check_ins.get(player.guild.id):
             return False
-        if next(
-            (x for x in self._check_ins[player.guild.id] if x["player"] == player.id),
-            None,
-        ):
-            return True
-        return False
+        return bool(next((x for x in self._check_ins[player.guild.id] if x["player"] == player.id), None))
 
     async def get_checkin(self, player: discord.Member) -> CheckIn | None:
         """Return a CheckIn for discord.Member if it exists"""
@@ -408,21 +391,13 @@ class FreeAgentMixIn(RSCMixIn):
 
     # API Calls
 
-    async def free_agents(
-        self, guild: discord.Guild, tier_name: str
-    ) -> list[LeaguePlayer]:
+    async def free_agents(self, guild: discord.Guild, tier_name: str) -> list[LeaguePlayer]:
         """Fetch a list of Free Agents for specified tier"""
-        return await self.players(
-            guild, status=Status.FREE_AGENT, tier_name=tier_name, limit=1000
-        )
+        return await self.players(guild, status=Status.FREE_AGENT, tier_name=tier_name, limit=1000)
 
-    async def permanent_free_agents(
-        self, guild: discord.Guild, tier_name: str
-    ) -> list[LeaguePlayer]:
+    async def permanent_free_agents(self, guild: discord.Guild, tier_name: str) -> list[LeaguePlayer]:
         """Fetch a list of Permanent Free Agents for specified tier"""
-        return await self.players(
-            guild, status=Status.PERM_FA, tier_name=tier_name, limit=1000
-        )
+        return await self.players(guild, status=Status.PERM_FA, tier_name=tier_name, limit=1000)
 
     # Config
 

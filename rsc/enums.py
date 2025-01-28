@@ -441,12 +441,7 @@ class AnsiColor(IntEnum):
             log.debug("Other Red")
             return round((((red - 8) / 247) * 24) + 232)
 
-        return (
-            16
-            + (36 * round(red / 255 * 5))
-            + (6 * round(green / 255 * 5))
-            + round(blue / 255 * 5)
-        )
+        return 16 + (36 * round(red / 255 * 5)) + (6 * round(green / 255 * 5)) + round(blue / 255 * 5)
 
     @staticmethod
     def ansi256_to_ansi(code: int) -> int:
@@ -487,7 +482,7 @@ class AnsiColor(IntEnum):
         return result
 
     @staticmethod
-    def from_rgb_hex(hex: str, bold=False, underline=False) -> str:
+    def from_rgb_hex(hex: str, bold: bool = False, underline: bool = False) -> str:
         """Example input: #FFFFFF (Not functional TODO)"""
         aformat = 0
 

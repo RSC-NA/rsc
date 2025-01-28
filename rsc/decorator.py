@@ -5,7 +5,7 @@ import discord
 from rsc.abc import RSCMixIn
 
 
-def apicall(f):
+def apicall(f):  # noqa: ANN001
     @wraps(f)
     def wrapper(self: RSCMixIn, guild: discord.Guild, *args, **kwargs):
         if not self._league.get(guild.id):

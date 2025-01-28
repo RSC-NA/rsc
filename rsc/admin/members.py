@@ -38,7 +38,7 @@ class AdminMembersMixIn(AdminMixIn):
         default_permissions=discord.Permissions(manage_guild=True),
     )
 
-    @_members.command(  # type: ignore
+    @_members.command(  # type: ignore[type-var]
         name="namehistory", description="Get an RSC discord members API name history"
     )
     @app_commands.describe(
@@ -58,44 +58,29 @@ class AdminMembersMixIn(AdminMixIn):
         try:
             history = await self.name_history(guild, member)
         except RscException as exc:
-            await interaction.followup.send(
-                embed=ApiExceptionErrorEmbed(exc), ephemeral=False
-            )
+            await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc), ephemeral=False)
             return
 
         log.debug(f"History: {history}")
         embed = BlueEmbed(title="Name History")
 
         if not history:
-            embed.description = (
-                f"{member.mention} does not have any past name changes in the API."
-            )
+            embed.description = f"{member.mention} does not have any past name changes in the API."
             return await interaction.followup.send(embed=embed)
         else:
             embed.description = f"Member: {member.mention}"
 
-        history.sort(
-            key=lambda x: x.date_changed if x.date_changed else "None", reverse=True
-        )
+        history.sort(key=lambda x: x.date_changed if x.date_changed else "None", reverse=True)
         log.debug(f"Post sort: {history}")
 
         embed.add_field(name="API Name", value="\n".join([h.old_name for h in history]))
         embed.add_field(
             name="Date",
-            value="\n".join(
-                [
-                    (
-                        h.date_changed.strftime("%-m/%-d/%y")
-                        if isinstance(h.date_changed, datetime)
-                        else "None"
-                    )
-                    for h in history
-                ]
-            ),
+            value="\n".join([(h.date_changed.strftime("%-m/%-d/%y") if isinstance(h.date_changed, datetime) else "None") for h in history]),
         )
         await interaction.followup.send(embed=embed)
 
-    @_members.command(name="changename", description="Change RSC name for a member")  # type: ignore
+    @_members.command(name="changename", description="Change RSC name for a member")  # type: ignore[type-var]
     @app_commands.describe(
         member="RSC discord member",
         name="New player name",
@@ -119,20 +104,16 @@ class AdminMembersMixIn(AdminMixIn):
         try:
             if tracker:
                 await self.add_tracker(guild, member, tracker)
-            mdata = await self.change_member_name(
-                guild, id=member.id, name=name, override=override
-            )
+            mdata = await self.change_member_name(guild, id=member.id, name=name, override=override)
         except RscException as exc:
-            await interaction.followup.send(
-                embed=ApiExceptionErrorEmbed(exc), ephemeral=False
-            )
+            await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc), ephemeral=False)
             return
 
         # Update nickname in RSC
         accolades = await utils.member_accolades(member)
         pfx = await utils.get_prefix(member)
 
-        if pfx:
+        if pfx:  # noqa: SIM108
             new_nick = f"{pfx} | {name} {accolades}".strip()
         else:
             new_nick = f"{name} {accolades}".strip()
@@ -140,9 +121,7 @@ class AdminMembersMixIn(AdminMixIn):
         try:
             await member.edit(nick=new_nick)
         except discord.Forbidden as exc:
-            await interaction.followup.send(
-                content=f"Unable to update nickname {member.mention}: {exc}"
-            )
+            await interaction.followup.send(content=f"Unable to update nickname {member.mention}: {exc}")
 
         # Update franchise role if player is GM
         if mdata.elevated_roles:
@@ -152,29 +131,26 @@ class AdminMembersMixIn(AdminMixIn):
                     if not frole:
                         return await interaction.followup.send(
                             embed=ErrorEmbed(
-                                description=f"Name change was successful but could not find {member.mention} franchise role. Unable to update GM name in role, Please open a modmail ticket."
+                                description=(
+                                    f"Name change was successful but could not find {member.mention} franchise role. "
+                                    "Unable to update GM name in role, Please open a modmail ticket."
+                                )
                             )
                         )
 
                     fsplit = frole.name.split("(", maxsplit=1)
                     if len(fsplit) != 2:
                         return await interaction.followup.send(
-                            embed=ErrorEmbed(
-                                description=f"Error updating franchise role {frole.mention}. Unable to parse name and GM."
-                            )
+                            embed=ErrorEmbed(description=f"Error updating franchise role {frole.mention}. Unable to parse name and GM.")
                         )
 
                     log.debug("Updating Franchise Role")
                     fname = fsplit[0].strip()
                     await frole.edit(name=f"{fname} ({name})")
 
-        await interaction.followup.send(
-            embed=SuccessEmbed(
-                description=f"Player RSC name has been updated to {member.mention}"
-            )
-        )
+        await interaction.followup.send(embed=SuccessEmbed(description=f"Player RSC name has been updated to {member.mention}"))
 
-    @_members.command(  # type: ignore
+    @_members.command(  # type: ignore[type-var]
         name="transfer", description="Transfer membership to a new Discord account"
     )
     @app_commands.describe(
@@ -197,9 +173,7 @@ class AdminMembersMixIn(AdminMixIn):
             old_discord_id = int(old.strip())
             log.debug(f"Looking up league player discord ID: {old_discord_id}")
         except ValueError:
-            return await interaction.response.send_message(
-                embed=ErrorEmbed(description="Old Discord ID must be a number")
-            )
+            return await interaction.response.send_message(embed=ErrorEmbed(description="Old Discord ID must be a number"))
 
         await interaction.response.defer()
         # Transfer membership to new account
@@ -210,18 +184,14 @@ class AdminMembersMixIn(AdminMixIn):
                 new=new,
             )
         except RscException as exc:
-            await interaction.followup.send(
-                embed=ApiExceptionErrorEmbed(exc), ephemeral=True
-            )
+            await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc), ephemeral=True)
             return
 
         await interaction.followup.send(
-            embed=SuccessEmbed(
-                description=f"Transferred membership of {old} to {new.mention}"
-            ),
+            embed=SuccessEmbed(description=f"Transferred membership of {old} to {new.mention}"),
         )
 
-    @_members.command(name="patch", description="Patch a league player in the API")  # type: ignore
+    @_members.command(name="patch", description="Patch a league player in the API")  # type: ignore[type-var]
     @app_commands.describe(
         player="Discord member to patch",
         status="Player status",
@@ -230,9 +200,7 @@ class AdminMembersMixIn(AdminMixIn):
         base_mmr="Base MMR",
         current_mmr="Current MMR",
     )
-    @app_commands.autocomplete(
-        tier=TierMixIn.tier_autocomplete, team=TeamMixIn.teams_autocomplete
-    )
+    @app_commands.autocomplete(tier=TierMixIn.tier_autocomplete, team=TeamMixIn.teams_autocomplete)
     async def _member_patch_cmd(
         self,
         interaction: discord.Interaction,
@@ -258,26 +226,18 @@ class AdminMembersMixIn(AdminMixIn):
                 tid = await self.tier_id_by_name(guild, tier=tier)
                 log.debug(f"Tier ID: {tid}")
         except RscException as exc:
-            return await interaction.followup.send(
-                embed=ApiExceptionErrorEmbed(exc), ephemeral=True
-            )
+            return await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc), ephemeral=True)
         except ValueError as exc:
-            return await interaction.followup.send(
-                embed=ExceptionErrorEmbed(exc_message=str(exc))
-            )
+            return await interaction.followup.send(embed=ExceptionErrorEmbed(exc_message=str(exc)))
 
         if not plist:
             return await interaction.followup.send(
-                embed=ErrorEmbed(
-                    description="League player does not exist. Please create the player first."
-                )
+                embed=ErrorEmbed(description="League player does not exist. Please create the player first.")
             )
 
         lplayer = plist.pop(0)
         if not lplayer.id:
-            return await interaction.response.send_message(
-                embed=ErrorEmbed(description="LeaguePlayer object has no ID")
-            )
+            return await interaction.response.send_message(embed=ErrorEmbed(description="LeaguePlayer object has no ID"))
 
         # Patch Player
         try:
@@ -295,32 +255,22 @@ class AdminMembersMixIn(AdminMixIn):
             # Get updated league player object
             plist = await self.players(guild, discord_id=player.id, limit=1)
         except RscException as exc:
-            return await interaction.followup.send(
-                embed=ApiExceptionErrorEmbed(exc), ephemeral=True
-            )
+            return await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc), ephemeral=True)
         except ValueError as exc:
-            return await interaction.followup.send(
-                embed=ExceptionErrorEmbed(exc_message=str(exc))
-            )
+            return await interaction.followup.send(embed=ExceptionErrorEmbed(exc_message=str(exc)))
 
         if not plist:
             return await interaction.response.send_message(
-                embed=ErrorEmbed(
-                    description="Player was updated but league player does not exist."
-                )
+                embed=ErrorEmbed(description="Player was updated but league player does not exist.")
             )
 
         # Update discord roles, etc
         try:
             log.debug("Updating player in discord")
             lplayer = plist.pop(0)
-            await update_league_player_discord(
-                guild=guild, player=player, league_player=lplayer, tiers=tier_list
-            )
+            await update_league_player_discord(guild=guild, player=player, league_player=lplayer, tiers=tier_list)
         except (ValueError, AttributeError) as exc:
-            return await interaction.followup.send(
-                embed=ExceptionErrorEmbed(exc_message=str(exc))
-            )
+            return await interaction.followup.send(embed=ExceptionErrorEmbed(exc_message=str(exc)))
 
         # Craft embed
         embed = BlueEmbed(title="League Player Updated")
@@ -352,7 +302,7 @@ class AdminMembersMixIn(AdminMixIn):
 
         await interaction.followup.send(embed=embed)
 
-    @_members.command(name="create", description="Create an RSC member in the API")  # type: ignore
+    @_members.command(name="create", description="Create an RSC member in the API")  # type: ignore[type-var]
     @app_commands.describe(
         member="Discord member being added",
         rsc_name="RSC player name (Defaults to members display name)",
@@ -373,9 +323,7 @@ class AdminMembersMixIn(AdminMixIn):
                 rsc_name=rsc_name or member.display_name,
             )
         except RscException as exc:
-            await interaction.response.send_message(
-                embed=ApiExceptionErrorEmbed(exc), ephemeral=True
-            )
+            await interaction.response.send_message(embed=ApiExceptionErrorEmbed(exc), ephemeral=True)
             return
 
         # Change nickname if specified
@@ -383,35 +331,27 @@ class AdminMembersMixIn(AdminMixIn):
             await member.edit(nick=rsc_name)
 
         await interaction.response.send_message(
-            embed=SuccessEmbed(
-                description=f"{member.mention} has been created in the RSC API."
-            ),
+            embed=SuccessEmbed(description=f"{member.mention} has been created in the RSC API."),
             ephemeral=True,
         )
 
-    @_members.command(name="delete", description="Delete an RSC member in the API")  # type: ignore
+    @_members.command(name="delete", description="Delete an RSC member in the API")  # type: ignore[type-var]
     @app_commands.describe(member="RSC discord member")
-    async def _member_delete(
-        self, interaction: discord.Interaction, member: discord.Member
-    ):
+    async def _member_delete(self, interaction: discord.Interaction, member: discord.Member):
         if not interaction.guild:
             return
 
         try:
             await self.delete_member(interaction.guild, member=member)
         except RscException as exc:
-            await interaction.response.send_message(
-                embed=ApiExceptionErrorEmbed(exc), ephemeral=True
-            )
+            await interaction.response.send_message(embed=ApiExceptionErrorEmbed(exc), ephemeral=True)
             return
         await interaction.response.send_message(
-            embed=SuccessEmbed(
-                description=f"{member.mention} has been deleted from the RSC API."
-            ),
+            embed=SuccessEmbed(description=f"{member.mention} has been deleted from the RSC API."),
             ephemeral=True,
         )
 
-    @_members.command(  # type: ignore
+    @_members.command(  # type: ignore[type-var]
         name="list", description="Fetch a list of members based on specified criteria."
     )
     @app_commands.describe(
@@ -435,9 +375,7 @@ class AdminMembersMixIn(AdminMixIn):
             return
 
         if not (rsc_name or discord_username or discord_id):
-            await interaction.response.send_message(
-                "You must specify at least one search option.", ephemeral=True
-            )
+            await interaction.response.send_message("You must specify at least one search option.", ephemeral=True)
             return
 
         discord_id_int = None
@@ -445,9 +383,7 @@ class AdminMembersMixIn(AdminMixIn):
             try:
                 discord_id_int = int(discord_id)
             except ValueError:
-                await interaction.response.send_message(
-                    "Discord ID must be an integer.", ephemeral=True
-                )
+                await interaction.response.send_message("Discord ID must be an integer.", ephemeral=True)
                 return
 
         await interaction.response.defer(ephemeral=True)
@@ -473,9 +409,7 @@ class AdminMembersMixIn(AdminMixIn):
 
             league = None
             if m.player_leagues:
-                league = next(
-                    (i for i in m.player_leagues if i.league.id == league_id), None
-                )
+                league = next((i for i in m.player_leagues if i.league.id == league_id), None)
 
             status = "Spectator"
             if league and league.status:
@@ -493,25 +427,17 @@ class AdminMembersMixIn(AdminMixIn):
             title="RSC Member Results",
             description="The following members matched the specified criteria",
         )
-        embed.add_field(
-            name="Member", value="\n".join([str(x[0]) for x in m_fmt]), inline=True
-        )
-        embed.add_field(
-            name="ID", value="\n".join([str(x[1]) for x in m_fmt]), inline=True
-        )
-        embed.add_field(
-            name="Status", value="\n".join([x[2] for x in m_fmt]), inline=True
-        )
+        embed.add_field(name="Member", value="\n".join([str(x[0]) for x in m_fmt]), inline=True)
+        embed.add_field(name="ID", value="\n".join([str(x[1]) for x in m_fmt]), inline=True)
+        embed.add_field(name="Status", value="\n".join([x[2] for x in m_fmt]), inline=True)
 
         if embed.exceeds_limits():
-            await interaction.followup.send(
-                content="Result exceeds discord character limits. Please refine your search."
-            )
+            await interaction.followup.send(content="Result exceeds discord character limits. Please refine your search.")
             return
 
         await interaction.followup.send(embed=embed, ephemeral=True)
 
-    @_members.command(  # type: ignore
+    @_members.command(  # type: ignore[type-var]
         name="signup", description="Sign a player up for the latest RSC season"
     )
     @app_commands.describe(
@@ -552,9 +478,7 @@ class AdminMembersMixIn(AdminMixIn):
                 override=override,
             )
         except RscException as exc:
-            await interaction.followup.send(
-                embed=ApiExceptionErrorEmbed(exc), ephemeral=True
-            )
+            await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc), ephemeral=True)
             return
 
         # Change nickname if specified
@@ -562,7 +486,5 @@ class AdminMembersMixIn(AdminMixIn):
             await member.edit(nick=rsc_name)
 
         await interaction.followup.send(
-            embed=SuccessEmbed(
-                description=f"{member.mention} has been signed up for the latest season of RSC."
-            )
+            embed=SuccessEmbed(description=f"{member.mention} has been signed up for the latest season of RSC.")
         )

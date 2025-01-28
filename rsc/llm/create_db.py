@@ -6,8 +6,8 @@ import logging
 import shutil
 import sys
 import tempfile
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable
 
 import discord
 import httpx
@@ -99,9 +99,7 @@ def franchise_metadata(record: dict, metadata: dict):
     return metadata
 
 
-async def json_to_docs(
-    data: str, jq_schema: str, metadata_func: Callable | None
-) -> list[Document]:
+async def json_to_docs(data: str, jq_schema: str, metadata_func: Callable | None) -> list[Document]:
     with tempfile.NamedTemporaryFile() as fd:
         if isinstance(data, str):
             fd.write(data.encode("utf-8"))
@@ -173,9 +171,7 @@ async def generate_document_hashes(docs: list[Document]) -> list[str]:
     return hashes
 
 
-async def create_chroma_db(
-    guild: discord.Guild, org_name: str, api_key: str, docs: list[Document]
-):
+async def create_chroma_db(guild: discord.Guild, org_name: str, api_key: str, docs: list[Document]):
     # Clear out the database first.
     await rm_chroma_db()
 

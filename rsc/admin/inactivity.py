@@ -1,5 +1,5 @@
 import logging
-from typing import MutableMapping
+from typing import TYPE_CHECKING
 
 import discord
 from redbot.core import app_commands
@@ -17,6 +17,9 @@ from rsc.enums import ActivityCheckStatus
 from rsc.exceptions import RscException
 from rsc.logs import GuildLogAdapter
 from rsc.utils import utils
+
+if TYPE_CHECKING:
+    from collections.abc import MutableMapping
 
 logger = logging.getLogger("red.rsc.admin.inactivity")
 log = GuildLogAdapter(logger)
@@ -40,7 +43,7 @@ class AdminInactivityMixIn(AdminMixIn):
 
     # Startup
 
-    async def setup_persistent_activity_check(self, guild: discord.Guild):
+    async def setup_persistent_activity_check(self, guild: discord.Guild) -> None:
         # Check if inactivity check is present
         msg_id = await self._get_activity_check_msg_id(guild)
         log.debug(f"Inactive Message ID: {msg_id}")
@@ -58,28 +61,22 @@ class AdminInactivityMixIn(AdminMixIn):
 
         inactive_channel = discord.utils.get(guild.channels, name="inactivity-check")
         if not inactive_channel:
-            log.warning(
-                "Inactive check channel does not exist but is turned on. Resetting..."
-            )
+            log.warning("Inactive check channel does not exist but is turned on. Resetting...")
             await self._set_actvity_check_msg_id(guild, None)
             return
 
         log.debug(f"[{guild.name}] Making activity check persistent: {msg_id}")
         # Create and attach view to persistent message ID
-        inactive_view = InactiveCheckView(
-            guild=guild, league_id=league_id, api_conf=conf
-        )
+        inactive_view = InactiveCheckView(guild=guild, league_id=league_id, api_conf=conf)
         self.bot.add_view(inactive_view, message_id=msg_id)
 
     # Commands
 
-    @_inactive.command(  #  type: ignore
+    @_inactive.command(  # type: ignore[type-var]
         name="start",
         description="Create a channel and ping for inactive check. (FA/DE players only)",
     )
-    async def _admin_inactive_check_start_cmd(
-        self, interaction: discord.Interaction, category: discord.CategoryChannel
-    ):
+    async def _admin_inactive_check_start_cmd(self, interaction: discord.Interaction, category: discord.CategoryChannel):
         guild = interaction.guild
         if not guild:
             return
@@ -90,9 +87,7 @@ class AdminInactivityMixIn(AdminMixIn):
 
         if not (de_role and gm_role and agm_role):
             return await interaction.response.send_message(
-                embed=ErrorEmbed(
-                    description="Draft Eligible, General Manager, or Assistant GM role does not exist in guild."
-                ),
+                embed=ErrorEmbed(description="Draft Eligible, General Manager, or Assistant GM role does not exist in guild."),
                 ephemeral=True,
             )
 
@@ -129,9 +124,7 @@ class AdminInactivityMixIn(AdminMixIn):
             create_public_threads=False,
         )
 
-        activity_overwrites: MutableMapping[
-            discord.Member | discord.Role, discord.PermissionOverwrite
-        ] = {
+        activity_overwrites: MutableMapping[discord.Member | discord.Role, discord.PermissionOverwrite] = {
             guild.default_role: discord.PermissionOverwrite(
                 view_channel=False,
                 send_messages=False,
@@ -162,9 +155,7 @@ class AdminInactivityMixIn(AdminMixIn):
         if guild.icon:
             embed.set_thumbnail(url=guild.icon.url)
 
-        inactive_view = InactiveCheckView(
-            guild=guild, league_id=league_id, api_conf=conf
-        )
+        inactive_view = InactiveCheckView(guild=guild, league_id=league_id, api_conf=conf)
 
         msg = await inactive_channel.send(
             content=ping_fmt,
@@ -188,7 +179,7 @@ class AdminInactivityMixIn(AdminMixIn):
             ephemeral=True,
         )
 
-    @_inactive.command(  # type: ignore
+    @_inactive.command(  # type: ignore[type-var]
         name="stop", description="End inactivity check and delete channel."
     )
     async def _admin_inactive_check_stop_cmd(self, interaction: discord.Interaction):
@@ -199,9 +190,7 @@ class AdminInactivityMixIn(AdminMixIn):
         msg_id = await self._get_activity_check_msg_id(guild)
         if not msg_id:
             return await interaction.response.send_message(
-                embed=ErrorEmbed(
-                    description="The activity check has not been started."
-                ),
+                embed=ErrorEmbed(description="The activity check has not been started."),
                 ephemeral=True,
             )
 
@@ -221,7 +210,7 @@ class AdminInactivityMixIn(AdminMixIn):
             ephemeral=True,
         )
 
-    @_inactive.command(  # type: ignore
+    @_inactive.command(  # type: ignore[type-var]
         name="manual", description="Manually change a players activity check status"
     )
     @app_commands.describe(player="RSC discord member", status="Active or Not Active")
@@ -240,9 +229,7 @@ class AdminInactivityMixIn(AdminMixIn):
             return
 
         if override and not interaction.user.guild_permissions.manage_guild:
-            await interaction.response.send_message(
-                embed=ErrorEmbed(description="Only admins can process an override.")
-            )
+            await interaction.response.send_message(embed=ErrorEmbed(description="Only admins can process an override."))
             return
 
         returning = bool(status)
@@ -259,35 +246,30 @@ class AdminInactivityMixIn(AdminMixIn):
             )
             log.debug(f"Active Result: {result}")
         except RscException as exc:
-            return await interaction.followup.send(
-                embed=ApiExceptionErrorEmbed(exc), ephemeral=True
-            )
+            return await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc), ephemeral=True)
 
         if result.missing:
             return await interaction.followup.send(
-                embed=ErrorEmbed(
-                    description="Player activity check was completed but the API returned **missing**"
-                )
+                embed=ErrorEmbed(description="Player activity check was completed but the API returned **missing**")
             )
 
         if not result.completed:
             return await interaction.followup.send(
-                embed=ErrorEmbed(
-                    description="Player activity check was completed but the API returned **not completed**"
-                )
+                embed=ErrorEmbed(description="Player activity check was completed but the API returned **not completed**")
             )
 
         if result.returning_status != returning:
             return await interaction.followup.send(
                 embed=ErrorEmbed(
-                    description=f"Player activity check was completed but API returning status does not match submitted status.\n\nSubmitted: {returning}\nReceived: {result.returning_status}"
+                    description=(
+                        f"Player activity check was completed but API returning status does not match submitted status.\n\n"
+                        f"Submitted: {returning}\n"
+                        f"Received: {result.returning_status}"
+                    )
                 )
             )
 
-        if result.returning_status:
-            status_fmt = "**returning**"
-        else:
-            status_fmt = "**not returning**"
+        status_fmt = "**returning**" if result.returning_status else "**not returning**"
 
         await interaction.followup.send(
             embed=GreenEmbed(

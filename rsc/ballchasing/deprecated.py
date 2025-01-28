@@ -1,6 +1,6 @@
 # Deprecated Ballchasing Functions
 
-#     @_ballchasing.command(  # type: ignore
+#     @_ballchasing.command(  # type: ignore[type-var]
 #         name="reportall",
 #         description="Find and report all matches for the day on ballchasing",
 #     )
@@ -249,11 +249,11 @@
 #             # else:
 #             #     log.error("Failed to retrieve or create a ballchasing group for match.")
 
-#     @_ballchasing.command(  # type: ignore
+#     @_ballchasing.command(  # type: ignore[type-var]
 #         name="reporttier",
 #         description="Report a specific tier on ballchasing",
 #     )
-#     @app_commands.autocomplete(tier=TierMixIn.tier_autocomplete)  # type: ignore
+#     @app_commands.autocomplete(tier=TierMixIn.tier_autocomplete)  # type: ignore[type-var]
 #     @app_commands.describe(
 #         tier="Tier name to report",
 #         matchday="Match day to report (Optional: Defaults to current match day)",
@@ -316,14 +316,14 @@
 #             return
 #         # TODO need monty to add tier search
 
-#     @_ballchasing.command(  # type: ignore
+#     @_ballchasing.command(  # type: ignore[type-var]
 #         name="reportmatch",
 #         description="Report a specific match on ballchasing",
 #     )
 #     @app_commands.autocomplete(
 #         home=TeamMixIn.teams_autocomplete,
 #         away=TeamMixIn.teams_autocomplete,
-#     )  # type: ignore
+#     )  # type: ignore[type-var]
 #     @app_commands.describe(
 #         home="Home team name",
 #         away="Away team name",
@@ -499,14 +499,14 @@
 
 #         await interaction.edit_original_response(embed=embed)
 
-#    @_ballchasing.command(  # type: ignore
+#    @_ballchasing.command(  # type: ignore[type-var]
 #         name="reportmatch",
 #         description="Report a specific match on ballchasing",
 #     )
 #     @app_commands.autocomplete(
 #         home=TeamMixIn.teams_autocomplete,
 #         away=TeamMixIn.teams_autocomplete,
-#     )  # type: ignore
+#     )  # type: ignore[type-var]
 #     @app_commands.describe(
 #         home="Home team name",
 #         away="Away team name",

@@ -22,9 +22,7 @@ class TierMixIn(RSCMixIn):
 
     # Autocomplete
 
-    async def tier_autocomplete(
-        self, interaction: discord.Interaction, current: str
-    ) -> list[app_commands.Choice[str]]:
+    async def tier_autocomplete(self, interaction: discord.Interaction, current: str) -> list[app_commands.Choice[str]]:
         if not interaction.guild_id:
             return []
 
@@ -42,7 +40,7 @@ class TierMixIn(RSCMixIn):
 
     # Commands
 
-    @app_commands.command(name="tiers", description="Get a list of all league tiers")  # type: ignore
+    @app_commands.command(name="tiers", description="Get a list of all league tiers")  # type: ignore[type-var]
     @app_commands.guild_only
     async def _tiers(self, interaction: discord.Interaction):
         """Get a list of all league tiers"""
@@ -58,9 +56,7 @@ class TierMixIn(RSCMixIn):
             role = discord.utils.get(guild.roles, name=t.name)
             if not role:
                 return await interaction.response.send_message(
-                    embed=ErrorEmbed(
-                        description=f"{t.name} does not have a role in the guild. Please open a modmail ticket."
-                    )
+                    embed=ErrorEmbed(description=f"{t.name} does not have a role in the guild. Please open a modmail ticket.")
                 )
             tier_roles.append(role)
             # Fetch teams from each tier
@@ -80,9 +76,7 @@ class TierMixIn(RSCMixIn):
         if not self._tier_cache.get(guild.id):
             return False
 
-        if name in self._tier_cache[guild.id]:
-            return True
-        return False
+        return name in self._tier_cache[guild.id]
 
     async def tier_fa_roles(self, guild: discord.Guild) -> list[discord.Role]:
         """Return a list of tier free agent roles (Ex: ProspectFA)"""
@@ -137,9 +131,7 @@ class TierMixIn(RSCMixIn):
                     self._tier_cache[guild.id] = [t.name for t in tiers if t.name]
             return tiers
 
-    async def create_tier(
-        self, guild: discord.Guild, name: str, color: int, position: int
-    ) -> Tier:
+    async def create_tier(self, guild: discord.Guild, name: str, color: int, position: int) -> Tier:
         async with ApiClient(self._api_conf[guild.id]) as client:
             api = TiersApi(client)
             data = Tier(name=name, color=color, position=position)

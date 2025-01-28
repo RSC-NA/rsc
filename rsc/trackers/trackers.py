@@ -27,20 +27,14 @@ class TrackerMixIn(RSCMixIn):
 
     # Top Level Groups
 
-    _trackers = app_commands.Group(
-        name="trackers", description="RSC Player Tracker Links", guild_only=True
-    )
+    _trackers = app_commands.Group(name="trackers", description="RSC Player Tracker Links", guild_only=True)
 
     # App Commands
 
-    @_trackers.command(name="add", description="Add a new player tracker")  # type: ignore
-    @app_commands.describe(
-        player="RSC Discord Member", tracker="Rocket League tracker link"
-    )
+    @_trackers.command(name="add", description="Add a new player tracker")  # type: ignore[type-var]
+    @app_commands.describe(player="RSC Discord Member", tracker="Rocket League tracker link")
     @app_commands.checks.has_permissions(manage_guild=True)
-    async def _trackers_add_cmd(
-        self, interaction: discord.Interaction, player: discord.Member, tracker: str
-    ):
+    async def _trackers_add_cmd(self, interaction: discord.Interaction, player: discord.Member, tracker: str):
         guild = interaction.guild
         if not guild:
             return
@@ -50,9 +44,7 @@ class TrackerMixIn(RSCMixIn):
         try:
             await self.add_tracker(guild, player, tracker)
         except RscException as exc:
-            return await interaction.followup.send(
-                embed=ApiExceptionErrorEmbed(exc), ephemeral=False
-            )
+            return await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc), ephemeral=False)
 
         tracker_view = discord.ui.View()
         tracker_view.add_item(LinkButton(label="Tracker Link", url=tracker))
@@ -65,11 +57,9 @@ class TrackerMixIn(RSCMixIn):
         embed.add_field(name="Tracker", value=tracker, inline=False)
         await interaction.followup.send(embed=embed, view=tracker_view, ephemeral=False)
 
-    @_trackers.command(name="list", description="List the trackers")  # type: ignore
+    @_trackers.command(name="list", description="List the trackers")  # type: ignore[type-var]
     @app_commands.describe(player="RSC Discord Member")
-    async def _trackers_list(
-        self, interaction: discord.Interaction, player: discord.Member
-    ):
+    async def _trackers_list(self, interaction: discord.Interaction, player: discord.Member):
         guild = interaction.guild
         if not guild:
             return
@@ -78,9 +68,7 @@ class TrackerMixIn(RSCMixIn):
         try:
             trackers = await self.trackers(guild, player=player.id)
         except RscException as exc:
-            return await interaction.followup.send(
-                embed=ApiExceptionErrorEmbed(exc), ephemeral=False
-            )
+            return await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc), ephemeral=False)
 
         embed = YellowEmbed(title=f"{player.display_name} Trackers")
         if not trackers:
@@ -95,12 +83,8 @@ class TrackerMixIn(RSCMixIn):
                 tdata.append((t.name or t.platform_id, status, date))
             tdata.sort(key=lambda x: cast(int, x[1]))
             embed.description = "List of associated RSC trackers. Account is tracker name or platform id."
-            embed.add_field(
-                name="Account", value="\n".join([str(x[0]) for x in tdata]), inline=True
-            )
-            embed.add_field(
-                name="Status", value="\n".join([str(x[1]) for x in tdata]), inline=True
-            )
+            embed.add_field(name="Account", value="\n".join([str(x[0]) for x in tdata]), inline=True)
+            embed.add_field(name="Status", value="\n".join([str(x[1]) for x in tdata]), inline=True)
             embed.add_field(
                 name="Last Pull",
                 value="\n".join([str(x[2]) for x in tdata]),
@@ -108,7 +92,7 @@ class TrackerMixIn(RSCMixIn):
             )
         await interaction.followup.send(embed=embed, ephemeral=False)
 
-    @_trackers.command(name="recent", description="Show most recent RL tracker pulls")  # type: ignore
+    @_trackers.command(name="recent", description="Show most recent RL tracker pulls")  # type: ignore[type-var]
     @app_commands.describe(status="Tracker status to query (Default: Pulled)")
     async def _trackers_recent_pull(
         self,
@@ -123,9 +107,7 @@ class TrackerMixIn(RSCMixIn):
         try:
             trackers = await self.trackers(guild, status)
         except RscException as exc:
-            return await interaction.followup.send(
-                embed=ApiExceptionErrorEmbed(exc), ephemeral=False
-            )
+            return await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc), ephemeral=False)
 
         trackers.sort(key=lambda x: cast(datetime, x.last_updated), reverse=True)
 
@@ -155,7 +137,7 @@ class TrackerMixIn(RSCMixIn):
         )
         await interaction.followup.send(embed=embed, ephemeral=False)
 
-    @_trackers.command(name="stats", description="Display RSC tracker link stats")  # type: ignore
+    @_trackers.command(name="stats", description="Display RSC tracker link stats")  # type: ignore[type-var]
     async def _trackers_stats(
         self,
         interaction: discord.Interaction,
@@ -168,9 +150,7 @@ class TrackerMixIn(RSCMixIn):
         try:
             stats = await self.tracker_stats(guild)
         except RscException as exc:
-            return await interaction.followup.send(
-                embed=ApiExceptionErrorEmbed(exc), ephemeral=False
-            )
+            return await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc), ephemeral=False)
 
         embed = YellowEmbed(
             title="RSC Tracker Stats",
@@ -187,7 +167,7 @@ class TrackerMixIn(RSCMixIn):
         )
         await interaction.followup.send(embed=embed, ephemeral=False)
 
-    @_trackers.command(  # type: ignore
+    @_trackers.command(  # type: ignore[type-var]
         name="old", description="Display number of outdated RSC tracker links"
     )
     @app_commands.describe(
@@ -213,9 +193,7 @@ class TrackerMixIn(RSCMixIn):
         try:
             trackers = await self.trackers(guild, status)
         except RscException as exc:
-            return await interaction.followup.send(
-                embed=ApiExceptionErrorEmbed(exc), ephemeral=False
-            )
+            return await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc), ephemeral=False)
 
         log.debug("Removing recently updated trackers")
         old_trackers = []
@@ -231,15 +209,14 @@ class TrackerMixIn(RSCMixIn):
         embed = YellowEmbed(
             title="Outdated RSC Trackers",
             description=(
-                f"Found **{len(old_trackers)}/{len(trackers)} {status.name}**"
-                f" trackers have not been updated since **{date_cutoff.date()}**"
+                f"Found **{len(old_trackers)}/{len(trackers)} {status.name}** trackers have not been updated since **{date_cutoff.date()}**"
             ),
         )
         await interaction.followup.send(embed=embed)
 
     # Non-Group Commands
 
-    @app_commands.command(  # type: ignore
+    @app_commands.command(  # type: ignore[type-var]
         name="accounts",
         description="Display rocket league accounts associated with a player",
     )
@@ -257,9 +234,7 @@ class TrackerMixIn(RSCMixIn):
 
         if not trackers:
             await interaction.followup.send(
-                embed=YellowEmbed(
-                    description=f"{player.mention} does not have any registered RL trackers."
-                ),
+                embed=YellowEmbed(description=f"{player.mention} does not have any registered RL trackers."),
                 ephemeral=False,
             )
             return

@@ -30,12 +30,10 @@ class StatsMixIn(RSCMixIn):
 
     # App Commands
 
-    @_standings_group.command(  # type: ignore
+    @_standings_group.command(  # type: ignore[type-var]
         name="franchise", description="Display franchise standings for season"
     )
-    async def _franchise_standings_cmd(
-        self, interaction: discord.Interaction, season: int | None = None
-    ):
+    async def _franchise_standings_cmd(self, interaction: discord.Interaction, season: int | None = None):
         guild = interaction.guild
         if not guild:
             return
@@ -52,17 +50,11 @@ class StatsMixIn(RSCMixIn):
 
         log.debug(sdata)
         if not sdata:
-            await interaction.followup.send(
-                embed=ErrorEmbed(description=f"Invalid season provided: `{season}`")
-            )
+            await interaction.followup.send(embed=ErrorEmbed(description=f"Invalid season provided: `{season}`"))
             return
 
         if not sdata.id:
-            await interaction.followup.send(
-                embed=ErrorEmbed(
-                    description="API did not return a season ID. Please submit a modmail."
-                )
-            )
+            await interaction.followup.send(embed=ErrorEmbed(description="API did not return a season ID. Please submit a modmail."))
             return
 
         season = sdata.number
@@ -72,11 +64,7 @@ class StatsMixIn(RSCMixIn):
         # standings = await self.franchise_standings(guild, season_id=1)  # REMOVE ME
 
         if not standings:
-            await interaction.followup.send(
-                embed=ErrorEmbed(
-                    description=f"No franchise standings returned for `S{season}`"
-                )
-            )
+            await interaction.followup.send(embed=ErrorEmbed(description=f"No franchise standings returned for `S{season}`"))
             return
 
         standings.sort(key=lambda x: x.franchise_standings_rank)
@@ -104,17 +92,15 @@ class StatsMixIn(RSCMixIn):
 
         await interaction.followup.send(embed=embed, ephemeral=False)
 
-    @_standings_group.command(  # type: ignore
+    @_standings_group.command(  # type: ignore[type-var]
         name="tier", description="Display tier standings for season"
     )
-    @app_commands.autocomplete(tier=TierMixIn.tier_autocomplete)  # type: ignore
-    async def _tier_standings_cmd(
-        self, interaction: discord.Interaction, tier: str, season: int | None = None
-    ):
+    @app_commands.autocomplete(tier=TierMixIn.tier_autocomplete)  # type: ignore[type-var]
+    async def _tier_standings_cmd(self, interaction: discord.Interaction, tier: str, season: int | None = None):
         tier = tier.capitalize()
         await utils.not_implemented(interaction)
 
-    @app_commands.command(  # type: ignore
+    @app_commands.command(  # type: ignore[type-var]
         name="playerstats", description="Display RSC stats for a player"
     )
     @app_commands.describe(player="RSC Discord Member")
@@ -139,9 +125,7 @@ class StatsMixIn(RSCMixIn):
         await interaction.response.defer()
 
         try:
-            stats = await self.player_stats(
-                guild, player, season=season, postseason=postseason
-            )
+            stats = await self.player_stats(guild, player, season=season, postseason=postseason)
         except RscException as exc:
             await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc))
             return
@@ -164,10 +148,10 @@ class StatsMixIn(RSCMixIn):
 
         await interaction.followup.send(embed=embed)
 
-    @app_commands.command(  # type: ignore
+    @app_commands.command(  # type: ignore[type-var]
         name="teamstats", description="Display RSC stats for an RSC team"
     )
-    @app_commands.autocomplete(team=TeamMixIn.teams_autocomplete)  # type: ignore
+    @app_commands.autocomplete(team=TeamMixIn.teams_autocomplete)  # type: ignore[type-var]
     @app_commands.guild_only
     async def _team_stats_cmd(
         self,
@@ -184,23 +168,15 @@ class StatsMixIn(RSCMixIn):
         tlist = await self.teams(guild=guild, name=team)
 
         if not tlist:
-            return await interaction.followup.send(
-                embed=ErrorEmbed(description=f"No team found with the name: `{team}`")
-            )
+            return await interaction.followup.send(embed=ErrorEmbed(description=f"No team found with the name: `{team}`"))
 
         if len(tlist) > 1:
-            return await interaction.followup.send(
-                embed=ErrorEmbed(description=f"Found multiple teams matching: `{team}`")
-            )
+            return await interaction.followup.send(embed=ErrorEmbed(description=f"Found multiple teams matching: `{team}`"))
 
         team_data = tlist.pop(0)
 
         if not team_data.id:
-            return await interaction.followup.send(
-                embed=ErrorEmbed(
-                    description="API returned a team with no ID. Please submit a modmail."
-                )
-            )
+            return await interaction.followup.send(embed=ErrorEmbed(description="API returned a team with no ID. Please submit a modmail."))
 
         team_id = team_data.id
         team_tier = None
@@ -213,9 +189,7 @@ class StatsMixIn(RSCMixIn):
             return await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc))
 
         if not team_stats:
-            return await interaction.followup.send(
-                embed=ErrorEmbed(description=f"No stats found for team: `{team}`")
-            )
+            return await interaction.followup.send(embed=ErrorEmbed(description=f"No stats found for team: `{team}`"))
 
         embed = await self.create_stats_embed(stats=team_stats, postseason=postseason)
 
@@ -233,11 +207,10 @@ class StatsMixIn(RSCMixIn):
         # Fix this when season is added to team stats serializer
         if isinstance(stats, TeamSeasonStats):
             desc = "Displaying team stats for current season"
+        elif postseason:
+            desc = f"Displaying post season stats for RSC S{stats.season}"
         else:
-            if postseason:
-                desc = f"Displaying post season stats for RSC S{stats.season}"
-            else:
-                desc = f"Displaying regular season stats for RSC S{stats.season}"
+            desc = f"Displaying regular season stats for RSC S{stats.season}"
 
         # Additional stats
         goals = stats.goals or 0
@@ -282,9 +255,7 @@ class StatsMixIn(RSCMixIn):
             embed.add_field(name="MVPs", value=str(stats.mvps), inline=True)
             embed.add_field(name="Points", value=str(points), inline=True)
             embed.add_field(name="PPG", value=f"{points_per_game:.2f}", inline=True)
-            embed.add_field(
-                name="Avg Speed", value=f"{stats.avg_speed:.2f}", inline=True
-            )
+            embed.add_field(name="Avg Speed", value=f"{stats.avg_speed:.2f}", inline=True)
         else:
             embed.add_field(name="Points", value=str(points), inline=True)
             embed.add_field(name="PPG", value=f"{points_per_game:.2f}", inline=True)

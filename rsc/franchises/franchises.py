@@ -29,9 +29,7 @@ class FranchiseMixIn(RSCMixIn):
 
     # Autocomplete
 
-    async def franchise_autocomplete(
-        self, interaction: discord.Interaction, current: str
-    ) -> list[app_commands.Choice[str]]:
+    async def franchise_autocomplete(self, interaction: discord.Interaction, current: str) -> list[app_commands.Choice[str]]:
         if not interaction.guild_id:
             return []
 
@@ -40,10 +38,7 @@ class FranchiseMixIn(RSCMixIn):
             return []
 
         if not current:
-            return [
-                app_commands.Choice(name=f, value=f)
-                for f in self._franchise_cache[interaction.guild_id][:25]
-            ]
+            return [app_commands.Choice(name=f, value=f) for f in self._franchise_cache[interaction.guild_id][:25]]
 
         choices = []
         for f in self._franchise_cache[interaction.guild_id]:
@@ -55,7 +50,7 @@ class FranchiseMixIn(RSCMixIn):
 
     # Commands
 
-    @app_commands.command(  # type: ignore
+    @app_commands.command(  # type: ignore[type-var]
         name="franchises", description="Get a list of all RSC franchises"
     )
     @app_commands.guild_only
@@ -101,9 +96,7 @@ class FranchiseMixIn(RSCMixIn):
 
     # Functions
 
-    async def franchise_gm_by_name(
-        self, guild: discord.Guild, name: str
-    ) -> FranchiseGM | None:
+    async def franchise_gm_by_name(self, guild: discord.Guild, name: str) -> FranchiseGM | None:
         result = await self.franchises(guild=guild, name=name)
 
         if not result:
@@ -119,9 +112,7 @@ class FranchiseMixIn(RSCMixIn):
 
         return franchise.gm
 
-    async def fetch_franchise(
-        self, guild: discord.Guild, name: str
-    ) -> Franchise | None:
+    async def fetch_franchise(self, guild: discord.Guild, name: str) -> FranchiseList | None:
         result = await self.franchises(guild=guild, name=name)
 
         if not result:
@@ -133,9 +124,7 @@ class FranchiseMixIn(RSCMixIn):
         franchise = result.pop(0)
         return franchise
 
-    async def franchise_name_to_id(
-        self, guild: discord.Guild, franchise_name: str
-    ) -> int:
+    async def franchise_name_to_id(self, guild: discord.Guild, franchise_name: str) -> int:
         franchise = await self.franchises(guild, name=franchise_name)
         if not franchise:
             return 0
@@ -197,9 +186,7 @@ class FranchiseMixIn(RSCMixIn):
                     cached = set(self._franchise_cache[guild.id])
                     different = {f.name for f in flist if f.name} - cached
                     if different:
-                        log.debug(
-                            f"[{guild.name}] Franchises being added to cache: {different}"
-                        )
+                        log.debug(f"[{guild.name}] Franchises being added to cache: {different}")
                         self._franchise_cache[guild.id] += list(different)
                 else:
                     log.debug(f"[{guild.name}] Starting fresh franchises cache")
@@ -221,7 +208,7 @@ class FranchiseMixIn(RSCMixIn):
         async with ApiClient(self._api_conf[guild.id]) as client:
             api = FranchisesApi(client)
             try:
-                return await api.franchises_upload_logo(id=id, logo=logo)  # type: ignore
+                return await api.franchises_upload_logo(id=id, logo=logo)  # type: ignore[arg-type]
             except ApiException as exc:
                 raise RscException(response=exc)
 
@@ -264,9 +251,7 @@ class FranchiseMixIn(RSCMixIn):
             except ApiException as exc:
                 raise RscException(response=exc)
 
-    async def rebrand_franchise(
-        self, guild: discord.Guild, id: int, rebrand: RebrandAFranchise
-    ) -> Franchise:
+    async def rebrand_franchise(self, guild: discord.Guild, id: int, rebrand: RebrandAFranchise) -> Franchise:
         async with ApiClient(self._api_conf[guild.id]) as client:
             api = FranchisesApi(client)
             try:
@@ -275,15 +260,11 @@ class FranchiseMixIn(RSCMixIn):
             except ApiException as exc:
                 raise RscException(response=exc)
 
-    async def transfer_franchise(
-        self, guild: discord.Guild, id: int, gm: discord.Member
-    ) -> Franchise:
+    async def transfer_franchise(self, guild: discord.Guild, id: int, gm: discord.Member) -> Franchise:
         async with ApiClient(self._api_conf[guild.id]) as client:
             api = FranchisesApi(client)
             try:
-                data = TransferFranchise(
-                    general_manager=gm.id, league=self._league[guild.id]
-                )
+                data = TransferFranchise(general_manager=gm.id, league=self._league[guild.id])
                 log.debug(f"Transfer Params: {data}")
                 return await api.franchises_transfer_franchise(id, data)
             except ApiException as exc:

@@ -15,6 +15,8 @@ from rsc.views import LinkButton
 
 log = logging.getLogger("red.rsc.combines.runner")
 
+background_tasks = set()
+
 
 class CombineRunnerMixIn(RSCMixIn):
     def __init__(self):
@@ -55,9 +57,9 @@ class CombineRunnerMixIn(RSCMixIn):
                     log.warning("Received finished combine lobby but no lobby id.")
                     return aiohttp.web.Response(status=400)  # 400 Bad Request
                 else:
-                    asyncio.create_task(
-                        self.teardown_combine_lobby(guild, lobby_id=event.match_id)
-                    )
+                    task = asyncio.create_task(self.teardown_combine_lobby(guild, lobby_id=event.match_id))
+                    background_tasks.add(task)
+                    task.add_done_callback(background_tasks.discard)
                     return aiohttp.web.Response(status=200)  # 200 OK
             case _:
                 return aiohttp.web.Response(status=501)  # 400 Not Implemented
@@ -75,7 +77,7 @@ class CombineRunnerMixIn(RSCMixIn):
         lobby_list: list[models.CombinesLobby] = []
         try:
             for v in data.values():
-                lobby_list.append(models.CombinesLobby(**v))
+                lobby_list.append(models.CombinesLobby(**v))  # noqa: PERF401
         except pydantic.ValidationError as exc:
             log.exception("Error deserializing combine game lobby", exc_info=exc)
             return aiohttp.web.Response(status=400)  # 400 Bad Request
@@ -108,16 +110,14 @@ class CombineRunnerMixIn(RSCMixIn):
                 break
 
         if not guild:
-            log.warning(
-                f"Bot is not in the specified combine guild ID: {lobby.guild_id}"
-            )
-            raise NotInGuild()
+            log.warning(f"Bot is not in the specified combine guild ID: {lobby.guild_id}")
+            raise NotInGuild
 
         # Check if active
         active = await self._get_combines_active(guild)
         if not active:
             log.warning(f"Combines are not active in guild ID: {lobby.guild_id}")
-            raise CombinesNotActive()
+            raise CombinesNotActive
 
         combine_category = await self._get_combines_category(guild)
         if not combine_category:
@@ -145,9 +145,7 @@ class CombineRunnerMixIn(RSCMixIn):
         log.debug("Finding valid combine category")
         if len(combine_category.channels) > 48:
             for i in range(2, 5):
-                next_category = discord.utils.get(
-                    guild.channels, name=f"{combine_category.name}-2"
-                )
+                next_category = discord.utils.get(guild.channels, name=f"{combine_category.name}-2")
 
                 if not next_category:
                     next_category = await guild.create_category(
@@ -158,9 +156,7 @@ class CombineRunnerMixIn(RSCMixIn):
                     break
 
                 if not isinstance(next_category, discord.CategoryChannel):
-                    log.warning(
-                        f"Combine category is already in use and not a category: {next_category}"
-                    )
+                    log.warning(f"Combine category is already in use and not a category: {next_category}")
                     continue
 
                 if len(next_category.channels) <= 48:
@@ -194,9 +190,7 @@ class CombineRunnerMixIn(RSCMixIn):
             ),
         }
         if muted_role:
-            player_overwrites[muted_role] = discord.PermissionOverwrite(
-                view_channel=True, connect=False, speak=False
-            )
+            player_overwrites[muted_role] = discord.PermissionOverwrite(view_channel=True, connect=False, speak=False)
 
         # Create Lobby
         log.debug("Creating combine lobby voice channels")
@@ -215,9 +209,7 @@ class CombineRunnerMixIn(RSCMixIn):
 
         # Announce
         log.debug("Announcing combine lobby!")
-        await self.announce_combines_lobby(
-            guild, lobby=lobby, channels=[home_channel, away_channel]
-        )
+        await self.announce_combines_lobby(guild, lobby=lobby, channels=[home_channel, away_channel])
 
         return [home_channel, away_channel]
 
@@ -228,20 +220,14 @@ class CombineRunnerMixIn(RSCMixIn):
         channels: list[discord.VoiceChannel],
     ) -> discord.Message:
         if len(channels) != 2:
-            raise ValueError(
-                "Must provide 2 voice channels to announce a combine lobby."
-            )
+            raise ValueError("Must provide 2 voice channels to announce a combine lobby.")
 
-        announce_channel = discord.utils.get(
-            guild.channels, name="combines-announcements"
-        )
+        announce_channel = discord.utils.get(guild.channels, name="combines-announcements")
         if not announce_channel:
             raise RuntimeError("Combine lobby announcement channel doesn't exit.")
 
         if not isinstance(announce_channel, discord.TextChannel):
-            raise RuntimeError(
-                "Combine lobbies announcement channel is not of type `disord.TextChannel`"
-            )
+            raise RuntimeError("Combine lobbies announcement channel is not of type `disord.TextChannel`")
 
         home_fmt = []
         for player in lobby.home:
@@ -265,11 +251,9 @@ class CombineRunnerMixIn(RSCMixIn):
         players = await self.combine_players_from_lobby(guild, lobby)
         players_fmt = " ".join([m.mention for m in players])
 
-        game_info_fmt = (
-            f"Name: **{lobby.lobby_user}**\n" f"Password: **{lobby.lobby_pass}**"
-        )
+        game_info_fmt = f"Name: **{lobby.lobby_user}**\nPassword: **{lobby.lobby_pass}**"
 
-        channel_fmt = f"Home: {channels[0].mention}\n" f"Away: {channels[1].mention}"
+        channel_fmt = f"Home: {channels[0].mention}\nAway: {channels[1].mention}"
 
         embed = BlueEmbed(title=f"Combine {lobby.id} Ready!")
 
@@ -279,22 +263,16 @@ class CombineRunnerMixIn(RSCMixIn):
         embed.add_field(name="Home Team", value="\n".join(home_fmt), inline=True)
         embed.add_field(name="Away Team", value="\n".join(away_fmt), inline=True)
 
-        embed.set_footer(
-            text="You can check your active game info with `/combines lobbyinfo`"
-        )
+        embed.set_footer(text="You can check your active game info with `/combines lobbyinfo`")
 
         if guild.icon:
             embed.set_thumbnail(url=guild.icon.url)
 
-        match_link = LinkButton(
-            label="Match Link", url=f"https://devleague.rscna.com/combine/{lobby.id}"
-        )
+        match_link = LinkButton(label="Match Link", url=f"https://devleague.rscna.com/combine/{lobby.id}")
         link_view = discord.ui.View()
         link_view.add_item(match_link)
 
-        msg = await announce_channel.send(
-            content=players_fmt, embed=embed, view=link_view
-        )
+        msg = await announce_channel.send(content=players_fmt, embed=embed, view=link_view)
 
         return msg
 

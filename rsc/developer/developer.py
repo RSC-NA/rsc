@@ -29,7 +29,7 @@ class DeveloperMixIn(RSCMixIn):
 
     # Commands
 
-    @_log_group.command(  # type: ignore
+    @_log_group.command(  # type: ignore[type-var]
         name="tail",
         description=f"Tail the latest log file (Max {BUFMAX} bytes)",
     )
@@ -41,20 +41,14 @@ class DeveloperMixIn(RSCMixIn):
     ):
         log_file = await self.get_latest_log_file()
         if not log_file:
-            await interaction.response.send_message(
-                embed=ErrorEmbed(
-                    description="Unable to find valid logging RotatingFileHandler."
-                )
-            )
+            await interaction.response.send_message(embed=ErrorEmbed(description="Unable to find valid logging RotatingFileHandler."))
             return
 
         async with aiofiles.open(log_file, mode="rb") as fd:
             await fd.seek((-1 * BUFMAX), os.SEEK_END)
             data = await fd.read(BUFMAX)
 
-        await interaction.response.send_message(
-            content=f"```\n{data.decode('utf-8')}\n```", ephemeral=True
-        )
+        await interaction.response.send_message(content=f"```\n{data.decode('utf-8')}\n```", ephemeral=True)
 
     # Functions
 
@@ -63,7 +57,7 @@ class DeveloperMixIn(RSCMixIn):
         latest_log_path = None
         root_logger = logging.getLogger()
         for fh in root_logger.handlers:
-            if not isinstance(fh, logging.handlers.RotatingFileHandler):  # type: ignore
+            if not isinstance(fh, logging.handlers.RotatingFileHandler):  # type: ignore[attr-defined]
                 log.debug("Not a file handler...")
                 continue
             if fh.baseStem == "latest":

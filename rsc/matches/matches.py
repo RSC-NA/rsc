@@ -1,5 +1,6 @@
 import logging
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 import discord
 from redbot.core import app_commands
@@ -10,7 +11,6 @@ from rscapi.models.match_list import MatchList
 from rscapi.models.match_results import MatchResults
 from rscapi.models.match_score_report import MatchScoreReport
 from rscapi.models.match_submission import MatchSubmission
-from rscapi.models.matches_list200_response import MatchesList200Response
 
 from rsc.abc import RSCMixIn
 from rsc.embeds import BlueEmbed, ErrorEmbed, ExceptionErrorEmbed, YellowEmbed
@@ -27,6 +27,9 @@ from rsc.logs import GuildLogAdapter
 from rsc.teams import TeamMixIn
 from rsc.utils.utils import tier_color_by_name
 
+if TYPE_CHECKING:
+    from rscapi.models.matches_list200_response import MatchesList200Response
+
 logger = logging.getLogger("red.rsc.matches")
 log = GuildLogAdapter(logger)
 
@@ -38,11 +41,11 @@ class MatchMixIn(RSCMixIn):
 
     # App Commands
 
-    @app_commands.command(  # type: ignore
+    @app_commands.command(  # type: ignore[type-var]
         name="schedule",
         description="Display your team or another teams entire schedule",
     )
-    @app_commands.autocomplete(team=TeamMixIn.teams_autocomplete)  # type: ignore
+    @app_commands.autocomplete(team=TeamMixIn.teams_autocomplete)  # type: ignore[type-var]
     @app_commands.describe(
         team="Get the schedule for a specific team (Optional)",
         preseason="Include preseason matches (Default: False)",
@@ -67,18 +70,14 @@ class MatchMixIn(RSCMixIn):
             try:
                 team_id = await self.team_id_by_name(guild, name=team)
             except ValueError as exc:
-                return await interaction.followup.send(
-                    embed=ExceptionErrorEmbed(exc_message=str(exc)), ephemeral=True
-                )
+                return await interaction.followup.send(embed=ExceptionErrorEmbed(exc_message=str(exc)), ephemeral=True)
         else:
             log.debug(f"Finding team for {interaction.user.display_name}")
             # Find the team ID of interaction user
             player = await self.players(guild, discord_id=interaction.user.id, limit=1)
             if not player:
                 await interaction.followup.send(
-                    embed=ErrorEmbed(
-                        description="You are not currently signed up for the league."
-                    ),
+                    embed=ErrorEmbed(description="You are not currently signed up for the league."),
                 )
                 return
 
@@ -90,16 +89,12 @@ class MatchMixIn(RSCMixIn):
                 Status.RENEWED,
             ):
                 return await interaction.followup.send(
-                    embed=ErrorEmbed(
-                        description="You are not currently rostered on a team."
-                    ),
+                    embed=ErrorEmbed(description="You are not currently rostered on a team."),
                 )
 
             if not (pdata.team and pdata.tier and pdata.team.id):
                 return await interaction.followup.send(
-                    embed=ErrorEmbed(
-                        description="Malformed data returned from API. Please submit a modmail."
-                    ),
+                    embed=ErrorEmbed(description="Malformed data returned from API. Please submit a modmail."),
                 )
 
             team = pdata.team.name
@@ -137,19 +132,12 @@ class MatchMixIn(RSCMixIn):
         else:
             title = f"{team} Schedule"
             matches = [s for s in schedule if s.match_type == MatchType.REGULAR]
-            matches.extend(
-                [s for s in schedule if s.match_type == MatchType.POSTSEASON]
-            )
+            matches.extend([s for s in schedule if s.match_type == MatchType.POSTSEASON])
             matches.extend([s for s in schedule if s.match_type == MatchType.FINALS])
 
-        if not (
-            all(m.home_team.name for m in matches)
-            and all(m.away_team.name for m in matches)
-        ):
+        if not (all(m.home_team.name for m in matches) and all(m.away_team.name for m in matches)):
             return await interaction.followup.send(
-                embed=ErrorEmbed(
-                    description="Schedule data has a missing home or away team name. Please open a modmail ticket."
-                )
+                embed=ErrorEmbed(description="Schedule data has a missing home or away team name. Please open a modmail ticket.")
             )
 
         embed = discord.Embed(
@@ -160,9 +148,7 @@ class MatchMixIn(RSCMixIn):
 
         embed.add_field(
             name="Date",
-            value="\n".join(
-                [f"{m.var_date.strftime('%-m/%-d')}" for m in matches if m.var_date]
-            ),
+            value="\n".join([f"{m.var_date.strftime('%-m/%-d')}" for m in matches if m.var_date]),
             inline=True,
         )
         embed.add_field(
@@ -178,18 +164,14 @@ class MatchMixIn(RSCMixIn):
 
         await interaction.followup.send(embed=embed)
 
-    @app_commands.command(  # type: ignore
+    @app_commands.command(  # type: ignore[type-var]
         name="match",
         description="Get information about your upcoming match",
     )
-    @app_commands.describe(
-        team="Get match information for a specific team (General Manager Only)"
-    )
-    @app_commands.autocomplete(team=TeamMixIn.teams_autocomplete)  # type: ignore
+    @app_commands.describe(team="Get match information for a specific team (General Manager Only)")
+    @app_commands.autocomplete(team=TeamMixIn.teams_autocomplete)  # type: ignore[type-var]
     @app_commands.guild_only
-    async def _match_cmd(
-        self, interaction: discord.Interaction, team: str | None = None
-    ):
+    async def _match_cmd(self, interaction: discord.Interaction, team: str | None = None):
         guild = interaction.guild
         if not (guild and isinstance(interaction.user, discord.Member)):
             return
@@ -202,24 +184,18 @@ class MatchMixIn(RSCMixIn):
             try:
                 team_id = await self.team_id_by_name(guild, name=team)
             except ValueError as exc:
-                return await interaction.followup.send(
-                    embed=ExceptionErrorEmbed(exc_message=str(exc)), ephemeral=True
-                )
+                return await interaction.followup.send(embed=ExceptionErrorEmbed(exc_message=str(exc)), ephemeral=True)
         else:
             player = await self.players(guild, discord_id=interaction.user.id, limit=1)
             if not player:
                 await interaction.followup.send(
-                    embed=ErrorEmbed(
-                        description="You are not currently signed up for the league."
-                    ),
+                    embed=ErrorEmbed(description="You are not currently signed up for the league."),
                     ephemeral=True,
                 )
                 return
             if not (player[0].team and player[0].team.name):
                 await interaction.followup.send(
-                    embed=ErrorEmbed(
-                        description="You are not currently rostered on a team."
-                    ),
+                    embed=ErrorEmbed(description="You are not currently rostered on a team."),
                     ephemeral=True,
                 )
                 return
@@ -231,13 +207,9 @@ class MatchMixIn(RSCMixIn):
                     team_id = await self.team_id_by_name(guild, name=team)
                 else:
                     log.debug(f"Getting Team ID: {player[0].team.name}")
-                    team_id = await self.team_id_by_name(
-                        guild, name=player[0].team.name
-                    )
+                    team_id = await self.team_id_by_name(guild, name=player[0].team.name)
             except ValueError as exc:
-                return await interaction.followup.send(
-                    embed=ExceptionErrorEmbed(exc_message=str(exc)), ephemeral=True
-                )
+                return await interaction.followup.send(embed=ExceptionErrorEmbed(exc_message=str(exc)), ephemeral=True)
 
         # Get teams next match
         try:
@@ -265,34 +237,32 @@ class MatchMixIn(RSCMixIn):
 
         # If team was specified, user must be GM or admin
         if team and not (
-            await self.is_match_franchise_gm(member=interaction.user, match=match)
-            or interaction.user.guild_permissions.manage_guild
+            await self.is_match_franchise_gm(member=interaction.user, match=match) or interaction.user.guild_permissions.manage_guild
         ):
             return await interaction.followup.send(
                 embed=ErrorEmbed(
-                    description="Only general managers can specify a team for match information. If you are not a GM, please simply run `/match` to get your teams match information."
+                    description=(
+                        "Only general managers can specify a team for match information. "
+                        "If you are not a GM, please simply run `/match` to get your teams match information."
+                    )
                 )
             )
 
         # Is interaction user away/home
         try:
             user_team = await self.match_team_by_user(match, interaction.user)
-            embed = await self.build_match_embed(
-                guild, match, user_team=user_team, with_gm=True
-            )
+            embed = await self.build_match_embed(guild, match, user_team=user_team, with_gm=True)
         except ValueError as exc:
             return await interaction.followup.send(embed=ExceptionErrorEmbed(str(exc)))
         await interaction.followup.send(embed=embed, ephemeral=True)
 
     # Functions
 
-    async def discord_member_in_match(
-        self, member: discord.Member, match: Match
-    ) -> bool:
+    async def discord_member_in_match(self, member: discord.Member, match: Match) -> bool:
         if not (match.home_team.players and match.away_team.players):
             return False
 
-        for hplayer in match.home_team.players:  # noqa: SIM110
+        for hplayer in match.home_team.players:
             if member.id == hplayer.discord_id:
                 return True
 
@@ -302,9 +272,7 @@ class MatchMixIn(RSCMixIn):
         return False
 
     @staticmethod
-    async def get_match_from_list(
-        home: str, away: str, matches: list[Match]
-    ) -> Match | None:
+    async def get_match_from_list(home: str, away: str, matches: list[Match]) -> Match | None:
         match = None
         for m in matches:
             if not (m.home_team.name and m.away_team.name):
@@ -334,16 +302,12 @@ class MatchMixIn(RSCMixIn):
         if not season.season_tier_data[0].schedule:
             raise AttributeError("Season does not have any match nights configured.")
 
-        if today in season.season_tier_data[0].schedule.match_nights:
-            return True
-        return False
+        return today in season.season_tier_data[0].schedule.match_nights
 
     async def matches_from_match_list(self, match_list: list[MatchList]):
         pass
 
-    async def match_team_by_user(
-        self, match: Match, member: discord.Member
-    ) -> MatchTeamEnum:
+    async def match_team_by_user(self, match: Match, member: discord.Member) -> MatchTeamEnum:
         """Determine if the user is on the home or away team"""
         # Check if GM of team
         if match.home_team.gm.discord_id == member.id:
@@ -405,14 +369,10 @@ class MatchMixIn(RSCMixIn):
         lobby_info = f"Name: **{match.game_name}**\nPass: **{match.game_pass}**"
 
         # Teams
-        home_fmt, away_fmt = await self.roster_fmt_from_match(
-            guild, match, with_gm=with_gm
-        )
+        home_fmt, away_fmt = await self.roster_fmt_from_match(guild, match, with_gm=with_gm)
 
         # Create embed
-        embed = discord.Embed(
-            title=f"{md}: {date_str}", description=desc, color=tier_color
-        )
+        embed = discord.Embed(title=f"{md}: {date_str}", description=desc, color=tier_color)
 
         embed.add_field(name="Lobby Info", value=lobby_info, inline=False)
         embed.add_field(name="Home Team", value=home_fmt, inline=False)
@@ -436,14 +396,12 @@ class MatchMixIn(RSCMixIn):
         additional_fmt += (
             "Be sure that **crossplay is enabled** and to save all replays and screenshots of the end-of-game scoreboard.\x20"
             "Do not leave the game until screenshots have been taken.\x20"
-            "These must be uploaded to the [RSC Website](https://www.rocketsoccarconfederation.com/replay-and-screenshot-uploads) after the game is finished."
+            "These must be uploaded to the [RSC Website](https://www.rocketsoccarconfederation.com/replay-and-screenshot-uploads) after the game is finished."  # noqa: E501
         )
         embed.add_field(name="Additional Info", value=additional_fmt, inline=False)
         return embed
 
-    async def roster_fmt_from_match(
-        self, guild: discord.Guild, match: Match, with_gm: bool = True
-    ) -> tuple[str, str]:
+    async def roster_fmt_from_match(self, guild: discord.Guild, match: Match, with_gm: bool = True) -> tuple[str, str]:
         """Return formatted roster string from Match"""
         home_players: list[str] = []
         away_players: list[str] = []
@@ -535,9 +493,7 @@ class MatchMixIn(RSCMixIn):
         # Home team roster formatting
         home_fmt = "```\n"
         if home_gm:
-            home_fmt += (
-                f"{match.home_team.name} - {match.home_team.franchise} ({home_gm})\n"
-            )
+            home_fmt += f"{match.home_team.name} - {match.home_team.franchise} ({home_gm})\n"
         else:
             home_fmt += f"{match.home_team.name} - {match.home_team.franchise}\n"
         home_fmt += "\n".join([f"\t{p}" for p in home_players])
@@ -546,9 +502,7 @@ class MatchMixIn(RSCMixIn):
         # Away team roster formatting
         away_fmt = "```\n"
         if away_gm:
-            away_fmt += (
-                f"{match.away_team.name} - {match.away_team.franchise} ({away_gm})\n"
-            )
+            away_fmt += f"{match.away_team.name} - {match.away_team.franchise} ({away_gm})\n"
         else:
             away_fmt += f"{match.away_team.name} - {match.away_team.franchise}\n"
         away_fmt += "\n".join([f"\t{p}" for p in away_players])
@@ -557,25 +511,16 @@ class MatchMixIn(RSCMixIn):
         return (home_fmt, away_fmt)
 
     async def is_match_franchise_gm(self, member: discord.Member, match: Match) -> bool:
-        if (
-            member.id == match.home_team.gm.discord_id
-            or member.id == match.away_team.gm.discord_id
-        ):
-            return True
-        return False
+        return member.id in (match.home_team.gm.discord_id, match.away_team.gm.discord_id)
 
-    async def is_future_match_date(
-        self, guild: discord.Guild, match: Match | MatchList
-    ) -> bool:
+    async def is_future_match_date(self, guild: discord.Guild, match: Match | MatchList) -> bool:
         tz = await self.timezone(guild=guild)
         today = datetime.now(tz=tz)
 
         if not match.var_date:
             raise AttributeError("Match has no date associated with it in the API.")
 
-        if today.date() < match.var_date.date():
-            return True
-        return False
+        return today.date() < match.var_date.date()
 
     # Api
 

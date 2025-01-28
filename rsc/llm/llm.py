@@ -1,11 +1,9 @@
 import logging
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import discord
-from langchain_core.documents import Document
 from redbot.core import app_commands, commands
-from rscapi.models.franchise_list import FranchiseList
-from rscapi.models.team import Team
 
 from rsc.abc import RSCMixIn
 from rsc.embeds import BlueEmbed, ErrorEmbed, GreenEmbed, YellowEmbed
@@ -23,6 +21,11 @@ from rsc.llm.create_db import (
 from rsc.llm.query import llm_query
 from rsc.logs import GuildLogAdapter
 from rsc.types import LLMSettings
+
+if TYPE_CHECKING:
+    from langchain_core.documents import Document
+    from rscapi.models.franchise_list import FranchiseList
+    from rscapi.models.team import Team
 
 logger = logging.getLogger("red.rsc.llm")
 log = GuildLogAdapter(logger)
@@ -81,15 +84,11 @@ class LLMMixIn(RSCMixIn):
         count, threshold = await self.get_llm_default(guild)
         org, key = await self.get_llm_credentials(guild)
         if not (org and key):
-            log.warning(
-                "OpenAI Organization and or API key is not configured.", guild=guild
-            )
+            log.warning("OpenAI Organization and or API key is not configured.", guild=guild)
             return
 
         # Remove bot mention
-        cleaned_msg = message.clean_content.replace(
-            f"@{guild.me.display_name}", ""
-        ).strip()
+        cleaned_msg = message.clean_content.replace(f"@{guild.me.display_name}", "").strip()
         log.debug(f"Cleaned LLM Message: {cleaned_msg}")
 
         # Replace some key words
@@ -143,7 +142,7 @@ class LLMMixIn(RSCMixIn):
     # Group commands
 
     # Settings
-    @_llm_group.command(name="settings", description="Display LLM settings")  # type: ignore
+    @_llm_group.command(name="settings", description="Display LLM settings")  # type: ignore[type-var]
     async def _llm_settings_cmd(self, interaction: discord.Interaction):
         guild = interaction.guild
         if not guild:
@@ -163,7 +162,7 @@ class LLMMixIn(RSCMixIn):
             if c:
                 blacklist_channels.append(c)
 
-        if blacklist_channels:
+        if blacklist_channels:  # noqa: SIM108
             blacklist_fmt = "\n".join([c.mention for c in blacklist_channels])
         else:
             blacklist_fmt = "None"
@@ -173,27 +172,19 @@ class LLMMixIn(RSCMixIn):
             description="Displaying configured settings for RSC LLM",
         )
         settings_embed.add_field(name="Enabled", value=str(active), inline=False)
-        settings_embed.add_field(
-            name="OpenAI Organization", value=openai_org, inline=False
-        )
+        settings_embed.add_field(name="OpenAI Organization", value=openai_org, inline=False)
         settings_embed.add_field(
             name="OpenAI API Key",
             value="Configured" if openai_key else "Not Configured",
             inline=False,
         )
-        settings_embed.add_field(
-            name="Similarity Count", value=str(llm_count), inline=False
-        )
-        settings_embed.add_field(
-            name="Similarity Threshold", value=str(llm_threshold), inline=False
-        )
-        settings_embed.add_field(
-            name="LLM Channel Blacklist", value=blacklist_fmt, inline=False
-        )
+        settings_embed.add_field(name="Similarity Count", value=str(llm_count), inline=False)
+        settings_embed.add_field(name="Similarity Threshold", value=str(llm_threshold), inline=False)
+        settings_embed.add_field(name="LLM Channel Blacklist", value=blacklist_fmt, inline=False)
 
         await interaction.response.send_message(embed=settings_embed, ephemeral=True)
 
-    @_llm_group.command(  # type: ignore
+    @_llm_group.command(  # type: ignore[type-var]
         name="toggle", description="Toggle llm on or off"
     )
     async def _llm_toggle_cmd(self, interaction: discord.Interaction):
@@ -217,7 +208,7 @@ class LLMMixIn(RSCMixIn):
             ephemeral=True,
         )
 
-    @_llm_group.command(  # type: ignore
+    @_llm_group.command(  # type: ignore[type-var]
         name="organization", description="Configure the OpenAI organization"
     )
     @app_commands.describe(name="OpenAI Organization")
@@ -237,7 +228,7 @@ class LLMMixIn(RSCMixIn):
             ephemeral=True,
         )
 
-    @_llm_group.command(  # type: ignore
+    @_llm_group.command(  # type: ignore[type-var]
         name="apikey", description="Configure the OpenAI API key"
     )
     @app_commands.describe(key="OpenAI API Key")
@@ -257,7 +248,7 @@ class LLMMixIn(RSCMixIn):
             ephemeral=True,
         )
 
-    @_llm_group.command(  # type: ignore
+    @_llm_group.command(  # type: ignore[type-var]
         name="count", description="Configure the LLM max similarity count"
     )
     @app_commands.describe(count="Number of similarity matches to get from DB")
@@ -277,15 +268,11 @@ class LLMMixIn(RSCMixIn):
             ephemeral=True,
         )
 
-    @_llm_group.command(  # type: ignore
+    @_llm_group.command(  # type: ignore[type-var]
         name="threshold", description="Configure the LLM threshold"
     )
-    @app_commands.describe(
-        threshold="Float threshold for finding similarities (Default: 0.65)"
-    )
-    async def _llm_threshold_cmd(
-        self, interaction: discord.Interaction, threshold: float
-    ):
+    @app_commands.describe(threshold="Float threshold for finding similarities (Default: 0.65)")
+    async def _llm_threshold_cmd(self, interaction: discord.Interaction, threshold: float):
         """Configure LLM threshold"""
         guild = interaction.guild
         if not guild:
@@ -301,7 +288,7 @@ class LLMMixIn(RSCMixIn):
             ephemeral=True,
         )
 
-    @_llm_group.command(name="query", description="Query the RSC LLM")  # type: ignore
+    @_llm_group.command(name="query", description="Query the RSC LLM")  # type: ignore[type-var]
     @app_commands.describe(question="Question to ask the RSC LLM")
     async def _llm_query_cmd(self, interaction: discord.Interaction, question: str):
         """Query the RSC LLM with a question"""
@@ -314,9 +301,7 @@ class LLMMixIn(RSCMixIn):
         org, key = await self.get_llm_credentials(guild)
         if not (org and key):
             return await interaction.response.send_message(
-                embed=ErrorEmbed(
-                    description="OpenAI organization and or API key has not been configured."
-                ),
+                embed=ErrorEmbed(description="OpenAI organization and or API key has not been configured."),
                 ephemeral=True,
             )
 
@@ -352,7 +337,7 @@ class LLMMixIn(RSCMixIn):
 
         await interaction.followup.send(embed=embed)
 
-    @_llm_group.command(  # type: ignore
+    @_llm_group.command(  # type: ignore[type-var]
         name="createdb", description="Create the LLM Chroma DB"
     )
     async def _llm_createdb_cmd(self, interaction: discord.Interaction):
@@ -365,9 +350,7 @@ class LLMMixIn(RSCMixIn):
         org, key = await self.get_llm_credentials(guild)
         if not (org and key):
             return await interaction.response.send_message(
-                embed=ErrorEmbed(
-                    description="OpenAI organization and or API key has not been configured."
-                ),
+                embed=ErrorEmbed(description="OpenAI organization and or API key has not been configured."),
                 ephemeral=True,
             )
 
@@ -379,13 +362,11 @@ class LLMMixIn(RSCMixIn):
             return await interaction.followup.send(content=str(exc), ephemeral=True)
 
         await interaction.followup.send(
-            embed=BlueEmbed(
-                title="Chroma DB", description=f"Saved {chunks} chunks to Chroma DB."
-            ),
+            embed=BlueEmbed(title="Chroma DB", description=f"Saved {chunks} chunks to Chroma DB."),
             ephemeral=True,
         )
 
-    @_llm_blacklist_group.command(  # type: ignore
+    @_llm_blacklist_group.command(  # type: ignore[type-var]
         name="show", description="Display the LLM channel blacklist"
     )
     async def _llm_blacklist_show_cmd(self, interaction: discord.Interaction):
@@ -402,7 +383,7 @@ class LLMMixIn(RSCMixIn):
             if c:
                 channels.append(c)
 
-        if channels:
+        if channels:  # noqa: SIM108
             blacklist_fmt = "\n".join([c.mention for c in channels])
         else:
             blacklist_fmt = "None"
@@ -414,13 +395,11 @@ class LLMMixIn(RSCMixIn):
         embed.add_field(name="Channels", value=blacklist_fmt, inline=False)
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-    @_llm_blacklist_group.command(  # type: ignore
+    @_llm_blacklist_group.command(  # type: ignore[type-var]
         name="add", description="Add a channel to the LLM blacklist"
     )
     @app_commands.describe(channel="Discord text channel to blacklist")
-    async def _llm_blacklist_add_cmd(
-        self, interaction: discord.Interaction, channel: discord.TextChannel
-    ):
+    async def _llm_blacklist_add_cmd(self, interaction: discord.Interaction, channel: discord.TextChannel):
         """Add a channel to the LLM blacklist"""
         guild = interaction.guild
         if not guild:
@@ -433,13 +412,11 @@ class LLMMixIn(RSCMixIn):
         )
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-    @_llm_blacklist_group.command(  # type: ignore
+    @_llm_blacklist_group.command(  # type: ignore[type-var]
         name="rm", description="Remove a channel from the LLM blacklist"
     )
     @app_commands.describe(channel="Discord text channel to remove")
-    async def _llm_blacklist_rm_cmd(
-        self, interaction: discord.Interaction, channel: discord.TextChannel
-    ):
+    async def _llm_blacklist_rm_cmd(self, interaction: discord.Interaction, channel: discord.TextChannel):
         """Remove a channel from the LLM blacklist"""
         guild = interaction.guild
         if not guild:
@@ -454,14 +431,10 @@ class LLMMixIn(RSCMixIn):
 
     # Helpers
 
-    async def create_chroma_db(
-        self, guild: discord.Guild, interaction: discord.Interaction | None = None
-    ) -> int:
+    async def create_chroma_db(self, guild: discord.Guild, interaction: discord.Interaction | None = None) -> int:
         org, key = await self.get_llm_credentials(guild)
         if not (org and key):
-            raise ValueError(
-                "OpenAI organization and or API key has not been configured."
-            )
+            raise ValueError("OpenAI organization and or API key has not been configured.")
 
         # Store
         docs: list[Document] = []
@@ -553,7 +526,7 @@ class LLMMixIn(RSCMixIn):
                 continue
 
             for t in fdata.teams:
-                teams.append(t)
+                teams.append(t)  # noqa: PERF402
 
         # Load Teams
         if teams:
@@ -580,9 +553,7 @@ class LLMMixIn(RSCMixIn):
                 results.append(f"- {s}")
         return "\n".join(results)
 
-    async def get_llm_credentials(
-        self, guild: discord.Guild
-    ) -> tuple[str | None, str | None]:
+    async def get_llm_credentials(self, guild: discord.Guild) -> tuple[str | None, str | None]:
         org = await self._get_openai_org(guild)
         key = await self._get_openai_key(guild)
         return (org, key)
@@ -632,9 +603,7 @@ class LLMMixIn(RSCMixIn):
 
     async def _set_llm_threshold(self, guild: discord.Guild, threshold: float):
         """Set similarity threshold for LLM queries"""
-        await self.config.custom("LLM", str(guild.id)).SimilarityThreshold.set(
-            threshold
-        )
+        await self.config.custom("LLM", str(guild.id)).SimilarityThreshold.set(threshold)
 
     async def _get_llm_channel_blacklist(self, guild: discord.Guild) -> list[int]:
         """Get channel blacklist for LLM responses"""
@@ -643,25 +612,17 @@ class LLMMixIn(RSCMixIn):
             return []
         return blacklist
 
-    async def _set_llm_channel_blacklist(
-        self, guild: discord.Guild, channels: list[discord.TextChannel]
-    ):
+    async def _set_llm_channel_blacklist(self, guild: discord.Guild, channels: list[discord.TextChannel]):
         """Set channel blacklist for LLM responses"""
-        await self.config.custom("LLM", str(guild.id)).LLMBlacklist.set(
-            [c.id for c in channels]
-        )
+        await self.config.custom("LLM", str(guild.id)).LLMBlacklist.set([c.id for c in channels])
 
-    async def _add_llm_channel_blacklist(
-        self, guild: discord.Guild, channel: discord.TextChannel
-    ):
+    async def _add_llm_channel_blacklist(self, guild: discord.Guild, channel: discord.TextChannel):
         """Set channel blacklist for LLM responses"""
         blacklist: list[int] = await self._get_llm_channel_blacklist(guild)
         blacklist.append(channel.id)
         await self.config.custom("LLM", str(guild.id)).LLMBlacklist.set(blacklist)
 
-    async def _rm_llm_channel_blacklist(
-        self, guild: discord.Guild, channel: discord.TextChannel
-    ):
+    async def _rm_llm_channel_blacklist(self, guild: discord.Guild, channel: discord.TextChannel):
         """Set channel blacklist for LLM responses"""
         blacklist: list[int] = await self._get_llm_channel_blacklist(guild)
         blacklist.remove(channel.id)

@@ -23,13 +23,11 @@ defaults_guild = CombineSettings(
 )
 
 
-def active_combines(f):
+def active_combines(f):  # noqa: ANN001
     """Combines decorator that verified Combines have started"""
 
     @wraps(f)
-    async def combine_wrapper(
-        cls: "CombineMixIn", interaction: discord.Interaction, *args, **kwargs
-    ):
+    async def combine_wrapper(cls: "CombineMixIn", interaction: discord.Interaction, *args, **kwargs):
         if not interaction.guild:
             return
 
@@ -67,7 +65,7 @@ class CombineMixIn(CombineRunnerMixIn, CombineManagerMixIn, RSCMixIn):
 
     # Commands
 
-    @_combines.command(  # type: ignore
+    @_combines.command(  # type: ignore[type-var]
         name="checkin", description="Check in for an RSC combines match"
     )
     @active_combines
@@ -96,9 +94,7 @@ class CombineMixIn(CombineRunnerMixIn, CombineManagerMixIn, RSCMixIn):
             )
 
         if result.status == "error":
-            return await interaction.response.send_message(
-                embed=ErrorEmbed(description=result.message), ephemeral=True
-            )
+            return await interaction.response.send_message(embed=ErrorEmbed(description=result.message), ephemeral=True)
 
         await interaction.response.send_message(
             embed=BlueEmbed(
@@ -108,7 +104,7 @@ class CombineMixIn(CombineRunnerMixIn, CombineManagerMixIn, RSCMixIn):
             ephemeral=True,
         )
 
-    @_combines.command(  # type: ignore
+    @_combines.command(  # type: ignore[type-var]
         name="checkout", description="Check out of RSC combines"
     )
     @active_combines
@@ -138,9 +134,7 @@ class CombineMixIn(CombineRunnerMixIn, CombineManagerMixIn, RSCMixIn):
 
         if isinstance(result, models.CombinesStatus):
             return await interaction.response.send_message(
-                embed=ErrorEmbed(
-                    title="Combines Check Out", description=result.message
-                ),
+                embed=ErrorEmbed(title="Combines Check Out", description=result.message),
                 ephemeral=True,
             )
 
@@ -152,13 +146,11 @@ class CombineMixIn(CombineRunnerMixIn, CombineManagerMixIn, RSCMixIn):
             ephemeral=True,
         )
 
-    @_combines.command(  # type: ignore
+    @_combines.command(  # type: ignore[type-var]
         name="lobbyinfo", description="Get your active combines game lobby info"
     )
     @active_combines
-    async def _combines_lobby_info_cmd(
-        self, interaction: discord.Interaction, lobby_id: int | None = None
-    ):
+    async def _combines_lobby_info_cmd(self, interaction: discord.Interaction, lobby_id: int | None = None):
         guild = interaction.guild
         if not guild:
             return
@@ -183,9 +175,7 @@ class CombineMixIn(CombineRunnerMixIn, CombineManagerMixIn, RSCMixIn):
             )
 
         if isinstance(result, models.CombinesStatus):
-            return await interaction.response.send_message(
-                embed=ErrorEmbed(description=result.message), ephemeral=True
-            )
+            return await interaction.response.send_message(embed=ErrorEmbed(description=result.message), ephemeral=True)
 
         embed = BlueEmbed(
             title=f"Combine Match {result.id}",
@@ -195,7 +185,7 @@ class CombineMixIn(CombineRunnerMixIn, CombineManagerMixIn, RSCMixIn):
         lobby_info = f"Name: **{result.lobby_user}**\nPassword: **{result.lobby_pass}**"
 
         team_fmt = None
-        for hplayer, aplayer in zip(result.home, result.away):
+        for hplayer, aplayer in zip(result.home, result.away, strict=True):
             if hplayer.discord_id == interaction.user.id:
                 team_fmt = "Home (Blue)"
                 break
@@ -213,10 +203,10 @@ class CombineMixIn(CombineRunnerMixIn, CombineManagerMixIn, RSCMixIn):
 
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-    @_combines.command(  # type: ignore
+    @_combines.command(  # type: ignore[type-var]
         name="active", description="Display active combine games"
     )
-    @app_commands.autocomplete(tier=TierMixIn.tier_autocomplete)  # type: ignore
+    @app_commands.autocomplete(tier=TierMixIn.tier_autocomplete)  # type: ignore[type-var]
     @app_commands.describe(
         player="Only show games with containing discord member (Optional)",
         tier="Only show games with average tier (Optional)",
@@ -253,9 +243,7 @@ class CombineMixIn(CombineRunnerMixIn, CombineManagerMixIn, RSCMixIn):
             )
 
         if isinstance(results, models.CombinesStatus):
-            return await interaction.response.send_message(
-                embed=ErrorEmbed(description=results.message), ephemeral=True
-            )
+            return await interaction.response.send_message(embed=ErrorEmbed(description=results.message), ephemeral=True)
 
         if not results:
             return await interaction.response.send_message(
@@ -266,9 +254,7 @@ class CombineMixIn(CombineRunnerMixIn, CombineManagerMixIn, RSCMixIn):
                 ephemeral=True,
             )
 
-        filtered = await self.filter_combine_lobbies(
-            guild, results, player=player, tier=tier
-        )
+        filtered = await self.filter_combine_lobbies(guild, results, player=player, tier=tier)
 
         embed = BlueEmbed(
             title="Active Combine Games",
@@ -304,27 +290,21 @@ class CombineMixIn(CombineRunnerMixIn, CombineManagerMixIn, RSCMixIn):
             final.append(lobby)
         return final
 
-    async def get_combine_room_list(
-        self, guild: discord.Guild
-    ) -> list[discord.CategoryChannel]:
+    async def get_combine_room_list(self, guild: discord.Guild) -> list[discord.CategoryChannel]:
         """Get a list of combine categories in the guild"""
         categories = []
         for x in guild.categories:
             if x.name.startswith("combine-"):
-                categories.append(x)
+                categories.append(x)  # noqa: PERF401
         return categories
 
-    async def total_players_in_combine_category(
-        self, category: discord.CategoryChannel
-    ) -> int:
+    async def total_players_in_combine_category(self, category: discord.CategoryChannel) -> int:
         total = 0
         for channel in category.voice_channels:
             total += len(channel.members)
         return total
 
-    async def combine_players_from_lobby(
-        self, guild: discord.Guild, lobby: models.CombinesLobby
-    ) -> list[discord.Member]:
+    async def combine_players_from_lobby(self, guild: discord.Guild, lobby: models.CombinesLobby) -> list[discord.Member]:
         players = []
         for p in lobby.home:
             m = guild.get_member(p.discord_id)

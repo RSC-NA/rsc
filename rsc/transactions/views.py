@@ -18,7 +18,8 @@ class TradeInfo(discord.ui.TextInput):
         )
 
     async def callback(self, interaction: discord.Interaction):
-        self.view.announcement = self.value  # type: ignore
+        if self.view:
+            self.view.announcement = self.value
 
 
 class TradeAnnouncementView(discord.ui.View):
@@ -47,8 +48,6 @@ class TradeAnnouncementModal(discord.ui.Modal, title="Trade Announcement"):
     async def on_submit(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
         if not self.trade:
-            await interaction.followup.send(
-                content="No trade data provided...", ephemeral=True
-            )
+            await interaction.followup.send(content="No trade data provided...", ephemeral=True)
             return
         self.stop()

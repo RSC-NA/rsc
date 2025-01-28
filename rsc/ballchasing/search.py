@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from rscapi.models import Match
 
@@ -12,10 +12,8 @@ async def get_bc_date_range(match: Match) -> tuple[datetime, datetime]:
         raise ValueError("Match has no date attribute.")
     match_date = match.var_date
     log.debug(f"BC Match Date: {match_date}")
-    after = match_date.replace(hour=21, minute=55, second=0).astimezone(tz=timezone.utc)
-    before = match_date.replace(hour=23, minute=59, second=0).astimezone(
-        tz=timezone.utc
-    )
+    after = match_date.replace(hour=21, minute=55, second=0).astimezone(tz=UTC)
+    before = match_date.replace(hour=23, minute=59, second=0).astimezone(tz=UTC)
     return after, before
 
 

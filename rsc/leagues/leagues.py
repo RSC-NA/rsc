@@ -1,5 +1,5 @@
 import logging
-from typing import AsyncIterator
+from collections.abc import AsyncIterator
 
 import aiohttp
 import discord
@@ -34,7 +34,7 @@ class LeagueMixIn(RSCMixIn):
 
     # Commands
 
-    @app_commands.command(name="leagues", description="Show all RSC leagues")  # type: ignore
+    @app_commands.command(name="leagues", description="Show all RSC leagues")  # type: ignore[type-var]
     @app_commands.guild_only
     async def _leagues(self, interaction: discord.Interaction):
         guild = interaction.guild
@@ -51,9 +51,7 @@ class LeagueMixIn(RSCMixIn):
         )
         embed.add_field(
             name="Game Mode",
-            value="\n".join(
-                league.league_data.game_mode or "None" for league in leagues
-            ),
+            value="\n".join(league.league_data.game_mode or "None" for league in leagues),
             inline=True,
         )
 
@@ -61,7 +59,7 @@ class LeagueMixIn(RSCMixIn):
             embed.set_thumbnail(url=guild.icon.url)
         await interaction.response.send_message(embed=embed)
 
-    @app_commands.command(  # type: ignore
+    @app_commands.command(  # type: ignore[type-var]
         name="leagueinfo", description="Show league and current season information"
     )
     @app_commands.guild_only
@@ -75,9 +73,7 @@ class LeagueMixIn(RSCMixIn):
 
         if not league_data:
             await interaction.response.send_message(
-                embed=ErrorEmbed(
-                    description="Unable to fetch league data. Is the league configured correctly?"
-                )
+                embed=ErrorEmbed(description="Unable to fetch league data. Is the league configured correctly?")
             )
             return
 
@@ -86,7 +82,7 @@ class LeagueMixIn(RSCMixIn):
         # )
         # TODO - Is this useful?
 
-    @app_commands.command(  # type: ignore
+    @app_commands.command(  # type: ignore[type-var]
         name="drafteligible", description="Display draft eligible players"
     )
     @app_commands.describe(
@@ -94,7 +90,7 @@ class LeagueMixIn(RSCMixIn):
         season="RSC Season (Default: current)",
         limit="Max number of results to display (Default: 50)",
     )
-    @app_commands.autocomplete(tier=TierMixIn.tier_autocomplete)  # type: ignore
+    @app_commands.autocomplete(tier=TierMixIn.tier_autocomplete)  # type: ignore[type-var]
     @app_commands.guild_only
     async def _draft_eligible_cmd(
         self,
@@ -144,9 +140,7 @@ class LeagueMixIn(RSCMixIn):
 
             paged_msg = Pagify(text="\n".join(pfmt))
             for page in paged_msg:
-                await interaction.followup.send(
-                    content=f"```\n{page}\n```", ephemeral=True
-                )
+                await interaction.followup.send(content=f"```\n{page}\n```", ephemeral=True)
 
         else:
             tcolor = await utils.tier_color_by_name(guild, name=tier)
@@ -159,9 +153,7 @@ class LeagueMixIn(RSCMixIn):
             if pfmt:
                 embed.add_field(name="Players", value="\n".join(pfmt), inline=False)
             else:
-                embed.description = (
-                    f"There are currently no Draft Eligible players in {tier}"
-                )
+                embed.description = f"There are currently no Draft Eligible players in {tier}"
 
             embed.set_footer(text=f"Found {len(pfmt)} players")
 
@@ -170,7 +162,7 @@ class LeagueMixIn(RSCMixIn):
 
             await interaction.followup.send(embed=embed, ephemeral=True)
 
-    @app_commands.command(  # type: ignore
+    @app_commands.command(  # type: ignore[type-var]
         name="season", description="Display current RSC season for league"
     )
     @app_commands.guild_only
@@ -197,7 +189,7 @@ class LeagueMixIn(RSCMixIn):
             embed.set_thumbnail(url=guild.icon.url)
         await interaction.response.send_message(embed=embed)
 
-    @app_commands.command(name="dates", description="Display important RSC dates")  # type: ignore
+    @app_commands.command(name="dates", description="Display important RSC dates")  # type: ignore[type-var]
     @app_commands.guild_only
     async def _dates_cmd(self, interaction: discord.Interaction):
         guild = interaction.guild
@@ -206,9 +198,7 @@ class LeagueMixIn(RSCMixIn):
 
         dates = await self._get_dates(guild)
         if not dates:
-            await interaction.response.send_message(
-                embed=YellowEmbed(description="No league dates have been posted.")
-            )
+            await interaction.response.send_message(embed=YellowEmbed(description="No league dates have been posted."))
             return
 
         embed = BlueEmbed(title="Important League Dates", description=dates)

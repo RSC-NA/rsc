@@ -1,8 +1,8 @@
 import io
 import logging
 import re
+from collections.abc import AsyncIterator
 from pathlib import Path
-from typing import Optional
 
 import discord
 from discord.app_commands import Transform
@@ -54,9 +54,7 @@ EMOJI_REGEX = re.compile(
 
 
 async def valid_emoji_name(name: str) -> bool:
-    if not re.match(r"[0-9A-Za-z_]+", name):
-        return False
-    return True
+    return bool(re.match("[0-9A-Za-z_]+", name))
 
 
 async def resize_image(img_data: bytes, height: int, width: int, imgtype: str):
@@ -115,10 +113,7 @@ async def get_audit_log_reason(
     """Retrieve audit log reason for `discord.AuditLogAction`"""
     perp = None
     reason = None
-    if not isinstance(target, int):
-        target_id = target.id
-    else:
-        target_id = target
+    target_id = target.id if not isinstance(target, int) else target
     if guild.me.guild_permissions.view_audit_log:
         async for log in guild.audit_logs(limit=5, action=action):
             if not log.target:
@@ -131,24 +126,18 @@ async def get_audit_log_reason(
     return perp, reason
 
 
-async def not_implemented(interaction: discord.Interaction, followup=False):
+async def not_implemented(interaction: discord.Interaction, followup: bool = False):
     if followup:
         await interaction.followup.send(embed=NotImplementedEmbed(), ephemeral=True)
     else:
-        await interaction.response.send_message(
-            embed=NotImplementedEmbed(), ephemeral=True
-        )
+        await interaction.response.send_message(embed=NotImplementedEmbed(), ephemeral=True)
 
 
 async def get_draft_eligible_role(guild: discord.Guild) -> discord.Role:
     r = discord.utils.get(guild.roles, name=const.DRAFT_ELIGIBLE)
     if not r:
-        log.error(
-            f"[{guild.name}] Expected role does not exist: {const.DRAFT_ELIGIBLE}"
-        )
-        raise ValueError(
-            f"[{guild.name}] Expected role does not exist: {const.DRAFT_ELIGIBLE}"
-        )
+        log.error(f"[{guild.name}] Expected role does not exist: {const.DRAFT_ELIGIBLE}")
+        raise ValueError(f"[{guild.name}] Expected role does not exist: {const.DRAFT_ELIGIBLE}")
     return r
 
 
@@ -156,9 +145,7 @@ async def get_ir_role(guild: discord.Guild) -> discord.Role:
     r = discord.utils.get(guild.roles, name=const.IR_ROLE)
     if not r:
         log.error(f"[{guild.name}] Expected role does not exist: {const.IR_ROLE}")
-        raise ValueError(
-            f"[{guild.name}] Expected role does not exist: {const.IR_ROLE}"
-        )
+        raise ValueError(f"[{guild.name}] Expected role does not exist: {const.IR_ROLE}")
     return r
 
 
@@ -166,9 +153,7 @@ async def get_muted_role(guild: discord.Guild) -> discord.Role:
     r = discord.utils.get(guild.roles, name=const.MUTED_ROLE)
     if not r:
         log.error(f"[{guild.name}] Expected role does not exist: {const.MUTED_ROLE}")
-        raise ValueError(
-            f"[{guild.name}] Expected role does not exist: {const.MUTED_ROLE}"
-        )
+        raise ValueError(f"[{guild.name}] Expected role does not exist: {const.MUTED_ROLE}")
     return r
 
 
@@ -176,33 +161,23 @@ async def get_captain_role(guild: discord.Guild) -> discord.Role:
     r = discord.utils.get(guild.roles, name=const.CAPTAIN_ROLE)
     if not r:
         log.error(f"[{guild.name}] Expected role does not exist: {const.CAPTAIN_ROLE}")
-        raise ValueError(
-            f"[{guild.name}] Expected role does not exist: {const.CAPTAIN_ROLE}"
-        )
+        raise ValueError(f"[{guild.name}] Expected role does not exist: {const.CAPTAIN_ROLE}")
     return r
 
 
 async def get_former_player_role(guild: discord.Guild) -> discord.Role:
     r = discord.utils.get(guild.roles, name=const.FORMER_PLAYER_ROLE)
     if not r:
-        log.error(
-            f"[{guild.name}] Expected role does not exist: {const.FORMER_PLAYER_ROLE}"
-        )
-        raise ValueError(
-            f"[{guild.name}] Expected role does not exist: {const.FORMER_PLAYER_ROLE}"
-        )
+        log.error(f"[{guild.name}] Expected role does not exist: {const.FORMER_PLAYER_ROLE}")
+        raise ValueError(f"[{guild.name}] Expected role does not exist: {const.FORMER_PLAYER_ROLE}")
     return r
 
 
 async def get_spectator_role(guild: discord.Guild) -> discord.Role:
     r = discord.utils.get(guild.roles, name=const.SPECTATOR_ROLE)
     if not r:
-        log.error(
-            f"[{guild.name}] Expected role does not exist: {const.SPECTATOR_ROLE}"
-        )
-        raise ValueError(
-            f"[{guild.name}] Expected role does not exist: {const.SPECTATOR_ROLE}"
-        )
+        log.error(f"[{guild.name}] Expected role does not exist: {const.SPECTATOR_ROLE}")
+        raise ValueError(f"[{guild.name}] Expected role does not exist: {const.SPECTATOR_ROLE}")
     return r
 
 
@@ -210,21 +185,15 @@ async def get_league_role(guild: discord.Guild) -> discord.Role:
     r = discord.utils.get(guild.roles, name=const.LEAGUE_ROLE)
     if not r:
         log.error(f"[{guild.name}] Expected role does not exist: {const.LEAGUE_ROLE}")
-        raise ValueError(
-            f"[{guild.name}] Expected role does not exist: {const.LEAGUE_ROLE}"
-        )
+        raise ValueError(f"[{guild.name}] Expected role does not exist: {const.LEAGUE_ROLE}")
     return r
 
 
 async def get_free_agent_role(guild: discord.Guild) -> discord.Role:
     r = discord.utils.get(guild.roles, name=const.FREE_AGENT_ROLE)
     if not r:
-        log.error(
-            f"[{guild.name}] Expected role does not exist: {const.FREE_AGENT_ROLE}"
-        )
-        raise ValueError(
-            f"[{guild.name}] Expected role does not exist: {const.FREE_AGENT_ROLE}"
-        )
+        log.error(f"[{guild.name}] Expected role does not exist: {const.FREE_AGENT_ROLE}")
+        raise ValueError(f"[{guild.name}] Expected role does not exist: {const.FREE_AGENT_ROLE}")
     return r
 
 
@@ -232,9 +201,7 @@ async def get_permfa_role(guild: discord.Guild) -> discord.Role:
     r = discord.utils.get(guild.roles, name=const.PERM_FA_ROLE)
     if not r:
         log.error(f"[{guild.name}] Expected role does not exist: {const.PERM_FA_ROLE}")
-        raise ValueError(
-            f"[{guild.name}] Expected role does not exist: {const.PERM_FA_ROLE}"
-        )
+        raise ValueError(f"[{guild.name}] Expected role does not exist: {const.PERM_FA_ROLE}")
     return r
 
 
@@ -242,9 +209,7 @@ async def get_gm_role(guild: discord.Guild) -> discord.Role:
     r = discord.utils.get(guild.roles, name=const.GM_ROLE)
     if not r:
         log.error(f"[{guild.name}] Expected role does not exist: {const.GM_ROLE}")
-        raise ValueError(
-            f"[{guild.name}] Expected role does not exist: {const.GM_ROLE}"
-        )
+        raise ValueError(f"[{guild.name}] Expected role does not exist: {const.GM_ROLE}")
     return r
 
 
@@ -252,33 +217,23 @@ async def get_agm_role(guild: discord.Guild) -> discord.Role:
     r = discord.utils.get(guild.roles, name=const.AGM_ROLE)
     if not r:
         log.error(f"[{guild.name}] Expected role does not exist: {const.AGM_ROLE}")
-        raise ValueError(
-            f"[{guild.name}] Expected role does not exist: {const.AGM_ROLE}"
-        )
+        raise ValueError(f"[{guild.name}] Expected role does not exist: {const.AGM_ROLE}")
     return r
 
 
 async def get_subbed_out_role(guild: discord.Guild) -> discord.Role:
     r = discord.utils.get(guild.roles, name=const.SUBBED_OUT_ROLE)
     if not r:
-        log.error(
-            f"[{guild.name}] Expected role does not exist: {const.SUBBED_OUT_ROLE}"
-        )
-        raise ValueError(
-            f"[{guild.name}] Expected role does not exist: {const.SUBBED_OUT_ROLE}"
-        )
+        log.error(f"[{guild.name}] Expected role does not exist: {const.SUBBED_OUT_ROLE}")
+        raise ValueError(f"[{guild.name}] Expected role does not exist: {const.SUBBED_OUT_ROLE}")
     return r
 
 
 async def get_former_gm_role(guild: discord.Guild) -> discord.Role:
     r = discord.utils.get(guild.roles, name=const.FORMER_GM_ROLE)
     if not r:
-        log.error(
-            f"[{guild.name}] Expected role does not exist: {const.FORMER_GM_ROLE}"
-        )
-        raise ValueError(
-            f"[{guild.name}] Expected role does not exist: {const.FORMER_GM_ROLE}"
-        )
+        log.error(f"[{guild.name}] Expected role does not exist: {const.FORMER_GM_ROLE}")
+        raise ValueError(f"[{guild.name}] Expected role does not exist: {const.FORMER_GM_ROLE}")
     return r
 
 
@@ -314,9 +269,7 @@ async def has_gm_role(member: discord.Member) -> bool:
     return any(role.name == const.GM_ROLE for role in member.roles)
 
 
-async def member_from_rsc_name(
-    guild: discord.Guild, name: str
-) -> Optional[discord.Member]:
+async def member_from_rsc_name(guild: discord.Guild, name: str) -> discord.Member | None:
     """Get guild member by rsc name ("nickm"). Not recommended."""
     for m in guild.members:
         try:
@@ -331,7 +284,7 @@ async def member_from_rsc_name(
     return None
 
 
-async def get_gm_by_role(franchise_role: discord.Role) -> Optional[discord.Member]:
+async def get_gm_by_role(franchise_role: discord.Role) -> discord.Member | None:
     """Get GM from guild franchise role"""
     for member in franchise_role.members:
         if has_gm_role(member):
@@ -344,9 +297,7 @@ async def role_by_name(guild: discord.Guild, name: str) -> discord.Role | None:
     return discord.utils.get(guild.roles, name=name)
 
 
-async def franchise_role_from_name(
-    guild: discord.Guild, franchise_name: str
-) -> discord.Role | None:
+async def franchise_role_from_name(guild: discord.Guild, franchise_name: str) -> discord.Role | None:
     """Get guild franchise role from franchise name (Ex: "The Garden")"""
     for role in guild.roles:
         if role.name.lower().startswith(franchise_name.lower()):
@@ -354,9 +305,9 @@ async def franchise_role_from_name(
     return None
 
 
-async def fa_img_from_tier(tier: str, tiny: bool = False) -> Optional[discord.File]:
+async def fa_img_from_tier(tier: str, tiny: bool = False) -> discord.File | None:
     root = Path(__file__).parent.parent
-    if tiny:
+    if tiny:  # noqa: SIM108
         img_path = root / f"resources/FA/64x64/{tier}FA_64x64.png"
     else:
         img_path = root / f"resources/FA/{tier}FA.png"
@@ -367,9 +318,9 @@ async def fa_img_from_tier(tier: str, tiny: bool = False) -> Optional[discord.Fi
     return None
 
 
-async def fa_img_path_from_tier(tier: str, tiny: bool = False) -> Optional[Path]:
+async def fa_img_path_from_tier(tier: str, tiny: bool = False) -> Path | None:
     root = Path(__file__).parent.parent
-    if tiny:
+    if tiny:  # noqa: SIM108
         img_path = root / f"resources/FA/64x64/{tier}FA_64x64.png"
     else:
         img_path = root / f"resources/FA/{tier}FA.png"
@@ -405,22 +356,16 @@ async def transaction_image_from_type(action: TransactionType) -> discord.File:
             raise NotImplementedError
 
 
-async def franchise_role_from_league_player(
-    guild: discord.Guild, player: LeaguePlayer
-) -> discord.Role:
+async def franchise_role_from_league_player(guild: discord.Guild, player: LeaguePlayer) -> discord.Role:
     """Return a franchise discord.Role from `LeaguePlayer` object"""
     if not (player.team and player.team.franchise):
-        raise AttributeError(
-            f"{player.player.name} LeaguePlayer object has no team or franchise data."
-        )
+        raise AttributeError(f"{player.player.name} LeaguePlayer object has no team or franchise data.")
 
     rname = f"{player.team.franchise.name} ({player.team.franchise.gm.rsc_name})"
     r = discord.utils.get(guild.roles, name=rname)
     if not r:
         log.error(f"[{guild.name}] Expected franchise role does not exist: {rname}")
-        raise ValueError(
-            f"[{guild.name}] Expected franchise role does not exist: {rname}"
-        )
+        raise ValueError(f"[{guild.name}] Expected franchise role does not exist: {rname}")
     return r
 
 
@@ -434,9 +379,7 @@ async def tier_color_by_name(guild: discord.Guild, name: str) -> discord.Color:
 
 async def is_guild_interaction(interaction: discord.Interaction) -> bool:
     """Check if interaction was sent from guild. Mostly for type issues since guild_only exists"""
-    if interaction.guild:
-        return True
-    return False
+    return bool(interaction.guild)
 
 
 async def get_tier_role(guild: discord.Guild, name: str) -> discord.Role:
@@ -453,9 +396,7 @@ async def get_tier_fa_role(guild: discord.Guild, name: str) -> discord.Role:
     r = discord.utils.get(guild.roles, name=f"{name}FA")
     if not r:
         log.error(f"[{guild.name}] Expected tier FA role does not exist: {name}FA")
-        raise ValueError(
-            f"[{guild.name}] Expected tier FA role does not exist: {name}FA"
-        )
+        raise ValueError(f"[{guild.name}] Expected tier FA role does not exist: {name}FA")
     return r
 
 
@@ -474,13 +415,11 @@ async def franchise_role_list_from_disord_member(
     result = []
     for r in member.roles:
         if FRANCHISE_ROLE_REGEX.match(r.name):
-            result.append(r)
+            result.append(r)  # noqa: PERF401
     return result
 
 
-async def emoji_from_prefix(
-    guild: discord.Guild, prefix: str
-) -> Optional[discord.Emoji]:
+async def emoji_from_prefix(guild: discord.Guild, prefix: str) -> discord.Emoji | None:
     return discord.utils.get(guild.emojis, name=prefix)
 
 
@@ -500,7 +439,7 @@ async def format_discord_prefix(member: discord.Member, prefix: str) -> str:
     accolades = await member_accolades(member)
     no_pfx = await remove_prefix(member)
     name = await strip_discord_accolades(no_pfx)
-    if prefix:
+    if prefix:  # noqa: SIM108
         new_nick = f"{prefix} | {name} {accolades}".strip()
     else:
         new_nick = f"{name} {accolades}".strip()
@@ -523,29 +462,21 @@ async def member_accolades(member: discord.Member) -> Accolades:
 
 
 async def remove_emoji(member: discord.Member | str) -> str:
-    if isinstance(member, discord.Member):
-        m_str = member.display_name
-    else:
-        m_str = member
+    m_str = member.display_name if isinstance(member, discord.Member) else member
     return re.sub(EMOJI_REGEX, "", m_str)
 
 
 async def fix_tracker_url(url: str) -> str:
     if "tracker.network/profile" in url:
-        url = url.replace(
-            "tracker.network/profile", "tracker.network/rocket-league/profile"
-        )
+        url = url.replace("tracker.network/profile", "tracker.network/rocket-league/profile")
         url = url.replace("profile/ps/", "profile/psn/")
         url = url.replace("profile/xbox/", "profile/xbl/")
     return url
 
 
-async def async_iter_gather(result):
+async def async_iter_gather(result: AsyncIterator) -> list:
     """Gather async iterator into list and return"""
-    final = []
-    async for r in result:
-        final.append(r)
-    return final
+    return [r async for r in result]
 
 
 class UtilsMixIn(RSCMixIn):
@@ -553,13 +484,11 @@ class UtilsMixIn(RSCMixIn):
         log.debug("Initializing UtilsMixIn")
         super().__init__()
 
-    @app_commands.command(  # type: ignore
+    @app_commands.command(  # type: ignore[type-var]
         name="getmassid",
         description="Mass lookup version of /getid.",
     )
-    @app_commands.describe(
-        members="Space delimited list of any string or ID that could identify a user."
-    )
+    @app_commands.describe(members="Space delimited list of any string or ID that could identify a user.")
     @app_commands.guild_only
     async def _getmassid(
         self,
@@ -574,7 +503,7 @@ class UtilsMixIn(RSCMixIn):
 
         await interaction.response.send_message(content=desc, ephemeral=True)
 
-    @app_commands.command(  # type: ignore
+    @app_commands.command(  # type: ignore[type-var]
         name="getid",
         description="Lookup discord member account identifiers",
     )
@@ -587,15 +516,13 @@ class UtilsMixIn(RSCMixIn):
             ephemeral=True,
         )
 
-    @app_commands.command(  # type: ignore
+    @app_commands.command(  # type: ignore[type-var]
         name="userinfo",
         description="Display discord user information for a user",
     )
     @app_commands.describe(member="RSC Discord Member (Optional)")
     @app_commands.guild_only
-    async def _userinfo(
-        self, interaction: discord.Interaction, member: discord.Member | None = None
-    ):
+    async def _userinfo(self, interaction: discord.Interaction, member: discord.Member | None = None):
         """Show information about a member.
 
         This includes fields for status, discord join date, server
@@ -617,22 +544,11 @@ class UtilsMixIn(RSCMixIn):
 
         joined_at = member.joined_at
         voice_state = member.voice
-        member_number = (
-            sorted(
-                guild.members, key=lambda m: m.joined_at or interaction.created_at
-            ).index(member)
-            + 1
-        )
+        member_number = sorted(guild.members, key=lambda m: m.joined_at or interaction.created_at).index(member) + 1
 
-        created_on = (
-            f"{discord.utils.format_dt(member.created_at)}\n"
-            f"{discord.utils.format_dt(member.created_at, 'R')}"
-        )
+        created_on = f"{discord.utils.format_dt(member.created_at)}\n{discord.utils.format_dt(member.created_at, 'R')}"
         if joined_at is not None:
-            joined_on = (
-                f"{discord.utils.format_dt(joined_at)}\n"
-                f"{discord.utils.format_dt(joined_at, 'R')}"
-            )
+            joined_on = f"{discord.utils.format_dt(joined_at)}\n{discord.utils.format_dt(joined_at, 'R')}"
         else:
             joined_on = "Unknown"
 
@@ -659,12 +575,8 @@ class UtilsMixIn(RSCMixIn):
                 # to every single check running on users than the occasional user info invoke
                 # We don't start by building this way, since the number of times we hit this should be
                 # infinitesimally small compared to when we don't across all uses of Red.
-                continuation_string = (
-                    "and {numeric_number} more roles not displayed due to embed limits."
-                )
-                available_length = 1024 - len(
-                    continuation_string
-                )  # do not attempt to tweak, i18n
+                continuation_string = "and {numeric_number} more roles not displayed due to embed limits."
+                available_length = 1024 - len(continuation_string)  # do not attempt to tweak, i18n
 
                 role_chunks = []
                 remaining_roles = 0
@@ -679,38 +591,30 @@ class UtilsMixIn(RSCMixIn):
                     else:
                         remaining_roles += 1
 
-                role_chunks.append(
-                    continuation_string.format(numeric_number=remaining_roles)
-                )
+                role_chunks.append(continuation_string.format(numeric_number=remaining_roles))
 
                 role_str = "".join(role_chunks)
 
         else:
             role_str = None
 
-        data = discord.Embed(
-            description=status_string or activity, colour=member.colour
-        )
+        data = discord.Embed(description=status_string or activity, colour=member.colour)
 
         data.add_field(name="Joined Discord on", value=created_on)
         data.add_field(name="Joined this server on", value=joined_on)
         if role_str is not None:
-            data.add_field(
-                name="Roles" if len(roles) > 1 else "Role", value=role_str, inline=False
-            )
+            data.add_field(name="Roles" if len(roles) > 1 else "Role", value=role_str, inline=False)
 
         if voice_state and voice_state.channel:
             data.add_field(
                 name="Current voice channel",
-                value="{0.mention} ID: {0.id}".format(voice_state.channel),
+                value=f"{voice_state.channel.mention} ID: {voice_state.channel.id}",
                 inline=False,
             )
-        data.set_footer(
-            text="Member #{} | User ID: {}".format(member_number, member.id)
-        )
+        data.set_footer(text=f"Member #{member_number} | User ID: {member.id}")
 
         name = str(member)
-        name = " ~ ".join((name, member.nick)) if member.nick else name
+        name = f"{name} ~ {member.nick}" if member.nick else name
         name = filters.filter_invites(name)
 
         avatar = member.display_avatar.replace(static_format="png")
@@ -719,15 +623,13 @@ class UtilsMixIn(RSCMixIn):
 
         await interaction.response.send_message(embed=data)
 
-    @app_commands.command(  # type: ignore
+    @app_commands.command(  # type: ignore[type-var]
         name="serverinfo",
         description="Display information about the discord server",
     )
     @app_commands.describe(details="Increase verbosity")
     @app_commands.guild_only
-    async def _serverinfo(
-        self, interaction: discord.Interaction, details: bool = False
-    ):
+    async def _serverinfo(self, interaction: discord.Interaction, details: bool = False):
         """
         Show server information.
 
@@ -742,9 +644,7 @@ class UtilsMixIn(RSCMixIn):
             date_and_time=discord.utils.format_dt(guild.created_at),
             relative_time=discord.utils.format_dt(guild.created_at, "R"),
         )
-        online = str(
-            len([m.status for m in guild.members if m.status != discord.Status.offline])
-        )
+        online = str(len([m.status for m in guild.members if m.status != discord.Status.offline]))
         total_users = guild.member_count and str(guild.member_count)
         text_channels = str(len(guild.text_channels))
         voice_channels = str(len(guild.voice_channels))
@@ -761,11 +661,10 @@ class UtilsMixIn(RSCMixIn):
             data.add_field(name="Owner", value=str(guild.owner))
             if interaction.command:
                 data.set_footer(
-                    text=f"Server ID: {str(guild.id)}"
-                    + f"  •  Use /{interaction.command.name} details for more info on the server."
+                    text=f"Server ID: {guild.id!s}" + f"  •  Use /{interaction.command.name} details for more info on the server."
                 )
             else:
-                data.set_footer(text=f"Server ID: {str(guild.id)}")
+                data.set_footer(text=f"Server ID: {guild.id!s}")
 
             if guild.icon:
                 data.set_author(name=guild.name, url=guild.icon)
@@ -777,39 +676,27 @@ class UtilsMixIn(RSCMixIn):
             def _size(num: float):
                 for unit in ["B", "KB", "MB", "GB", "TB", "PB", "EB", "ZB"]:
                     if abs(num) < 1024.0:
-                        return "{0:.1f}{1}".format(num, unit)
+                        return f"{num:.1f}{unit}"
                     num /= 1024.0
-                return "{0:.1f}{1}".format(num, "YB")
+                return f"{num:.1f}YB"
 
             def _bitsize(num: float):
                 for unit in ["B", "KB", "MB", "GB", "TB", "PB", "EB", "ZB"]:
                     if abs(num) < 1000.0:
-                        return "{0:.1f}{1}".format(num, unit)
+                        return f"{num:.1f}{unit}"
                     num /= 1000.0
-                return "{0:.1f}{1}".format(num, "YB")
+                return f"{num:.1f}YB"
 
-            shard_info = (
-                "\nShard ID: **{shard_id}/{shard_count}**".format(
-                    shard_id=str(guild.shard_id + 1),
-                    shard_count=str(self.bot.shard_count),
-                )
-                if self.bot.shard_count > 1
-                else ""
-            )
+            shard_info = f"\nShard ID: **{guild.shard_id + 1!s}/{self.bot.shard_count!s}**" if self.bot.shard_count > 1 else ""
             # Logic from: https://github.com/TrustyJAID/Trusty-cogs/blob/master/serverstats/serverstats.py#L159
             online_stats = {
                 "Humans: ": lambda x: not x.bot,
                 " • Bots: ": lambda x: x.bot,
                 "\N{LARGE GREEN CIRCLE}": lambda x: x.status is discord.Status.online,
                 "\N{LARGE ORANGE CIRCLE}": lambda x: x.status is discord.Status.idle,
-                "\N{LARGE RED CIRCLE}": lambda x: x.status
-                is discord.Status.do_not_disturb,
-                "\N{MEDIUM WHITE CIRCLE}\N{VARIATION SELECTOR-16}": lambda x: (
-                    x.status is discord.Status.offline
-                ),
-                "\N{LARGE PURPLE CIRCLE}": lambda x: any(
-                    a.type is discord.ActivityType.streaming for a in x.activities
-                ),
+                "\N{LARGE RED CIRCLE}": lambda x: x.status is discord.Status.do_not_disturb,
+                "\N{MEDIUM WHITE CIRCLE}\N{VARIATION SELECTOR-16}": lambda x: (x.status is discord.Status.offline),
+                "\N{LARGE PURPLE CIRCLE}": lambda x: any(a.type is discord.ActivityType.streaming for a in x.activities),
                 "\N{MOBILE PHONE}": lambda x: x.is_on_mobile(),
             }
             member_msg = f"Users online: **{online}/{total_users}**\n"
@@ -821,9 +708,7 @@ class UtilsMixIn(RSCMixIn):
                     print(error)
                     continue
                 else:
-                    member_msg += f"{emoji} **{num}** " + (
-                        "\n" if count % 2 == 0 else ""
-                    )
+                    member_msg += f"{emoji} **{num}** " + ("\n" if count % 2 == 0 else "")
                 count += 1
 
             verif = {
@@ -843,19 +728,14 @@ class UtilsMixIn(RSCMixIn):
                 )
 
             data = OrangeEmbed(
-                description=(f"{guild.description}\n\n" if guild.description else "")
-                + created_at,
+                description=(f"{guild.description}\n\n" if guild.description else "") + created_at,
             )
             data.set_author(
                 name=guild.name,
                 icon_url=(
                     "https://cdn.discordapp.com/emojis/457879292152381443.png"
                     if "VERIFIED" in guild.features
-                    else (
-                        "https://cdn.discordapp.com/emojis/508929941610430464.png"
-                        if "PARTNERED" in guild.features
-                        else None
-                    )
+                    else ("https://cdn.discordapp.com/emojis/508929941610430464.png" if "PARTNERED" in guild.features else None)
                 ),
             )
             if guild.icon:
@@ -879,9 +759,7 @@ class UtilsMixIn(RSCMixIn):
             )
             data.add_field(
                 name="Utility:",
-                value=(
-                    "Owner: {owner}\nVerif. level: {verif}\nServer ID: {id}{shard_info}"
-                ).format(
+                value=("Owner: {owner}\nVerif. level: {verif}\nServer ID: {id}{shard_info}").format(
                     owner=f"**{guild.owner}**",
                     verif=f"**{verif[str(guild.verification_level)]}**",
                     id=f"**{guild.id}**",
@@ -892,10 +770,7 @@ class UtilsMixIn(RSCMixIn):
             data.add_field(
                 name="Misc:",
                 value=(
-                    "AFK channel: {afk_chan}\n"
-                    "AFK timeout: **{afk_timeout}**\n"
-                    "Custom emojis: **{emoji_count}**\n"
-                    "Roles: **{role_count}**"
+                    "AFK channel: {afk_chan}\nAFK timeout: **{afk_timeout}**\nCustom emojis: **{emoji_count}**\nRoles: **{role_count}**"
                 ).format(
                     afk_chan=guild.afk_channel if guild.afk_channel else "**Not set**",
                     afk_timeout=guild.afk_timeout,
@@ -924,33 +799,22 @@ class UtilsMixIn(RSCMixIn):
             if "COMMUNITY" in features:
                 features.remove("NEWS")
             feature_names = [
-                custom_feature_names.get(
-                    feature, " ".join(feature.split("_")).capitalize()
-                )
+                custom_feature_names.get(feature, " ".join(feature.split("_")).capitalize())
                 for feature in features
                 if feature not in excluded_features
             ]
             if guild.features:
                 data.add_field(
                     name="Server features:",
-                    value="\n".join(
-                        f"\N{WHITE HEAVY CHECK MARK} {feature}"
-                        for feature in feature_names
-                    ),
+                    value="\n".join(f"\N{WHITE HEAVY CHECK MARK} {feature}" for feature in feature_names),
                 )
 
             if guild.premium_tier != 0:
                 nitro_boost = (
-                    "Tier {boostlevel} with {nitroboosters} boosts\n"
-                    "File size limit: **{filelimit}**\n"
-                    "Emoji limit: **{emojis_limit}**\n"
-                    "VCs max bitrate: **{bitrate}**"
-                ).format(
-                    boostlevel=guild.premium_tier,
-                    nitroboosters=guild.premium_subscription_count,
-                    filelimit=_size(guild.filesize_limit),
-                    emojis_limit=guild.emoji_limit,
-                    bitrate=_bitsize(guild.bitrate_limit),
+                    f"Tier {guild.premium_tier} with {guild.premium_subscription_count} boosts\n"
+                    f"File size limit: **{_size(guild.filesize_limit)}**\n"
+                    f"Emoji limit: **{guild.emoji_limit}**\n"
+                    f"VCs max bitrate: **{_bitsize(guild.bitrate_limit)}**"
                 )
                 data.add_field(name="Nitro Boost:", value=nitro_boost)
             if guild.splash:
@@ -959,7 +823,7 @@ class UtilsMixIn(RSCMixIn):
 
         await interaction.response.send_message(embed=data)
 
-    @app_commands.command(  # type: ignore
+    @app_commands.command(  # type: ignore[type-var]
         name="getallwithrole",
         description="Get all users with the specified role(s). (Max 4 roles)",
     )
@@ -1012,12 +876,8 @@ class UtilsMixIn(RSCMixIn):
                 description=desc,
                 color=discord.Color.blue(),
             )
-            embed.add_field(
-                name="Player", value="\n".join(r.mention for r in results), inline=True
-            )
-            embed.add_field(
-                name="Username", value="\n".join(r.name for r in results), inline=True
-            )
+            embed.add_field(name="Player", value="\n".join(r.mention for r in results), inline=True)
+            embed.add_field(name="Username", value="\n".join(r.name for r in results), inline=True)
             embed.add_field(
                 name="Discord ID",
                 value="\n".join(str(r.id) for r in results),
@@ -1027,7 +887,7 @@ class UtilsMixIn(RSCMixIn):
             embed.set_footer(text=f"Found {len(results)} matching player(s).")
             await interaction.followup.send(embed=embed, ephemeral=True)
 
-    @app_commands.command(  # type: ignore
+    @app_commands.command(  # type: ignore[type-var]
         name="addrole", description="Add a role to the specified user"
     )
     @app_commands.describe(role="Discord role to add", member="Player discord name")
@@ -1043,9 +903,7 @@ class UtilsMixIn(RSCMixIn):
         try:
             await member.add_roles(role)
             await interaction.response.send_message(
-                embed=SuccessEmbed(
-                    description=f"Added {role.mention} role to {member.mention}"
-                ),
+                embed=SuccessEmbed(description=f"Added {role.mention} role to {member.mention}"),
                 ephemeral=True,
             )
         except discord.Forbidden as exc:
@@ -1057,7 +915,7 @@ class UtilsMixIn(RSCMixIn):
                 ephemeral=True,
             )
 
-    @app_commands.command(  # type: ignore
+    @app_commands.command(  # type: ignore[type-var]
         name="bulkaddrole", description="Add a role a list of user(s) or another role"
     )
     @app_commands.describe(
@@ -1081,17 +939,13 @@ class UtilsMixIn(RSCMixIn):
             mlist = to_role.members
         else:
             await interaction.response.send_message(
-                embed=ErrorEmbed(
-                    description="You must specify a list of members or a destination role."
-                ),
+                embed=ErrorEmbed(description="You must specify a list of members or a destination role."),
                 ephemeral=True,
             )
             return
 
         count = len(mlist)
-        bulk_view = BulkRoleConfirmView(
-            interaction, action=BulkRoleAction.ADD, role=role, count=count
-        )
+        bulk_view = BulkRoleConfirmView(interaction, action=BulkRoleAction.ADD, role=role, count=count)
         await bulk_view.prompt()
         await bulk_view.wait()
 
@@ -1105,9 +959,7 @@ class UtilsMixIn(RSCMixIn):
             except discord.Forbidden:
                 failed.append(m)
 
-        embed = SuccessEmbed(
-            description=f"Applied {role.mention} to **{count - len(failed)}/{count}** users(s)."
-        )
+        embed = SuccessEmbed(description=f"Applied {role.mention} to **{count - len(failed)}/{count}** users(s).")
         if failed:
             embed.add_field(
                 name="Failed",
@@ -1116,7 +968,7 @@ class UtilsMixIn(RSCMixIn):
             )
         await interaction.edit_original_response(embed=embed, view=None)
 
-    @app_commands.command(  # type: ignore
+    @app_commands.command(  # type: ignore[type-var]
         name="removerole", description="Remove a role to the specified user"
     )
     @app_commands.describe(role="Discord role to remove", member="Player discord name")
@@ -1132,9 +984,7 @@ class UtilsMixIn(RSCMixIn):
         try:
             await member.remove_roles(role)
             await interaction.response.send_message(
-                embed=SuccessEmbed(
-                    description=f"Removed {role.mention} role to {member.mention}"
-                ),
+                embed=SuccessEmbed(description=f"Removed {role.mention} role to {member.mention}"),
                 ephemeral=True,
             )
         except discord.Forbidden as exc:
@@ -1146,7 +996,7 @@ class UtilsMixIn(RSCMixIn):
                 ephemeral=True,
             )
 
-    @app_commands.command(  # type: ignore
+    @app_commands.command(  # type: ignore[type-var]
         name="bulkremoverole", description="Remove a role a list of user(s)"
     )
     @app_commands.describe(
@@ -1160,13 +1010,11 @@ class UtilsMixIn(RSCMixIn):
         self,
         interaction: discord.Interaction,
         role: discord.Role,
-        members: Optional[Transform[list[discord.Member], GreedyMemberTransformer]],
+        members: Transform[list[discord.Member], GreedyMemberTransformer] | None,
     ):
         count = len(members) if members else len(role.members)
 
-        bulk_view = BulkRoleConfirmView(
-            interaction, action=BulkRoleAction.REMOVE, role=role, count=count
-        )
+        bulk_view = BulkRoleConfirmView(interaction, action=BulkRoleAction.REMOVE, role=role, count=count)
         await bulk_view.prompt()
         await bulk_view.wait()
 
@@ -1182,9 +1030,7 @@ class UtilsMixIn(RSCMixIn):
             except discord.Forbidden:
                 failed.append(m)
 
-        embed = SuccessEmbed(
-            description=f"Removed {role.mention} from **{count - len(failed)}/{count}** users(s)."
-        )
+        embed = SuccessEmbed(description=f"Removed {role.mention} from **{count - len(failed)}/{count}** users(s).")
         if failed:
             embed.add_field(
                 name="Failed",
@@ -1193,7 +1039,7 @@ class UtilsMixIn(RSCMixIn):
             )
         await interaction.edit_original_response(embed=embed, view=None)
 
-    @app_commands.command(  # type: ignore
+    @app_commands.command(  # type: ignore[type-var]
         name="setchannelperm",
         description="Modify channel permissions for a role or member",
     )
@@ -1217,9 +1063,7 @@ class UtilsMixIn(RSCMixIn):
         perms = channel.overwrites_for(target)
         if permission not in perms.VALID_NAMES:
             return await interaction.response.send_message(
-                embed=ErrorEmbed(
-                    description=f"Invalid permission type: `{permission}`"
-                ),
+                embed=ErrorEmbed(description=f"Invalid permission type: `{permission}`"),
                 ephemeral=True,
             )
 
@@ -1245,7 +1089,7 @@ class UtilsMixIn(RSCMixIn):
             ephemeral=True,
         )
 
-    def handle_custom(self, user):
+    def handle_custom(self, user: discord.Member):
         a = [c for c in user.activities if c.type == discord.ActivityType.custom]
         if not a:
             return None, discord.ActivityType.custom
@@ -1261,7 +1105,7 @@ class UtilsMixIn(RSCMixIn):
             c_status = f"Custom: {activity.name}"
         return c_status, discord.ActivityType.custom
 
-    def handle_playing(self, user):
+    def handle_playing(self, user: discord.Member):
         p_acts = [c for c in user.activities if c.type == discord.ActivityType.playing]
         if not p_acts:
             return None, discord.ActivityType.playing
@@ -1269,10 +1113,8 @@ class UtilsMixIn(RSCMixIn):
         act = f"Playing: {p_act.name}"
         return act, discord.ActivityType.playing
 
-    def handle_streaming(self, user):
-        s_acts = [
-            c for c in user.activities if c.type == discord.ActivityType.streaming
-        ]
+    def handle_streaming(self, user: discord.Member):
+        s_acts = [c for c in user.activities if c.type == discord.ActivityType.streaming]
         if not s_acts:
             return None, discord.ActivityType.streaming
         s_act = s_acts[0]
@@ -1287,10 +1129,8 @@ class UtilsMixIn(RSCMixIn):
             act = f"Streaming: {s_act.name}"
         return act, discord.ActivityType.streaming
 
-    def handle_listening(self, user):
-        l_acts = [
-            c for c in user.activities if c.type == discord.ActivityType.listening
-        ]
+    def handle_listening(self, user: discord.Member):
+        l_acts = [c for c in user.activities if c.type == discord.ActivityType.listening]
         if not l_acts:
             return None, discord.ActivityType.listening
         l_act = l_acts[0]
@@ -1298,16 +1138,14 @@ class UtilsMixIn(RSCMixIn):
             act = "Listening: [{title}{sep}{artist}]({url})".format(
                 title=discord.utils.escape_markdown(l_act.title),
                 sep=" | " if l_act.artist else "",
-                artist=(
-                    discord.utils.escape_markdown(l_act.artist) if l_act.artist else ""
-                ),
+                artist=(discord.utils.escape_markdown(l_act.artist) if l_act.artist else ""),
                 url=f"https://open.spotify.com/track/{l_act.track_id}",
             )
         else:
             act = f"Listening: {l_act.name}"
         return act, discord.ActivityType.listening
 
-    def handle_watching(self, user):
+    def handle_watching(self, user: discord.Member):
         w_acts = [c for c in user.activities if c.type == discord.ActivityType.watching]
         if not w_acts:
             return None, discord.ActivityType.watching
@@ -1315,17 +1153,15 @@ class UtilsMixIn(RSCMixIn):
         act = f"Watching: {w_act.name}"
         return act, discord.ActivityType.watching
 
-    def handle_competing(self, user):
-        w_acts = [
-            c for c in user.activities if c.type == discord.ActivityType.competing
-        ]
+    def handle_competing(self, user: discord.Member):
+        w_acts = [c for c in user.activities if c.type == discord.ActivityType.competing]
         if not w_acts:
             return None, discord.ActivityType.competing
         w_act = w_acts[0]
         act = f"Competing in: {w_act.name}"
         return act, discord.ActivityType.competing
 
-    def get_status_string(self, user):
+    def get_status_string(self, user: discord.Member):
         string = ""
         for a in [
             self.handle_custom(user),

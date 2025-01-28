@@ -57,35 +57,35 @@ class Accolades:
     def __str__(self) -> str:
         return f"{TROPHY_EMOJI * self.trophy}{STAR_EMOJI * self.star}{DEV_LEAGUE_EMOJI * self.devleague}"
 
-    def __eq__(self, other):
+    def __eq__(self, other: object):
         if isinstance(other, int):
             return self.total == other
         if isinstance(other, Accolades):
             return self.total == other.total
         return NotImplemented
 
-    def __gt__(self, other):
+    def __gt__(self, other: object):
         if isinstance(other, int):
             return self.total > other
         if isinstance(other, Accolades):
             return self.total > other.total
         return NotImplemented
 
-    def __lt(self, other):
+    def __lt(self, other: object):
         if isinstance(other, int):
             return self.total < other
         if isinstance(other, Accolades):
             return self.total < other.total
         return NotImplemented
 
-    def __ge__(self, other):
+    def __ge__(self, other: object):
         if isinstance(other, int):
             return self.total >= other
         if isinstance(other, Accolades):
             return self.total >= other.total
         return NotImplemented
 
-    def __le(self, other):
+    def __le(self, other: object):
         if isinstance(other, int):
             return self.total <= other
         if isinstance(other, Accolades):

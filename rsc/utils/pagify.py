@@ -1,5 +1,5 @@
 import math
-from typing import Iterator, Sequence
+from collections.abc import Iterator, Sequence
 
 from rsc.utils import utils
 
@@ -95,16 +95,14 @@ class Pagify(Iterator[str]):
         while (end - start) > page_length:
             stop = start + page_length
             if escape_mass_mentions:
-                stop -= text.count("@here", start, stop) + text.count(
-                    "@everyone", start, stop
-                )
+                stop -= text.count("@here", start, stop) + text.count("@everyone", start, stop)
             closest_delim_it = (text.rfind(d, start + 1, stop) for d in self._delims)
-            if self._priority:
+            if self._priority:  # noqa: SIM108
                 closest_delim = next((x for x in closest_delim_it if x > 0), -1)
             else:
                 closest_delim = max(closest_delim_it)
             stop = closest_delim if closest_delim != -1 else stop
-            if escape_mass_mentions:
+            if escape_mass_mentions:  # noqa: SIM108
                 to_send = utils.escape(text[start:stop], mass_mentions=True)
             else:
                 to_send = text[start:stop]

@@ -1,7 +1,7 @@
 import logging
 import re
+from collections.abc import AsyncIterator, Iterator
 from pathlib import Path
-from typing import AsyncIterator, Iterator
 
 import aiofiles
 from langchain_core.document_loaders import BaseLoader
@@ -51,9 +51,7 @@ class RuleDocumentLoader(BaseLoader):
             # Get final group
             if rule_group:
                 if source:
-                    yield Document(
-                        page_content="\n".join(rule_group), metadata={"source": source}
-                    )
+                    yield Document(page_content="\n".join(rule_group), metadata={"source": source})
                 else:
                     yield Document(page_content="\n".join(rule_group))
 
@@ -93,8 +91,6 @@ class RuleDocumentLoader(BaseLoader):
             # Get final group
             if rule_group:
                 if source:
-                    yield Document(
-                        page_content="\n".join(rule_group), metadata={"source": source}
-                    )
+                    yield Document(page_content="\n".join(rule_group), metadata={"source": source})
                 else:
                     yield Document(page_content="\n".join(rule_group))

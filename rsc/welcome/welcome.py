@@ -9,9 +9,7 @@ from rsc.types import WelcomeSettings
 
 log = logging.getLogger("red.rsc.welcome")
 
-defaults_guild = WelcomeSettings(
-    WelcomeChannel=None, WelcomeMsg=None, WelcomeRoles=[], WelcomeStatus=False
-)
+defaults_guild = WelcomeSettings(WelcomeChannel=None, WelcomeMsg=None, WelcomeRoles=[], WelcomeStatus=False)
 
 
 class WelcomeMixIn(RSCMixIn):
@@ -53,10 +51,10 @@ class WelcomeMixIn(RSCMixIn):
         default_permissions=discord.Permissions(manage_roles=True),
     )
 
-    @_rsc_welcome.command(  # type: ignore
+    @_rsc_welcome.command(  # type: ignore[type-var]
         name="settings", description="Display the current RSC welcome settings."
     )
-    async def _rsc_settings(self, interaction: discord.Interaction):
+    async def _rsc_welcome_settings(self, interaction: discord.Interaction):
         guild = interaction.guild
         if not guild:
             return
@@ -70,9 +68,7 @@ class WelcomeMixIn(RSCMixIn):
             title="RSC Welcome Settings",
             description="RSC member welcome channel and roles configuration.",
         )
-        settings_embed.add_field(
-            name="Enabled", value=str(welcome_active), inline=False
-        )
+        settings_embed.add_field(name="Enabled", value=str(welcome_active), inline=False)
         settings_embed.add_field(
             name="Welcome Channel",
             value=welcome_channel.mention if welcome_channel else welcome_channel,
@@ -83,12 +79,10 @@ class WelcomeMixIn(RSCMixIn):
             value="\n".join([x.mention for x in welcome_roles]),
             inline=False,
         )
-        settings_embed.add_field(
-            name="Welcome Message", value=welcome_msg, inline=False
-        )
+        settings_embed.add_field(name="Welcome Message", value=welcome_msg, inline=False)
         await interaction.response.send_message(embed=settings_embed, ephemeral=True)
 
-    @_rsc_welcome.command(  # type: ignore
+    @_rsc_welcome.command(  # type: ignore[type-var]
         name="toggle", description="Toggle the welcome message on or off"
     )
     async def _rsc_welcome_toggle(self, interaction: discord.Interaction):
@@ -109,34 +103,24 @@ class WelcomeMixIn(RSCMixIn):
             ephemeral=True,
         )
 
-    @_rsc_welcome.command(name="channel", description="Modify the welcome channel")  # type: ignore
-    @app_commands.describe(
-        channel="Channel to send welcome message in. (Must be text channel)"
-    )
-    async def _rsc_welcome_channel(
-        self, interaction: discord.Interaction, channel: discord.TextChannel
-    ):
+    @_rsc_welcome.command(name="channel", description="Modify the welcome channel")  # type: ignore[type-var]
+    @app_commands.describe(channel="Channel to send welcome message in. (Must be text channel)")
+    async def _rsc_welcome_channel(self, interaction: discord.Interaction, channel: discord.TextChannel):
         if not interaction.guild:
             return
 
         await self._set_welcome_channel(interaction.guild, channel)
         await interaction.response.send_message(
-            embed=SuccessEmbed(
-                description=f"Welcome channel has been set to {channel.mention}"
-            ),
+            embed=SuccessEmbed(description=f"Welcome channel has been set to {channel.mention}"),
             ephemeral=True,
         )
 
-    @_rsc_welcome.command(  # type: ignore
+    @_rsc_welcome.command(  # type: ignore[type-var]
         name="message",
         description="Modify the welcome message when a user joins the server (Max 512 characters)",
     )
-    @app_commands.describe(
-        msg="Welcome message string to send (Accepts `{member.mention}`)"
-    )
-    async def _rsc_welcome_msg(
-        self, interaction: discord.Interaction, msg: app_commands.Range[str, 1, 512]
-    ):
+    @app_commands.describe(msg="Welcome message string to send (Accepts `{member.mention}`)")
+    async def _rsc_welcome_msg(self, interaction: discord.Interaction, msg: app_commands.Range[str, 1, 512]):
         if not interaction.guild:
             return
 
@@ -145,7 +129,7 @@ class WelcomeMixIn(RSCMixIn):
         embed = SuccessEmbed(title="Welcome Message Configured", description=msg)
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-    @_rsc_welcome.command(  # type: ignore
+    @_rsc_welcome.command(  # type: ignore[type-var]
         name="roles",
         description="Modify the roles a user receives when joining the server",
     )
@@ -171,28 +155,20 @@ class WelcomeMixIn(RSCMixIn):
         await self._set_welcome_roles(interaction.guild, roles)
 
         embed = SuccessEmbed(description="Welcome roles have been configured.")
-        embed.add_field(
-            name="Roles", value="\n".join([r.mention for r in roles]), inline=False
-        )
+        embed.add_field(name="Roles", value="\n".join([r.mention for r in roles]), inline=False)
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
     # Settings
 
-    async def _get_welcome_channel(
-        self, guild: discord.Guild
-    ) -> discord.TextChannel | None:
+    async def _get_welcome_channel(self, guild: discord.Guild) -> discord.TextChannel | None:
         cid = await self.config.custom("Welcome", str(guild.id)).WelcomeChannel()
         channel = guild.get_channel(cid)
         if not channel or not isinstance(channel, discord.TextChannel):
             return None
         return channel
 
-    async def _set_welcome_channel(
-        self, guild: discord.Guild, channel: discord.TextChannel
-    ):
-        await self.config.custom("Welcome", str(guild.id)).WelcomeChannel.set(
-            channel.id
-        )
+    async def _set_welcome_channel(self, guild: discord.Guild, channel: discord.TextChannel):
+        await self.config.custom("Welcome", str(guild.id)).WelcomeChannel.set(channel.id)
 
     async def _get_welcome_roles(self, guild: discord.Guild) -> list[discord.Role]:
         roles = []
@@ -210,9 +186,7 @@ class WelcomeMixIn(RSCMixIn):
         return roles
 
     async def _set_welcome_roles(self, guild: discord.Guild, roles: list[discord.Role]):
-        await self.config.custom("Welcome", str(guild.id)).WelcomeRoles.set(
-            [x.id for x in roles]
-        )
+        await self.config.custom("Welcome", str(guild.id)).WelcomeRoles.set([x.id for x in roles])
 
     async def _get_welcome_msg(self, guild: discord.Guild) -> str | None:
         return await self.config.custom("Welcome", str(guild.id)).WelcomeMsg()

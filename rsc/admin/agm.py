@@ -28,7 +28,7 @@ class AdminAGMMixIn(AdminMixIn):
         default_permissions=discord.Permissions(manage_guild=True),
     )
 
-    @_agm.command(name="message", description="Configure the AGM promotion message")  # type: ignore
+    @_agm.command(name="message", description="Configure the AGM promotion message")  # type: ignore[type-var]
     async def _agm_set_message_cmd(self, interaction: discord.Interaction):
         if not interaction.guild:
             return
@@ -37,15 +37,13 @@ class AdminAGMMixIn(AdminMixIn):
         await interaction.response.send_modal(agm_msg_modal)
         await agm_msg_modal.wait()
 
-        await self._set_agm_message(
-            interaction.guild, value=agm_msg_modal.agm_msg.value
-        )
+        await self._set_agm_message(interaction.guild, value=agm_msg_modal.agm_msg.value)
 
-    @_agm.command(  # type: ignore
+    @_agm.command(  # type: ignore[type-var]
         name="add", description="Add an Assistant GM to a franchise"
     )
     @app_commands.describe(franchise="Franchise name", agm="Player to promote to AGM")
-    @app_commands.autocomplete(franchise=FranchiseMixIn.franchise_autocomplete)  # type: ignore
+    @app_commands.autocomplete(franchise=FranchiseMixIn.franchise_autocomplete)  # type: ignore[type-var]
     async def _franchise_promote_agm_cmd(
         self,
         interaction: discord.Interaction,
@@ -61,27 +59,17 @@ class AdminAGMMixIn(AdminMixIn):
         # Get AGM promotion message
         agm_msg = await self._get_agm_message(guild)
         if not agm_msg:
-            return await interaction.followup.send(
-                embed=ErrorEmbed(description="AGM promotion message is not configured.")
-            )
+            return await interaction.followup.send(embed=ErrorEmbed(description="AGM promotion message is not configured."))
 
         # Find transaction channel
         tchannel = await self.get_franchise_transaction_channel(guild, franchise)
         if not tchannel:
-            return await interaction.followup.send(
-                embed=ErrorEmbed(
-                    description=f"Unable to find transaction channel for **{franchise}**"
-                )
-            )
+            return await interaction.followup.send(embed=ErrorEmbed(description=f"Unable to find transaction channel for **{franchise}**"))
 
         # Get Franchise from API
         fdata = await self.fetch_franchise(guild=guild, name=franchise)
         if not fdata:
-            return await interaction.followup.send(
-                embed=ErrorEmbed(
-                    description=f"Unable to find franchise **{franchise}**"
-                )
-            )
+            return await interaction.followup.send(embed=ErrorEmbed(description=f"Unable to find franchise **{franchise}**"))
 
         # Get AGM role
         agm_role = await utils.get_agm_role(guild)
@@ -91,11 +79,7 @@ class AdminAGMMixIn(AdminMixIn):
         new_franchise_role = await utils.franchise_role_from_name(guild, franchise)
 
         if not (agm_role and league_role and new_franchise_role):
-            return await interaction.followup.send(
-                embed=ErrorEmbed(
-                    description="Unable to find AGM role, league role, or franchise role."
-                )
-            )
+            return await interaction.followup.send(embed=ErrorEmbed(description="Unable to find AGM role, league role, or franchise role."))
 
         # Remove old franchise role (Edge case for when transactions hasn't opened yet)
         if old_franchise_role:
@@ -139,17 +123,15 @@ class AdminAGMMixIn(AdminMixIn):
         )
 
         embed.add_field(name="Franchise", value=franchise, inline=False)
-        embed.add_field(
-            name="Transaction Channel", value=tchannel.mention, inline=False
-        )
+        embed.add_field(name="Transaction Channel", value=tchannel.mention, inline=False)
 
         await interaction.followup.send(embed=embed, ephemeral=True)
 
-    @_agm.command(  # type: ignore
+    @_agm.command(  # type: ignore[type-var]
         name="remove", description="Remove an Assistant GM from a franchise"
     )
     @app_commands.describe(franchise="Franchise name", agm="Player to remove from AGM")
-    @app_commands.autocomplete(franchise=FranchiseMixIn.franchise_autocomplete)  # type: ignore
+    @app_commands.autocomplete(franchise=FranchiseMixIn.franchise_autocomplete)  # type: ignore[type-var]
     async def _franchise_remove_agm_cmd(
         self,
         interaction: discord.Interaction,
@@ -168,26 +150,16 @@ class AdminAGMMixIn(AdminMixIn):
         # Find transaction channel
         tchannel = await self.get_franchise_transaction_channel(guild, franchise)
         if not tchannel:
-            return await interaction.followup.send(
-                embed=ErrorEmbed(
-                    description=f"Unable to find transaction channel for **{franchise}**"
-                )
-            )
+            return await interaction.followup.send(embed=ErrorEmbed(description=f"Unable to find transaction channel for **{franchise}**"))
 
         # Add AGM role to player
         await agm.remove_roles(agm_role)
 
-        await tchannel.set_permissions(
-            agm, overwrite=None, reason="Player was removed from AGM"
-        )
+        await tchannel.set_permissions(agm, overwrite=None, reason="Player was removed from AGM")
 
-        embed = BlueEmbed(
-            title="AGM Removed", description=f"{agm.mention} has been removed as AGM."
-        )
+        embed = BlueEmbed(title="AGM Removed", description=f"{agm.mention} has been removed as AGM.")
 
         embed.add_field(name="Franchise", value=franchise, inline=False)
-        embed.add_field(
-            name="Transaction Channel", value=tchannel.mention, inline=False
-        )
+        embed.add_field(name="Transaction Channel", value=tchannel.mention, inline=False)
 
         await interaction.followup.send(embed=embed, ephemeral=True)

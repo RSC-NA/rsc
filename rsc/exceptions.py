@@ -27,15 +27,11 @@ async def translate_api_error(exc: RscApiException):
         return PastTransactionsEndDate(response=exc)
     elif reason.startswith("Unable to find team name "):
         return TeamDoesNotExist(response=exc)
-    elif reason.startswith(
-        "Cannot admin override transaction for league you are not an admin in"
-    ):
+    elif reason.startswith("Cannot admin override transaction for league you are not an admin in"):
         return NotAdmin(response=exc)
     elif reason.startswith("Cannot cut a player during the offseason, reason was:"):
         return NotAllowedInOffseason(response=exc)
-    elif reason.startswith(
-        "Player cannot be cut as they are not finished their IR period yet."
-    ):
+    elif reason.startswith("Player cannot be cut as they are not finished their IR period yet."):
         return MustFinishIRPeriod(response=exc)
     elif reason == "Cut is past the offseason cut deadline.":
         return PastOffseasonDeadline(response=exc)
@@ -48,7 +44,7 @@ async def translate_api_error(exc: RscApiException):
     return RscException(response=exc)
 
 
-class RscException(Exception):
+class RscException(Exception):  # noqa: N818
     """Base exception type for RSC Bot"""
 
     def __init__(self, *args, **kwargs):
@@ -64,9 +60,7 @@ class RscException(Exception):
                     self.reason = body.get("detail")
                     self.type = body.get("type")
             except json.JSONDecodeError:
-                log.error(
-                    f"Unable to JSON decode API exception body. Status: {self.status}"
-                )
+                log.error(f"Unable to JSON decode API exception body. Status: {self.status} Body: {self.response.body}")
                 self.reason = "Received unknown error from server."
                 self.type = "UnknownError"
 

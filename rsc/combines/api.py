@@ -10,9 +10,7 @@ from rsc.exceptions import BadGateway
 log = logging.getLogger("red.rsc.combines.api")
 
 
-async def combines_active(
-    url: str, player: discord.Member
-) -> list[models.CombinesLobby] | models.CombinesStatus:
+async def combines_active(url: str, player: discord.Member) -> list[models.CombinesLobby] | models.CombinesStatus:
     async with aiohttp.ClientSession(trust_env=True) as session:
         url = urljoin(url, "active")
         log.debug(f"URL: {url}")
@@ -36,13 +34,11 @@ async def combines_active(
             else:
                 lobbies = []
                 for v in data.values():
-                    lobbies.append(models.CombinesLobby(**v))
+                    lobbies.append(models.CombinesLobby(**v))  # noqa: PERF401
                 return lobbies
 
 
-async def combines_lobby(
-    url: str, executor: discord.Member, lobby_id: int | None = None
-) -> models.CombinesLobby | models.CombinesStatus:
+async def combines_lobby(url: str, executor: discord.Member, lobby_id: int | None = None) -> models.CombinesLobby | models.CombinesStatus:
     async with aiohttp.ClientSession(trust_env=True) as session:
         params = {"discord_id": executor.id, "guild_id": executor.guild.id}
 
