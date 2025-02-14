@@ -896,7 +896,7 @@ class MemberMixIn(RSCMixIn):
             api = MembersApi(client)
             try:
                 data = UpdateMemberRSCName(name=name, admin_override=override)
-                log.debug(f"Name Change Data: {data}")
+                log.debug(f"NameChange Data. Name: {data.name} Override: {data.admin_override}")
                 return await api.members_name_change(id, data)
             except ApiException as exc:
                 raise RscException(response=exc)
