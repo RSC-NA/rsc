@@ -44,7 +44,7 @@ from rsc.teams import TeamMixIn
 from rsc.tiers import TierMixIn
 from rsc.utils import utils
 
-logger = logging.getLogger("red.rsc.freeagents")
+logger = logging.getLogger("red.rsc.members")
 log = GuildLogAdapter(logger)
 
 
