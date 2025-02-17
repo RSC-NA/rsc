@@ -512,8 +512,6 @@ class UtilsMixIn(RSCMixIn):
             fmt_msg[r] = ""
             async for user in r.users():
                 fmt_msg[r] += f"{user.id}:{user.display_name}\n"
-                for _ in range(250):
-                    fmt_msg[r] += f"{user.id}:{user.display_name}\n"
 
         for r, fmt in fmt_msg.items():
             await interaction.followup.send(content=f"{r.emoji} - Count: {r.count}")
