@@ -489,9 +489,15 @@ class UtilsMixIn(RSCMixIn):
         name="getreactlist",
         description="Get a list of users who reacted to a message",
     )
-    @app_commands.describe(channel="Channel containing the message", message_id="The discord message ID to fetch reacts from")
+    @app_commands.describe(
+        channel="Channel containing the message",
+        message_id="The discord message ID to fetch reacts from",
+        filter="Only list users who reacted with this emoji",
+    )
     @app_commands.guild_only
-    async def _react_list_ctx_menu(self, interaction: discord.Interaction, channel: discord.TextChannel, message_id: str):
+    async def _react_list_ctx_menu(
+        self, interaction: discord.Interaction, channel: discord.TextChannel, message_id: str, filter: str | None = None
+    ):
         try:
             msgid = int(message_id)
         except ValueError:
@@ -508,13 +514,18 @@ class UtilsMixIn(RSCMixIn):
 
         fmt_msg: dict[discord.Reaction, str] = {}
         for r in msg.reactions:
+            if filter and r.emoji != filter.strip():
+                log.debug(f"Skipping reaction {r.emoji}. (Filter: {filter})")
+                continue
             log.debug(f"Reaction: {r}")
             fmt_msg[r] = ""
             async for user in r.users():
                 fmt_msg[r] += f"{user.id}:{user.display_name}\n"
 
+        if not fmt_msg:
+            return await interaction.followup.send(content=f"No matching reactions for filter: {filter}", ephemeral=True)
+
         for r, fmt in fmt_msg.items():
-            await interaction.followup.send(content=f"{r.emoji} - Count: {r.count}")
             if len(fmt) > 1950:
                 paged_msg = Pagify(text=fmt, page_length=1950)
                 for idx, page in enumerate(paged_msg):
