@@ -482,7 +482,50 @@ async def async_iter_gather(result: AsyncIterator) -> list:
 class UtilsMixIn(RSCMixIn):
     def __init__(self):
         log.debug("Initializing UtilsMixIn")
+
         super().__init__()
+
+    @app_commands.command(  # type: ignore[type-var]
+        name="getreactlist",
+        description="Get a list of users who reacted to a message",
+    )
+    @app_commands.describe(channel="Channel containing the message", message_id="The discord message ID to fetch reacts from")
+    @app_commands.guild_only
+    async def _react_list_ctx_menu(self, interaction: discord.Interaction, channel: discord.TextChannel, message_id: str):
+        try:
+            msgid = int(message_id)
+        except ValueError:
+            return await interaction.response.send_message(content="Message ID must be a valid integer.", ephemeral=True)
+
+        msg = await channel.fetch_message(msgid)
+        if not msg:
+            return await interaction.response.send_message(content=f"Message {message_id} not found.", ephemeral=True)
+
+        if not msg.reactions:
+            return await interaction.response.send_message(content=f"Message {message_id} has no reactions.", ephemeral=True)
+
+        await interaction.response.defer(ephemeral=True)
+
+        fmt_msg: dict[discord.Reaction, str] = {}
+        for r in msg.reactions:
+            log.debug(f"Reaction: {r}")
+            fmt_msg[r] = ""
+            async for user in r.users():
+                fmt_msg[r] += f"{user.id}:{user.display_name}\n"
+                for _ in range(250):
+                    fmt_msg[r] += f"{user.id}:{user.display_name}\n"
+
+        for r, fmt in fmt_msg.items():
+            await interaction.followup.send(content=f"{r.emoji} - Count: {r.count}")
+            if len(fmt) > 1950:
+                paged_msg = Pagify(text=fmt, page_length=1950)
+                for idx, page in enumerate(paged_msg):
+                    await interaction.followup.send(
+                        content=f"{r.emoji} - Count {r.count} (Page {idx + 1})\n\n```\n{page}\n```",
+                        ephemeral=True,
+                    )
+            else:
+                await interaction.followup.send(content=f"{r.emoji} - Count {r.count}\n\n```\n{fmt}```\n", ephemeral=True)
 
     @app_commands.command(  # type: ignore[type-var]
         name="getmassid",
