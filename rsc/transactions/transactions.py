@@ -505,6 +505,7 @@ class TransactionMixIn(RSCMixIn):
     @app_commands.describe(
         player="Player to cut",
         notes="Transaction notes (Optional)",
+        announce="Announce to server (Default: True)",
         override="Admin only override",
     )
     async def _transactions_cut(
@@ -512,6 +513,7 @@ class TransactionMixIn(RSCMixIn):
         interaction: discord.Interaction,
         player: discord.Member,
         notes: str | None = None,
+        announce: bool = True,
         override: bool = False,
     ):
         guild = interaction.guild
@@ -576,7 +578,7 @@ class TransactionMixIn(RSCMixIn):
             )
 
         # Announce to transaction channel
-        if result.first_franchise:
+        if result.first_franchise and announce:
             await self.announce_transaction(
                 guild,
                 embed=embed,
@@ -593,10 +595,11 @@ class TransactionMixIn(RSCMixIn):
             )
 
         # Send cut message to user directly
-        try:
-            await self.send_cut_msg(guild, player=player)
-        except discord.Forbidden as exc:
-            await interaction.followup.send(content=f"Unable to DM user {player.mention}: {exc}")
+        if announce:
+            try:
+                await self.send_cut_msg(guild, player=player)
+            except discord.Forbidden as exc:
+                await interaction.followup.send(content=f"Unable to DM user {player.mention}: {exc}")
 
         # Send result
         await interaction.followup.send(
