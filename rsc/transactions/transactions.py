@@ -586,7 +586,7 @@ class TransactionMixIn(RSCMixIn):
                 player=player,
                 gm=result.first_franchise.gm.discord_id,
             )
-        else:
+        elif not override:
             await interaction.followup.send(
                 embed=ErrorEmbed(
                     description="Transaction was processed but did not contain any old franchise data. **Announcement not sent.**"
