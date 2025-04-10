@@ -8,6 +8,8 @@ import discord
 from discord.app_commands import Transform
 from PIL import Image
 from redbot.core import app_commands
+from rscapi.models.franchise import Franchise
+from rscapi.models.franchise_list import FranchiseList
 from rscapi.models.league_player import LeaguePlayer
 
 from rsc import const
@@ -362,6 +364,19 @@ async def franchise_role_from_league_player(guild: discord.Guild, player: League
         raise AttributeError(f"{player.player.name} LeaguePlayer object has no team or franchise data.")
 
     rname = f"{player.team.franchise.name} ({player.team.franchise.gm.rsc_name})"
+    r = discord.utils.get(guild.roles, name=rname)
+    if not r:
+        log.error(f"[{guild.name}] Expected franchise role does not exist: {rname}")
+        raise ValueError(f"[{guild.name}] Expected franchise role does not exist: {rname}")
+    return r
+
+
+async def franchise_role_from_model(guild: discord.Guild, franchise: Franchise | FranchiseList) -> discord.Role:
+    """Return a franchise discord.Role from `LeaguePlayer` object"""
+    if not franchise.gm:
+        raise AttributeError(f"{franchise.name} has no GM data.")
+
+    rname = f"{franchise.name} ({franchise.gm.rsc_name})"
     r = discord.utils.get(guild.roles, name=rname)
     if not r:
         log.error(f"[{guild.name}] Expected franchise role does not exist: {rname}")

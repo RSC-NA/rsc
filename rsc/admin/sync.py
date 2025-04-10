@@ -662,7 +662,7 @@ class AdminSyncMixIn(AdminMixIn):
             synced += 1
             if not dryrun:
                 try:
-                    await update_rostered_discord(guild=guild, player=m, league_player=api_player, tiers=tiers)
+                    await update_league_player_discord(guild=guild, player=m, league_player=api_player, tiers=tiers)
                 except (ValueError, AttributeError) as exc:
                     await interaction.followup.send(content=str(exc), ephemeral=True)
 
@@ -711,16 +711,30 @@ class AdminSyncMixIn(AdminMixIn):
 
         await interaction.response.defer()
         try:
+            default_roles = await self._get_welcome_roles(guild=guild)
             plist = await self.players(guild, discord_id=member.id, limit=1)
             tiers = await self.tiers(guild)
         except RscException as exc:
             return await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc), ephemeral=False)
 
         if not plist:
-            await update_nonplaying_discord(guild=guild, member=member, tiers=tiers)
+            await update_nonplaying_discord(guild=guild, member=member, tiers=tiers, default_roles=default_roles)
         else:
             lp = plist.pop(0)
-            await update_league_player_discord(guild=guild, player=member, league_player=lp, tiers=tiers)
+            if lp.status == Status.UNSIGNED_GM:
+                # Get Franchise information
+                flist = await self.franchises(guild=guild, gm_discord_id=member.id)
+                if not flist:
+                    return await interaction.followup.send(
+                        embed=ErrorEmbed(description=f"{member.mention} is an un-signed GM but franchise could not be found in API."),
+                        ephemeral=False,
+                    )
+                franchise = flist.pop(0)
+                await update_league_player_discord(
+                    guild=guild, player=member, league_player=lp, tiers=tiers, franchise=franchise, default_roles=default_roles
+                )
+            else:
+                await update_league_player_discord(guild=guild, player=member, league_player=lp, tiers=tiers)
 
         await interaction.followup.send(
             embed=SuccessEmbed(description=f"Successfully synced {member.mention} from the API. Discord roles and name have been updated."),
