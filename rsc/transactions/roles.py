@@ -299,20 +299,22 @@ async def update_nonplaying_discord(
         await member.add_roles(*roles_to_add)
 
 
-async def update_unsigned_gm_discord(
+async def update_nonplaying_gm_discord(
     guild: discord.Guild,
     player: discord.Member,
-    league_player: LeaguePlayer,
     franchise: Franchise | FranchiseList,
     tiers: list[Tier],
 ):
-    if league_player.status != Status.UNSIGNED_GM:
-        raise ValueError(f"{player.display_name} ({player.id}) is not an unsigned GM.")
+    if not franchise.gm:
+        raise AttributeError(f"{franchise.name} ({franchise.id}) has no GM data.")
+
+    if franchise.gm.discord_id != player.id:
+        raise ValueError(f"{player.display_name} ({player.id}) is not the GM of {franchise.name}.")
 
     roles_to_remove: list[discord.Role] = []
     roles_to_add: list[discord.Role] = []
 
-    # Remove all tier roles
+    # Remove old tier roles and tier FA role
     if tiers:
         for r in player.roles:
             for tier in tiers:
@@ -356,6 +358,108 @@ async def update_unsigned_gm_discord(
     captain_role = await utils.get_captain_role(guild)
     if captain_role in player.roles:
         roles_to_remove.append(captain_role)
+
+    # Add franchise role
+    frole = await utils.franchise_role_from_model(guild, franchise=franchise)
+    if frole and frole not in player.roles:
+        roles_to_add.append(frole)
+    elif not frole:
+        raise ValueError(f"New franchise role not found for {player.display_name} ({player.id})")
+
+    # Remove any old franchise role if it exists
+    old_froles = await utils.franchise_role_list_from_disord_member(player)
+    if old_froles:
+        # Don't remove current franchise if present
+        if frole in old_froles:
+            old_froles.remove(frole)
+        roles_to_remove.extend(old_froles)
+
+    # Update roles at same time to reduce API calls
+    if roles_to_remove:
+        log.debug(f"Removing roles: {roles_to_remove}", guild=guild)
+        await player.remove_roles(*roles_to_remove)
+    if roles_to_add:
+        log.debug(f"Adding roles: {roles_to_add}", guild=guild)
+        await player.add_roles(*roles_to_add)
+
+    # Update player prefix
+    accolades = await utils.member_accolades(player)
+    new_nick = f"{franchise.prefix} | {franchise.gm.rsc_name} {accolades}".strip()
+    try:
+        if new_nick != player.display_name:
+            log.debug(f"Changing {player.id} signed player nick: {new_nick}", guild=guild)
+            await player.edit(nick=new_nick)
+    except discord.Forbidden as exc:
+        log.warning(f"Unable to update nickname {player.display_name} ({player.id}): {exc}")
+
+
+async def update_unsigned_gm_discord(
+    guild: discord.Guild,
+    player: discord.Member,
+    league_player: LeaguePlayer,
+    franchise: Franchise | FranchiseList,
+    tiers: list[Tier],
+):
+    if league_player.status != Status.UNSIGNED_GM:
+        raise ValueError(f"{player.display_name} ({player.id}) is not an unsigned GM.")
+
+    if not league_player.tier:
+        raise AttributeError(f"{player.display_name} ({player.id}) has no tier data.")
+
+    roles_to_remove: list[discord.Role] = []
+    roles_to_add: list[discord.Role] = []
+
+    # Remove old tier roles and tier FA role
+    if tiers:
+        for r in player.roles:
+            for tier in tiers:
+                if r in roles_to_remove:
+                    continue
+
+                if r.name.endswith("FA") or (r.name.lower() == tier.name.lower() and r.name.lower() != league_player.tier.name.lower()):
+                    roles_to_remove.append(r)
+
+    # Remove Spectator
+    spec_role = await utils.get_spectator_role(guild)
+    if spec_role in player.roles:
+        roles_to_remove.append(spec_role)
+
+    # Remove Former Player
+    former_role = await utils.get_former_player_role(guild)
+    if former_role in player.roles:
+        roles_to_remove.append(former_role)
+
+    # PermFA role
+    permfa_role = await utils.get_permfa_role(guild)
+    if permfa_role in player.roles:
+        roles_to_remove.append(permfa_role)
+
+    # FA Role:
+    fa_role = await utils.get_free_agent_role(guild)
+    if fa_role in player.roles:
+        roles_to_remove.append(fa_role)
+
+    # Draft Eligible role
+    de_role = await utils.get_draft_eligible_role(guild)
+    if de_role in player.roles:
+        roles_to_remove.append(de_role)
+
+    # League Role
+    league_role = await utils.get_league_role(guild)
+    if league_role not in player.roles:
+        roles_to_add.append(league_role)
+
+    # Remove Captain
+    captain_role = await utils.get_captain_role(guild)
+    if captain_role in player.roles:
+        roles_to_remove.append(captain_role)
+
+    # Verify player has tier role
+    tier_role = await utils.get_tier_role(guild, name=league_player.tier.name)
+    if tier_role and tier_role not in player.roles:
+        roles_to_add.append(tier_role)
+    else:
+        raise ValueError(f"Tier role not found: {league_player.tier.name}")
 
     # Add franchise role
     frole = await utils.franchise_role_from_model(guild, franchise=franchise)
@@ -724,5 +828,7 @@ async def update_league_player_discord(
             return await update_unsigned_gm_discord(
                 guild=guild, player=player, league_player=league_player, franchise=franchise, tiers=tiers
             )
+        case Status.DROPPED:
+            return await update_nonplaying_discord(guild=guild, member=player, tiers=tiers, default_roles=default_roles)
         case _:
             raise ValueError(f"**{league_player.status}** is not currently supported.")

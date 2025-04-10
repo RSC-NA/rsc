@@ -21,6 +21,7 @@ from rsc.transactions.roles import (
     update_free_agent_discord,
     update_league_player_discord,
     update_nonplaying_discord,
+    update_nonplaying_gm_discord,
     update_rostered_discord,
 )
 from rsc.utils import images, utils
@@ -718,7 +719,21 @@ class AdminSyncMixIn(AdminMixIn):
             return await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc), ephemeral=False)
 
         if not plist:
-            await update_nonplaying_discord(guild=guild, member=member, tiers=tiers, default_roles=default_roles)
+            # Check if player is a non-playing GM
+            all_franchises = await self.franchises(guild=guild)
+
+            gm = False
+            franchise = None
+            for f in all_franchises:
+                if f.gm and f.gm.discord_id == member.id:
+                    gm = True
+                    franchise = f
+                    break
+
+            if gm and franchise:
+                await update_nonplaying_gm_discord(guild=guild, player=member, franchise=franchise, tiers=tiers)
+            else:
+                await update_nonplaying_discord(guild=guild, member=member, tiers=tiers, default_roles=default_roles)
         else:
             lp = plist.pop(0)
             if lp.status == Status.UNSIGNED_GM:
