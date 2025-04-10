@@ -7,13 +7,19 @@ from redbot.core import app_commands
 from rsc import const
 from rsc.admin import AdminMixIn
 from rsc.admin.views import ConfirmSyncView
-from rsc.embeds import ApiExceptionErrorEmbed, BlueEmbed, ErrorEmbed
+from rsc.embeds import (  # YellowEmbed,
+    ApiExceptionErrorEmbed,
+    BlueEmbed,
+    ErrorEmbed,
+    SuccessEmbed,
+)
 from rsc.enums import Status
 from rsc.exceptions import RscException
 from rsc.logs import GuildLogAdapter
 from rsc.transactions.roles import (
     update_draft_eligible_discord,
     update_free_agent_discord,
+    update_league_player_discord,
     update_nonplaying_discord,
     update_rostered_discord,
 )
@@ -692,6 +698,34 @@ class AdminSyncMixIn(AdminMixIn):
         )
         embed.set_footer(text=f"Synced {synced}/{total} RSC players(s).")
         await interaction.edit_original_response(embed=embed)
+
+    @_sync.command(  # type: ignore[type-var]
+        name="member",
+        description="Sync an individual members from the API to discord",
+    )
+    @app_commands.describe(member="RSC Discord member to sync")
+    async def _sync_member_cmd(self, interaction: discord.Interaction, member: discord.Member):
+        guild = interaction.guild
+        if not guild:
+            return
+
+        await interaction.response.defer()
+        try:
+            plist = await self.players(guild, discord_id=member.id, limit=1)
+            tiers = await self.tiers(guild)
+        except RscException as exc:
+            return await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc), ephemeral=False)
+
+        if not plist:
+            await update_nonplaying_discord(guild=guild, member=member, tiers=tiers)
+        else:
+            lp = plist.pop(0)
+            await update_league_player_discord(guild=guild, player=member, league_player=lp, tiers=tiers)
+
+        await interaction.followup.send(
+            embed=SuccessEmbed(description=f"Successfully synced {member.mention} from the API. Discord roles and name have been updated."),
+            ephemeral=False,
+        )
 
     @_sync.command(  # type: ignore[type-var]
         name="freeagent",

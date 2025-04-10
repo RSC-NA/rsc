@@ -7,11 +7,18 @@ from redbot.core import app_commands
 from rscapi import ApiClient, TrackerLinksApi
 from rscapi.exceptions import ApiException
 from rscapi.models.tracker_link import TrackerLink
+from rscapi.models.tracker_link_linking import TrackerLinkLinking
 from rscapi.models.tracker_link_stats import TrackerLinkStats
 
 from rsc.abc import RSCMixIn
 from rsc.const import RSC_TRACKER_URL
-from rsc.embeds import ApiExceptionErrorEmbed, BlueEmbed, YellowEmbed
+from rsc.embeds import (
+    ApiExceptionErrorEmbed,
+    BlueEmbed,
+    ErrorEmbed,
+    SuccessEmbed,
+    YellowEmbed,
+)
 from rsc.enums import TrackerLinksStatus
 from rsc.exceptions import RscException
 from rsc.utils import utils
@@ -58,8 +65,8 @@ class TrackerMixIn(RSCMixIn):
         await interaction.followup.send(embed=embed, view=tracker_view, ephemeral=False)
 
     @_trackers.command(name="list", description="List the trackers")  # type: ignore[type-var]
-    @app_commands.describe(player="RSC Discord Member")
-    async def _trackers_list(self, interaction: discord.Interaction, player: discord.Member):
+    @app_commands.describe(player="RSC Discord Member", ids="Show tracker ids")
+    async def _trackers_list(self, interaction: discord.Interaction, player: discord.Member, ids: bool = False):
         guild = interaction.guild
         if not guild:
             return
@@ -80,9 +87,11 @@ class TrackerMixIn(RSCMixIn):
                 status = None
                 if t.status:
                     status = TrackerLinksStatus(t.status).full_name
-                tdata.append((t.name or t.platform_id, status, date))
+                tdata.append((t.name or t.platform_id, status, date, t.id))
             tdata.sort(key=lambda x: cast(int, x[1]))
             embed.description = "List of associated RSC trackers. Account is tracker name or platform id."
+            if ids:
+                embed.add_field(name="ID", value="\n".join([str(x[3]) for x in tdata]), inline=True)
             embed.add_field(name="Account", value="\n".join([str(x[0]) for x in tdata]), inline=True)
             embed.add_field(name="Status", value="\n".join([str(x[1]) for x in tdata]), inline=True)
             embed.add_field(
@@ -90,6 +99,81 @@ class TrackerMixIn(RSCMixIn):
                 value="\n".join([str(x[2]) for x in tdata]),
                 inline=True,
             )
+        await interaction.followup.send(embed=embed, ephemeral=False)
+
+    @_trackers.command(name="link", description="Link a tracker from player")  # type: ignore[type-var]
+    @app_commands.describe(tracker_id="Tracker API ID", player="RSC Discord Member")
+    async def _trackers_unlink_cmd(self, interaction: discord.Interaction, tracker_id: int, player: discord.Member):
+        guild = interaction.guild
+        if not (guild and isinstance(interaction.user, discord.Member)):
+            return
+
+        await interaction.response.defer(ephemeral=False)
+        try:
+            tracker = await self.fetch_tracker_by_id(guild, tracker_id)
+        except RscException as exc:
+            return await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc), ephemeral=False)
+
+        # Verify tracker exists
+        if not tracker:
+            return await interaction.followup.send(embed=ErrorEmbed(description=f"Tracker {tracker_id} does not exist."), ephemeral=False)
+
+        try:
+            tracker = await self.link_tracker(guild, tracker_id, player, interaction.user)
+        except RscException as exc:
+            return await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc), ephemeral=False)
+
+        embed = SuccessEmbed(title="Tracker Linked", description=f"Linked tracker {tracker_id} from {player.mention}")
+        await interaction.followup.send(embed=embed, ephemeral=False)
+
+    @_trackers.command(name="unlink", description="Unlink a tracker from player")  # type: ignore[type-var]
+    @app_commands.describe(tracker_id="Tracker API ID", player="RSC Discord Member")
+    async def _trackers_unlink_cmd(self, interaction: discord.Interaction, tracker_id: int, player: discord.Member):
+        guild = interaction.guild
+        if not (guild and isinstance(interaction.user, discord.Member)):
+            return
+
+        await interaction.response.defer(ephemeral=False)
+        try:
+            tracker = await self.fetch_tracker_by_id(guild, tracker_id)
+        except RscException as exc:
+            return await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc), ephemeral=False)
+
+        # Verify tracker exists
+        if not tracker:
+            return await interaction.followup.send(embed=ErrorEmbed(description=f"Tracker {tracker_id} does not exist."), ephemeral=False)
+
+        try:
+            tracker = await self.unlink_tracker(guild, tracker_id, player, interaction.user)
+        except RscException as exc:
+            return await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc), ephemeral=False)
+
+        embed = SuccessEmbed(title="Tracker Unlinked", description=f"Unlinked tracker {tracker_id} from {player.mention}")
+        await interaction.followup.send(embed=embed, ephemeral=False)
+
+    @_trackers.command(name="delete", description="Delete a tracker (Must have zero MMR pulls)")  # type: ignore[type-var]
+    @app_commands.describe(tracker_id="Tracker API ID")
+    async def _trackers_delete_cmd(self, interaction: discord.Interaction, tracker_id: int):
+        guild = interaction.guild
+        if not (guild and isinstance(interaction.user, discord.Member)):
+            return
+
+        await interaction.response.defer(ephemeral=False)
+        try:
+            tracker = await self.fetch_tracker_by_id(guild, tracker_id)
+        except RscException as exc:
+            return await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc), ephemeral=False)
+
+        # Verify tracker exists
+        if not tracker:
+            return await interaction.followup.send(embed=ErrorEmbed(description=f"Tracker {tracker_id} does not exist."), ephemeral=False)
+
+        try:
+            await self.rm_tracker(guild, tracker_id)
+        except RscException as exc:
+            return await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc), ephemeral=False)
+
+        embed = SuccessEmbed(title="Tracker Deleted", description=f"Deleted tracker ID {tracker_id}.")
         await interaction.followup.send(embed=embed, ephemeral=False)
 
     @_trackers.command(name="recent", description="Show most recent RL tracker pulls")  # type: ignore[type-var]
@@ -332,5 +416,67 @@ class TrackerMixIn(RSCMixIn):
             log.debug(f"Tracker Create: {data}")
             try:
                 return await api.tracker_links_create(data)
+            except ApiException as exc:
+                raise RscException(response=exc)
+
+    async def rm_tracker(
+        self,
+        guild: discord.Guild,
+        tracker_id: int,
+    ) -> None:
+        """Delete a tracker"""
+        async with ApiClient(self._api_conf[guild.id]) as client:
+            api = TrackerLinksApi(client)
+            log.debug(f"Tracker Delete: {tracker_id}")
+            try:
+                return await api.tracker_links_delete(tracker_id)
+            except ApiException as exc:
+                raise RscException(response=exc)
+
+    async def unlink_tracker(
+        self,
+        guild: discord.Guild,
+        tracker_id: int,
+        player: discord.Member,
+        executor: discord.Member,
+    ) -> TrackerLink:
+        """Unlink a tracker from a user"""
+        async with ApiClient(self._api_conf[guild.id]) as client:
+            api = TrackerLinksApi(client)
+            data = TrackerLinkLinking(member=player.id, executor=executor.id)
+            log.debug(f"Tracker Unlink: {tracker_id} (Member: {player})")
+            try:
+                return await api.tracker_links_unlink(tracker_id, data)
+            except ApiException as exc:
+                raise RscException(response=exc)
+
+    async def link_tracker(
+        self,
+        guild: discord.Guild,
+        tracker_id: int,
+        player: discord.Member,
+        executor: discord.Member,
+    ) -> TrackerLink:
+        """Unlink a tracker from a user"""
+        async with ApiClient(self._api_conf[guild.id]) as client:
+            api = TrackerLinksApi(client)
+            data = TrackerLinkLinking(member=player.id, executor=executor.id)
+            log.debug(f"Tracker Link: {tracker_id} (Member: {player})")
+            try:
+                return await api.tracker_links_link(tracker_id, data)
+            except ApiException as exc:
+                raise RscException(response=exc)
+
+    async def fetch_tracker_by_id(
+        self,
+        guild: discord.Guild,
+        tracker_id: int,
+    ) -> TrackerLink:
+        """Fetch a Tracker Link by API ID"""
+        async with ApiClient(self._api_conf[guild.id]) as client:
+            api = TrackerLinksApi(client)
+            log.debug(f"Fetch Tracker ID: {tracker_id}")
+            try:
+                return await api.tracker_links_read(tracker_id)
             except ApiException as exc:
                 raise RscException(response=exc)

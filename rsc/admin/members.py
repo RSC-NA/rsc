@@ -3,6 +3,7 @@ from datetime import datetime
 
 import discord
 from redbot.core import app_commands
+from redbot.core.app_commands import Transform
 
 from rsc.admin import AdminMixIn
 from rsc.embeds import (
@@ -18,6 +19,7 @@ from rsc.logs import GuildLogAdapter
 from rsc.teams import TeamMixIn
 from rsc.tiers import TierMixIn
 from rsc.transactions.roles import update_league_player_discord
+from rsc.transformers import DateTransformer
 from rsc.utils import utils
 
 logger = logging.getLogger("red.rsc.admin.members")
@@ -199,6 +201,7 @@ class AdminMembersMixIn(AdminMixIn):
         team="Team name",
         base_mmr="Base MMR",
         current_mmr="Current MMR",
+        waiver_period='Waiver start date (Example: "2025-01-25")',
     )
     @app_commands.autocomplete(tier=TierMixIn.tier_autocomplete, team=TeamMixIn.teams_autocomplete)
     async def _member_patch_cmd(
@@ -210,6 +213,7 @@ class AdminMembersMixIn(AdminMixIn):
         team: str | None = None,
         base_mmr: int | None = None,
         current_mmr: int | None = None,
+        waiver_period: Transform[datetime, DateTransformer] | None = None,
     ):
         guild = interaction.guild
         if not (guild and isinstance(interaction.user, discord.Member)):
@@ -251,6 +255,7 @@ class AdminMembersMixIn(AdminMixIn):
                 status=status,
                 team=team,
                 executor=interaction.user,
+                waiver_period=waiver_period,
             )
             # Get updated league player object
             plist = await self.players(guild, discord_id=player.id, limit=1)

@@ -85,22 +85,16 @@ class BallchasingProcessingView(AuthorOnlyView):
             num_completed = await self.completed_matches()
             total_matches = len(self.matches)
             if num_completed == total_matches:
-                desc.append(
-                    f"\n **All matches have been successfully reported. ({num_completed}/{total_matches})**"
-                )
+                desc.append(f"\n **All matches have been successfully reported. ({num_completed}/{total_matches})**")
             else:
-                desc.append(
-                    f"\n **Some matches could not be found. ({num_completed}/{total_matches})**"
-                )
+                desc.append(f"\n **Some matches could not be found. ({num_completed}/{total_matches})**")
             exc_time = await self.execution_time()
             embed.set_footer(text=f"Completed in {exc_time}")
 
         if self.cancelled:
             num_completed = await self.completed_matches()
             total_matches = len(self.matches)
-            desc.append(
-                f"\n **User has cancelled replay processing. ({num_completed}/{total_matches})**"
-            )
+            desc.append(f"\n **User has cancelled replay processing. ({num_completed}/{total_matches})**")
             exc_time = await self.execution_time()
             embed.set_footer(text=f"Cancelled after {exc_time}")
 
@@ -146,9 +140,7 @@ class BallchasingProcessingView(AuthorOnlyView):
         else:
             content = self.role.mention if self.role else ""
             if bc_view:
-                self.msg = await self.channel.send(
-                    content=content, embed=embed, view=bc_view
-                )
+                self.msg = await self.channel.send(content=content, embed=embed, view=bc_view)
             else:
                 self.msg = await self.channel.send(content=content, embed=embed)
 

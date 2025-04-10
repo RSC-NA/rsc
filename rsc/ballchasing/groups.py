@@ -12,15 +12,11 @@ logger = logging.getLogger("red.rsc.ballchasing.groups")
 log = GuildLogAdapter(logger)
 
 
-async def purge_ballchasing_group(
-    bapi: ballchasing.Api, guild: discord.Guild, group: str
-):
+async def purge_ballchasing_group(bapi: ballchasing.Api, guild: discord.Guild, group: str):
     """Remove all replays from a ballchasing group (CAUTION: DESTRUCTIVE)"""
     try:
         async with asyncio.TaskGroup() as tg:
-            async for replay in bapi.get_group_replays(
-                group_id=group, deep=False, recurse=False
-            ):
+            async for replay in bapi.get_group_replays(group_id=group, deep=False, recurse=False):
                 log.debug(f"Deleting replay: {replay.id}", guild=guild)
                 tg.create_task(bapi.delete_replay(replay.id))
     except ExceptionGroup as eg:
@@ -28,9 +24,7 @@ async def purge_ballchasing_group(
             raise err
 
 
-async def season_bc_group(
-    bapi: ballchasing.Api, guild: discord.Guild, tlg: str, match: Match
-) -> str | None:
+async def season_bc_group(bapi: ballchasing.Api, guild: discord.Guild, tlg: str, match: Match) -> str | None:
     """Get season group ID and or create it"""
     sname = f"Season {match.home_team.latest_season}"
     season_group = None
@@ -55,9 +49,7 @@ async def season_bc_group(
     return season_group
 
 
-async def match_type_group(
-    bapi: ballchasing.Api, guild: discord.Guild, tlg: str, match: Match
-) -> str | None:
+async def match_type_group(bapi: ballchasing.Api, guild: discord.Guild, tlg: str, match: Match) -> str | None:
     """Get tier group ID and or create it"""
     season_group = await season_bc_group(bapi=bapi, guild=guild, tlg=tlg, match=match)
     if not season_group:
@@ -72,9 +64,7 @@ async def match_type_group(
     # Find relevant server group
     async for g in bapi.get_groups(group=season_group):
         if g.name.lower() == tname.lower():
-            log.debug(
-                f"Found existing ballchasing match type group: {g.id}", guild=guild
-            )
+            log.debug(f"Found existing ballchasing match type group: {g.id}", guild=guild)
             match_type_group = g.id
             break
 
@@ -91,9 +81,7 @@ async def match_type_group(
     return match_type_group
 
 
-async def tier_bc_group(
-    bapi: ballchasing.Api, guild: discord.Guild, tlg: str, match: Match
-) -> str | None:
+async def tier_bc_group(bapi: ballchasing.Api, guild: discord.Guild, tlg: str, match: Match) -> str | None:
     """Get tier group ID and or create it"""
     mtype_group = await match_type_group(bapi=bapi, guild=guild, tlg=tlg, match=match)
     if not mtype_group:
@@ -122,9 +110,7 @@ async def tier_bc_group(
     return tier_group
 
 
-async def match_day_bc_group(
-    bapi: ballchasing.Api, guild: discord.Guild, tlg: str, match: Match
-) -> str | None:
+async def match_day_bc_group(bapi: ballchasing.Api, guild: discord.Guild, tlg: str, match: Match) -> str | None:
     """Get match group ID and or create it"""
     tier_group = await tier_bc_group(bapi=bapi, guild=guild, tlg=tlg, match=match)
     if not tier_group:
@@ -146,9 +132,7 @@ async def match_day_bc_group(
     md_group = None
     async for g in bapi.get_groups(group=tier_group):
         if g.name.lower() == mdname.lower():
-            log.debug(
-                f"Found existing ballchasing match day group: {g.id}", guild=guild
-            )
+            log.debug(f"Found existing ballchasing match day group: {g.id}", guild=guild)
             md_group = g.id
             break
 
@@ -165,9 +149,7 @@ async def match_day_bc_group(
     return md_group
 
 
-async def rsc_match_bc_group(
-    bapi: ballchasing.Api, guild: discord.Guild, tlg: str, match: Match
-) -> str | None:
+async def rsc_match_bc_group(bapi: ballchasing.Api, guild: discord.Guild, tlg: str, match: Match) -> str | None:
     """Get match group ID and or create it starting with top level group (tlg)"""
     md_group = await match_day_bc_group(bapi=bapi, guild=guild, tlg=tlg, match=match)
     if not md_group:

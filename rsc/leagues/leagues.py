@@ -1,5 +1,6 @@
 import logging
 from collections.abc import AsyncIterator
+from datetime import datetime
 
 import aiohttp
 import discord
@@ -382,6 +383,7 @@ class LeagueMixIn(RSCMixIn):
         tier: int | None = None,
         status: Status | None = None,
         team: str | None = None,
+        waiver_period: datetime | None = None,
     ) -> LeaguePlayer:
         data = LeaguePlayerPatch(executor=executor.id)
         if base_mmr:
@@ -395,6 +397,12 @@ class LeagueMixIn(RSCMixIn):
             data.team_name = team
         if status:
             data.status = status.value
+        if waiver_period:
+            # Use guild timezone if not provided. Force to noon.
+            if not waiver_period.tzinfo:
+                tz = await self.timezone(guild)
+                waiver_period = waiver_period.replace(hour=12, minute=0, second=0, microsecond=0, tzinfo=tz)
+            data.waiver_period = waiver_period.isoformat()
 
         async with ApiClient(self._api_conf[guild.id]) as client:
             api = LeaguePlayersApi(client)

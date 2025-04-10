@@ -30,6 +30,7 @@ async def change_member_name(
 ) -> Member:
     async with ApiClient(CONF) as client:
         api = MembersApi(client)
+        print(f"Override: {override}")
         data = UpdateMemberRSCName(name=name, admin_override=override)
         return await api.members_name_change(id, data)
 

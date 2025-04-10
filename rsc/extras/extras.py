@@ -1,7 +1,7 @@
 import logging
 from enum import StrEnum
 from random import choice, randint
-from typing import Final
+from typing import ClassVar, Final
 
 import discord
 from redbot.core import app_commands
@@ -39,7 +39,7 @@ MAX_ROLL: Final[int] = 2**63 - 1
 
 
 class ExtrasMixIn(RSCMixIn):
-    ball = [
+    ball: ClassVar[list[str]] = [
         "As I see it, yes",
         "It is certain",
         "It is decidedly so",

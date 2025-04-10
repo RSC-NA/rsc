@@ -33,9 +33,7 @@ DEV_LEAGUE_EMOJI = "\U0001f451"  # :crown:
 # Links
 
 BALLCHASING_URL = "https://ballchasing.com"
-BEHAVIOR_RULES_URL = (
-    "https://docs.google.com/document/d/1AR241UmyNos8xflYqrzmpHE6Cy6xDcCtfn-32gdtPdI/"
-)
+BEHAVIOR_RULES_URL = "https://docs.google.com/document/d/1AR241UmyNos8xflYqrzmpHE6Cy6xDcCtfn-32gdtPdI/"
 RSC_TRACKER_URL = "https://docs.google.com/spreadsheets/d/1WVQEfU1DuFMm4s4XUXKI6mdU7k54c8OmdHvjLlDTWX0"
 
 # Moderation
@@ -161,9 +159,7 @@ COMBINES_HOW_TO_PLAY_1 = (
     "## Log In\n\n"
     "Navigate to https://devleague.rscna.com in your browser and login with Discord then click on the check in button. \n\n**You cannot check in until 10 minutes prior to combines starting.**\n"
 )
-COMBINES_HOW_TO_PLAY_2 = (
-    "## Check In\n\n" 'Check in on the same page by hitting the "Check In" button.\n'
-)
+COMBINES_HOW_TO_PLAY_2 = '## Check In\n\nCheck in on the same page by hitting the "Check In" button.\n'
 COMBINES_HOW_TO_PLAY_3 = (
     "## Wait for a discord ping containing your match info\n\n"
     "Now that you are checked in, keep an eye on the #combines-announcements channel for a ping that your lobby is ready. Lobby info along with a direct link to your voice chat channel will be included. **The home team creates the lobby and the away team uploads the replays.**\n"

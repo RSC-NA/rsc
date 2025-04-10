@@ -213,7 +213,8 @@ class RSC(
         try:
             await self.setup()
         except ExceptionGroup as exc:
-            log.exception(f"Error: {exc}", exc_info=exc)
+            for e in exc.exceptions:
+                log.exception(f"Error: {e}", exc_info=e)
 
     async def start_webapp(self):
         log.debug("Starting Web App")

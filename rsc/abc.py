@@ -190,6 +190,7 @@ class RSCMixIn(ABC):
         tier: int | None = None,
         status: Status | None = None,
         team: str | None = None,
+        waiver_period: datetime | None = None,
     ) -> LeaguePlayer: ...
 
     @abstractmethod
@@ -588,6 +589,38 @@ class RSCMixIn(ABC):
         player: discord.Member,
         tracker: str,
     ): ...
+
+    @abstractmethod
+    async def fetch_tracker_by_id(
+        self,
+        guild: discord.Guild,
+        tracker_id: int,
+    ) -> TrackerLink: ...
+
+    @abstractmethod
+    async def unlink_tracker(
+        self,
+        guild: discord.Guild,
+        tracker_id: int,
+        player: discord.Member,
+        executor: discord.Member,
+    ) -> TrackerLink: ...
+
+    @abstractmethod
+    async def rm_tracker(
+        self,
+        guild: discord.Guild,
+        tracker_id: int,
+    ) -> None: ...
+
+    @abstractmethod
+    async def link_tracker(
+        self,
+        guild: discord.Guild,
+        tracker_id: int,
+        player: discord.Member,
+        executor: discord.Member,
+    ) -> TrackerLink: ...
 
     # Transactions
 

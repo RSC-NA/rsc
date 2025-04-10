@@ -87,9 +87,9 @@ ignore = [
     # "RUF001", # String contains ambiguous unicode character
     # "RUF002", # Docstring contains ambiguous unicode character
     # "RUF003", # Comment contains ambiguous unicode character
-    "RUF012", # Mutable class attributes should be annotated with `typing.ClassVar`
+    # "RUF012", # Mutable class attributes should be annotated with `typing.ClassVar`
     # "S101", # Use of `assert` detected
-    "S105", # Possible hardcoded password
+    # "S105", # Possible hardcoded password
     # "S106", # Possible hardcoded password
     # "S107", # Possible hardcoded password
     # "S110", # `try`-`except`-`pass` detected, consider logging the exception

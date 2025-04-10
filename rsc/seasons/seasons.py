@@ -30,17 +30,13 @@ class SeasonsMixIn(RSCMixIn):
         if not seasons:
             return None
 
-        league_seasons = list(
-            filter(lambda league: league.league.id == league_id, seasons)
-        )
+        league_seasons = list(filter(lambda league: league.league.id == league_id, seasons))
         log.debug(f"league_seasons: {league_seasons}")
         if not league_seasons:
             return None
 
         next_season = max(league_seasons, key=attrgetter("number"))
-        log.debug(
-            f"Newest Season. ID: {next_season.id} Season Number: {next_season.number}"
-        )
+        log.debug(f"Newest Season. ID: {next_season.id} Season Number: {next_season.number}")
 
         return next_season
 
@@ -51,9 +47,7 @@ class SeasonsMixIn(RSCMixIn):
             api = SeasonsApi(client)
             try:
                 season_list = await api.seasons_list()
-                seasons = [
-                    x for x in season_list if x.league.id == self._league[guild.id]
-                ]
+                seasons = [x for x in season_list if x.league.id == self._league[guild.id]]
                 return seasons
             except ApiException as exc:
                 raise RscException(response=exc)
@@ -78,9 +72,7 @@ class SeasonsMixIn(RSCMixIn):
             api = SeasonsApi(client)
             try:
                 discord_id = player.id if player else None
-                log.debug(
-                    f"Season Intent Data. Season: {season_id} Discord: {discord_id} Returning: {returning} Missing: {missing}"
-                )
+                log.debug(f"Season Intent Data. Season: {season_id} Discord: {discord_id} Returning: {returning} Missing: {missing}")
                 return await api.seasons_player_intents(
                     season_id,
                     discord_id=discord_id,
@@ -90,9 +82,7 @@ class SeasonsMixIn(RSCMixIn):
             except ApiException as exc:
                 raise RscException(response=exc)
 
-    async def franchise_standings(
-        self, guild: discord.Guild, season_id: int
-    ) -> list[FranchiseStandings]:
+    async def franchise_standings(self, guild: discord.Guild, season_id: int) -> list[FranchiseStandings]:
         async with ApiClient(self._api_conf[guild.id]) as client:
             api = SeasonsApi(client)
             try:

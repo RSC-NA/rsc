@@ -31,8 +31,7 @@ class BulkRoleConfirmView(AuthorOnlyView):
         embed = OrangeEmbed(
             title=f"Bulk {self.action.value.capitalize()} Role",
             description=(
-                f"This action will affect **{self.count}** user(s) in {self.role.mention}\n\n"
-                "**Are you sure you want to do this?**"
+                f"This action will affect **{self.count}** user(s) in {self.role.mention}\n\n**Are you sure you want to do this?**"
             ),
         )
         await self.interaction.response.send_message(
