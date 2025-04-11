@@ -383,6 +383,7 @@ class LeagueMixIn(RSCMixIn):
         tier: int | None = None,
         status: Status | None = None,
         team: str | None = None,
+        contract_length: int | None = None,
         waiver_period: datetime | None = None,
     ) -> LeaguePlayer:
         data = LeaguePlayerPatch(executor=executor.id)
@@ -397,6 +398,10 @@ class LeagueMixIn(RSCMixIn):
             data.team_name = team
         if status:
             data.status = status.value
+        if contract_length:
+            if contract_length < 0 or contract_length > 2:
+                raise ValueError("Contract Length must be between 0 and 2.")
+            data.contract_length = contract_length
         if waiver_period:
             # Use guild timezone if not provided. Force to noon.
             if not waiver_period.tzinfo:

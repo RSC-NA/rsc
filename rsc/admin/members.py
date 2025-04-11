@@ -201,6 +201,7 @@ class AdminMembersMixIn(AdminMixIn):
         team="Team name",
         base_mmr="Base MMR",
         current_mmr="Current MMR",
+        contract_length="Contract Length",
         waiver_period='Waiver start date (Example: "2025-01-25")',
     )
     @app_commands.autocomplete(tier=TierMixIn.tier_autocomplete, team=TeamMixIn.teams_autocomplete)
@@ -213,6 +214,7 @@ class AdminMembersMixIn(AdminMixIn):
         team: str | None = None,
         base_mmr: int | None = None,
         current_mmr: int | None = None,
+        contract_length: app_commands.Range[int, 0, 2] | None = None,
         waiver_period: Transform[datetime, DateTransformer] | None = None,
     ):
         guild = interaction.guild
@@ -253,6 +255,7 @@ class AdminMembersMixIn(AdminMixIn):
                 base_mmr=base_mmr,
                 tier=tid,
                 status=status,
+                contract_length=contract_length,
                 team=team,
                 executor=interaction.user,
                 waiver_period=waiver_period,

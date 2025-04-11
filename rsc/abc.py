@@ -190,6 +190,7 @@ class RSCMixIn(ABC):
         tier: int | None = None,
         status: Status | None = None,
         team: str | None = None,
+        contract_length: int | None = None,
         waiver_period: datetime | None = None,
     ) -> LeaguePlayer: ...
 
