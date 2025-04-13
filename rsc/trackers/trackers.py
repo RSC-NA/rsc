@@ -168,6 +168,12 @@ class TrackerMixIn(RSCMixIn):
         if not tracker:
             return await interaction.followup.send(embed=ErrorEmbed(description=f"Tracker {tracker_id} does not exist."), ephemeral=False)
 
+        if tracker.pulls and tracker.pulls > 0:
+            return await interaction.followup.send(
+                embed=ErrorEmbed(description=f"Tracker {tracker_id} has {tracker.pulls} pulls. Must unlink instead."),
+                ephemeral=False,
+            )
+
         try:
             await self.rm_tracker(guild, tracker_id)
         except RscException as exc:
