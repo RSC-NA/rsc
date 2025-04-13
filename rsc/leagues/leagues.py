@@ -398,7 +398,7 @@ class LeagueMixIn(RSCMixIn):
             data.team_name = team
         if status:
             data.status = status.value
-        if contract_length:
+        if contract_length is not None:
             if contract_length < 0 or contract_length > 2:
                 raise ValueError("Contract Length must be between 0 and 2.")
             data.contract_length = contract_length
