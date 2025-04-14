@@ -307,6 +307,8 @@ class AdminMembersMixIn(AdminMixIn):
         embed.add_field(name="", value="", inline=False)  # Line Break
         embed.add_field(name="Base MMR", value=str(result.base_mmr), inline=True)
         embed.add_field(name="Current MMR", value=str(result.current_mmr), inline=True)
+        embed.add_field(name="", value="", inline=False)  # Line Break
+        embed.add_field(name="Contract Length", value=str(result.contract_length), inline=True)
 
         await interaction.followup.send(embed=embed)
 

@@ -168,6 +168,7 @@ class TrackerMixIn(RSCMixIn):
         if not tracker:
             return await interaction.followup.send(embed=ErrorEmbed(description=f"Tracker {tracker_id} does not exist."), ephemeral=False)
 
+        # Prevent deleting tracker with pulls
         if tracker.pulls and tracker.pulls > 0:
             return await interaction.followup.send(
                 embed=ErrorEmbed(description=f"Tracker {tracker_id} has {tracker.pulls} pulls. Must unlink instead."),
