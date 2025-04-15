@@ -77,6 +77,7 @@ class CombineRunnerMixIn(RSCMixIn):
         lobby_list: list[models.CombinesLobby] = []
         try:
             for v in data.values():
+                log.debug(f"Combine Raw Lobby: {v}")
                 lobby_list.append(models.CombinesLobby(**v))  # noqa: PERF401
         except pydantic.ValidationError as exc:
             log.exception("Error deserializing combine game lobby", exc_info=exc)
