@@ -227,8 +227,8 @@ class AdminMembersMixIn(AdminMixIn):
         tier_list = []
         try:
             plist = await self.players(guild, discord_id=player.id, limit=1)
+            tier_list = await self.tiers(guild)
             if tier:
-                tier_list = await self.tiers(guild)
                 tid = await self.tier_id_by_name(guild, tier=tier)
                 log.debug(f"Tier ID: {tid}")
         except RscException as exc:
@@ -498,3 +498,38 @@ class AdminMembersMixIn(AdminMixIn):
         await interaction.followup.send(
             embed=SuccessEmbed(description=f"{member.mention} has been signed up for the latest season of RSC.")
         )
+
+    @_members.command(  # type: ignore[type-var]
+        name="notinserver", description="Find API league players not in the server"
+    )
+    @app_commands.describe(
+        status="Only check league players with this status",
+    )
+    async def _admin_member_notinserver_cmd(self, interaction: discord.Interaction, status: Status | None = None):
+        guild = interaction.guild
+        if not guild:
+            return
+
+        await interaction.response.defer()
+
+        try:
+            c = 0
+            results = []
+            async for lp in self.paged_players(guild=guild, status=status):
+                c += 1
+                if (c % 100) == 0:
+                    log.debug(f"Processed {c} players")
+
+                if not lp.player.discord_id:
+                    await interaction.followup.send(f"ERROR: No discord ID found for player: {lp.id}")
+                    continue
+                m = guild.get_member(lp.player.discord_id)
+                if not m:
+                    log.debug(f"Player {lp.player.name} ({lp.player.discord_id}) not in server")
+                    results.append(lp)
+        except RscException as exc:
+            return await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc), ephemeral=True)
+
+        fmt_msg = "\n".join([f"{x.player.name} ({x.player.discord_id}) not in server" for x in results])
+
+        await interaction.followup.send(content=f"```\n{fmt_msg}```")
