@@ -6,6 +6,7 @@ from redbot.core import app_commands
 from rsc.admin import AdminMixIn
 from rsc.admin.modals import AgmMessageModal
 from rsc.embeds import BlueEmbed, ErrorEmbed
+from rsc.enums import Status
 from rsc.franchises import FranchiseMixIn
 from rsc.logs import GuildLogAdapter
 from rsc.utils import utils
@@ -55,6 +56,21 @@ class AdminAGMMixIn(AdminMixIn):
             return
 
         await interaction.response.defer(ephemeral=True)
+
+        # Check if player is on another franchise already
+        players = await self.players(guild=guild, discord_id=agm.id, limit=1)
+        if players:
+            lp = players.pop(0)
+            if (
+                lp.status in [Status.ROSTERED, Status.RENEWED]
+                and lp.team
+                and lp.team.franchise
+                and lp.team.franchise.name
+                and lp.team.franchise.name.lower() != franchise.lower()
+            ):
+                return await interaction.followup.send(
+                    embed=ErrorEmbed(description=f"{agm.mention} is already on a roster for **{lp.team.franchise.name}**.")
+                )
 
         # Get AGM promotion message
         agm_msg = await self._get_agm_message(guild)
