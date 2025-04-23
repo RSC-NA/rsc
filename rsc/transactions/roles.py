@@ -456,10 +456,11 @@ async def update_unsigned_gm_discord(
 
     # Verify player has tier role
     tier_role = await utils.get_tier_role(guild, name=league_player.tier.name)
-    if tier_role and tier_role not in player.roles:
-        roles_to_add.append(tier_role)
-    else:
+    if not tier_role:
         raise ValueError(f"Tier role not found: {league_player.tier.name}")
+
+    if tier_role not in player.roles:
+        roles_to_add.append(tier_role)
 
     # Add franchise role
     frole = await utils.franchise_role_from_model(guild, franchise=franchise)
