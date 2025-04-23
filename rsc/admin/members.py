@@ -276,7 +276,22 @@ class AdminMembersMixIn(AdminMixIn):
         try:
             log.debug("Updating player in discord")
             lplayer = plist.pop(0)
-            await update_league_player_discord(guild=guild, player=player, league_player=lplayer, tiers=tier_list)
+            if lplayer.status == Status.UNSIGNED_GM:
+                # Need to pull franchise information for unsigned GMs
+                # Data not available in `LeaguePlayer`
+                flist = await self.franchises(guild, gm_discord_id=lplayer.player.discord_id)
+                if not flist:
+                    return await interaction.response.send_message(
+                        embed=ErrorEmbed(description="Unable to find franchise for un-signed GM in API.")
+                    )
+                elif len(flist) > 1:
+                    return await interaction.response.send_message(
+                        embed=ErrorEmbed(description="Multiple franchises found for un-signed GM in API.")
+                    )
+                franchise = flist.pop(0)
+                await update_league_player_discord(guild=guild, player=player, league_player=lplayer, tiers=tier_list, franchise=franchise)
+            else:
+                await update_league_player_discord(guild=guild, player=player, league_player=lplayer, tiers=tier_list)
         except (ValueError, AttributeError) as exc:
             return await interaction.followup.send(embed=ExceptionErrorEmbed(exc_message=str(exc)))
 
