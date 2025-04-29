@@ -817,7 +817,7 @@ async def update_league_player_discord(
         raise ValueError("API returned league player with no status value")
 
     match league_player.status:
-        case Status.ROSTERED | Status.RENEWED:
+        case Status.ROSTERED | Status.RENEWED | Status.AGMIR | Status.IR:
             return await update_rostered_discord(guild=guild, player=player, league_player=league_player, tiers=tiers)
         case Status.DRAFT_ELIGIBLE:
             return await update_draft_eligible_discord(guild=guild, player=player, league_player=league_player, tiers=tiers)

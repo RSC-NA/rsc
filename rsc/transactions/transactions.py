@@ -212,16 +212,7 @@ class TransactionMixIn(RSCMixIn):
             )
             return
 
-        # Check if user was forcibly removed from server
-        perp, reason = await utils.get_audit_log_reason(member.guild, member, discord.AuditLogAction.kick)
-
-        p = players.pop(0)
-        log.info(
-            f"{member.display_name} ({member.id}) has left the server. Player is being retired. Reason: {reason}",
-            guild=guild,
-        )
-
-        # Retire player
+        # Retire player (retire everyone just in case)
         try:
             await self.retire(
                 guild,
@@ -233,6 +224,15 @@ class TransactionMixIn(RSCMixIn):
         except RscException as exc:
             log.error(f"Error retiring player that left guild: {exc.reason}", guild=guild)
             return
+
+        # Check if user was forcibly removed from server
+        perp, reason = await utils.get_audit_log_reason(member.guild, member, discord.AuditLogAction.kick)
+
+        p = players.pop(0)
+        log.info(
+            f"{member.display_name} ({member.id}) has left the server. Player is being retired. Reason: {reason}",
+            guild=guild,
+        )
 
         # Check if notifications are enabled
         if not await self._notifications_enabled(guild):
@@ -1617,12 +1617,14 @@ class TransactionMixIn(RSCMixIn):
 
     @_transactions.command(name="leaderboard", description="Display transaction committee leaderboard")  # type: ignore[type-var]
     @app_commands.describe(
-        season='RSC Season Number. Example: "20" (Optional)',
+        season='RSC Season Number. Example: "23" (Optional)',
     )
     async def _transactions_leaderboard_cmd(
         self,
         interaction: discord.Interaction,
         season: int | None = None,
+        transaction_type: TransactionType | None = None,
+        no_draft: bool = False,
     ):
         guild = interaction.guild
         if not guild:
@@ -1633,9 +1635,11 @@ class TransactionMixIn(RSCMixIn):
         leaders: dict[int, int] = {}
         try:
             t: TransactionResponse
-            async for t in self.paged_transaction_history(guild, season=season):
+            async for t in self.paged_transaction_history(guild, season=season, trans_type=transaction_type):
                 if not t.executor.discord_id:
                     log.warning("Transaction executor has no discord ID.", guild=guild)
+                    continue
+                if no_draft and t.type == TransactionType.DRAFT:
                     continue
                 if not leaders.get(t.executor.discord_id):
                     leaders[t.executor.discord_id] = 1
