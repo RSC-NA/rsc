@@ -52,6 +52,14 @@ async def update_signed_player_discord(
 
                 if r.name.endswith("FA") or (r.name.lower() == tier.name.lower() and r.name.lower() != ptu.new_team.tier.lower()):
                     roles_to_remove.append(r)
+    else:
+        # Remove FA tier role
+        for r in player.roles:
+            if r in roles_to_remove:
+                continue
+
+            if r.name.endswith("FA"):
+                roles_to_remove.append(r)
 
     # Remove Spectator
     spec_role = await utils.get_spectator_role(guild)
