@@ -213,8 +213,9 @@ class TrackerLinksStatus(StrEnum):
     STALE = "STL"  # Stale
     PULLED = "PLD"  # Pulled
     FAILED = "FLD"  # Failed
-    MISSING = "MSG"  # "Missing"
-    REPULL = "RPL"  # "Repull Needed"
+    MISSING = "MSG"  # Missing
+    REPULL = "RPL"  # Repull Needed
+    INVALID = "INV"  # Invalid
 
     @property
     def full_name(self) -> str:
