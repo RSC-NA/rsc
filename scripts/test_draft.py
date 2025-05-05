@@ -59,7 +59,7 @@ async def tiers() -> list[Tier]:
         # Populate cache
         if tiers:
             if not all(t.name for t in tiers):
-                raise AttributeError("API returned a franchise with no name.")
+                raise AttributeError("API returned a tier with no name.")
         return tiers
 
 async def draft(
@@ -136,7 +136,7 @@ async def players(
 
 
 async def parse_csv(csv: str, tier:str|None=None) -> pd.DataFrame:
-    df: pd.DataFrame = pd.read_csv(csv, dtype={"Player Id": str})
+    df: pd.DataFrame = pd.read_csv(csv, dtype={"Discord ID": str})
     # for idx, row in df.iterrows():
     #     if df[idx]["Player Id"] == "#N/A":
     #         df[idx]["Player Id"] = None
@@ -151,10 +151,10 @@ async def parse_csv(csv: str, tier:str|None=None) -> pd.DataFrame:
         df = df.loc[df['Tier'] == tier]
 
     # df["Player Id"] = df["Player Id"].apply(lambda x: int(x) if not pd.isna(x) else None)
-    df["Player Id"] = df["Player Id"].astype('Int64')
-    df["Pick"] = df["Pick"].astype(int)
-    df["Round"] = df["Round"].astype(int)
-    df["Pick / Round"] = df["Round"].astype(int)
+    df["Discord ID"] = df["Discord ID"].astype('Int64')
+    df["Pick #"] = df["Pick #"].astype(int)
+    df["Round #"] = df["Round #"].astype(int)
+    df["Pick / Round"] = df["Pick / Round"].astype(int)
 
     print(df)
     # with pd.option_context('display.max_rows', None, 'display.max_columns', None):  # more options can be specified also
@@ -164,7 +164,7 @@ async def parse_csv(csv: str, tier:str|None=None) -> pd.DataFrame:
 
 async def process_tier(layout: pd.DataFrame, tier: str, pick:int, dry:bool=False) -> None:
     print(f"Getting player list for {tier}")
-    plist = await players(tier_name=tier)
+    plist = await players(tier_name=tier, season_number=23)
     plist.sort(key=lambda p: p.id)
 
     tdata = await teams(tier=tier)
@@ -184,13 +184,13 @@ async def process_tier(layout: pd.DataFrame, tier: str, pick:int, dry:bool=False
 
     print(f"Starting draft at pick: {pick}")
     for idx, pos in layout.iterrows():
-        print(f"[{tier}] Round: {pos['Round']} Pick: {pos['Pick']}")
+        print(f"[{tier}] Round: {pos['Round #']} Pick: {pos['Pick #']}")
         # print(type(pos["Pick"]))
-        if pos["Pick"] < pick:
+        if pos["Pick #"] < pick:
             print(f"Skipping")
             continue
 
-        gm = pos["GM"]
+        gm = pos["Pick Owner"]
 
         if gm == "-":
             print(f"Skipping empty red square")
@@ -208,16 +208,16 @@ async def process_tier(layout: pd.DataFrame, tier: str, pick:int, dry:bool=False
             print(f"Could not find team for GM: {gm}")
             sys.exit(1)
 
-
-        if not pd.isna(pos["Player Id"]):
+        print(f"Row Player Name: {pos['Player Name']} ID: {pos['Discord ID']}")
+        if not pd.isna(pos["Discord ID"]):
             print(f"Drafting keeper pick")
-            pname = pos["Player"]
-            pid = pos["Player Id"]
+            pname = pos["Player Name"]
+            pid = pos["Discord ID"]
         else:
             # Sign from eligible
             print(f"Drafting eligible player")
             try:
-                p = eligible.pop(0)
+                draftee = eligible.pop(0)
             except IndexError:
                 print("No more eligible players. Finished draft.")
                 break
@@ -225,17 +225,90 @@ async def process_tier(layout: pd.DataFrame, tier: str, pick:int, dry:bool=False
             if not p:
                 print("No more eligible players. Finished draft.")
                 break
-            pname = p.player.name
-            pid = int(p.player.discord_id)
+            pname = draftee.player.name
+            pid = int(draftee.player.discord_id)
+            print(f"Player Status in API: {draftee.status}")
 
 
-        print(f"[{tier}] Round {pos['Round']} Pick {pos['Pick']} - Drafting {pname} ({pid}) to {dst.name}")
+        print(f"[{tier}] Round {pos['Round #']} Pick {pos['Pick #']} - Drafting {pname} ({pid}) to {dst.name}")
+
         if not dry:
-            resp = await draft(player=pid, team=dst.name, round=pos["Round"], pick=pos["Pick"])
+            resp = await draft(player=pid, team=dst.name, round=pos["Round #"], pick=pos["Pick #"], override=True)
+            # resp = await draft(player=pid, team=dst.name, round=pos["Round #"], pick=pos["Pick #"])
             if not resp:
                 print("No transaction response from server...")
                 sys.exit(0)
 
+async def process_tier_random(layout: pd.DataFrame, tier: str, pick:int, dry:bool=False) -> None:
+    print(f"Getting player list for {tier}")
+    plist = await players(tier_name=tier, season_number=23)
+    plist.sort(key=lambda p: p.id)
+
+    tdata = await teams(tier=tier)
+    print(f"Team[0]: {tdata[0]}")
+
+    print(f"Total draft picks in tier: {len(layout)}")
+    print(f"Found {len(plist)} players in {tier}")
+    eligible: list[LeaguePlayer] = []
+    for p in plist:
+        if p.status == Status.FREE_AGENT:
+            eligible.append(p)
+        if p.status == Status.DRAFT_ELIGIBLE:
+            eligible.append(p)
+
+    eligible.sort(key=lambda p: p.id)
+    print(f"Total FA/DE players: {len(eligible)}")
+
+    print(f"Starting draft at pick: {pick}")
+    for idx, pos in layout.iterrows():
+        print(f"[{tier}] Round: {pos['Round #']} Pick: {pos['Pick #']}")
+        # print(type(pos["Pick"]))
+        if pos["Pick #"] < pick:
+            print(f"Skipping")
+            continue
+
+        gm = pos["Pick Owner"]
+
+        if gm == "-":
+            print(f"Skipping empty red square")
+            continue
+
+        # gm = "Tinsel"
+        print(f"Pick Owner: {gm}")
+        dst = None
+        for t in tdata:
+            if t.franchise.gm.rsc_name.lower() == gm.lower():
+                dst = t
+                break
+
+        if not dst:
+            print(f"Could not find team for GM: {gm}")
+            sys.exit(1)
+
+        # Sign from eligible
+        print(f"Drafting eligible player")
+        try:
+            draftee = plist.pop(0)
+        except IndexError:
+            print("No more eligible players. Finished draft.")
+            break
+
+        if not p:
+            print("No more eligible players. Finished draft.")
+            break
+        pname = draftee.player.name
+        pid = int(draftee.player.discord_id)
+        print(f"Player Status in API: {draftee.status}")
+
+
+        print(f"[{tier}] Round {pos['Round #']} Pick {pos['Pick #']} - Drafting {pname} ({pid}) to {dst.name}")
+
+        if not dry:
+            resp = await draft(player=pid, team=dst.name, round=pos["Round #"], pick=pos["Pick #"], override=True)
+            # resp = await draft(player=pid, team=dst.name, round=pos["Round #"], pick=pos["Pick #"])
+            if not resp:
+                print("No transaction response from server...")
+                sys.exit(0)
 
 
 
@@ -248,7 +321,8 @@ async def test_draft(draftcsv: str, tier: str, pick: int, dry:bool=False):
         print(f"[!] Tier does not exist: {tier}")
         sys.exit(1)
 
-    await process_tier(layout=layout, tier=tier, pick=pick, dry=dry)
+    # await process_tier(layout=layout, tier=tier, pick=pick, dry=dry)
+    await process_tier_random(layout=layout, tier=tier, pick=pick, dry=dry)
 
 
 if __name__ == "__main__":

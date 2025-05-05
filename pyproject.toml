@@ -125,6 +125,7 @@ line-ending = "auto"
 
 
 [tool.codespell]
+skip = ["*.json"]
 ignore-words-list = "ptd,oce,nd,cros,recuse,checkin"
 
 [tool.pytest.ini_options]

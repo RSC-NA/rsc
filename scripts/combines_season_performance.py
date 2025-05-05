@@ -68,8 +68,8 @@ if __name__ == "__main__":
 
     print(f"Len combined: {len(pdata)}")
 
-    zero_combines = [v["sbv"] for v in pdata.values() if v["combine_games"] == 0]
-    has_combines = [v["sbv"] for v in pdata.values() if v["combine_games"] > 0]
+    zero_combines = [v["rpv"] for v in pdata.values() if v["combine_games"] == 0]
+    has_combines = [v["rpv"] for v in pdata.values() if v["combine_games"] > 0]
 
     print(f"Total with 0 combines: {len(zero_combines)}")
     print(f"Zero Combines Mean: {mean(zero_combines)}")
@@ -90,16 +90,16 @@ if __name__ == "__main__":
         if v['season_games'] <= 10:
             continue
 
-        if v["combine_games"] == 0:
-            continue
+        #if v["combine_games"] == 0:
+        #    continue
 
-        y.append(v['idr'])
+        y.append(v['rpv'])
         x.append(v['combine_win_prcnt'])
 
 
     plt.scatter(x, y)
     plt.plot(np.unique(x), np.poly1d(np.polyfit(x, y, 1))(np.unique(x)), color="red")
     plt.xlabel("Combine Win %")
-    plt.ylabel("idr")
+    plt.ylabel("RPV")
     plt.title("Combine Win % vs RPV (More than 10 GP in season)")
-    # plt.show()
+    plt.show()

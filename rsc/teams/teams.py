@@ -621,7 +621,7 @@ class TeamMixIn(RSCMixIn):
             # Populate cache
             if teams:
                 if not all(t.name for t in teams):
-                    raise AttributeError("API returned a franchise with no name.")
+                    raise AttributeError("API returned a team with no name.")
 
                 if self._team_cache.get(guild.id):
                     log.debug(f"[{guild.name}] Adding new teams to cache")

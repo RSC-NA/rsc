@@ -117,7 +117,11 @@ class RSC(
     async def cog_load(self):
         """Perform initial bot setup on Cog reload"""
         log.debug("In cog_load()")
-        await self.setup()
+        try:
+            await self.setup()
+        except ExceptionGroup as eg:
+            for err in eg.exceptions:
+                log.exception(f"Error in cog_load(): {err}", exc_info=err)
 
     async def cog_unload(self):
         """Cancel task loops on unload to avoid multiple tasks"""
@@ -155,8 +159,8 @@ class RSC(
                     # API is down or not responding
                     for err in eg.exceptions:
                         if hasattr(err, "status"):
-                            log.debug(
-                                f"Setup Error. Status: {err.status} Reason: P{err.args[0]}",
+                            log.exception(
+                                f"Setup Error. Status: {err.status} Reason: {err}",
                                 exc_info=err,
                                 guild=guild,
                             )
@@ -174,11 +178,12 @@ class RSC(
                                 case _:
                                     raise err
                         else:
-                            raise err
+                            log.exception(f"Setup Error: {err}", exc_info=err, guild=guild)
+                            # raise err
                 except* ValidationError as eg:
                     for verr in eg.exceptions:
-                        log.error(f"*ValidationError: {verr!r}", guild=guild)
-                    raise eg.exceptions[0]
+                        log.exception(f"*ValidationError: {verr!r}", exc_info=verr, guild=guild)
+                    # raise eg.exceptions[0]
         log.info("Finished preparing caches.")
 
     async def prepare_league(self, guild: discord.Guild):

@@ -1618,6 +1618,8 @@ class TransactionMixIn(RSCMixIn):
     @_transactions.command(name="leaderboard", description="Display transaction committee leaderboard")  # type: ignore[type-var]
     @app_commands.describe(
         season='RSC Season Number. Example: "23" (Optional)',
+        transaction_type="Transaction Type (Optional)",
+        no_draft="Exclude draft transactions (Default: False)",
     )
     async def _transactions_leaderboard_cmd(
         self,

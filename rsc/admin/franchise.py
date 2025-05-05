@@ -458,17 +458,6 @@ class AdminFranchiseMixIn(AdminMixIn):
         # Update franchise role
         await frole.edit(name=f"{rebrand_modal.name} ({new_fdata.gm.rsc_name})")
 
-        # Update emoji
-        if fdata.prefix:
-            emoji = await utils.emoji_from_prefix(guild, prefix=fdata.prefix)
-            if emoji:
-                await emoji.edit(name=new_fdata.prefix)
-            else:
-                await interaction.followup.send(
-                    content=f"Unable to update franchise emoji. `{fdata.prefix}` not found.",
-                    ephemeral=True,
-                )
-
         # Update all prefix
         try:
             for m in frole.members:
@@ -479,6 +468,17 @@ class AdminFranchiseMixIn(AdminMixIn):
                 content=f"Unable to update nickname {m.mention}: `{exc}`",
                 ephemeral=True,
             )
+
+        # Update emoji
+        if fdata.prefix:
+            emoji = await utils.emoji_from_prefix(guild, prefix=fdata.prefix)
+            if emoji:
+                await emoji.edit(name=new_fdata.prefix)
+            else:
+                await interaction.followup.send(
+                    content=f"Unable to update franchise emoji. `{fdata.prefix}` not found.",
+                    ephemeral=True,
+                )
 
         embed = SuccessEmbed(description=f"**{fdata.name}** has been rebranded to **{rebrand_modal.name}**")
         await rebrand_modal.interaction.edit_original_response(embed=embed, view=None)

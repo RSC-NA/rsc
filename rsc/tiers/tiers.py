@@ -120,7 +120,7 @@ class TierMixIn(RSCMixIn):
             # Populate cache
             if tiers:
                 if not all(t.name for t in tiers):
-                    raise AttributeError("API returned a franchise with no name.")
+                    raise AttributeError("API returned a tier with no name.")
 
                 if self._tier_cache.get(guild.id):
                     cached = set(self._tier_cache[guild.id])
