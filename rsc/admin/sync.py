@@ -11,6 +11,7 @@ from rsc.embeds import (  # YellowEmbed,
     ApiExceptionErrorEmbed,
     BlueEmbed,
     ErrorEmbed,
+    ExceptionErrorEmbed,
     SuccessEmbed,
 )
 from rsc.enums import Status
@@ -736,7 +737,7 @@ class AdminSyncMixIn(AdminMixIn):
                 else:
                     await update_nonplaying_discord(guild=guild, member=member, tiers=tiers, default_roles=default_roles)
             except (ValueError, AttributeError) as exc:
-                return await interaction.followup.send(content=str(exc), ephemeral=True)
+                return await interaction.followup.send(embed=ExceptionErrorEmbed(exc_message=str(exc)))
         else:
             lp = plist.pop(0)
             if lp.status == Status.UNSIGNED_GM:
@@ -753,12 +754,12 @@ class AdminSyncMixIn(AdminMixIn):
                         guild=guild, player=member, league_player=lp, tiers=tiers, franchise=franchise, default_roles=default_roles
                     )
                 except (ValueError, AttributeError) as exc:
-                    return await interaction.followup.send(content=str(exc), ephemeral=True)
+                    return await interaction.followup.send(embed=ExceptionErrorEmbed(exc_message=str(exc)))
             else:
                 try:
                     await update_league_player_discord(guild=guild, player=member, league_player=lp, tiers=tiers)
                 except (ValueError, AttributeError) as exc:
-                    return await interaction.followup.send(content=str(exc), ephemeral=True)
+                    return await interaction.followup.send(embed=ExceptionErrorEmbed(exc_message=str(exc)))
 
         await interaction.followup.send(
             embed=SuccessEmbed(description=f"Successfully synced {member.mention} from the API. Discord roles and name have been updated."),
