@@ -730,10 +730,13 @@ class AdminSyncMixIn(AdminMixIn):
                     franchise = f
                     break
 
-            if gm and franchise:
-                await update_nonplaying_gm_discord(guild=guild, player=member, franchise=franchise, tiers=tiers)
-            else:
-                await update_nonplaying_discord(guild=guild, member=member, tiers=tiers, default_roles=default_roles)
+            try:
+                if gm and franchise:
+                    await update_nonplaying_gm_discord(guild=guild, player=member, franchise=franchise, tiers=tiers)
+                else:
+                    await update_nonplaying_discord(guild=guild, member=member, tiers=tiers, default_roles=default_roles)
+            except (ValueError, AttributeError) as exc:
+                return await interaction.followup.send(content=str(exc), ephemeral=True)
         else:
             lp = plist.pop(0)
             if lp.status == Status.UNSIGNED_GM:
@@ -745,11 +748,17 @@ class AdminSyncMixIn(AdminMixIn):
                         ephemeral=False,
                     )
                 franchise = flist.pop(0)
-                await update_league_player_discord(
-                    guild=guild, player=member, league_player=lp, tiers=tiers, franchise=franchise, default_roles=default_roles
-                )
+                try:
+                    await update_league_player_discord(
+                        guild=guild, player=member, league_player=lp, tiers=tiers, franchise=franchise, default_roles=default_roles
+                    )
+                except (ValueError, AttributeError) as exc:
+                    return await interaction.followup.send(content=str(exc), ephemeral=True)
             else:
-                await update_league_player_discord(guild=guild, player=member, league_player=lp, tiers=tiers)
+                try:
+                    await update_league_player_discord(guild=guild, player=member, league_player=lp, tiers=tiers)
+                except (ValueError, AttributeError) as exc:
+                    return await interaction.followup.send(content=str(exc), ephemeral=True)
 
         await interaction.followup.send(
             embed=SuccessEmbed(description=f"Successfully synced {member.mention} from the API. Discord roles and name have been updated."),

@@ -839,5 +839,7 @@ async def update_league_player_discord(
             )
         case Status.DROPPED:
             return await update_nonplaying_discord(guild=guild, member=player, tiers=tiers, default_roles=default_roles)
+        case Status.PERMFA_W:
+            raise ValueError("Permanent Free Agent (Waiting) is not currently supported. They have not been accepted into the league.")
         case _:
             raise ValueError(f"**{league_player.status}** is not currently supported.")
