@@ -81,7 +81,7 @@ class AdminSyncMixIn(AdminMixIn):
 
                 m = guild.get_member(api_player.player.discord_id)
                 if not m:
-                    if api_player.status != Status.DROPPED:
+                    if api_player.status not in [Status.DROPPED, Status.FORMER]:
                         log.warning(
                             "League player not in guild: %d",
                             api_player.player.discord_id,
@@ -730,11 +730,15 @@ class AdminSyncMixIn(AdminMixIn):
 
             m = guild.get_member(api_player.player.discord_id)
             if not m:
-                if api_player.status != Status.DROPPED:
+                if api_player.status not in [Status.DROPPED, Status.FORMER]:
                     log.warning(
-                        "League player not in guild: %d",
+                        "League player not in guild and is active: %d",
                         api_player.player.discord_id,
                         guild=guild,
+                    )
+                    await interaction.followup.send(
+                        embed=ErrorEmbed(description=f"League player {api_player.player.name} not in guild and is active."),
+                        ephemeral=True,
                     )
                 continue
 
