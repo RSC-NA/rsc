@@ -722,7 +722,7 @@ async def update_free_agent_discord(
         await player.add_roles(*roles_to_add)
 
     try:
-        if league_player.status == Status.FREE_AGENT:
+        if league_player.status in [Status.FREE_AGENT, Status.WAIVERS, Status.WAIVER_RELEASE, Status.WAIVER_CLAIM]:
             new_nick = f"FA | {await utils.remove_prefix(player)}".strip()
         elif league_player.status == Status.PERM_FA:
             new_nick = f"PFA | {await utils.remove_prefix(player)}".strip()
