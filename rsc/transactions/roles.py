@@ -829,6 +829,94 @@ async def update_draft_eligible_discord(
         log.warning(f"Unable to update nickname {player.display_name} ({player.id}): {exc}")
 
 
+async def update_permfa_waiting_discord(
+    guild: discord.Guild,
+    player: discord.Member,
+    league_player: LeaguePlayer,
+    tiers: list[Tier],
+):
+    if league_player.status != Status.PERMFA_W:
+        raise ValueError(f"{player.display_name} ({player.id}) is not a permfa in waiting...")
+
+    roles_to_remove: list[discord.Role] = []
+    roles_to_add: list[discord.Role] = []
+
+    # PermFA waiting should have no tier roles yet
+    if tiers:
+        for r in player.roles:
+            for tier in tiers:
+                if r in roles_to_remove:
+                    continue
+
+                if r.name.replace("FA", "").lower() == tier.name.lower():
+                    roles_to_remove.append(r)
+
+    # Remove any old franchise role if it exists
+    old_froles = await utils.franchise_role_list_from_disord_member(player)
+    if old_froles:
+        roles_to_remove.extend(old_froles)
+
+    # Remove Spectator
+    spec_role = await utils.get_spectator_role(guild)
+    if spec_role in player.roles:
+        roles_to_remove.append(spec_role)
+
+    # Remove Former Player
+    former_role = await utils.get_former_player_role(guild)
+    if former_role in player.roles:
+        roles_to_remove.append(former_role)
+
+    # League Role:
+    league_role = await utils.get_league_role(guild)
+    if league_role not in player.roles:
+        roles_to_add.append(league_role)
+
+    # IR Role
+    ir_role = await utils.get_ir_role(guild)
+    if ir_role in player.roles:
+        roles_to_remove.append(ir_role)
+
+    # Remove captain
+    captain_role = await utils.get_captain_role(guild)
+    if captain_role in player.roles:
+        roles_to_remove.append(captain_role)
+
+    # Free agent roles
+    fa_role = await utils.get_free_agent_role(guild)
+    if fa_role in player.roles:
+        roles_to_remove.append(fa_role)
+
+    # Draft Eligible
+    de_role = await utils.get_draft_eligible_role(guild)
+    if de_role in player.roles:
+        roles_to_remove.append(de_role)
+
+    # PermFA role:
+    permfa_role = await utils.get_permfa_role(guild)
+    if permfa_role in player.roles:
+        roles_to_remove.append(permfa_role)
+
+    # Add PermFA Waiting role
+    permfa_waiting_role = await utils.get_permfa_waiting_role(guild)
+    if permfa_waiting_role not in player.roles:
+        roles_to_add.append(permfa_waiting_role)
+
+    if roles_to_remove:
+        log.debug(f"Removing roles: {roles_to_remove}", guild=guild)
+        await player.remove_roles(*roles_to_remove)
+    if roles_to_add:
+        log.debug(f"Adding roles: {roles_to_add}", guild=guild)
+        await player.add_roles(*roles_to_add)
+
+    try:
+        new_nick = f"PFW | {await utils.remove_prefix(player)}".strip()
+        if new_nick != player.display_name:
+            log.debug(f"Updating permfa waiting player nickname: {new_nick}", guild=guild)
+            await player.edit(nick=new_nick)
+    except discord.Forbidden as exc:
+        log.warning(f"Unable to update nickname {player.display_name} ({player.id}): {exc}")
+
+
 async def update_league_player_discord(
     guild: discord.Guild,
     player: discord.Member,
@@ -851,7 +939,7 @@ async def update_league_player_discord(
             return await update_rostered_discord(guild=guild, player=player, league_player=league_player, tiers=tiers)
         case Status.DRAFT_ELIGIBLE:
             return await update_draft_eligible_discord(guild=guild, player=player, league_player=league_player, tiers=tiers)
-        case Status.FREE_AGENT | Status.PERM_FA:
+        case Status.FREE_AGENT | Status.PERM_FA | Status.WAIVERS | Status.WAIVER_RELEASE | Status.WAIVER_CLAIM:
             return await update_free_agent_discord(guild=guild, player=player, league_player=league_player, tiers=tiers)
         case Status.UNSIGNED_GM:
             if not franchise:
@@ -859,9 +947,9 @@ async def update_league_player_discord(
             return await update_unsigned_gm_discord(
                 guild=guild, player=player, league_player=league_player, franchise=franchise, tiers=tiers
             )
-        case Status.DROPPED:
+        case Status.DROPPED | Status.FORMER | Status.BANNED:
             return await update_nonplaying_discord(guild=guild, member=player, tiers=tiers, default_roles=default_roles)
         case Status.PERMFA_W:
-            raise ValueError("Permanent Free Agent (Waiting) is not supported. They have not been accepted into the league.")
+            return await update_permfa_waiting_discord(guild=guild, player=player, league_player=league_player, tiers=tiers)
         case _:
             raise ValueError(f"**{league_player.status}** is not currently supported.")

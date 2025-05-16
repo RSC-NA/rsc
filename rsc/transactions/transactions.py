@@ -103,7 +103,6 @@ class TransactionMixIn(RSCMixIn):
         self.expire_sub_contract_loop.start()
 
     # Tasks
-
     @tasks.loop(time=SUB_LOOP_TIME)
     async def expire_sub_contract_loop(self):
         """Send contract expiration message to Transaction Channel"""

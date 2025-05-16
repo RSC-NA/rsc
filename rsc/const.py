@@ -24,6 +24,7 @@ MUTED_ROLE = "Muted"
 PERM_FA_ROLE = "PermFA"
 SPECTATOR_ROLE = "Spectator"
 SUBBED_OUT_ROLE = "Subbed Out"
+PERM_FA_WAITING_ROLE = "PermFA in Waiting"
 
 # Emoji
 TROPHY_EMOJI = "\U0001f3c6"  # :trophy:

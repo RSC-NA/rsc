@@ -143,6 +143,14 @@ async def get_draft_eligible_role(guild: discord.Guild) -> discord.Role:
     return r
 
 
+async def get_permfa_waiting_role(guild: discord.Guild) -> discord.Role:
+    r = discord.utils.get(guild.roles, name=const.PERM_FA_WAITING_ROLE)
+    if not r:
+        log.error(f"[{guild.name}] Expected role does not exist: {const.PERM_FA_WAITING_ROLE}")
+        raise ValueError(f"[{guild.name}] Expected role does not exist: {const.PERM_FA_WAITING_ROLE}")
+    return r
+
+
 async def get_ir_role(guild: discord.Guild) -> discord.Role:
     r = discord.utils.get(guild.roles, name=const.IR_ROLE)
     if not r:

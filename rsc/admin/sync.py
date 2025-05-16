@@ -1,7 +1,9 @@
 import logging
+from datetime import time
 from typing import TYPE_CHECKING
 
 import discord
+from discord.ext import tasks
 from redbot.core import app_commands
 
 from rsc import const
@@ -23,7 +25,6 @@ from rsc.transactions.roles import (
     update_league_player_discord,
     update_nonplaying_discord,
     update_nonplaying_gm_discord,
-    update_rostered_discord,
 )
 from rsc.utils import images, utils
 from rsc.views import CancelView
@@ -39,11 +40,69 @@ logger = logging.getLogger("red.rsc.admin.sync")
 log = GuildLogAdapter(logger)
 
 
+SYNC_LOOP_TIME = time(hour=7)  # 7:00 AM UTC
+
+
 class AdminSyncMixIn(AdminMixIn):
     def __init__(self):
         log.debug("Initializing AdminMixIn:Sync")
-
         super().__init__()
+
+        # Start sync loop
+        self.sync_discord_roles.start()
+
+    # Tasks
+    @tasks.loop(time=SYNC_LOOP_TIME)
+    async def sync_discord_roles(self):
+        log.info("Discord role sync loop is running.")
+        guilds: list[discord.Guild] = list(self.bot.guilds)
+        for guild in guilds:
+            log.info("Syncing discord roles", guild=guild)
+            if guild.id != 991044575567179856:
+                continue
+
+            # Get list of all tiers
+            try:
+                log.debug("Fetching tiers", guild=guild)
+                tiers: list[Tier] = await self.tiers(guild)
+            except RscException as exc:
+                log.exception("Error fetching tiers", guild=guild, exc=exc)
+
+            log.debug("Fetching league players", guild=guild)
+            total = 0
+            synced = 0
+            api_player: LeaguePlayer
+
+            # Rostered
+            async for api_player in self.paged_players(guild=guild):
+                total += 1
+                if not api_player.player.discord_id:
+                    continue
+
+                m = guild.get_member(api_player.player.discord_id)
+                if not m:
+                    log.warning(
+                        "League player not in guild: %d",
+                        api_player.player.discord_id,
+                        guild=guild,
+                    )
+                    continue
+
+                log.debug("Syncing Player: %s (%d)", m.display_name, m.id, guild=guild)
+                synced += 1
+                try:
+                    await update_league_player_discord(guild=guild, player=m, league_player=api_player, tiers=tiers)
+                except (ValueError, AttributeError) as exc:
+                    log.exception(
+                        "Error syncing player: %s (%d)",
+                        m.display_name,
+                        m.id,
+                        extra={"guild": guild, "exc": exc},
+                    )
+
+            log.debug("Total Players: %d", total, guild=guild)
+            log.debug("Total Synced: %d", synced, guild=guild)
+            log.info("Finished syncing league players", guild=guild)
 
     _sync = app_commands.Group(
         name="sync",
@@ -230,6 +289,17 @@ class AdminSyncMixIn(AdminMixIn):
             )
             role_list.append(result)
 
+        # Perm FA (Waiting)
+        r = discord.utils.get(guild.roles, name=const.PERM_FA_WAITING_ROLE)
+        if not r:
+            result = await guild.create_role(
+                name=const.PERM_FA_WAITING_ROLE,
+                hoist=False,
+                permissions=const.GENERIC_ROLE_PERMS,
+                reason="Syncing required roles.",
+            )
+            role_list.append(result)
+
         embed = BlueEmbed(
             title="Required Roles Synced",
             description="All of the following roles have been added to the server.",
@@ -278,7 +348,7 @@ class AdminSyncMixIn(AdminMixIn):
         roles: dict[str, list[discord.Role]] = {}
         for t in tiers:
             if not t.name:
-                log.error(f"{t.id} has no name associated with it.")
+                log.error("%d has no name associated with it.", t.id)
                 await interaction.followup.send(embed=ErrorEmbed(description=f"{t.id} has no name associated with it."))
                 return
 
@@ -287,7 +357,7 @@ class AdminSyncMixIn(AdminMixIn):
             trole = None
             farole = None
 
-            log.debug(f"Syncing {t.name} roles", guild=guild)
+            log.debug("Syncing %s roles", t.name, guild=guild)
 
             # Tier Role
             trole = discord.utils.get(guild.roles, name=t.name)
@@ -468,18 +538,18 @@ class AdminSyncMixIn(AdminMixIn):
         franchises = await self.franchises(guild)
         for f in franchises:
             if not f.name:
-                log.error(f"Franchise {f.id} has no name.")
+                log.error("Franchise %d has no name.", f.id)
                 await interaction.edit_original_response(embed=ErrorEmbed(description=f"Franchise {f.id} has no name in the API..."))
                 return
 
             channel = await self.get_franchise_transaction_channel(guild, f.name)
 
             if channel:
-                log.debug(f"Found transaction channel: {channel.name}", guild=guild)
+                log.debug("Found transaction channel: %s", channel.name, guild=guild)
                 existing.append(channel)
             else:
                 channel_name = await self.get_franchise_transaction_channel_name(f.name)
-                log.info(f"Creating new transaction channel: {channel_name}", guild=guild)
+                log.info("Creating new transaction channel: %s", channel_name, guild=guild)
                 content = None
                 gm = None
 
@@ -597,7 +667,7 @@ class AdminSyncMixIn(AdminMixIn):
             if not m:
                 continue
 
-            log.debug(f"Syncing non-playing member: {m.display_name} ({m.id})", guild=guild)
+            log.debug("Syncing non-playing member: %s (%d)", m.display_name, m.id, guild=guild)
 
             if not dryrun:
                 try:
@@ -606,8 +676,8 @@ class AdminSyncMixIn(AdminMixIn):
                     await interaction.followup.send(content=str(exc), ephemeral=True)
             synced += 1
 
-        log.debug(f"Total Members: {total}", guild=guild)
-        log.debug(f"Total Synced: {synced}", guild=guild)
+        log.debug("Total Members: %d", total, guild=guild)
+        log.debug("Total Synced: %d", synced, guild=guild)
 
         embed = BlueEmbed(
             title="Non-Playing Sync",
@@ -618,7 +688,7 @@ class AdminSyncMixIn(AdminMixIn):
 
     @_sync.command(  # type: ignore[type-var]
         name="players",
-        description="Sync all players in discord members. (Long Execution Time)",
+        description="Sync all league players in discord members. (Long Execution Time)",
     )
     @app_commands.describe(dryrun="Do not modify any users.")
     async def _sync_players_cmd(self, interaction: discord.Interaction, dryrun: bool = False):
@@ -647,20 +717,22 @@ class AdminSyncMixIn(AdminMixIn):
         api_player: LeaguePlayer
 
         # Rostered
-        async for api_player in self.paged_players(guild=guild, status=Status.ROSTERED):
+        async for api_player in self.paged_players(guild=guild):
             total += 1
             if not api_player.player.discord_id:
+                log.warning("League player has no discord id: %d", api_player.id, guild=guild)
                 continue
 
             m = guild.get_member(api_player.player.discord_id)
             if not m:
                 log.warning(
-                    f"Rostered player not in guild: {api_player.player.discord_id}",
+                    "League player not in guild: %d",
+                    api_player.player.discord_id,
                     guild=guild,
                 )
                 continue
 
-            log.debug(f"Syncing Player: {m.display_name} ({m.id})", guild=guild)
+            log.debug("Syncing player: %s (%d)", m.display_name, m.id, guild=guild)
             synced += 1
             if not dryrun:
                 try:
@@ -668,35 +740,12 @@ class AdminSyncMixIn(AdminMixIn):
                 except (ValueError, AttributeError) as exc:
                     await interaction.followup.send(content=str(exc), ephemeral=True)
 
-        # Renewed
-        async for api_player in self.paged_players(guild=guild, status=Status.RENEWED):
-            total += 1
-            if not api_player.player.discord_id:
-                continue
-
-            m = guild.get_member(api_player.player.discord_id)
-            if not m:
-                log.warning(
-                    f"Rostered player not in guild: {api_player.player.discord_id}",
-                    guild=guild,
-                )
-                continue
-
-            log.debug(f"Syncing Player: {m.display_name} ({m.id})", guild=guild)
-
-            synced += 1
-            if not dryrun:
-                try:
-                    await update_rostered_discord(guild=guild, player=m, league_player=api_player, tiers=tiers)
-                except (ValueError, AttributeError) as exc:
-                    await interaction.followup.send(content=str(exc), ephemeral=True)
-
-        log.debug(f"Total Players: {total}", guild=guild)
-        log.debug(f"Total Synced: {synced}", guild=guild)
+        log.debug("Total Players: %d", total, guild=guild)
+        log.debug("Total Synced: %d", synced, guild=guild)
 
         embed = BlueEmbed(
-            title="Rostered Player Sync",
-            description="All RSC rostered players have been synced.",
+            title="League Player Sync",
+            description="All RSC league players have been synced.",
         )
         embed.set_footer(text=f"Synced {synced}/{total} RSC players(s).")
         await interaction.edit_original_response(embed=embed)
@@ -811,9 +860,9 @@ class AdminSyncMixIn(AdminMixIn):
 
         # Send initial progress bar
         total_players = total_fa + total_pfa
-        log.debug(f"Total FA: {total_fa}", guild=guild)
-        log.debug(f"Total PermFA: {total_pfa}", guild=guild)
-        log.debug(f"Combined Total: {total_players}", guild=guild)
+        log.debug("Total FA: %d", total_fa, guild=guild)
+        log.debug("Total PermFA: %d", total_pfa, guild=guild)
+        log.debug("Combined Total: %d", total_players, guild=guild)
         dFile = images.getProgressBar(
             x=10,
             y=10,
@@ -847,11 +896,13 @@ class AdminSyncMixIn(AdminMixIn):
             m = guild.get_member(player.player.discord_id)
             if not m:
                 log.warning(
-                    f"Couldn't find FA in guild: {player.player.name} ({player.id})",
+                    "Couldn't find FA in guild: %s (%d)",
+                    player.player.name,
+                    player.id,
                     guild=guild,
                 )
                 continue
-            log.debug(f"Syncing FA: {m.display_name}", guild=guild)
+            log.debug("Syncing FA: %s", m.display_name, guild=guild)
 
             # Check if dry run
             if not dryrun:
@@ -878,7 +929,10 @@ class AdminSyncMixIn(AdminMixIn):
                     await interaction.edit_original_response(embed=loading_embed, attachments=[dFile], view=progress_view)
                 except discord.HTTPException as exc:
                     log.warning(
-                        f"Received {exc.status} (error code {exc.code}: {exc.text})",
+                        "Received %d (error code %d: %s)",
+                        exc.status,
+                        exc.code,
+                        exc.text,
                         guild=guild,
                     )
                     if exc.code == 50027:
@@ -1120,15 +1174,15 @@ class AdminSyncMixIn(AdminMixIn):
             fname = f"{f.name} ({f.gm.rsc_name})"
             frole = await utils.franchise_role_from_name(guild, f.name)
             if frole:
-                log.debug(f"Found franchise role: {frole.name}", guild=guild)
+                log.debug("Found franchise role: %s", frole.name, guild=guild)
                 if frole.name != fname:
-                    log.info(f"Changing franchise role: {frole.name}", guild=guild)
+                    log.info("Changing franchise role: %s", frole.name, guild=guild)
                     await frole.edit(name=fname)
                     fixed.append(frole)
                 else:
                     existing.append(frole)
             else:
-                log.info(f"Creating new franchise role: {fname}", guild=guild)
+                log.info("Creating new franchise role: %s", fname, guild=guild)
                 nrole = await guild.create_role(
                     name=fname,
                     hoist=True,

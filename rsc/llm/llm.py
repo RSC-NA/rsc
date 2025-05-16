@@ -55,7 +55,6 @@ class LLMMixIn(RSCMixIn):
         if not guild:
             return
 
-        log.debug("Received mention, generating LLM response.")
         # Check if LLM active
         if not await self._get_llm_status(guild):
             return
@@ -79,6 +78,8 @@ class LLMMixIn(RSCMixIn):
         # Check if channel in blacklist
         if message.channel.id in await self._get_llm_channel_blacklist(guild):
             return
+
+        log.debug("Received mention, generating LLM response.")
 
         # Settings
         count, threshold = await self.get_llm_default(guild)
