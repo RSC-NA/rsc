@@ -247,13 +247,13 @@ class TrackerMixIn(RSCMixIn):
             title="RSC Tracker Stats",
         )
         embed.add_field(
-            name="New",
-            value=str(stats.new),
+            name="Status",
+            value="\n".join(str(s.status) for s in stats),
             inline=True,
         )
         embed.add_field(
-            name="Stale",
-            value=str(stats.stale),
+            name="Count",
+            value="\n".join(str(s.count) for s in stats),
             inline=True,
         )
         await interaction.followup.send(embed=embed, ephemeral=False)
