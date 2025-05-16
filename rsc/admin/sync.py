@@ -732,11 +732,22 @@ class AdminSyncMixIn(AdminMixIn):
                 )
                 continue
 
+            franchise = None
+            if api_player.status == Status.UNSIGNED_GM:
+                # Get Franchise information
+                flist = await self.franchises(guild=guild, gm_discord_id=m.id)
+                if not flist:
+                    return await interaction.followup.send(
+                        embed=ErrorEmbed(description=f"{m.mention} is an un-signed GM but franchise could not be found in API."),
+                        ephemeral=False,
+                    )
+                franchise = flist.pop(0)
+
             log.debug("Syncing player: %s (%d)", m.display_name, m.id, guild=guild)
             synced += 1
             if not dryrun:
                 try:
-                    await update_league_player_discord(guild=guild, player=m, league_player=api_player, tiers=tiers)
+                    await update_league_player_discord(guild=guild, player=m, league_player=api_player, franchise=franchise, tiers=tiers)
                 except (ValueError, AttributeError) as exc:
                     await interaction.followup.send(content=str(exc), ephemeral=True)
 

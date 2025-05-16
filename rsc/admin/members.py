@@ -243,7 +243,7 @@ class AdminMembersMixIn(AdminMixIn):
 
         lplayer = plist.pop(0)
         if not lplayer.id:
-            return await interaction.response.send_message(embed=ErrorEmbed(description="LeaguePlayer object has no ID"))
+            return await interaction.followup.send(embed=ErrorEmbed(description="LeaguePlayer object has no ID"))
 
         # Patch Player
         try:
@@ -268,9 +268,7 @@ class AdminMembersMixIn(AdminMixIn):
             return await interaction.followup.send(embed=ExceptionErrorEmbed(exc_message=str(exc)))
 
         if not plist:
-            return await interaction.response.send_message(
-                embed=ErrorEmbed(description="Player was updated but league player does not exist.")
-            )
+            return await interaction.followup.send(embed=ErrorEmbed(description="Player was updated but league player does not exist."))
 
         # Update discord roles, etc
         try:
@@ -281,11 +279,11 @@ class AdminMembersMixIn(AdminMixIn):
                 # Data not available in `LeaguePlayer`
                 flist = await self.franchises(guild, gm_discord_id=lplayer.player.discord_id)
                 if not flist:
-                    return await interaction.response.send_message(
+                    return await interaction.followup.send(
                         embed=ErrorEmbed(description="Unable to find franchise for un-signed GM in API.")
                     )
                 elif len(flist) > 1:
-                    return await interaction.response.send_message(
+                    return await interaction.followup.send(
                         embed=ErrorEmbed(description="Multiple franchises found for un-signed GM in API.")
                     )
                 franchise = flist.pop(0)

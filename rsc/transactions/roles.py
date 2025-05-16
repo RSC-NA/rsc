@@ -517,7 +517,7 @@ async def update_rostered_discord(
     league_player: LeaguePlayer,
     tiers: list[Tier],
 ):
-    if league_player.status not in (Status.ROSTERED, Status.RENEWED):
+    if league_player.status not in (Status.ROSTERED, Status.RENEWED, Status.IR, Status.AGMIR):
         raise ValueError(f"{player.display_name} ({player.id}) is not rostered.")
 
     if not league_player.tier:
@@ -637,7 +637,7 @@ async def update_free_agent_discord(
     league_player: LeaguePlayer,
     tiers: list[Tier],
 ):
-    if league_player.status not in (Status.FREE_AGENT, Status.PERM_FA):
+    if league_player.status not in (Status.FREE_AGENT, Status.PERM_FA, Status.WAIVERS, Status.WAIVER_RELEASE, Status.WAIVER_CLAIM):
         raise ValueError(f"{player.display_name} ({player.id}) is not a free agent.")
 
     if not league_player.tier:
