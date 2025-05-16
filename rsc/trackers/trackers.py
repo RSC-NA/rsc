@@ -248,7 +248,7 @@ class TrackerMixIn(RSCMixIn):
         )
         embed.add_field(
             name="Status",
-            value="\n".join(TrackerLinksStatus(s.status).full_name() for s in stats),
+            value="\n".join(TrackerLinksStatus(s.status).full_name for s in stats),
             inline=True,
         )
         embed.add_field(
