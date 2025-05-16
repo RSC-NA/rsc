@@ -556,6 +556,13 @@ async def update_rostered_discord(
     if permfa_role in player.roles:
         roles_to_remove.append(permfa_role)
 
+    # IR
+    ir_role = await utils.get_ir_role(guild)
+    if player.status in [Status.IR, Status.AGMIR] and ir_role not in player.roles:
+        roles_to_add.append(ir_role)
+    elif ir_role in player.roles:
+        roles_to_remove.append(ir_role)
+
     # FA Role:
     fa_role = await utils.get_free_agent_role(guild)
     if fa_role in player.roles:
