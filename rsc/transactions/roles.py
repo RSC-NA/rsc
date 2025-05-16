@@ -462,6 +462,11 @@ async def update_unsigned_gm_discord(
     if captain_role in player.roles:
         roles_to_remove.append(captain_role)
 
+    # IR Role
+    ir_role = await utils.get_ir_role(guild)
+    if ir_role in player.roles:
+        roles_to_remove.append(ir_role)
+
     # Verify player has tier role
     tier_role = await utils.get_tier_role(guild, name=league_player.tier.name)
     if not tier_role:
@@ -674,6 +679,11 @@ async def update_free_agent_discord(
     if league_role not in player.roles:
         roles_to_add.append(league_role)
 
+    # IR Role
+    ir_role = await utils.get_ir_role(guild)
+    if ir_role in player.roles:
+        roles_to_remove.append(ir_role)
+
     # Remove captain
     captain_role = await utils.get_captain_role(guild)
     if captain_role in player.roles:
@@ -786,6 +796,11 @@ async def update_draft_eligible_discord(
         tier_role = await utils.get_tier_role(guild, league_player.tier.name)
         if tier_role not in player.roles:
             roles_to_add.append(tier_role)
+
+    # IR Role
+    ir_role = await utils.get_ir_role(guild)
+    if ir_role in player.roles:
+        roles_to_remove.append(ir_role)
 
     # Free agent roles
     fa_role = await utils.get_free_agent_role(guild)
