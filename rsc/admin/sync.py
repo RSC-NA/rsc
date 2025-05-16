@@ -81,24 +81,29 @@ class AdminSyncMixIn(AdminMixIn):
 
                 m = guild.get_member(api_player.player.discord_id)
                 if not m:
-                    log.warning(
-                        "League player not in guild: %d",
-                        api_player.player.discord_id,
-                        guild=guild,
-                    )
+                    if api_player.status != Status.DROPPED:
+                        log.warning(
+                            "League player not in guild: %d",
+                            api_player.player.discord_id,
+                            guild=guild,
+                        )
                     continue
+
+                franchise = None
+                if api_player.status == Status.UNSIGNED_GM:
+                    # Get Franchise information
+                    flist = await self.franchises(guild=guild, gm_discord_id=m.id)
+                    if not flist:
+                        log.error("Unsigned GM has no franchise in API: %s (%d)", m.display_name, m.id, guild=guild)
+                        continue
+                    franchise = flist.pop(0)
 
                 log.debug("Syncing Player: %s (%d)", m.display_name, m.id, guild=guild)
                 synced += 1
                 try:
-                    await update_league_player_discord(guild=guild, player=m, league_player=api_player, tiers=tiers)
+                    await update_league_player_discord(guild=guild, player=m, league_player=api_player, franchise=franchise, tiers=tiers)
                 except (ValueError, AttributeError) as exc:
-                    log.exception(
-                        "Error syncing player: %s (%d)",
-                        m.display_name,
-                        m.id,
-                        extra={"guild": guild, "exc": exc},
-                    )
+                    log.exception("Error syncing player: %s (%d)", m.display_name, m.id, guild=guild, exc=exc)
 
             log.debug("Total Players: %d", total, guild=guild)
             log.debug("Total Synced: %d", synced, guild=guild)
@@ -725,11 +730,12 @@ class AdminSyncMixIn(AdminMixIn):
 
             m = guild.get_member(api_player.player.discord_id)
             if not m:
-                log.warning(
-                    "League player not in guild: %d",
-                    api_player.player.discord_id,
-                    guild=guild,
-                )
+                if api_player.status != Status.DROPPED:
+                    log.warning(
+                        "League player not in guild: %d",
+                        api_player.player.discord_id,
+                        guild=guild,
+                    )
                 continue
 
             franchise = None
