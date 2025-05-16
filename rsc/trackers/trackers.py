@@ -248,7 +248,7 @@ class TrackerMixIn(RSCMixIn):
         )
         embed.add_field(
             name="Status",
-            value="\n".join(str(s.status) for s in stats),
+            value="\n".join(TrackerLinksStatus(s.status).full_name() for s in stats),
             inline=True,
         )
         embed.add_field(
@@ -388,7 +388,7 @@ class TrackerMixIn(RSCMixIn):
     async def tracker_stats(
         self,
         guild: discord.Guild,
-    ) -> TrackerLinkStats:
+    ) -> list[TrackerLinkStats]:
         """Fetch RSC Tracker Stats"""
         async with ApiClient(self._api_conf[guild.id]) as client:
             api = TrackerLinksApi(client)
