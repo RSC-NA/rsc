@@ -984,15 +984,15 @@ class UtilsMixIn(RSCMixIn):
         try:
             if role.permissions > executor.guild_permissions and executor.id != const.NICKM_ID:
                 return await interaction.response.send_message(
-                    ErrorEmbed(description="You cannot add a role that is higher than your own.")
+                    embed=ErrorEmbed(description="You cannot add a role that is higher than your own.")
                 )
 
             admin_role = discord.utils.get(guild.roles, name=const.ADMIN_ROLE)
             if not admin_role:
-                return await interaction.response.send_message(ErrorEmbed(description="Error, unable to find admin role."))
+                return await interaction.response.send_message(embed=ErrorEmbed(description="Error, unable to find admin role."))
 
             if role.position >= admin_role.position and executor.id != const.NICKM_ID:
-                return await interaction.response.send_message(ErrorEmbed(description="Yeah right nerd. nickm has been notified."))
+                return await interaction.response.send_message(embed=ErrorEmbed(description="Yeah right nerd. nickm has been notified."))
 
             await member.add_roles(role)
             await interaction.response.send_message(
@@ -1055,15 +1055,15 @@ class UtilsMixIn(RSCMixIn):
         for m in mlist:
             if role.permissions > executor.guild_permissions:
                 return await interaction.response.send_message(
-                    ErrorEmbed(description="You cannot add a role that is higher than your own.")
+                    embed=ErrorEmbed(description="You cannot add a role that is higher than your own.")
                 )
 
             admin_role = discord.utils.get(guild.roles, name=const.ADMIN_ROLE)
             if not admin_role:
-                return await interaction.response.send_message(ErrorEmbed(description="Error, unable to find admin role."))
+                return await interaction.response.send_message(embed=ErrorEmbed(description="Error, unable to find admin role."))
 
             if role.position >= admin_role.position:
-                return await interaction.response.send_message(ErrorEmbed(description="Yeah right nerd. nickm has been notified."))
+                return await interaction.response.send_message(embed=ErrorEmbed(description="Yeah right nerd. nickm has been notified."))
 
             try:
                 await m.add_roles(role)
@@ -1101,15 +1101,15 @@ class UtilsMixIn(RSCMixIn):
         try:
             if role.permissions > executor.guild_permissions and executor.id != const.NICKM_ID:
                 return await interaction.response.send_message(
-                    ErrorEmbed(description="You cannot remove a role that is higher than your own.")
+                    embed=ErrorEmbed(description="You cannot remove a role that is higher than your own.")
                 )
 
             admin_role = discord.utils.get(guild.roles, name=const.ADMIN_ROLE)
             if not admin_role:
-                return await interaction.response.send_message(ErrorEmbed(description="Error, unable to find admin role."))
+                return await interaction.response.send_message(embed=ErrorEmbed(description="Error, unable to find admin role."))
 
             if role.position >= admin_role.position and executor.id != const.NICKM_ID:
-                return await interaction.response.send_message(ErrorEmbed(description="Yeah right nerd. nickm has been notified."))
+                return await interaction.response.send_message(embed=ErrorEmbed(description="Yeah right nerd. nickm has been notified."))
 
             await member.remove_roles(role)
             await interaction.response.send_message(
@@ -1167,10 +1167,10 @@ class UtilsMixIn(RSCMixIn):
 
             admin_role = discord.utils.get(guild.roles, name=const.ADMIN_ROLE)
             if not admin_role:
-                return await interaction.response.send_message(ErrorEmbed(description="Error, unable to find admin role."))
+                return await interaction.response.send_message(embed=ErrorEmbed(description="Error, unable to find admin role."))
 
             if role.position >= admin_role.position:
-                return await interaction.response.send_message(ErrorEmbed(description="Yeah right nerd. nickm has been notified."))
+                return await interaction.response.send_message(embed=ErrorEmbed(description="Yeah right nerd. nickm has been notified."))
 
             try:
                 await m.remove_roles(role)
