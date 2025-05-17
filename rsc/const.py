@@ -27,6 +27,9 @@ SPECTATOR_ROLE = "Spectator"
 SUBBED_OUT_ROLE = "Subbed Out"
 PERM_FA_WAITING_ROLE = "PermFA in Waiting"
 
+# NICKM
+NICKM_ID = 138778232802508801
+
 # Emoji
 TROPHY_EMOJI = "\U0001f3c6"  # :trophy:
 STAR_EMOJI = "\U00002b50"  # :star:

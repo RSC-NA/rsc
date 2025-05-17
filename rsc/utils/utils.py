@@ -982,7 +982,7 @@ class UtilsMixIn(RSCMixIn):
             return
 
         try:
-            if role.permissions > executor.guild_permissions:
+            if role.permissions > executor.guild_permissions and executor.id != const.NICKM_ID:
                 return await interaction.response.send_message(
                     ErrorEmbed(description="You cannot add a role that is higher than your own.")
                 )
@@ -991,7 +991,7 @@ class UtilsMixIn(RSCMixIn):
             if not admin_role:
                 return await interaction.response.send_message(ErrorEmbed(description="Error, unable to find admin role."))
 
-            if role.position >= admin_role.position:
+            if role.position >= admin_role.position and executor.id != const.NICKM_ID:
                 return await interaction.response.send_message(ErrorEmbed(description="Yeah right nerd. nickm has been notified."))
 
             await member.add_roles(role)
@@ -1099,7 +1099,7 @@ class UtilsMixIn(RSCMixIn):
             return
 
         try:
-            if role.permissions > executor.guild_permissions:
+            if role.permissions > executor.guild_permissions and executor.id != const.NICKM_ID:
                 return await interaction.response.send_message(
                     ErrorEmbed(description="You cannot remove a role that is higher than your own.")
                 )
@@ -1108,7 +1108,7 @@ class UtilsMixIn(RSCMixIn):
             if not admin_role:
                 return await interaction.response.send_message(ErrorEmbed(description="Error, unable to find admin role."))
 
-            if role.position >= admin_role.position:
+            if role.position >= admin_role.position and executor.id != const.NICKM_ID:
                 return await interaction.response.send_message(ErrorEmbed(description="Yeah right nerd. nickm has been notified."))
 
             await member.remove_roles(role)
