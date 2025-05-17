@@ -9,6 +9,7 @@ DEFAULT_TIMEOUT = 30.0
 
 # Role Names
 AGM_ROLE = "Assistant GM"
+ADMIN_ROLE = "Admin"
 CAPTAIN_ROLE = "Captain"
 DEV_LEAGUE_ROLE = "Dev League Interest"
 DRAFT_ELIGIBLE = "Draft Eligible"
