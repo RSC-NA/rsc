@@ -714,6 +714,11 @@ async def update_free_agent_discord(
     if dev_league_role and dev_league_role not in player.roles:
         roles_to_add.append(dev_league_role)
 
+    # PermFA Waiting
+    permfa_waiting_role = await utils.get_permfa_waiting_role(guild)
+    if permfa_waiting_role in player.roles:
+        roles_to_remove.append(permfa_waiting_role)
+
     if roles_to_remove:
         log.debug(f"Removing roles: {roles_to_remove}", guild=guild)
         await player.remove_roles(*roles_to_remove)
