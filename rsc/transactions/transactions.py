@@ -1372,6 +1372,7 @@ class TransactionMixIn(RSCMixIn):
         action="Inactive Reserve Action",
         player="RSC Discord Member",
         notes="Transaction notes (Optional)",
+        announce="Announce to transactions channel (Default: True)",
         override="Admin only override",
     )
     @app_commands.choices(
@@ -1386,6 +1387,7 @@ class TransactionMixIn(RSCMixIn):
         action: app_commands.Choice[int],
         player: discord.Member,
         notes: str | None = None,
+        announce: bool = True,
         override: bool = False,
     ):
         guild = interaction.guild
@@ -1434,7 +1436,7 @@ class TransactionMixIn(RSCMixIn):
                 ephemeral=True,
             )
 
-        if result.first_franchise and result.first_franchise.gm.discord_id:
+        if result.first_franchise and result.first_franchise.gm.discord_id and announce:
             await self.announce_transaction(
                 guild=guild,
                 embed=embed,

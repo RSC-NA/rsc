@@ -274,6 +274,8 @@ async def update_nonplaying_discord(
                 roles_to_remove.append(r)
             case const.SUBBED_OUT_ROLE:
                 roles_to_remove.append(r)
+            case const.PERM_FA_WAITING_ROLE:
+                roles_to_remove.append(r)
 
     # Default Roles
     if default_roles:
@@ -606,6 +608,11 @@ async def update_rostered_discord(
         if frole in old_froles:
             old_froles.remove(frole)
         roles_to_remove.extend(old_froles)
+
+    # PermFA Waiting
+    permfa_waiting_role = await utils.get_permfa_waiting_role(guild)
+    if permfa_waiting_role in player.roles:
+        roles_to_remove.append(permfa_waiting_role)
 
     # Verify player has tier role
     tier_role = await utils.get_tier_role(guild, name=league_player.tier.name)
