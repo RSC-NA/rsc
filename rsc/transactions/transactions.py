@@ -1436,19 +1436,20 @@ class TransactionMixIn(RSCMixIn):
                 ephemeral=True,
             )
 
-        if result.first_franchise and result.first_franchise.gm.discord_id and announce:
-            await self.announce_transaction(
-                guild=guild,
-                embed=embed,
-                files=files,
-                player=player,
-                gm=result.first_franchise.gm.discord_id,
-            )
-        else:
-            await interaction.followup.send(
-                content="IR transaction response did not return first_franchise and or GM discord ID. Announcement skipped...",
-                ephemeral=True,
-            )
+        if announce:
+            if result.first_franchise and result.first_franchise.gm.discord_id:
+                await self.announce_transaction(
+                    guild=guild,
+                    embed=embed,
+                    files=files,
+                    player=player,
+                    gm=result.first_franchise.gm.discord_id,
+                )
+            else:
+                await interaction.followup.send(
+                    content="IR transaction response did not return first_franchise and or GM discord ID. Announcement skipped...",
+                    ephemeral=True,
+                )
 
         action_fmt = "removed from" if remove else "moved to"
         await interaction.followup.send(
