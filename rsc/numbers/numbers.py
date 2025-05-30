@@ -116,7 +116,7 @@ class NumberMixIn(RSCMixIn):
             pulls = await self.mmr_pulls(
                 interaction.guild,
                 player=player,
-                psyonix_season=str(psyonix_season) if psyonix_season else None,
+                psyonix_season=psyonix_season or None,
             )
         except RscException as exc:
             await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc), ephemeral=True)
@@ -171,7 +171,7 @@ class NumberMixIn(RSCMixIn):
         await interaction.response.defer(ephemeral=True)
 
         try:
-            pulls = await self.mmr_pulls(interaction.guild, player=player, psyonix_season=str(psyonix_season))
+            pulls = await self.mmr_pulls(interaction.guild, player=player, psyonix_season=psyonix_season)
         except RscException as exc:
             await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc), ephemeral=True)
 
@@ -257,13 +257,13 @@ class NumberMixIn(RSCMixIn):
         rscid: str | None = None,
         rscid_begin: str | None = None,
         rscid_end: str | None = None,
-        psyonix_season: str | None = None,
+        psyonix_season: int | None = None,
     ) -> list[PlayerMMR]:
         """Get list of trackers ready to be updated"""
         async with ApiClient(self._api_conf[guild.id]) as client:
             api = NumbersApi(client)
             try:
-                return await api.numbers_mmr_list(
+                data = await api.numbers_mmr_list(
                     pulled=pulled.isoformat() if pulled else None,
                     pulled_before=pulled_before.isoformat() if pulled_before else None,
                     pulled_after=pulled_after.isoformat() if pulled_after else None,
@@ -272,7 +272,9 @@ class NumberMixIn(RSCMixIn):
                     rscid_begin=rscid_begin,
                     rscid_end=rscid_end,
                     psyonix_season=psyonix_season,
+                    limit=1000,
                 )
+                return data.results
             except ApiException as exc:
                 raise RscException(response=exc)
 
