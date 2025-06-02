@@ -4,7 +4,7 @@ from typing import cast
 
 import discord
 from redbot.core import app_commands
-from rscapi import ApiClient, TrackerLinksApi
+from rscapi import ApiClient, TrackerIDInput, TrackerLinksApi
 from rscapi.exceptions import ApiException
 from rscapi.models.tracker_link import TrackerLink
 from rscapi.models.tracker_link_linking import TrackerLinkLinking
@@ -103,7 +103,8 @@ class TrackerMixIn(RSCMixIn):
 
     @_trackers.command(name="link", description="Link a tracker from player")  # type: ignore[type-var]
     @app_commands.describe(tracker_id="Tracker API ID", player="RSC Discord Member")
-    async def _trackers_unlink_cmd(self, interaction: discord.Interaction, tracker_id: int, player: discord.Member):
+    @app_commands.checks.has_permissions(manage_guild=True)
+    async def _trackers_link_cmd(self, interaction: discord.Interaction, tracker_id: int, player: discord.Member):
         guild = interaction.guild
         if not (guild and isinstance(interaction.user, discord.Member)):
             return
@@ -128,6 +129,7 @@ class TrackerMixIn(RSCMixIn):
 
     @_trackers.command(name="unlink", description="Unlink a tracker from player")  # type: ignore[type-var]
     @app_commands.describe(tracker_id="Tracker API ID", player="RSC Discord Member")
+    @app_commands.checks.has_permissions(manage_guild=True)
     async def _trackers_unlink_cmd(self, interaction: discord.Interaction, tracker_id: int, player: discord.Member):
         guild = interaction.guild
         if not (guild and isinstance(interaction.user, discord.Member)):
@@ -153,6 +155,7 @@ class TrackerMixIn(RSCMixIn):
 
     @_trackers.command(name="delete", description="Delete a tracker (Must have zero MMR pulls)")  # type: ignore[type-var]
     @app_commands.describe(tracker_id="Tracker API ID")
+    @app_commands.checks.has_permissions(manage_guild=True)
     async def _trackers_delete_cmd(self, interaction: discord.Interaction, tracker_id: int):
         guild = interaction.guild
         if not (guild and isinstance(interaction.user, discord.Member)):
@@ -305,6 +308,75 @@ class TrackerMixIn(RSCMixIn):
         )
         await interaction.followup.send(embed=embed)
 
+    @_trackers.command(name="merge", description="Merge tracker pulls")  # type: ignore[type-var]
+    @app_commands.describe(source="Source tracker ID", dest="Destination tracker ID")
+    @app_commands.checks.has_permissions(manage_guild=True)
+    async def _trackers_merge_cmd(
+        self,
+        interaction: discord.Interaction,
+        source: int,
+        dest: int,
+    ):
+        guild = interaction.guild
+        if not guild:
+            return
+
+        await interaction.response.defer(ephemeral=False)
+        try:
+            await self.migrate_tracker_pulls(guild, source, dest)
+        except RscException as exc:
+            return await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc), ephemeral=False)
+
+        embed = SuccessEmbed(title="RSC Tracker Stats", description=f"Merged trackers pull from {source} into {dest}.")
+        await interaction.followup.send(embed=embed, ephemeral=False)
+
+    @_trackers.command(  # type: ignore[type-var]
+        name="old", description="Display number of outdated RSC tracker links"
+    )
+    @app_commands.describe(
+        status="Tracker status to query (Default: Pulled)",
+        days="Number of days since last update (Default: 90)",
+    )
+    async def _trackers_old(
+        self,
+        interaction: discord.Interaction,
+        status: TrackerLinksStatus = TrackerLinksStatus.PULLED,
+        days: int = 90,
+    ):
+        guild = interaction.guild
+        if not guild:
+            return
+
+        await interaction.response.defer()
+
+        tz = await self.timezone(guild)
+        date_cutoff = datetime.now(tz) - timedelta(days=days)
+
+        log.debug(f"Getting tracker data older than {date_cutoff.date()}")
+        try:
+            trackers = await self.trackers(guild, status)
+        except RscException as exc:
+            return await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc), ephemeral=False)
+
+        log.debug("Removing recently updated trackers")
+        old_trackers = []
+        for t in trackers:
+            if not t.last_updated:
+                old_trackers.append(t)
+                continue
+
+            if t.last_updated.date() < date_cutoff.date():
+                old_trackers.append(t)
+        log.debug("Finished iterating tracker list")
+
+        embed = YellowEmbed(
+            title="Outdated RSC Trackers",
+            description=(
+                f"Found **{len(old_trackers)}/{len(trackers)} {status.name}** trackers have not been updated since **{date_cutoff.date()}**"
+            ),
+        )
+        await interaction.followup.send(embed=embed)
+
     # Non-Group Commands
 
     @app_commands.command(  # type: ignore[type-var]
@@ -388,7 +460,7 @@ class TrackerMixIn(RSCMixIn):
     async def tracker_stats(
         self,
         guild: discord.Guild,
-    ) -> list[TrackerLinkStats]:
+    ) -> TrackerLinkStats:
         """Fetch RSC Tracker Stats"""
         async with ApiClient(self._api_conf[guild.id]) as client:
             api = TrackerLinksApi(client)
@@ -485,5 +557,21 @@ class TrackerMixIn(RSCMixIn):
             log.debug(f"Fetch Tracker ID: {tracker_id}")
             try:
                 return await api.tracker_links_read(tracker_id)
+            except ApiException as exc:
+                raise RscException(response=exc)
+
+    async def migrate_tracker_pulls(
+        self,
+        guild: discord.Guild,
+        source: int,
+        dest: int,
+    ) -> TrackerLink:
+        """Fetch a Tracker Link by API ID"""
+        async with ApiClient(self._api_conf[guild.id]) as client:
+            api = TrackerLinksApi(client)
+            log.debug(f"Merging {source} pulls into {dest}")
+            try:
+                data = TrackerIDInput(tracker_id=source)
+                return await api.tracker_links_migrate_pulls(id=dest, data=data)
             except ApiException as exc:
                 raise RscException(response=exc)
