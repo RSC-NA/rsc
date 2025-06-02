@@ -57,10 +57,10 @@ class RscException(Exception):  # noqa: N818
                 if self.response.body:
                     body = json.loads(self.response.body)
                     log.debug(f"Response Body: {body}")
-                    if hasattr(body, "detail"):
+                    if body.get("detail"):
                         log.debug("Found 'detail' in response body")
                         self.reason = body.get("detail")
-                    elif hasattr(body, "message"):
+                    elif body.get("message"):
                         log.debug("Found 'message' in response body")
                         self.reason = body.get("message")
                     self.type = body.get("type")
@@ -77,9 +77,9 @@ class RscException(Exception):  # noqa: N818
                 body = json.loads(self.response.body)
 
             if body:
-                if hasattr(body, "detail"):
+                if body.get("detail"):
                     self.reason = body.get("detail")
-                elif hasattr(body, "message"):
+                elif body.get("message"):
                     self.reason = body.get("message")
                 self.type = body.get("type")
         elif isinstance(self.response, ServiceException):
