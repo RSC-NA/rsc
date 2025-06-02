@@ -66,8 +66,7 @@ class RscException(Exception):  # noqa: N818
                 log.error(f"Unable to JSON decode API exception body. Status: {self.status} Body: {self.response.body}")
                 self.reason = "Received unknown error from server."
                 self.type = "UnknownError"
-
-        elif len(args) > 0 and isinstance(args[0], BadRequestException):
+        elif isinstance(self.response, BadRequestException) or (len(args) > 0 and isinstance(args[0], BadRequestException)):
             self.status = args[0].status
             if args[0].body:
                 body = json.loads(args[0].body)
