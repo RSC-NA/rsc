@@ -69,8 +69,12 @@ class RscException(Exception):  # noqa: N818
         elif isinstance(self.response, BadRequestException) or (len(args) > 0 and isinstance(args[0], BadRequestException)):
             log.debug("BadRequestException encountered")
             self.status = args[0].status
-            if args[0].body or self.response.body:
+            if args[0].body:
                 body = json.loads(args[0].body)
+            elif self.response and self.response.body:
+                body = json.loads(self.response.body)
+
+            if body:
                 if hasattr(body, "detail"):
                     self.reason = body.get("detail")
                 elif hasattr(body, "message"):
