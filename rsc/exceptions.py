@@ -57,7 +57,10 @@ class RscException(Exception):  # noqa: N818
                 log.debug(f"Response Body: {self.response.body}")
                 if self.response.body:
                     body = json.loads(self.response.body)
-                    self.reason = body.get("detail")
+                    if hasattr(body, "detail"):
+                        self.reason = body.get("detail")
+                    elif hasattr(body, "message"):
+                        self.reason = body.get("message")
                     self.type = body.get("type")
             except json.JSONDecodeError:
                 log.error(f"Unable to JSON decode API exception body. Status: {self.status} Body: {self.response.body}")
@@ -68,7 +71,10 @@ class RscException(Exception):  # noqa: N818
             self.status = args[0].status
             if args[0].body:
                 body = json.loads(args[0].body)
-                self.reason = body.get("detail")
+                if hasattr(body, "detail"):
+                    self.reason = body.get("detail")
+                elif hasattr(body, "message"):
+                    self.reason = body.get("message")
                 self.type = body.get("type")
         elif isinstance(self.response, ServiceException):
             self.status = self.response.status
