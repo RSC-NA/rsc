@@ -330,53 +330,6 @@ class TrackerMixIn(RSCMixIn):
         embed = SuccessEmbed(title="RSC Tracker Stats", description=f"Merged trackers pull from {source} into {dest}.")
         await interaction.followup.send(embed=embed, ephemeral=False)
 
-    @_trackers.command(  # type: ignore[type-var]
-        name="old", description="Display number of outdated RSC tracker links"
-    )
-    @app_commands.describe(
-        status="Tracker status to query (Default: Pulled)",
-        days="Number of days since last update (Default: 90)",
-    )
-    async def _trackers_old(
-        self,
-        interaction: discord.Interaction,
-        status: TrackerLinksStatus = TrackerLinksStatus.PULLED,
-        days: int = 90,
-    ):
-        guild = interaction.guild
-        if not guild:
-            return
-
-        await interaction.response.defer()
-
-        tz = await self.timezone(guild)
-        date_cutoff = datetime.now(tz) - timedelta(days=days)
-
-        log.debug(f"Getting tracker data older than {date_cutoff.date()}")
-        try:
-            trackers = await self.trackers(guild, status)
-        except RscException as exc:
-            return await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc), ephemeral=False)
-
-        log.debug("Removing recently updated trackers")
-        old_trackers = []
-        for t in trackers:
-            if not t.last_updated:
-                old_trackers.append(t)
-                continue
-
-            if t.last_updated.date() < date_cutoff.date():
-                old_trackers.append(t)
-        log.debug("Finished iterating tracker list")
-
-        embed = YellowEmbed(
-            title="Outdated RSC Trackers",
-            description=(
-                f"Found **{len(old_trackers)}/{len(trackers)} {status.name}** trackers have not been updated since **{date_cutoff.date()}**"
-            ),
-        )
-        await interaction.followup.send(embed=embed)
-
     # Non-Group Commands
 
     @app_commands.command(  # type: ignore[type-var]
