@@ -67,8 +67,9 @@ class RscException(Exception):  # noqa: N818
                 self.reason = "Received unknown error from server."
                 self.type = "UnknownError"
         elif isinstance(self.response, BadRequestException) or (len(args) > 0 and isinstance(args[0], BadRequestException)):
+            log.debug("BadRequestException encountered")
             self.status = args[0].status
-            if args[0].body:
+            if args[0].body or self.response.body:
                 body = json.loads(args[0].body)
                 if hasattr(body, "detail"):
                     self.reason = body.get("detail")
