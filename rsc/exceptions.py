@@ -54,12 +54,14 @@ class RscException(Exception):  # noqa: N818
         if self.response is not None and isinstance(self.response, RscApiException):
             self.status = self.response.status
             try:
-                log.debug(f"Response Body: {self.response.body}")
                 if self.response.body:
                     body = json.loads(self.response.body)
+                    log.debug(f"Response Body: {body}")
                     if hasattr(body, "detail"):
+                        log.debug("Found 'detail' in response body")
                         self.reason = body.get("detail")
                     elif hasattr(body, "message"):
+                        log.debug("Found 'message' in response body")
                         self.reason = body.get("message")
                     self.type = body.get("type")
             except json.JSONDecodeError:
@@ -84,6 +86,8 @@ class RscException(Exception):  # noqa: N818
             self.status = self.response.status
             self.reason = self.response.reason
             self.type = "ServiceException"
+
+        log.debug("Status: %s, Reason: %s, Type: %s", self.status, self.reason, self.type)
 
         super().__init__(self.message, *args, **kwargs)
 
