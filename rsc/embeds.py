@@ -188,7 +188,11 @@ class ApiExceptionErrorEmbed(RedEmbed):
     def __init__(self, exc: RscException, **kwargs):
         title = kwargs.pop("title", "API Error")
         super().__init__(title=title, **kwargs)
-        self.description = exc.reason
+        self.description = exc.reason or "No reason provided."
+        if exc.extra:
+            self.description += "\n\n"
+            for k, v in exc.extra.items():
+                self.description += f"{k}: {v}\n"
         self.add_field(name="Status", value=exc.status, inline=True)
         self.add_field(name="Type", value=exc.__class__.__name__, inline=True)
 

@@ -50,6 +50,7 @@ class RscException(Exception):  # noqa: N818
     def __init__(self, *args, **kwargs):
         self.response = kwargs.pop("response", None)
         self.message = kwargs.pop("message", None)
+        self.extra = None
         log.debug(f"ExceptionType: {type(self.response)}")
         if self.response is not None and isinstance(self.response, RscApiException):
             self.status = self.response.status
@@ -63,6 +64,10 @@ class RscException(Exception):  # noqa: N818
                     elif body.get("message"):
                         log.debug("Found 'message' in response body")
                         self.reason = body.get("message")
+
+                    if body.get("extra"):
+                        self.extra = body.get("extra")
+
                     self.type = body.get("type")
             except json.JSONDecodeError:
                 log.error(f"Unable to JSON decode API exception body. Status: {self.status} Body: {self.response.body}")
