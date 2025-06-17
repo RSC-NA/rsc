@@ -93,7 +93,7 @@ class RscException(Exception):  # noqa: N818
             self.reason = self.response.reason
             self.type = "ServiceException"
 
-        log.debug("Status: %s, Reason: %s, Type: %s", self.status, self.reason, self.type)
+        log.debug("Status: %s, Reason: %s, Type: %s", self.status, self.reason or self.message, self.type)
 
         super().__init__(self.message, *args, **kwargs)
 
