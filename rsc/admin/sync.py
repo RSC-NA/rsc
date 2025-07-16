@@ -58,7 +58,7 @@ class AdminSyncMixIn(AdminMixIn):
         guilds: list[discord.Guild] = list(self.bot.guilds)
         for guild in guilds:
             log.info("Syncing discord roles", guild=guild)
-            if guild.id != 991044575567179856:
+            if guild.id != 395806681994493964:
                 continue
 
             # Get list of all tiers
