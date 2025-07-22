@@ -45,7 +45,7 @@ class IntentState(IntEnum):
 
 
 class PlayerInfoModal(discord.ui.Modal, title="Rocket League Trackers"):
-    rsc_name: TextInput = TextInput(label="In-game Name", style=discord.TextStyle.short, required=True)
+    rsc_name: TextInput = TextInput(label="In-game Name (Must match exactly)", style=discord.TextStyle.short, required=True)
     links: TextInput = TextInput(label="Tracker Links", style=discord.TextStyle.paragraph, required=True)
 
     async def on_submit(self, interaction: discord.Interaction):

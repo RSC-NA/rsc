@@ -79,6 +79,7 @@ defaults = TransactionSettings(
     TransDMs=False,
     TransLogChannel=None,
     TransNotifications=False,
+    TransGMNotifications=False,
     TransRole=None,
     CutMessage=None,
     ContractExpirationMessage=None,
@@ -234,12 +235,9 @@ class TransactionMixIn(RSCMixIn):
         )
 
         # Check if notifications are enabled
-        if not await self._notifications_enabled(guild):
-            return
-
-        # Return if transaction log channel is not configured
-        log_channel = await self._trans_log_channel(guild)
-        if not log_channel:
+        tm_notify = await self._notifications_enabled(guild)
+        gm_notify = await self._gm_notifications_enabled(guild)
+        if not (tm_notify and gm_notify):
             return
 
         tz = await self.timezone(guild)
@@ -289,23 +287,30 @@ class TransactionMixIn(RSCMixIn):
         )
         log_embed.set_thumbnail(url=member.display_avatar)
 
+        # Return if transaction log channel is not configured
+        log_channel = await self._trans_log_channel(guild)
+        if not log_channel:
+            return
+
         # Ping Transaction Committee if role is configured and send embed to log channel
-        await self.announce_to_transaction_committee(
-            guild=guild,
-            embed=log_embed,
-        )
+        if log_channel and tm_notify:
+            await self.announce_to_transaction_committee(
+                guild=guild,
+                embed=log_embed,
+            )
 
         # Ping GM and AGM in franchise transaction channel.
         if not p.team:
             # Handle GM case
             return
 
-        await self.announce_to_franchise_transactions(
-            guild=guild,
-            franchise=fname,
-            gm=gm_id,
-            embed=log_embed,
-        )
+        if gm_notify:
+            await self.announce_to_franchise_transactions(
+                guild=guild,
+                franchise=fname,
+                gm=gm_id,
+                embed=log_embed,
+            )
 
     # Group
 
@@ -331,6 +336,7 @@ class TransactionMixIn(RSCMixIn):
         trans_channel = await self._trans_channel(interaction.guild)
         trans_role = await self._trans_role(interaction.guild)
         notifications = await self._notifications_enabled(interaction.guild)
+        gm_notifications = await self._gm_notifications_enabled(interaction.guild)
         dms = await self._trans_dms_enabled(interaction.guild)
         cut_msg = await self._get_cut_message(interaction.guild) or "None"
 
@@ -341,6 +347,8 @@ class TransactionMixIn(RSCMixIn):
         )
 
         settings_embed.add_field(name="Notifications Enabled", value=notifications, inline=False)
+
+        settings_embed.add_field(name="GM Notifications Enabled", value=gm_notifications, inline=False)
 
         settings_embed.add_field(name="Direct Messages Enabled", value=dms, inline=False)
 
@@ -390,6 +398,30 @@ class TransactionMixIn(RSCMixIn):
             embed=discord.Embed(
                 title="Success",
                 description=f"Transaction committee and GM notifications are now {result}.",
+                color=discord.Color.green(),
+            ),
+            ephemeral=True,
+        )
+
+    @_transactions.command(  # type: ignore[type-var]
+        name="gmnotifications", description="Toggle GM notifications on or off"
+    )
+    @app_commands.checks.has_permissions(manage_guild=True)
+    async def transactions_gm_notifications_cmd(self, interaction: discord.Interaction):
+        """Toggle GM notifications on or off"""
+        guild = interaction.guild
+        if not guild:
+            return
+        status = await self._gm_notifications_enabled(guild)
+        log.debug(f"Current GM Notifications: {status}", guild=guild)
+        status ^= True  # Flip boolean with xor
+        log.debug(f"GM Notifications: {status}", guild=guild)
+        await self._set_gm_notifications(guild, status)
+        result = "**enabled**" if status else "**disabled**"
+        await interaction.response.send_message(
+            embed=discord.Embed(
+                title="Success",
+                description=f"GM member notifications are now {result}.",
                 color=discord.Color.green(),
             ),
             ephemeral=True,
@@ -2762,6 +2794,12 @@ class TransactionMixIn(RSCMixIn):
 
     async def _set_notifications(self, guild: discord.Guild, enabled: bool):
         await self.config.custom("Transactions", str(guild.id)).TransNotifications.set(enabled)
+
+    async def _gm_notifications_enabled(self, guild: discord.Guild) -> bool:
+        return await self.config.custom("Transactions", str(guild.id)).TransGMNotifications()
+
+    async def _set_gm_notifications(self, guild: discord.Guild, enabled: bool):
+        await self.config.custom("Transactions", str(guild.id)).TransGMNotifications.set(enabled)
 
     async def _trans_dms_enabled(self, guild: discord.Guild) -> bool:
         return await self.config.custom("Transactions", str(guild.id)).TransDMs()

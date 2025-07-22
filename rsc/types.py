@@ -124,6 +124,7 @@ class TransactionSettings(TypedDict):
     TransDMs: bool
     TransLogChannel: discord.TextChannel | None
     TransNotifications: bool
+    TransGMNotifications: bool
     TransRole: discord.Role | None
     CutMessage: str | None
     ContractExpirationMessage: str | None
