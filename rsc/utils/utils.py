@@ -68,7 +68,7 @@ async def update_discord_name(member: discord.Member, name: str, prefix: str | N
         final = f"{prefix} | {name} {accolades}".strip()
 
     if len(final) > 32:
-        raise ValueError(f"Discord name is too long: {len(final)} characters")
+        raise ValueError(f"Discord name is too long ({member.id}): {final}")
 
     if not final or len(final) < 1:
         raise ValueError(f"Error changing name. Empty or <1 characters: {member.mention}")
