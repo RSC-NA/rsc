@@ -120,7 +120,7 @@ class AdminMembersMixIn(AdminMixIn):
         else:
             new_nick = f"{name} {accolades}".strip()
 
-        if len(new_nick) > 32:
+        if len(new_nick) > 30:
             return await interaction.followup.send(
                 embed=ErrorEmbed(description=f"`{new_nick}` is too long and would exceed the 32 character.")
             )
