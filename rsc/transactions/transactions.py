@@ -195,19 +195,22 @@ class TransactionMixIn(RSCMixIn):
 
     # Listeners
 
-    @commands.Cog.listener("on_member_remove")
-    async def _transactions_on_member_remove(self, member: discord.Member):
+    @commands.Cog.listener("on_raw_member_remove")
+    async def _transactions_on_member_remove(self, event: discord.RawMemberRemoveEvent):
         """Check if a rostered player has left the server and report to transaction log channel. Retire player"""
-        if not member.guild:
+        guild = self.bot.get_guild(event.guild_id)
+        member = event.user
+
+        if not guild:
+            log.info(f"Member left server but is not in a related guild. {member.id}")
             return
 
-        guild = member.guild
         players = await self.players(guild, discord_id=member.id, limit=1)
 
         if not players:
             # Member is not a league player, do nothing
             log.info(
-                f"{member.display_name} ({member.id}) has left the server but is not on a team. No action taken.",
+                f"{member.display_name} ({member.id}) has left the server but is not on a league player. No action taken.",
                 guild=guild,
             )
             return
@@ -226,13 +229,16 @@ class TransactionMixIn(RSCMixIn):
             return
 
         # Check if user was forcibly removed from server
-        perp, reason = await utils.get_audit_log_reason(member.guild, member, discord.AuditLogAction.kick)
+        perp = None
+        reason = None
+        if isinstance(member, discord.Member):
+            perp, reason = await utils.get_audit_log_reason(guild, member, discord.AuditLogAction.kick)
 
-        p = players.pop(0)
-        log.info(
-            f"{member.display_name} ({member.id}) has left the server. Player is being retired. Reason: {reason}",
-            guild=guild,
-        )
+            p = players.pop(0)
+            log.info(
+                f"{member.display_name} ({member.id}) has left the server. Player is being retired. Reason: {reason}",
+                guild=guild,
+            )
 
         # Check if notifications are enabled
         tm_notify = await self._notifications_enabled(guild)
@@ -2556,7 +2562,7 @@ class TransactionMixIn(RSCMixIn):
     async def retire(
         self,
         guild: discord.Guild,
-        player: discord.Member,
+        player: discord.Member | discord.User,
         executor: discord.Member,
         notes: str | None = None,
         override: bool = False,

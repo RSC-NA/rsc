@@ -763,6 +763,7 @@ class AdminSyncMixIn(AdminMixIn):
 
         log.debug("Total Players: %d", total, guild=guild)
         log.debug("Total Synced: %d", synced, guild=guild)
+        log.info("Finished syncing player")
 
         embed = BlueEmbed(
             title="League Player Sync",
