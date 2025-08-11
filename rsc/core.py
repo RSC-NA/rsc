@@ -15,6 +15,7 @@ from rscapi.exceptions import ApiException
 
 from rsc.abc import CompositeMetaClass
 from rsc.admin.agm import AdminAGMMixIn
+from rsc.admin.audit import AdminAuditMixIn
 from rsc.admin.franchise import AdminFranchiseMixIn
 from rsc.admin.inactivity import AdminInactivityMixIn
 from rsc.admin.intents import AdminIntentsMixIn
@@ -65,6 +66,7 @@ defaults_guild = {
 
 class RSC(
     AdminAGMMixIn,
+    AdminAuditMixIn,
     AdminFranchiseMixIn,
     AdminInactivityMixIn,
     AdminIntentsMixIn,

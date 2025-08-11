@@ -22,13 +22,15 @@ from rsc.embeds import (
     SuccessEmbed,
 )
 from rsc.enums import BulkRoleAction, DiscordPermType, DiscordPermValue, TransactionType
+from rsc.logs import GuildLogAdapter
 from rsc.transformers import GreedyMemberTransformer
 from rsc.types import Accolades
 from rsc.utils import filters
 from rsc.utils.pagify import Pagify
 from rsc.utils.views import BulkRoleConfirmView
 
-log = logging.getLogger("red.rsc.utils")
+logger = logging.getLogger("red.rsc.utils")
+log = GuildLogAdapter(logger)
 
 FRANCHISE_ROLE_REGEX = re.compile(r"^\w[\w\s\x27]+?\s\(.+?\)$")
 EMOJI_REGEX = re.compile(
@@ -57,6 +59,26 @@ EMOJI_REGEX = re.compile(
 
 async def valid_emoji_name(name: str) -> bool:
     return bool(re.match("[0-9A-Za-z_]+", name))
+
+
+async def update_discord_name(member: discord.Member, name: str, prefix: str | None = None) -> None:
+    accolades = await member_accolades(member)
+    final = f"{name} {accolades}".strip()
+    if prefix:
+        final = f"{prefix} | {name} {accolades}".strip()
+
+    if len(final) > 32:
+        raise ValueError(f"Discord name is too long: {len(final)} characters")
+
+    if not final or len(final) < 1:
+        raise ValueError(f"Error changing name. Empty or <1 characters: {member.mention}")
+
+    if final == member.display_name:
+        log.debug(f"Name is unchanged for {member.id}: {final}", guild=member.guild)
+        return
+
+    log.debug(f"Updating {member.id} nickname to {final}", guild=member.guild)
+    await member.edit(nick=final)
 
 
 async def resize_image(img_data: bytes, height: int, width: int, imgtype: str):

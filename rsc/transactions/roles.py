@@ -110,11 +110,9 @@ async def update_signed_player_discord(
         await player.add_roles(*roles_to_add)
 
     # Update player prefix
-    new_nick = f"{ptu.player.team.franchise.prefix} | {await utils.remove_prefix(player)}"
     try:
-        if new_nick != player.display_name:
-            log.debug(f"Changing {player.id} signed player nick: {new_nick}", guild=guild)
-            await player.edit(nick=new_nick)
+        log.debug(f"Changing {player.id} signed player nick", guild=guild)
+        await utils.update_discord_name(member=player, name=ptu.player.player.name, prefix=ptu.player.team.franchise.prefix)
     except discord.Forbidden as exc:
         log.warning(f"Unable to update nickname {player.display_name} ({player.id}): {exc}")
 
@@ -185,8 +183,8 @@ async def update_cut_player_discord(
         raise ValueError(f"Unable to find franchise role for **{response.first_franchise.name}**")
 
     # Make changes for Non-GM player
-    if response.first_franchise.gm.discord_id != player.id:
-        new_nick = f"FA | {await utils.remove_prefix(player)}".strip()
+    is_gm = response.first_franchise.gm.discord_id != player.id
+    if not is_gm:
         roles_to_remove.append(franchise_role)
 
         # Add Dev League Interest if it exists
@@ -194,7 +192,6 @@ async def update_cut_player_discord(
         if dev_league_role and dev_league_role not in player.roles:
             roles_to_add.append(dev_league_role)
     else:
-        new_nick = player.display_name
         roles_to_add.remove(fa_role)
         roles_to_add.remove(tier_fa_role)
 
@@ -205,9 +202,12 @@ async def update_cut_player_discord(
         log.debug(f"Adding cut player roles: {roles_to_add}", guild=guild)
         await player.add_roles(*roles_to_add)
 
-    log.debug(f"Updating cut player nickname: {new_nick}", guild=guild)
+    log.debug("Updating cut player nickname", guild=guild)
     try:
-        await player.edit(nick=new_nick)
+        if is_gm:
+            await utils.update_discord_name(member=player, name=ptu.player.player.name, prefix=response.first_franchise.prefix)
+        else:
+            await utils.update_discord_name(member=player, name=ptu.player.player.name, prefix="FA")
     except discord.Forbidden as exc:
         log.warning(f"Unable to update nickname {player.display_name} ({player.id}): {exc}")
 
@@ -299,6 +299,12 @@ async def update_nonplaying_discord(
     if new_nick != member.display_name:
         try:
             log.debug(f"Updating nickname ({member.id}): {new_nick}", guild=guild)
+
+            if len(new_nick) > 32:
+                raise ValueError(f"Discord name is too long: {len(new_nick)} characters")
+
+            if not new_nick or len(new_nick) < 1:
+                raise ValueError(f"Error changing name. Empty or <1 characters: {member.mention}")
             await member.edit(nick=new_nick)
         except discord.Forbidden as exc:
             log.warning(f"Unable to update nickname {member.display_name} ({member.id}): {exc}")
@@ -393,12 +399,11 @@ async def update_nonplaying_gm_discord(
         await player.add_roles(*roles_to_add)
 
     # Update player prefix
-    accolades = await utils.member_accolades(player)
-    new_nick = f"{franchise.prefix} | {franchise.gm.rsc_name} {accolades}".strip()
     try:
-        if new_nick != player.display_name:
-            log.debug(f"Changing {player.id} signed player nick: {new_nick}", guild=guild)
-            await player.edit(nick=new_nick)
+        log.debug(f"Changing {player.id} non-playing GM nick", guild=guild)
+        if not franchise.gm.rsc_name:
+            raise ValueError("Franchise GM has no name in API...")
+        await utils.update_discord_name(member=player, name=franchise.gm.rsc_name, prefix=franchise.prefix)
     except discord.Forbidden as exc:
         log.warning(f"Unable to update nickname {player.display_name} ({player.id}): {exc}")
 
@@ -503,12 +508,8 @@ async def update_unsigned_gm_discord(
         await player.add_roles(*roles_to_add)
 
     # Update player prefix
-    accolades = await utils.member_accolades(player)
-    new_nick = f"{franchise.prefix} | {league_player.player.name} {accolades}".strip()
     try:
-        if new_nick != player.display_name:
-            log.debug(f"Changing {player.id} signed player nick: {new_nick}", guild=guild)
-            await player.edit(nick=new_nick)
+        await utils.update_discord_name(member=player, name=league_player.player.name, prefix=franchise.prefix)
     except discord.Forbidden as exc:
         log.warning(f"Unable to update nickname {player.display_name} ({player.id}): {exc}")
 
@@ -628,12 +629,8 @@ async def update_rostered_discord(
         await player.add_roles(*roles_to_add)
 
     # Update player prefix
-    accolades = await utils.member_accolades(player)
-    new_nick = f"{league_player.team.franchise.prefix} | {league_player.player.name} {accolades}".strip()
     try:
-        if new_nick != player.display_name:
-            log.debug(f"Changing {player.id} signed player nick: {new_nick}", guild=guild)
-            await player.edit(nick=new_nick)
+        await utils.update_discord_name(member=player, name=league_player.player.name, prefix=league_player.team.franchise.prefix)
     except discord.Forbidden as exc:
         log.warning(f"Unable to update nickname {player.display_name} ({player.id}): {exc}")
 
@@ -735,12 +732,9 @@ async def update_free_agent_discord(
 
     try:
         if league_player.status in [Status.FREE_AGENT, Status.WAIVERS, Status.WAIVER_RELEASE, Status.WAIVER_CLAIM]:
-            new_nick = f"FA | {await utils.remove_prefix(player)}".strip()
+            await utils.update_discord_name(member=player, name=league_player.player.name, prefix="FA")
         elif league_player.status == Status.PERM_FA:
-            new_nick = f"PFA | {await utils.remove_prefix(player)}".strip()
-        if new_nick != player.display_name:
-            log.debug(f"Updating cut player nickname: {new_nick}", guild=guild)
-            await player.edit(nick=new_nick)
+            await utils.update_discord_name(member=player, name=league_player.player.name, prefix="PFA")
     except discord.Forbidden as exc:
         log.warning(f"Unable to update nickname {player.display_name} ({player.id}): {exc}")
 
@@ -832,11 +826,7 @@ async def update_draft_eligible_discord(
         await player.add_roles(*roles_to_add)
 
     try:
-        accolades = await utils.member_accolades(player)
-        new_nick = f"DE | {league_player.player.name} {accolades}".strip()
-        if new_nick != player.display_name:
-            log.debug(f"Updating cut player nickname: {new_nick}", guild=guild)
-            await player.edit(nick=new_nick)
+        await utils.update_discord_name(member=player, name=league_player.player.name, prefix="DE")
     except discord.Forbidden as exc:
         log.warning(f"Unable to update nickname {player.display_name} ({player.id}): {exc}")
 
@@ -921,10 +911,7 @@ async def update_permfa_waiting_discord(
         await player.add_roles(*roles_to_add)
 
     try:
-        new_nick = f"PFW | {await utils.remove_prefix(player)}".strip()
-        if new_nick != player.display_name:
-            log.debug(f"Updating permfa waiting player nickname: {new_nick}", guild=guild)
-            await player.edit(nick=new_nick)
+        await utils.update_discord_name(member=player, name=league_player.player.name, prefix="PFW")
     except discord.Forbidden as exc:
         log.warning(f"Unable to update nickname {player.display_name} ({player.id}): {exc}")
 
