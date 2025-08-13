@@ -183,7 +183,7 @@ async def update_cut_player_discord(
         raise ValueError(f"Unable to find franchise role for **{response.first_franchise.name}**")
 
     # Make changes for Non-GM player
-    is_gm = response.first_franchise.gm.discord_id != player.id
+    is_gm = response.first_franchise.gm.discord_id == player.id
     if not is_gm:
         roles_to_remove.append(franchise_role)
 
