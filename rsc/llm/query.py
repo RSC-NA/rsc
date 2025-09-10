@@ -105,7 +105,7 @@ async def llm_query(
     prompt = prompt_template.format(context=context_text, question=question)
     log.debug(prompt)
 
-    model = ChatOpenAI(organization=org_name, api_key=secret_key, async_client=http_client, model="gpt-4o-mini")
+    model = ChatOpenAI(organization=org_name, api_key=secret_key, async_client=http_client, model="gpt-4.1")
     response_text = model.invoke(prompt)
 
     await http_client.aclose()
