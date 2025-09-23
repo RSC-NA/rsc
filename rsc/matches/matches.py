@@ -520,12 +520,15 @@ class MatchMixIn(RSCMixIn):
         guild = member.guild
         agm_role = await utils.get_agm_role(guild)
         if agm_role not in member.roles:
+            log.debug("Member is not AGM", guild=guild)
             return False
 
         hfranchise = match.home_team.franchise.lower()
         afranchise = match.away_team.franchise.lower()
+        log.debug(f"Home Franchise: {hfranchise} Away Franchise: {afranchise}", guild=guild)
         matching_franchise = False
         for role in member.roles:
+            log.debug(f"Checking for franchise role: {role.name}", guild=guild)
             if hfranchise in role.name.lower():
                 matching_franchise = True
                 break
