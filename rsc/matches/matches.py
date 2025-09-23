@@ -25,6 +25,7 @@ from rsc.enums import (
 from rsc.exceptions import RscException
 from rsc.logs import GuildLogAdapter
 from rsc.teams import TeamMixIn
+from rsc.utils import utils
 from rsc.utils.utils import tier_color_by_name
 
 if TYPE_CHECKING:
@@ -237,7 +238,9 @@ class MatchMixIn(RSCMixIn):
 
         # If team was specified, user must be GM or admin
         if team and not (
-            await self.is_match_franchise_gm(member=interaction.user, match=match) or interaction.user.guild_permissions.manage_guild
+            await self.is_match_franchise_gm(member=interaction.user, match=match)
+            or await self.is_match_franchise_agm(member=interaction.user, match=match)
+            or interaction.user.guild_permissions.manage_guild
         ):
             return await interaction.followup.send(
                 embed=ErrorEmbed(
@@ -512,6 +515,25 @@ class MatchMixIn(RSCMixIn):
 
     async def is_match_franchise_gm(self, member: discord.Member, match: Match) -> bool:
         return member.id in (match.home_team.gm.discord_id, match.away_team.gm.discord_id)
+
+    async def is_match_franchise_agm(self, member: discord.Member, match: Match) -> bool:
+        guild = member.guild
+        agm_role = await utils.get_agm_role(guild)
+        if agm_role not in member.roles:
+            return False
+
+        hfranchise = match.home_team.franchise.lower()
+        afranchise = match.away_team.franchise.lower()
+        matching_franchise = False
+        for role in member.roles:
+            if hfranchise in role.name.lower():
+                matching_franchise = True
+                break
+            if afranchise in role.name.lower():
+                matching_franchise = True
+                break
+
+        return matching_franchise
 
     async def is_future_match_date(self, guild: discord.Guild, match: Match | MatchList) -> bool:
         tz = await self.timezone(guild=guild)
