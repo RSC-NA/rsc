@@ -245,8 +245,8 @@ class MatchMixIn(RSCMixIn):
             return await interaction.followup.send(
                 embed=ErrorEmbed(
                     description=(
-                        "Only general managers can specify a team for match information. "
-                        "If you are not a GM, please simply run `/match` to get your teams match information."
+                        "Only franchise managers can specify a team for match information. "
+                        "If you are not a GM or AGM, please simply run `/match` to get your teams match information."
                     )
                 )
             )
@@ -334,6 +334,14 @@ class MatchMixIn(RSCMixIn):
         # Without this, we block the use of commands that validate players.
         if member.guild_permissions.manage_guild:
             return MatchTeamEnum.HOME
+
+        # Check AGM
+        if await self.is_match_franchise_agm(member, match):
+            for role in member.roles:
+                if match.home_team.franchise.lower() in role.name.lower():
+                    return MatchTeamEnum.HOME
+                if match.away_team.franchise.lower() in role.name.lower():
+                    return MatchTeamEnum.AWAY
 
         raise ValueError(f"{member.display_name} is not a valid player in this match")
 
