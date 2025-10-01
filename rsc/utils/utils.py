@@ -482,6 +482,10 @@ async def devleague_count(member: discord.Member) -> int:
     return count + cookies
 
 
+async def combine_cup_count(member: discord.Member) -> int:
+    return member.display_name.count(const.COMBINE_CUP_EMOJI)
+
+
 async def format_discord_prefix(member: discord.Member, prefix: str) -> str:
     accolades = await member_accolades(member)
     no_pfx = await remove_prefix(member)
@@ -498,6 +502,7 @@ async def strip_discord_accolades(value: str) -> str:
     final = final.replace(const.STAR_EMOJI, "")
     final = final.replace(const.DEV_LEAGUE_EMOJI, "")
     final = final.replace(const.COOKIE_EMOJI, "")
+    final = final.replace(const.COMBINE_CUP_EMOJI, "")
     return final.strip()
 
 
@@ -506,6 +511,7 @@ async def member_accolades(member: discord.Member) -> Accolades:
         trophy=await trophy_count(member),
         star=await star_count(member),
         devleague=await devleague_count(member),
+        combine_cup=await combine_cup_count(member),
     )
 
 

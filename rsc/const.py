@@ -35,6 +35,7 @@ TROPHY_EMOJI = "\U0001f3c6"  # :trophy:
 STAR_EMOJI = "\U00002b50"  # :star:
 DEV_LEAGUE_EMOJI = "\U0001f451"  # :crown:
 COOKIE_EMOJI = "\U0001f36a"  # :cookie:
+COMBINE_CUP_EMOJI = "\U0001f964"  # :cup_with_straw:
 
 # Links
 

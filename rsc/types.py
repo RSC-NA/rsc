@@ -6,7 +6,7 @@ import discord
 import math
 from rscapi.models.match import Match
 
-from rsc.const import DEV_LEAGUE_EMOJI, STAR_EMOJI, TROPHY_EMOJI, COOKIE_EMOJI
+from rsc.const import DEV_LEAGUE_EMOJI, STAR_EMOJI, TROPHY_EMOJI, COOKIE_EMOJI, COMBINE_CUP_EMOJI
 
 
 # Number of dev league trophies before conversion to cookie
@@ -51,19 +51,26 @@ class ThreadGroup(TypedDict):
 
 @dataclass
 class Accolades:
-    trophy: int
-    star: int
-    devleague: int
+    trophy: int = 0
+    star: int = 0
+    devleague: int = 0
+    combine_cup: int = 0
 
     @property
     def total(self) -> int:
-        return self.trophy + self.star + self.devleague
+        return self.trophy + self.star + self.devleague + self.combine_cup
 
     def __str__(self) -> str:
         dev_count = self.devleague % 4
         cookie_count = math.floor(self.devleague / 4)
 
-        return f"{TROPHY_EMOJI * self.trophy}{STAR_EMOJI * self.star}{DEV_LEAGUE_EMOJI * dev_count}{COOKIE_EMOJI * cookie_count}"
+        return (
+            f"{TROPHY_EMOJI * self.trophy}"
+            f"{STAR_EMOJI * self.star}"
+            f"{DEV_LEAGUE_EMOJI * dev_count}"
+            f"{COOKIE_EMOJI * cookie_count}"
+            f"{COMBINE_CUP_EMOJI * self.combine_cup}"
+        )
 
     def __eq__(self, other: object):
         if isinstance(other, int):

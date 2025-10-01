@@ -83,12 +83,31 @@ class TrophyMixIn(RSCMixIn):
 
         return await interaction.response.send_message(f"Added dev league trophy for {player.mention}.", ephemeral=True)
 
+    @_accolades.command(name="addcombinecup", description="Add a combine cup trophy")  # type: ignore[type-var]
+    async def _accolades_add_combine_cup_cmd(self, interaction: discord.Interaction, player: discord.Member):
+        guild = interaction.guild
+        if not guild:
+            return
+
+        accolades = await utils.member_accolades(player)
+
+        accolades.combine_cup += 1
+
+        try:
+            new_nick = await self.format_nickname(player, accolades)
+            await player.edit(nick=new_nick)
+        except ValueError as e:
+            return await interaction.response.send_message(str(e), ephemeral=True)
+
+        return await interaction.response.send_message(f"Added combine cup trophy for {player.mention}.", ephemeral=True)
+
     @_accolades.command(name="masstrophy", description="Add multiple trophies at once by discord IDs")  # type: ignore[type-var]
     @app_commands.choices(
         trophy=[
             app_commands.Choice(name="Championship", value=const.TROPHY_EMOJI),
             app_commands.Choice(name="Star", value=const.STAR_EMOJI),
             app_commands.Choice(name="Dev League", value=const.DEV_LEAGUE_EMOJI),
+            app_commands.Choice(name="Combine Cup", value=const.COMBINE_CUP_EMOJI),
         ]
     )
     async def _accolades_mass_trophy_cmd(self, interaction: discord.Interaction, trophy: str):
@@ -117,6 +136,8 @@ class TrophyMixIn(RSCMixIn):
                     accolades.star += 1
                 case const.DEV_LEAGUE_EMOJI:
                     accolades.devleague += 1
+                case const.COMBINE_CUP_EMOJI:
+                    accolades.combine_cup += 1
                 case _:
                     return await interaction.followup.send(embed=ErrorEmbed("Invalid trophy type."))
 
