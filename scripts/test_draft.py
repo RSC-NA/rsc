@@ -164,7 +164,7 @@ async def parse_csv(csv: str, tier:str|None=None) -> pd.DataFrame:
 
 async def process_tier(layout: pd.DataFrame, tier: str, pick:int, dry:bool=False) -> None:
     print(f"Getting player list for {tier}")
-    plist = await players(tier_name=tier, season_number=23)
+    plist = await players(tier_name=tier, season_number=24)
     plist.sort(key=lambda p: p.id)
 
     tdata = await teams(tier=tier)
@@ -241,7 +241,7 @@ async def process_tier(layout: pd.DataFrame, tier: str, pick:int, dry:bool=False
 
 async def process_tier_random(layout: pd.DataFrame, tier: str, pick:int, dry:bool=False) -> None:
     print(f"Getting player list for {tier}")
-    plist = await players(tier_name=tier, season_number=23)
+    plist = await players(tier_name=tier, season_number=24)
     plist.sort(key=lambda p: p.id)
 
     tdata = await teams(tier=tier)

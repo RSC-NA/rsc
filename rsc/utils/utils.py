@@ -27,7 +27,7 @@ from rsc.transformers import GreedyMemberTransformer
 from rsc.types import Accolades
 from rsc.utils import filters
 from rsc.utils.pagify import Pagify
-from rsc.utils.views import BulkRoleConfirmView
+from rsc.utils.views.bulk_role import BulkRoleConfirmView
 
 logger = logging.getLogger("red.rsc.utils")
 log = GuildLogAdapter(logger)
@@ -477,7 +477,9 @@ async def star_count(member: discord.Member) -> int:
 
 
 async def devleague_count(member: discord.Member) -> int:
-    return member.display_name.count(const.DEV_LEAGUE_EMOJI)
+    count = member.display_name.count(const.DEV_LEAGUE_EMOJI)
+    cookies = member.display_name.count(const.COOKIE_EMOJI) * 4
+    return count + cookies
 
 
 async def format_discord_prefix(member: discord.Member, prefix: str) -> str:
@@ -495,6 +497,7 @@ async def strip_discord_accolades(value: str) -> str:
     final = value.replace(const.TROPHY_EMOJI, "")
     final = final.replace(const.STAR_EMOJI, "")
     final = final.replace(const.DEV_LEAGUE_EMOJI, "")
+    final = final.replace(const.COOKIE_EMOJI, "")
     return final.strip()
 
 

@@ -538,11 +538,9 @@ class MatchMixIn(RSCMixIn):
         for role in member.roles:
             log.debug(f"Checking for franchise role: {role.name}", guild=guild)
             if hfranchise in role.name.lower():
-                log.debug("AGM matches home franchise", guild=guild)
                 matching_franchise = True
                 break
             if afranchise in role.name.lower():
-                log.debug("AGM matches away franchise", guild=guild)
                 matching_franchise = True
                 break
 

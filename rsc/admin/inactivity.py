@@ -74,7 +74,7 @@ class AdminInactivityMixIn(AdminMixIn):
 
     @_inactive.command(  # type: ignore[type-var]
         name="start",
-        description="Create a channel and ping for inactive check. (FA/DE players only)",
+        description="Create a channel and ping for inactive check. (DE players only)",
     )
     async def _admin_inactive_check_start_cmd(self, interaction: discord.Interaction, category: discord.CategoryChannel):
         guild = interaction.guild

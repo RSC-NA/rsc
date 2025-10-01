@@ -3,9 +3,14 @@ from typing import TypedDict
 
 import ballchasing
 import discord
+import math
 from rscapi.models.match import Match
 
-from rsc.const import DEV_LEAGUE_EMOJI, STAR_EMOJI, TROPHY_EMOJI
+from rsc.const import DEV_LEAGUE_EMOJI, STAR_EMOJI, TROPHY_EMOJI, COOKIE_EMOJI
+
+
+# Number of dev league trophies before conversion to cookie
+COOKIE_COUNT = 4
 
 
 class RebrandTeamDict(TypedDict):
@@ -55,7 +60,10 @@ class Accolades:
         return self.trophy + self.star + self.devleague
 
     def __str__(self) -> str:
-        return f"{TROPHY_EMOJI * self.trophy}{STAR_EMOJI * self.star}{DEV_LEAGUE_EMOJI * self.devleague}"
+        dev_count = self.devleague % 4
+        cookie_count = math.floor(self.devleague / 4)
+
+        return f"{TROPHY_EMOJI * self.trophy}{STAR_EMOJI * self.star}{DEV_LEAGUE_EMOJI * dev_count}{COOKIE_EMOJI * cookie_count}"
 
     def __eq__(self, other: object):
         if isinstance(other, int):

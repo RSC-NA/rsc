@@ -48,6 +48,7 @@ from rsc.tiers import TierMixIn
 from rsc.trackers import TrackerMixIn
 from rsc.transactions import TransactionMixIn
 from rsc.utils import UtilsMixIn
+from rsc.utils.trophy import TrophyMixIn
 from rsc.views import LeagueSelectView, RSCSetupModal
 from rsc.welcome import WelcomeMixIn
 
@@ -95,6 +96,7 @@ class RSC(
     TierMixIn,
     TrackerMixIn,
     TransactionMixIn,
+    TrophyMixIn,
     UtilsMixIn,
     WelcomeMixIn,
     commands.Cog,

@@ -18,6 +18,7 @@ from rscapi.models.player_activity_check_schema import PlayerActivityCheckSchema
 from rscapi.models.player_season_stats import PlayerSeasonStats
 from rscapi.models.player_signup_schema import PlayerSignupSchema
 from rscapi.models.update_member_rsc_name import UpdateMemberRSCName
+from rscapi.models.drop_a_player_from_a_league import DropAPlayerFromALeague
 
 from rsc.abc import RSCMixIn
 from rsc.embeds import (
@@ -1045,5 +1046,24 @@ class MemberMixIn(RSCMixIn):
                     guild=guild,
                 )
                 return await api.members_make_player(id=member.id, data=data)
+            except ApiException as exc:
+                raise RscException(response=exc)
+
+    async def drop_player_from_league(
+        self,
+        guild: discord.Guild,
+        member: discord.Member,
+    ) -> Member:
+        async with ApiClient(self._api_conf[guild.id]) as client:
+            api = MembersApi(client)
+            data = DropAPlayerFromALeague(
+                league=self._league[guild.id],
+            )
+            try:
+                log.debug(
+                    f"Droppping {member.display_name} ({member.id}) from league {data}",
+                    guild=guild,
+                )
+                return await api.members_member_league_drop(id=member.id, data=data)
             except ApiException as exc:
                 raise RscException(response=exc)
