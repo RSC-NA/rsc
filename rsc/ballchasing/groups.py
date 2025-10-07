@@ -112,6 +112,7 @@ async def tier_bc_group(bapi: ballchasing.Api, guild: discord.Guild, tlg: str, m
 
 async def match_day_bc_group(bapi: ballchasing.Api, guild: discord.Guild, tlg: str, match: Match) -> str | None:
     """Get match group ID and or create it"""
+    log.debug(f"Getting match day group for: {match.home_team.name} vs {match.away_team.name}", guild=guild)
     tier_group = await tier_bc_group(bapi=bapi, guild=guild, tlg=tlg, match=match)
     if not tier_group:
         return None

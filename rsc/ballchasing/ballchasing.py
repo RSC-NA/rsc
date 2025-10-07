@@ -369,6 +369,7 @@ class BallchasingMixIn(RSCMixIn):
         try:
             bc_group = await self.process_match_replays(guild, match=match, replays=replay_files)  # type: ignore[arg-type]
         except (TypeError, ValueError, RuntimeError) as exc:
+            log.exception(f"Error processing match replays: {exc}", guild=guild)
             return await interaction.edit_original_response(embed=ExceptionErrorEmbed(exc_message=str(exc)))
 
         try:
@@ -439,15 +440,18 @@ class BallchasingMixIn(RSCMixIn):
         )
         # Get BC top level group
         tlg = await self._get_top_level_group(guild)
+        log.debug(f"[{match.home_team.name} vs {match.away_team.name}] Top Level Group: {tlg}", guild=guild)
         if not tlg:
             raise ValueError("Top level ballchasing group is not configured in guild.")
 
         # Get ballchasing API
-        bapi = self._ballchasing_api.get(guild.id)
+        log.debug(f"[{match.home_team.name} vs {match.away_team.name}] Initializing ballchasing API")
+        bapi = await self.ballchasing_init(guild)
         if not bapi:
             raise ValueError("Ballchasing API is not configured in guild.")
 
         # Create or find RSC match group ID
+        log.debug(f"[{match.home_team.name} vs {match.away_team.name}] Finding or creating match group in ballchasing", guild=guild)
         match_group_id = await groups.rsc_match_bc_group(bapi=bapi, guild=guild, tlg=tlg, match=match)
         log.debug(f"Match Group ID: {match_group_id}", guild=guild)
         if not match_group_id:
@@ -472,6 +476,7 @@ class BallchasingMixIn(RSCMixIn):
         if replays:
             await self.upload_replays(guild, group=match_group_id, replays=replays)
 
+        await bapi._session.close()
         return match_group_id
 
     async def upload_replays(
@@ -484,7 +489,7 @@ class BallchasingMixIn(RSCMixIn):
             raise ValueError("No replays provided for upload to ballchasing.")
 
         # Get ballchasing API
-        bapi = self._ballchasing_api.get(guild.id)
+        bapi = await self.ballchasing_init(guild)
         if not bapi:
             raise ValueError("Ballchasing API is not configured in guild.")
 
@@ -529,6 +534,7 @@ class BallchasingMixIn(RSCMixIn):
                         await bapi.patch_replay(r_id, group=group)
                         replay_ids.append(r_id)
         log.debug(f"Ballchasing IDs: {replay_ids}", guild=guild)
+        await bapi._session.close()
         return replay_ids
 
     async def build_match_result_embed(
@@ -670,6 +676,18 @@ class BallchasingMixIn(RSCMixIn):
         log.info("Closing ballchasing sessions")
         for bapi in self._ballchasing_api.values():
             await bapi.close()
+
+    async def ballchasing_init(self, guild: discord.Guild) -> ballchasing.Api:
+        token = await self._get_bc_auth_token(guild)
+        if not token:
+            raise ValueError("Ballchasing API token is not configured in guild.")
+
+        bapi = ballchasing.Api(auth_key=token)
+        # Validate
+        ping = await bapi.ping()
+        if not ping:
+            raise RuntimeError("Ping to ballchasing API failed.")
+        return bapi
 
     # Config
 
