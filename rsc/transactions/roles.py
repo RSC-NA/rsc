@@ -188,9 +188,9 @@ async def update_cut_player_discord(
         roles_to_remove.append(franchise_role)
 
         # Add Dev League Interest if it exists
-        dev_league_role = discord.utils.get(guild.roles, name=const.DEV_LEAGUE_ROLE)
-        if dev_league_role and dev_league_role not in player.roles:
-            roles_to_add.append(dev_league_role)
+        # dev_league_role = discord.utils.get(guild.roles, name=const.DEV_LEAGUE_ROLE)
+        # if dev_league_role and dev_league_role not in player.roles:
+        #     roles_to_add.append(dev_league_role)
     else:
         roles_to_add.remove(fa_role)
         roles_to_add.remove(tier_fa_role)
@@ -268,8 +268,8 @@ async def update_nonplaying_discord(
                 roles_to_remove.append(r)
             case const.DRAFT_ELIGIBLE:
                 roles_to_remove.append(r)
-            case const.DEV_LEAGUE_ROLE:
-                roles_to_remove.append(r)
+            # case const.DEV_LEAGUE_ROLE:
+            #     roles_to_remove.append(r)
             case const.CAPTAIN_ROLE:
                 roles_to_remove.append(r)
             case const.SUBBED_OUT_ROLE:
@@ -714,9 +714,9 @@ async def update_free_agent_discord(
         roles_to_add.append(tier_fa_role)
 
     # Dev League
-    dev_league_role = discord.utils.get(guild.roles, name=const.DEV_LEAGUE_ROLE)
-    if dev_league_role and dev_league_role not in player.roles:
-        roles_to_add.append(dev_league_role)
+    # dev_league_role = discord.utils.get(guild.roles, name=const.DEV_LEAGUE_ROLE)
+    # if dev_league_role and dev_league_role not in player.roles:
+    #     roles_to_add.append(dev_league_role)
 
     # PermFA Waiting
     permfa_waiting_role = await utils.get_permfa_waiting_role(guild)
