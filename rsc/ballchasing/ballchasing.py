@@ -69,8 +69,7 @@ class BallchasingMixIn(RSCMixIn):
     async def prepare_ballchasing(self, guild: discord.Guild):
         token = await self._get_bc_auth_token(guild)
         if token:
-            self._ballchasing_api[guild.id] = ballchasing.Api(auth_key=token)
-            await self._ballchasing_api[guild.id].ping()
+            self._ballchasing_api[guild.id] = await ballchasing.Api.create(auth_key=token)
 
     # Settings
 
@@ -343,7 +342,7 @@ class BallchasingMixIn(RSCMixIn):
                 embed=ErrorEmbed(description=f"Found match for **{home}** vs **{away}** but it has no match ID in the API."),
                 ephemeral=True,
             )
-        log.debug(f"Found match: {match}")
+        log.debug(f"Found match: {match}", match=match)
 
         # Only GMs, Admins, and team members can report
         if (
@@ -368,8 +367,8 @@ class BallchasingMixIn(RSCMixIn):
 
         try:
             bc_group = await self.process_match_replays(guild, match=match, replays=replay_files)  # type: ignore[arg-type]
-        except (TypeError, ValueError, RuntimeError) as exc:
-            log.exception(f"Error processing match replays: {exc}", guild=guild)
+        except Exception as exc:
+            log.exception(f"Error processing match replays: {exc}", exc_info=exc, guild=guild, match=match)
             return await interaction.edit_original_response(embed=ExceptionErrorEmbed(exc_message=str(exc)))
 
         try:
@@ -382,7 +381,7 @@ class BallchasingMixIn(RSCMixIn):
                 executor=member,
                 override=override,
             )
-            log.debug(f"Match Result: {match_result}")
+            log.debug(f"Match Result: {match_result}", match=match)
         except RscException as exc:
             if hasattr(exc, "status") and exc.status == 500:
                 # Match already reported
@@ -437,36 +436,38 @@ class BallchasingMixIn(RSCMixIn):
         log.debug(
             f"Processing match: {match.home_team.name} vs {match.away_team.name}",
             guild=guild,
+            match=match,
         )
         # Get BC top level group
         tlg = await self._get_top_level_group(guild)
-        log.debug(f"[{match.home_team.name} vs {match.away_team.name}] Top Level Group: {tlg}", guild=guild)
+        log.debug(f"Top Level Group: {tlg}", guild=guild, match=match)
         if not tlg:
             raise ValueError("Top level ballchasing group is not configured in guild.")
 
         # Get ballchasing API
-        log.debug(f"[{match.home_team.name} vs {match.away_team.name}] Initializing ballchasing API")
-        bapi = await self.ballchasing_init(guild)
+        log.debug("Initializing ballchasing API...", guild=guild, match=match)
+        bapi = self._ballchasing_api.get(guild.id)
         if not bapi:
             raise ValueError("Ballchasing API is not configured in guild.")
+        log.debug("Ballchasing API initialized", guild=guild, match=match)
 
         # Create or find RSC match group ID
-        log.debug(f"[{match.home_team.name} vs {match.away_team.name}] Finding or creating match group in ballchasing", guild=guild)
+        log.debug("Finding or creating match group in ballchasing", guild=guild, match=match)
         match_group_id = await groups.rsc_match_bc_group(bapi=bapi, guild=guild, tlg=tlg, match=match)
-        log.debug(f"Match Group ID: {match_group_id}", guild=guild)
+        log.debug(f"Match Group ID: {match_group_id}", guild=guild, match=match)
         if not match_group_id:
             raise RuntimeError("Unable to find or create ballchasing match group.")
 
         # Get replays from group if any
-        log.debug(f"Getting existing replays from {match_group_id}", guild=guild)
+        log.debug(f"Getting existing replays from {match_group_id}", guild=guild, match=match)
         bc_replays: list[ballchasing.models.Replay] = await utils.async_iter_gather(
             bapi.get_group_replays(group_id=match_group_id, deep=True)
         )
-        log.debug(f"Existing Replay Count: {len(bc_replays)}", guild=guild)
+        log.debug(f"Existing Replay Count: {len(bc_replays)}", guild=guild, match=match)
 
         # Check for collisions in ballchasing (duplicate replays)
         collisions = await process.replay_group_collisions(replay_files=replays, bc_replays=bc_replays)
-        log.debug(f"Replay Collisions: {collisions}", guild=guild)
+        log.debug(f"Replay Collisions: {collisions}", guild=guild, match=match)
 
         # Remove collisions from upload list
         for c in collisions:
@@ -474,27 +475,25 @@ class BallchasingMixIn(RSCMixIn):
 
         # Upload replays (only if we need to)
         if replays:
-            await self.upload_replays(guild, group=match_group_id, replays=replays)
+            await self.upload_replays(guild, group=match_group_id, replays=replays, match=match)
+        else:
+            log.debug("No new replays to upload", guild=guild, match=match)
 
-        await bapi._session.close()
         return match_group_id
 
     async def upload_replays(
-        self,
-        guild: discord.Guild,
-        group: str,
-        replays: list[discord.Attachment | str | bytes],
+        self, guild: discord.Guild, group: str, replays: list[discord.Attachment | str | bytes], match: Match | None = None
     ) -> list[str]:
         if not replays:
             raise ValueError("No replays provided for upload to ballchasing.")
 
         # Get ballchasing API
-        bapi = await self.ballchasing_init(guild)
+        bapi = self._ballchasing_api.get(guild.id)
         if not bapi:
             raise ValueError("Ballchasing API is not configured in guild.")
 
         # Upload replays
-        log.debug(f"Uploading replays to group: {group}", guild=guild)
+        log.debug(f"Uploading replays to group: {group}", guild=guild, match=match)
         replay_ids = []
         for replay in replays:
             generated_name = "".join(random.choices(string.ascii_letters + string.digits, k=64))  # noqa: S311
@@ -527,14 +526,14 @@ class BallchasingMixIn(RSCMixIn):
                     log.debug(
                         f"Error uploading replay. {err.status} -- {err_info}",
                         guild=guild,
+                        match=match,
                     )
                     r_id = err_info.get("id")
                     if r_id:
-                        log.debug("Patching replay under correct group", guild=guild)
+                        log.debug("Patching replay under correct group", guild=guild, match=match)
                         await bapi.patch_replay(r_id, group=group)
                         replay_ids.append(r_id)
-        log.debug(f"Ballchasing IDs: {replay_ids}", guild=guild)
-        await bapi._session.close()
+        log.debug(f"Ballchasing IDs: {replay_ids}", guild=guild, match=match)
         return replay_ids
 
     async def build_match_result_embed(

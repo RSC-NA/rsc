@@ -423,6 +423,7 @@ class RSC(
     )
     async def _rsc_dev_loglevel(self, interaction: discord.Interaction, level: LogLevel):
         logging.getLogger("red.rsc").setLevel(level)
+        logging.getLogger("ballchasing").setLevel(level)
         await interaction.response.send_message(f"Logging level is now **{level}**", ephemeral=True)
 
     # Non-Group Commands

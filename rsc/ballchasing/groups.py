@@ -32,13 +32,13 @@ async def season_bc_group(bapi: ballchasing.Api, guild: discord.Guild, tlg: str,
     # Find relevant season group
     async for g in bapi.get_groups(group=tlg):
         if g.name.lower() == sname.lower():
-            log.debug(f"Found existing ballchasing season group: {g.id}", guild=guild)
+            log.debug(f"Found existing ballchasing season group: {g.id}", guild=guild, match=match)
             season_group = g.id
             break
 
     # Create group if not found
     if not season_group:
-        log.debug(f"Creating ballchasing season group: {sname}", guild=guild)
+        log.debug(f"Creating ballchasing season group: {sname}", guild=guild, match=match)
         result = await bapi.create_group(
             name=sname,
             parent=tlg,
@@ -64,13 +64,13 @@ async def match_type_group(bapi: ballchasing.Api, guild: discord.Guild, tlg: str
     # Find relevant server group
     async for g in bapi.get_groups(group=season_group):
         if g.name.lower() == tname.lower():
-            log.debug(f"Found existing ballchasing match type group: {g.id}", guild=guild)
+            log.debug(f"Found existing ballchasing match type group: {g.id}", guild=guild, match=match)
             match_type_group = g.id
             break
 
     # Create group if not found
     if not match_type_group:
-        log.debug(f"Creating ballchasing match type group: {tname}", guild=guild)
+        log.debug(f"Creating ballchasing match type group: {tname}", guild=guild, match=match)
         result = await bapi.create_group(
             name=tname,
             parent=season_group,
@@ -93,13 +93,13 @@ async def tier_bc_group(bapi: ballchasing.Api, guild: discord.Guild, tlg: str, m
     # Find relevant server group
     async for g in bapi.get_groups(group=mtype_group):
         if g.name.lower() == tname.lower():
-            log.debug(f"Found existing ballchasing tier group: {g.id}", guild=guild)
+            log.debug(f"Found existing ballchasing tier group: {g.id}", guild=guild, match=match)
             tier_group = g.id
             break
 
     # Create group if not found
     if not tier_group:
-        log.debug(f"Creating ballchasing tier group: {tname}", guild=guild)
+        log.debug(f"Creating ballchasing tier group: {tname}", guild=guild, match=match)
         result = await bapi.create_group(
             name=tname,
             parent=mtype_group,
@@ -133,13 +133,13 @@ async def match_day_bc_group(bapi: ballchasing.Api, guild: discord.Guild, tlg: s
     md_group = None
     async for g in bapi.get_groups(group=tier_group):
         if g.name.lower() == mdname.lower():
-            log.debug(f"Found existing ballchasing match day group: {g.id}", guild=guild)
+            log.debug(f"Found existing ballchasing match day group: {g.id}", guild=guild, match=match)
             md_group = g.id
             break
 
     # Create group if not found
     if not md_group:
-        log.debug(f"Creating match day ballchasing group: {mdname}", guild=guild)
+        log.debug(f"Creating match day ballchasing group: {mdname}", guild=guild, match=match)
         result = await bapi.create_group(
             name=mdname,
             parent=tier_group,
@@ -155,6 +155,7 @@ async def rsc_match_bc_group(bapi: ballchasing.Api, guild: discord.Guild, tlg: s
     md_group = await match_day_bc_group(bapi=bapi, guild=guild, tlg=tlg, match=match)
     if not md_group:
         return None
+    log.debug(f"RSC Match BC Group: {md_group}", guild=guild, match=match)
 
     mname = f"{match.home_team.name} vs {match.away_team.name}"
     match_group = None
@@ -162,13 +163,13 @@ async def rsc_match_bc_group(bapi: ballchasing.Api, guild: discord.Guild, tlg: s
     # Find relevant server group
     async for g in bapi.get_groups(group=md_group):
         if g.name.lower() == mname.lower():
-            log.debug(f"Found existing ballchasing match group: {g.id}", guild=guild)
+            log.debug(f"Found existing ballchasing match group: {g.id}", guild=guild, match=match)
             match_group = g.id
             break
 
     # Create group if not found
     if not match_group:
-        log.debug(f"Creating match ballchasing group: {mname}", guild=guild)
+        log.debug(f"Creating match ballchasing group: {mname}", guild=guild, match=match)
         result = await bapi.create_group(
             name=mname,
             parent=md_group,
@@ -176,4 +177,5 @@ async def rsc_match_bc_group(bapi: ballchasing.Api, guild: discord.Guild, tlg: s
             team_identification=ballchasing.TeamIdentificationBy.CLUSTERS,
         )
         match_group = result.id
+    log.debug(f"Resulting match group ID: {match_group}", guild=guild, match=match)
     return match_group
