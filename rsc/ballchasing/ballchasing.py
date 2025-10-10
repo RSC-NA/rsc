@@ -304,8 +304,8 @@ class BallchasingMixIn(RSCMixIn):
         # Get match search window
         tz = await self.timezone(guild)
         today = datetime.now(tz=tz)
-        start_date = today - timedelta(days=1)
-        end_date = today + timedelta(days=1)
+        start_date = today - timedelta(days=7)
+        end_date = today + timedelta(days=7)
 
         log.debug(f"Searching for match: {home} vs {away}. Start: {start_date}, End: {end_date}")
         mlist: list[Match] = await self.find_match(
