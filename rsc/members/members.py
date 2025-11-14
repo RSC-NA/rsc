@@ -12,6 +12,7 @@ from rscapi.models.league_player import LeaguePlayer
 from rscapi.models.league_player_patch import LeaguePlayerPatch
 from rscapi.models.league_player_signup import LeaguePlayerSignup
 from rscapi.models.member import Member
+from rscapi.models.create_member_input import CreateMemberInput
 from rscapi.models.member_transfer_schema import MemberTransferSchema
 from rscapi.models.name_change_history import NameChangeHistory
 from rscapi.models.player_activity_check_schema import PlayerActivityCheckSchema
@@ -863,7 +864,7 @@ class MemberMixIn(RSCMixIn):
     ) -> Member:
         async with ApiClient(self._api_conf[guild.id]) as client:
             api = MembersApi(client)
-            data = Member(
+            data = CreateMemberInput(
                 username=member.name,
                 discord_id=member.id,
                 rsc_name=rsc_name or member.display_name,

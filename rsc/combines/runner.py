@@ -78,7 +78,7 @@ class CombineRunnerMixIn(RSCMixIn):
         try:
             for v in data.values():
                 log.debug(f"Combine Raw Lobby: {v}")
-                lobby_list.append(models.CombinesLobby(**v))  # noqa: PERF401
+                lobby_list.append(models.CombinesLobby(**v))
         except pydantic.ValidationError as exc:
             log.exception("Error deserializing combine game lobby", exc_info=exc)
             return aiohttp.web.Response(status=400)  # 400 Bad Request
