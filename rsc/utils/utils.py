@@ -16,6 +16,7 @@ from rsc import const
 from rsc.abc import RSCMixIn
 from rsc.embeds import (
     ErrorEmbed,
+    BetterEmbed,
     ExceptionErrorEmbed,
     NotImplementedEmbed,
     OrangeEmbed,
@@ -959,12 +960,23 @@ class UtilsMixIn(RSCMixIn):
                 desc += f", {role4.mention}"
             results = sorted(members, key=lambda x: x.display_name)
 
-        # Check for character max being exceeded (6000 total in embed or 1024 per field)
-        nicks = "\n".join([r.display_name for r in results])
-        usernames = ("\n".join([r.name for r in results]),)
-        ids = "\n".join(str(r.id) for r in results)
+        # Create embed
+        embed = BetterEmbed(
+            title="Matching Members",
+            description=desc,
+            color=discord.Color.blue(),
+        )
+        embed.add_field(name="Player", value="\n".join([r.mention for r in results]), inline=True)
+        embed.add_field(name="Username", value="\n".join([r.name for r in results]), inline=True)
+        embed.add_field(
+            name="Discord ID",
+            value="\n".join([str(r.id) for r in results]),
+            inline=True,
+        )
+        embed.set_footer(text=f"Found {len(results)} matching player(s).")
 
-        if len(nicks) > 1024 or len(usernames) > 1024 or len(ids) > 1024:
+        # Check limits on embed length
+        if embed.exceeds_limits():
             msg = "\n".join([f"{p.display_name}:{p.name}:{p.id}" for p in results])
             if len(msg) > 2000:
                 paged_msg = Pagify(text=msg)
@@ -977,20 +989,6 @@ class UtilsMixIn(RSCMixIn):
             else:
                 await interaction.followup.send(f"```\n{msg}\n```", ephemeral=True)
         else:
-            embed = discord.Embed(
-                title="Matching Members",
-                description=desc,
-                color=discord.Color.blue(),
-            )
-            embed.add_field(name="Player", value="\n".join(r.mention for r in results), inline=True)
-            embed.add_field(name="Username", value="\n".join(r.name for r in results), inline=True)
-            embed.add_field(
-                name="Discord ID",
-                value="\n".join(str(r.id) for r in results),
-                inline=True,
-            )
-
-            embed.set_footer(text=f"Found {len(results)} matching player(s).")
             await interaction.followup.send(embed=embed, ephemeral=True)
 
     @app_commands.command(  # type: ignore[type-var]
