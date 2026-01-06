@@ -196,6 +196,7 @@ class TransactionType(StrEnum):
     AGM_IR = "AIR"  # AGM Inactive Reserve
     IR_RETURN = "IRT"  # IR Return
     DRAFT = "DFT"  # Draft Player
+    PATCH = "PCH"  # Patched Player
 
     @property
     def full_name(self) -> str:
