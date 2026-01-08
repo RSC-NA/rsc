@@ -726,6 +726,10 @@ class AdminSyncMixIn(AdminMixIn):
             total += 1
             if not api_player.player.discord_id:
                 log.warning("League player has no discord id: %d", api_player.id, guild=guild)
+                await interaction.followup.send(
+                    embed=ErrorEmbed(description=f"League player {api_player.player.name} has no discord id in the API."),
+                    ephemeral=True,
+                )
                 continue
 
             m = guild.get_member(api_player.player.discord_id)
