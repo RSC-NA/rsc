@@ -1693,9 +1693,13 @@ class TransactionMixIn(RSCMixIn):
         leader_fmt = sorted(leaders.items(), key=lambda i: i[1], reverse=True)
         leader_fmt = leader_fmt[:15]  # Top 15
 
+        desc = "Your transaction is my command."
+        if season:
+            desc += f"\n\nSeason {season}"
+
         embed = BlueEmbed(
             title="Transaction Leaderboard",
-            description="Your transaction is my command.",
+            description=desc,
         )
 
         embed.add_field(
