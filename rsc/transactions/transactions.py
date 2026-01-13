@@ -1657,7 +1657,7 @@ class TransactionMixIn(RSCMixIn):
 
     @_transactions.command(name="leaderboard", description="Display transaction committee leaderboard")  # type: ignore[type-var]
     @app_commands.describe(
-        season='RSC Season Number. Example: "23" (Optional)',
+        season='RSC Season Number. Example: "23" (Default: Current Season)',
         transaction_type="Transaction Type (Optional)",
         no_draft="Exclude draft transactions (Default: False)",
     )
@@ -1673,6 +1673,17 @@ class TransactionMixIn(RSCMixIn):
             return
 
         await interaction.response.defer()
+
+        # Default to current season
+        # All-time leaderboard is too intensive on API
+        if not season:
+            season_obj = await self.current_season(guild)
+            if not season_obj:
+                return await interaction.followup.send(
+                    embed=ErrorEmbed(description="Unable to determine current season for leaderboard."),
+                    ephemeral=True,
+                )
+            season = season_obj.number
 
         leaders: dict[int, int] = {}
         try:
@@ -1690,15 +1701,17 @@ class TransactionMixIn(RSCMixIn):
         except RscException as exc:
             return await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc), ephemeral=True)
 
+        # Sort and trim to top 15
         leader_fmt = sorted(leaders.items(), key=lambda i: i[1], reverse=True)
         leader_fmt = leader_fmt[:15]  # Top 15
 
         desc = "Your transaction is my command."
+        title = "Transaction Leaderboard"
         if season:
-            desc += f"\n\nSeason {season}"
+            title += f" (S{season})"
 
         embed = BlueEmbed(
-            title="Transaction Leaderboard",
+            title=title,
             description=desc,
         )
 
