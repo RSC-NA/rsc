@@ -1691,6 +1691,7 @@ class TransactionMixIn(RSCMixIn):
             return await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc), ephemeral=True)
 
         leader_fmt = sorted(leaders.items(), key=lambda i: i[1], reverse=True)
+        leader_fmt = leader_fmt[:15]  # Top 15
 
         embed = BlueEmbed(
             title="Transaction Leaderboard",
