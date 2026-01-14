@@ -242,9 +242,12 @@ async def update_nonplaying_discord(
     roles_to_remove: list[discord.Role] = []
     roles_to_add: list[discord.Role] = []
 
+    # Need to do some special handling for non-playing AGMs
+    is_agm = await utils.has_agm_role(member)
+
     # Remove any old franchise role if it exists
     old_froles = await utils.franchise_role_list_from_disord_member(member)
-    if old_froles:
+    if old_froles and not is_agm:
         roles_to_remove.extend(old_froles)
 
     for r in member.roles:
@@ -259,7 +262,11 @@ async def update_nonplaying_discord(
         # All player roles
         match r.name:
             case const.LEAGUE_ROLE:
-                roles_to_remove.append(r)
+                # Don't remove league role if AGM
+                if not is_agm:
+                    roles_to_remove.append(r)
+                elif const.LEAGUE_ROLE not in roles_to_add:
+                    roles_to_add.append(r)
             case const.FREE_AGENT_ROLE:
                 roles_to_remove.append(r)
             case const.IR_ROLE:
@@ -294,8 +301,12 @@ async def update_nonplaying_discord(
         if former_player_role not in member.roles:
             roles_to_add.append(former_player_role)
 
-    # Update nickname
-    new_nick = await utils.remove_prefix(member)
+    # Update nickname (Leave prefix if AGM)
+    if is_agm:
+        new_nick = member.display_name
+    else:
+        new_nick = await utils.remove_prefix(member)
+
     if new_nick != member.display_name:
         try:
             log.debug(f"Updating nickname ({member.id}): {new_nick}", guild=guild)

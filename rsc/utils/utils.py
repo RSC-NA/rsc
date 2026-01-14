@@ -302,6 +302,11 @@ async def has_gm_role(member: discord.Member) -> bool:
     return any(role.name == const.GM_ROLE for role in member.roles)
 
 
+async def has_agm_role(member: discord.Member) -> bool:
+    """Check if user has Assistant General Manager role in guild"""
+    return any(role.name == const.AGM_ROLE for role in member.roles)
+
+
 async def member_from_rsc_name(guild: discord.Guild, name: str) -> discord.Member | None:
     """Get guild member by rsc name ("nickm"). Not recommended."""
     for m in guild.members:
