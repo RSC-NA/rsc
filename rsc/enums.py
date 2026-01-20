@@ -52,7 +52,7 @@ class MatchType(StrEnum):
             case MatchType.REGULAR:
                 return "Regular Season"
             case MatchType.PRESEASON:
-                return "Regular Season"
+                return "Pre-season"
             case MatchType.POSTSEASON:
                 return "Post Season"
             case MatchType.FINALS:
