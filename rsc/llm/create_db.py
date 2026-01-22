@@ -11,13 +11,13 @@ from pathlib import Path
 
 import discord
 import httpx
-from langchain.document_loaders.directory import DirectoryLoader
-from langchain.vectorstores.chroma import Chroma
+from langchain_community.document_loaders.directory import DirectoryLoader
+from langchain_community.vectorstores.chroma import Chroma
 from langchain_community.document_loaders import JSONLoader
 from langchain_core.documents import Document
 from langchain_openai.embeddings import OpenAIEmbeddings
 from langchain_text_splitters import MarkdownTextSplitter
-from pydantic.v1.types import SecretStr
+from pydantic.types import SecretStr
 from rscapi.models.franchise_list import FranchiseList
 from rscapi.models.league_player import LeaguePlayer
 from rscapi.models.team import Team
@@ -183,16 +183,23 @@ async def create_chroma_db(guild: discord.Guild, org_name: str, api_key: str, do
         await asyncio.sleep(5)
 
     log.debug("Saving Chroma DB.", guild=guild)
-    Chroma.from_documents(
-        documents=docs,
-        collection_name=str(guild.id),
-        embedding=OpenAIEmbeddings(
-            organization=org_name,
-            api_key=SecretStr(api_key),
-            async_client=httpx.AsyncClient(),
-        ),
-        persist_directory=str(CHROMA_PATH.absolute()),
-    )
+    client = httpx.AsyncClient()
+
+    try:
+        Chroma.from_documents(
+            documents=docs,
+            collection_name=str(guild.id),
+            embedding=OpenAIEmbeddings(
+                model="text-embedding-3-small",
+                organization=org_name,
+                api_key=SecretStr(api_key),
+                async_client=client,
+            ),
+            collection_metadata={"hnsw:space": "cosine"},
+            persist_directory=str(CHROMA_PATH.absolute()),
+        )
+    finally:
+        await client.aclose()
     log.info(f"Saved {len(docs)} chunks to {CHROMA_PATH}.", guild=guild)
 
 

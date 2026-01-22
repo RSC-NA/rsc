@@ -49,7 +49,8 @@ class AdminSyncMixIn(AdminMixIn):
         super().__init__()
 
         # Start sync loop
-        self.sync_discord_roles.start()
+        if not self.sync_discord_roles.is_running():
+            self.sync_discord_roles.start()
 
     # Tasks
     @tasks.loop(time=SYNC_LOOP_TIME)
@@ -108,6 +109,10 @@ class AdminSyncMixIn(AdminMixIn):
             log.debug("Total Players: %d", total, guild=guild)
             log.debug("Total Synced: %d", synced, guild=guild)
             log.info("Finished syncing league players", guild=guild)
+
+    @sync_discord_roles.before_loop
+    async def before_sync_discord_roles(self):
+        await self.bot.wait_until_ready()
 
     _sync = app_commands.Group(
         name="sync",

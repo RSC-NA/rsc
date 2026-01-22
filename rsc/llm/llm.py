@@ -1,8 +1,10 @@
 import logging
+from datetime import time, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 import discord
+from discord.ext import tasks
 from redbot.core import app_commands, commands
 
 from rsc.abc import RSCMixIn
@@ -39,6 +41,8 @@ defaults_guild = LLMSettings(
     SimilarityThreshold=0.65,
 )
 
+LLM_DB_LOOP_TIME = time(hour=8)
+
 
 class LLMMixIn(RSCMixIn):
     def __init__(self):
@@ -46,6 +50,41 @@ class LLMMixIn(RSCMixIn):
         self.config.init_custom("LLM", 1)
         self.config.register_custom("LLM", **defaults_guild)
         super().__init__()
+
+        # Start DB loop
+        if not self.weekly_llm_db_refresh.is_running():
+            self.weekly_llm_db_refresh.start()
+
+    # Tasks
+
+    @tasks.loop(time=LLM_DB_LOOP_TIME)
+    async def weekly_llm_db_refresh(self):
+        """Weekly refresh of the LLM Chroma DB"""
+        log.info("Starting weekly LLM Chroma DB refresh task.")
+        for guild in self.bot.guilds:
+            # Only run on Monday morning
+            tz = await self.timezone(guild)
+            now = datetime.now(tz)
+            if now.weekday() != 0:
+                log.info("Skipping LLM DB refresh, not Monday.", guild=guild)
+                continue
+
+            if not await self._get_llm_status(guild):
+                log.debug("LLM is not active, skipping DB refresh.", guild=guild)
+                continue
+
+            log.info("Refreshing LLM Chroma DB.", guild=guild)
+            try:
+                chunks = await self.create_chroma_db(guild)
+            except ValueError as exc:
+                log.error(f"Failed to refresh LLM Chroma DB: {exc}", exc_info=exc, guild=guild)
+                continue
+
+            log.info(f"Refreshed LLM Chroma DB with {chunks} chunks.", guild=guild)
+
+    @weekly_llm_db_refresh.before_loop
+    async def before_refresh(self):
+        await self.bot.wait_until_ready()
 
     # Listener
 
@@ -89,22 +128,7 @@ class LLMMixIn(RSCMixIn):
             return
 
         # Remove bot mention
-        cleaned_msg = message.clean_content.replace(f"@{guild.me.display_name}", "").strip()
-        log.debug(f"Cleaned LLM Message: {cleaned_msg}")
-
-        # Replace some key words
-        cleaned_msg = cleaned_msg.replace(" My ", message.author.display_name)
-        cleaned_msg = cleaned_msg.replace(" my ", message.author.display_name)
-        cleaned_msg = cleaned_msg.replace(" I ", message.author.display_name)
-        cleaned_msg = cleaned_msg.replace(" i ", message.author.display_name)
-        cleaned_msg = cleaned_msg.replace(" I?", message.author.display_name)
-        cleaned_msg = cleaned_msg.replace(" i?", message.author.display_name)
-        cleaned_msg = cleaned_msg.replace("Your ", guild.me.display_name)
-        cleaned_msg = cleaned_msg.replace("your ", guild.me.display_name)
-        cleaned_msg = cleaned_msg.replace("You ", guild.me.display_name)
-        cleaned_msg = cleaned_msg.replace("you ", guild.me.display_name)
-        cleaned_msg = cleaned_msg.replace(" Me ", message.author.display_name)
-        cleaned_msg = cleaned_msg.replace(" me ", message.author.display_name)
+        cleaned_msg = await self.clean_question(message)
 
         try:
             response, _sources = await llm_query(
@@ -463,13 +487,6 @@ class LLMMixIn(RSCMixIn):
             rdocs = await load_rule_style_docs(fd)
             docs.extend(rdocs)
 
-        log.info("Creating rule documents.")
-        rulepath = Path(__file__).parent.parent / "resources" / "rules"
-        for fd in rulepath.glob("*.md"):
-            log.debug(f"Rule Doc: {fd}")
-            rdocs = await load_rule_style_docs(fd)
-            docs.extend(rdocs)
-
         log.info("Creating help documents.")
         helpdocs = await load_help_docs()
         docs.extend(await markdown_to_documents(helpdocs))
@@ -546,6 +563,34 @@ class LLMMixIn(RSCMixIn):
         await create_chroma_db(guild=guild, org_name=org, api_key=key, docs=docs)
         log.info("Chroma database created")
         return len(docs)
+
+    async def clean_question(self, message: discord.Message) -> str:
+        if not message.guild:
+            return message.clean_content
+
+        # Remove bot mention
+        cleaned_msg = message.clean_content.replace(f"@{message.guild.me.display_name}", "").strip()
+        log.debug(f"Original Question: {cleaned_msg}")
+
+        display_name = f" {message.author.display_name} "
+        bot_name = f" {message.guild.me.display_name} "
+        # Replace some key words
+        cleaned_msg = cleaned_msg.replace(" My ", display_name)
+        cleaned_msg = cleaned_msg.replace(" my ", display_name)
+        cleaned_msg = cleaned_msg.replace(" I ", display_name)
+        cleaned_msg = cleaned_msg.replace(" i ", display_name)
+        cleaned_msg = cleaned_msg.replace(" I?", display_name)
+        cleaned_msg = cleaned_msg.replace(" i?", display_name)
+        cleaned_msg = cleaned_msg.replace("Your ", bot_name)
+        cleaned_msg = cleaned_msg.replace("your ", bot_name)
+        cleaned_msg = cleaned_msg.replace("You ", bot_name)
+        cleaned_msg = cleaned_msg.replace("you ", bot_name)
+        cleaned_msg = cleaned_msg.replace(" Me ", display_name)
+        cleaned_msg = cleaned_msg.replace(" me ", display_name)
+
+        log.debug(f"Cleaned Question: {cleaned_msg}")
+
+        return cleaned_msg
 
     async def format_llm_sources(self, sources: list[str | None]) -> str:
         results = []

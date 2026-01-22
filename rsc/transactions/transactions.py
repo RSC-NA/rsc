@@ -101,7 +101,8 @@ class TransactionMixIn(RSCMixIn):
         super().__init__()
 
         # Start sub expire loop
-        self.expire_sub_contract_loop.start()
+        if not self.expire_sub_contract_loop.is_running():
+            self.expire_sub_contract_loop.start()
 
     # Tasks
     @tasks.loop(time=SUB_LOOP_TIME)
@@ -192,6 +193,10 @@ class TransactionMixIn(RSCMixIn):
                         guild=guild,
                     )
         log.info("Finished expire substitute daily loop.")
+
+    @expire_sub_contract_loop.before_loop
+    async def before_expire_sub_contract_loop(self):
+        await self.bot.wait_until_ready()
 
     # Listeners
 

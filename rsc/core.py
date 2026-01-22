@@ -132,6 +132,8 @@ class RSC(
         log.info("Cancelling task loops due to cog_unload()")
         self.expire_sub_contract_loop.cancel()
         self.expire_free_agent_checkins_loop.cancel()
+        self.sync_discord_roles.cancel()
+        self.weekly_llm_db_refresh.cancel()
         await self.close_ballchasing_sessions()
         await self._web_runner.cleanup()
 

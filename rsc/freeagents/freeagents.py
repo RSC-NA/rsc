@@ -36,7 +36,8 @@ class FreeAgentMixIn(RSCMixIn):
         super().__init__()
 
         # Start FA check in loop
-        self.expire_free_agent_checkins_loop.start()
+        if not self.expire_free_agent_checkins_loop.is_running():
+            self.expire_free_agent_checkins_loop.start()
 
     # Setup
 
@@ -50,7 +51,7 @@ class FreeAgentMixIn(RSCMixIn):
 
     @tasks.loop(time=FA_LOOP_TIME)
     async def expire_free_agent_checkins_loop(self):
-        log.debug("Expire FA Loop is running")
+        log.debug("Expire FA check-in Loop is running")
         for k, v in self._check_ins.items():
             guild = self.bot.get_guild(k)
 
@@ -69,6 +70,15 @@ class FreeAgentMixIn(RSCMixIn):
                 if checkin_date.date() <= yesterday.date():
                     log.debug(f"[{guild.name} Expiring FA check in: {player['player']}")
                     await self.remove_checkin(guild, player)
+
+    @expire_free_agent_checkins_loop.before_loop
+    async def before_expire_free_agent_checkins_loop(self):
+        log.debug("Waiting for bot to be ready before starting expire FA check in loop...")
+        await self.bot.wait_until_ready()
+        log.debug("Bot is ready, populating FA cache...")
+        for guild in self.bot.guilds:
+            await self._populate_free_agent_cache(guild)
+        log.debug("FA cache populated, starting expire FA check in loop.")
 
     # Groups
 
