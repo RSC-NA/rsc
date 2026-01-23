@@ -1,6 +1,7 @@
 import logging
 from datetime import datetime
 from typing import TYPE_CHECKING
+from collections.abc import AsyncIterator
 
 import discord
 from redbot.core import app_commands
@@ -592,6 +593,56 @@ class MatchMixIn(RSCMixIn):
                 return matches.results
             except ApiException as exc:
                 raise RscException(response=exc)
+
+    async def paged_matches(
+        self,
+        guild: discord.Guild,
+        season_number: int,
+        date__lt: datetime | None = None,
+        date__gt: datetime | None = None,
+        season: int | None = None,
+        match_team_type: MatchTeamEnum = MatchTeamEnum.ALL,
+        team_name: str | None = None,
+        day: int | None = None,
+        match_type: MatchType | None = None,
+        match_format: MatchFormat | None = None,
+        limit: int = 0,
+        offset: int = 0,
+        per_page: int = 100,
+    ) -> AsyncIterator[MatchList]:
+        """Generator to page through matches (Must have season number due to high API load)"""
+        offset = 0
+        while True:
+            async with ApiClient(self._api_conf[guild.id]) as client:
+                api = MatchesApi(client)
+                try:
+                    matches: MatchesList200Response = await api.matches_list(
+                        date__lt=date__lt.isoformat() if date__lt else None,
+                        date__gt=date__gt.isoformat() if date__gt else None,
+                        season=season,
+                        season_number=season_number,
+                        match_team_type=str(match_team_type),
+                        team_name=team_name,
+                        day=day,
+                        match_type=str(match_type) if match_type else None,
+                        match_format=str(match_format) if match_format else None,
+                        league=self._league[guild.id],
+                        limit=limit,
+                        offset=offset,
+                    )
+
+                    if not matches.results:
+                        break
+
+                    for match in matches.results:
+                        yield match
+                except ApiException as exc:
+                    raise RscException(exc)
+
+            if not matches.next:
+                break
+
+            offset += per_page
 
     async def find_match(
         self,

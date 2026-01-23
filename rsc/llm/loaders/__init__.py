@@ -4,3 +4,4 @@ from rsc.llm.loaders.franchiseloader import (
 from rsc.llm.loaders.playerloader import PlayerDocumentLoader as PlayerDocumentLoader
 from rsc.llm.loaders.ruleloader import RuleDocumentLoader as RuleDocumentLoader
 from rsc.llm.loaders.teamloader import TeamDocumentLoader as TeamDocumentLoader
+from rsc.llm.loaders.matchloader import MatchDocumentLoader as MatchDocumentLoader

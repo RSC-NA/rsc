@@ -324,6 +324,24 @@ class RSCMixIn(ABC):
     ) -> list[MatchList]: ...
 
     @abstractmethod
+    def paged_matches(
+        self,
+        guild: discord.Guild,
+        season_number: int,
+        date__lt: datetime | None = None,
+        date__gt: datetime | None = None,
+        season: int | None = None,
+        match_team_type: MatchTeamEnum = MatchTeamEnum.ALL,
+        team_name: str | None = None,
+        day: int | None = None,
+        match_type: MatchType | None = None,
+        match_format: MatchFormat | None = None,
+        limit: int = 0,
+        offset: int = 0,
+        per_page: int = 100,
+    ) -> AsyncIterator[MatchList]: ...
+
+    @abstractmethod
     async def find_match(
         self,
         guild: discord.Guild,

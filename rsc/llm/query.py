@@ -36,6 +36,12 @@ sys.modules["sqlite3"] = sys.modules.pop("pysqlite3")
 CHROMA_PATH = Path(__file__).parent / "db"
 CHROMA_PATH_ABS = CHROMA_PATH.absolute()
 
+# Constants
+ANCHOR_SCORE_THRESHOLD = 0.95
+ANCHOR_EXPANSION_MIN_SCORE = 0.5  # Minimum score for expanded context
+OPENAI_TEMPERATURE = 0.3
+DYNAMIC_CUTOFF = 0.65
+
 
 # Template
 PROMPT_TEMPLATE = """
@@ -45,8 +51,9 @@ You have access to the following context from the RSC rulebooks, team informatio
 
 {context}
 
-Answer the question using the context provided above. Do not create your own acronyms.
-If you cannot answer the question based on the context provided, say so clearly.
+Answer the question using the context provided above. If you can provide rule number references, do so.
+Do not create your own acronyms.
+If you cannot answer the question based on the context provided, say so clearly. Do not try to make assumptions"
 Keep your response under 2000 characters for Discord compatibility.
 
 Do NOT respond with anything that could be considered a discord bot command (e.g., starting with a "!" or "?").
@@ -54,8 +61,8 @@ Do NOT respond with anything that could be considered a discord bot command (e.g
 
 
 def normalize_distances(
-    docs: list[tuple["Document", float]],
-) -> list[tuple["Document", float, float]]:
+    docs: list[tuple[Document, float]],
+) -> list[tuple[Document, float, float]]:
     """
     Convert raw distances into normalized relevance scores (0-1).
     Higher score = more relevant.
@@ -72,8 +79,8 @@ def normalize_distances(
 
 
 def deduplicate_documents(
-    scored: list[tuple["Document", float, float]],
-) -> list[tuple["Document", float, float]]:
+    scored: list[tuple[Document, float, float]],
+) -> list[tuple[Document, float, float]]:
     """
     Remove duplicate chunks from the same document.
     """
@@ -83,9 +90,9 @@ def deduplicate_documents(
     for doc, distance, score in sorted(scored, key=lambda x: x[2], reverse=True):
         key = (
             doc.metadata.get("source"),
-            doc.metadata.get("document_id"),
+            doc.id,
         )
-        log.debug("Inspecting document chunk for deduplication: %s - %s", key, doc.metadata.get("chunk_index"))
+        log.debug("Inspecting document chunk for deduplication: %s", key)
         if key in seen:
             log.debug(f"Deduplicating document chunk: {key}")
             continue
@@ -96,76 +103,103 @@ def deduplicate_documents(
     return deduped
 
 
-def merge_sequential_chunks(
-    docs: list[tuple[Document, float, float]],
-) -> list[dict]:
-    """
-    Merge adjacent chunks into larger context blocks.
-    """
-    merged: list[list[tuple[Document, float]]] = []
-    buffer: list[tuple[Document, float]] = []
-
-    log.debug(f"Merging {len(docs)} documents into sequential chunks")
-    for doc, _distance, score in docs:
-        idx = doc.metadata.get("chunk_index")
-        source = doc.metadata.get("source", "unknown")
-
-        if buffer and idx is not None and buffer[-1][0].metadata.get("chunk_index") == idx - 1:
-            log.debug(f"Merging chunk {idx} from {source} into buffer")
-            buffer.append((doc, score))
-        else:
-            if buffer:
-                log.debug(f"Finalizing merged group with {len(buffer)} chunks from {buffer[0][0].metadata.get('source')}")
-                merged.append(buffer)
-            log.debug(f"Starting new buffer with chunk {idx} from {source}")
-            buffer = [(doc, score)]
-
-    if buffer:
-        log.debug(f"Finalizing final merged group with {len(buffer)} chunks")
-        merged.append(buffer)
-
-    result = [
-        {
-            "content": "\n".join(d.page_content for d, _ in group),
-            "score": max(score for _, score in group),
-            "source": group[0][0].metadata.get("source"),
-        }
-        for group in merged
-    ]
-
-    log.debug(f"Merged into {len(result)} final document groups")
-    return result
-
-
 def apply_dynamic_cutoff(
-    docs: list[dict],
-    ratio: float = 0.65,
-) -> list[dict]:
+    docs: list[tuple[Document, float, float]],
+    ratio: float = DYNAMIC_CUTOFF,
+) -> list[tuple[Document, float, float]]:
     """
     Keep only documents close to the best match.
     """
     if not docs:
         return []
 
-    docs.sort(key=lambda x: x["score"], reverse=True)
-    top_score = docs[0]["score"]
+    sorted_docs = sorted(docs, key=lambda x: x[2], reverse=True)
+    top_score = sorted_docs[0][2]
 
-    filtered = [d for d in docs if d["score"] >= top_score * ratio]
+    filtered = [d for d in sorted_docs if d[2] >= top_score * ratio]
+    log.debug("Dynamic cutoff at %.2f: kept %d of %d documents", ratio, len(filtered), len(docs))
 
-    return filtered or docs[:1]
+    return filtered or sorted_docs[:1]
 
 
 def build_context(
-    docs: list[dict],
+    docs: list[tuple[Document, float, float]],
 ) -> tuple[str, list[str | None]]:
     """
     Assemble final prompt context and source list.
     """
-    context = "\n\n---\n\n".join(f"[Relevance {doc['score']:.2f}]\n{doc['content']}" for doc in docs)
+    context = "\n\n---\n\n".join(f"[Relevance {score:.2f}]\n{doc.page_content}" for doc, _distance, score in docs)
 
-    sources = [doc["source"] for doc in docs]
+    sources = [doc.metadata.get("source") for doc, _distance, _score in docs]
 
     return context, sources
+
+
+async def expand_context_from_anchors(
+    anchors: list[Document],
+    llm_db: Chroma,
+    question: str,
+    top_n: int = 3,
+    min_score: float = ANCHOR_EXPANSION_MIN_SCORE,
+) -> list[tuple[Document, float, float]]:
+    """
+    Given high-confidence anchors, fetch related chunks from Chroma to expand context.
+
+    Uses a combined query of the original question and anchor content to find
+    contextually relevant adjacent information.
+    """
+    if not anchors:
+        return []
+
+    extra_docs: list[tuple[Document, float]] = []
+    seen_ids: set[str] = set()
+
+    # Add original question as an anchor
+    question_anchor = Document(
+        page_content=question,
+        metadata={"source": "query_anchor"},
+    )
+
+    anchors = [*anchors, question_anchor]
+
+    # Track anchor IDs to avoid re-adding them
+    for anchor in anchors:
+        if anchor.id:
+            seen_ids.add(anchor.id)
+
+    for anchor in anchors:
+        source = anchor.metadata.get("source", "")
+
+        # Create a more targeted query combining question context with anchor source
+
+        log.debug(f"Expanding context from anchor. source={source} ID={anchor.id}")
+
+        # Search with the combined query for better relevance
+        similar = await llm_db.asimilarity_search_with_score(
+            anchor.page_content,
+            k=top_n,
+        )
+
+        for doc, distance in similar:
+            # Skip if we've already seen this document
+            if doc.id and doc.id in seen_ids:
+                continue
+            if doc.id:
+                seen_ids.add(doc.id)
+            extra_docs.append((doc, distance))
+
+    if not extra_docs:
+        return []
+
+    # Normalize and filter by minimum score
+    scored = normalize_distances(extra_docs)
+
+    # Filter out low-confidence expansions
+    filtered = [(doc, dist, score) for doc, dist, score in scored if score >= min_score]
+
+    log.debug(f"Anchor expansion: {len(extra_docs)} candidates, {len(filtered)} passed min_score={min_score}")
+
+    return filtered
 
 
 async def llm_query(
@@ -207,7 +241,13 @@ async def llm_query(
             ),
         )
 
+        # Add date context for match-related questions
+        if "match" in question.lower():
+            log.debug("Question appears to be match-related.", guild=guild)
+            question += f"\nDate: {discord.utils.utcnow().date().strftime('%m-%d-%Y')}"
+
         # Search the DB with distance scores (lower is better)
+        log.debug(f"Initial Question: {question}", guild=guild)
         similar = await llm_db.asimilarity_search_with_score(question, k=count)
 
         if not similar:
@@ -215,13 +255,6 @@ async def llm_query(
             return (None, [])
 
         log.debug(f"Similar result count: {len(similar)}", guild=guild)
-
-        for doc, distance in similar:
-            log.debug(
-                f"Doc source={doc.metadata.get('source')} distance={distance:.4f} ID={doc.id}",
-                guild=guild,
-            )
-            log.debug(f"Doc content: {doc.page_content[:100]}", guild=guild)
 
         # Retrieval pipeline
         scored = normalize_distances(similar)
@@ -231,14 +264,28 @@ async def llm_query(
                 f"Normalized score={score:.3f} Distance={distance:.4f} source={doc.metadata.get('source')}",
                 guild=guild,
             )
+            log.debug(f"Document content: {doc.page_content[:100]}", guild=guild)
 
+        # Identify high-confidence anchors (>= 0.95 Default)
+        anchors = [doc for doc, _, score in scored if score >= ANCHOR_SCORE_THRESHOLD]
+        extra_context_docs = await expand_context_from_anchors(anchors, llm_db, question=question, top_n=3)
+        log.debug(f"Expanded {len(extra_context_docs)} extra context documents from anchors.", guild=guild)
+        if extra_context_docs:
+            for extra_doc, distance, score in extra_context_docs:
+                log.debug(
+                    f"Extra context score={score:.3f} Distance={distance:.4f} source={extra_doc.metadata.get('source')}",
+                    guild=guild,
+                )
+                log.debug(f"Extra context content: {extra_doc.page_content[:100]}", guild=guild)
+            scored.extend(extra_context_docs)
+
+        # Continue pipeline
         deduped = deduplicate_documents(scored)
-        merged = merge_sequential_chunks(deduped)
-        final_docs = apply_dynamic_cutoff(merged)
+        final_docs = apply_dynamic_cutoff(deduped)
 
-        for doc in final_docs:
+        for doc, distance, score in final_docs:
             log.debug(
-                f"Final score={doc['score']:.3f} source={doc['source']}",
+                f"Final score={score:.3f} distance={distance:.4f} source={doc.metadata.get('source')}",
                 guild=guild,
             )
 

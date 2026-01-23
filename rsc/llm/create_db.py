@@ -18,16 +18,12 @@ from langchain_core.documents import Document
 from langchain_openai.embeddings import OpenAIEmbeddings
 from langchain_text_splitters import MarkdownTextSplitter
 from pydantic.types import SecretStr
+from rscapi import MatchList
 from rscapi.models.franchise_list import FranchiseList
 from rscapi.models.league_player import LeaguePlayer
 from rscapi.models.team import Team
 
-from rsc.llm.loaders import (
-    FranchiseDocumentLoader,
-    PlayerDocumentLoader,
-    RuleDocumentLoader,
-    TeamDocumentLoader,
-)
+from rsc.llm.loaders import FranchiseDocumentLoader, PlayerDocumentLoader, RuleDocumentLoader, TeamDocumentLoader, MatchDocumentLoader
 from rsc.logs import GuildLogAdapter
 
 logger = logging.getLogger("red.rsc.llm.create")
@@ -57,7 +53,7 @@ async def load_funny_docs() -> list[Document]:
     log.debug("Loading funny documents")
     fpath = Path(__file__).parent.parent / "resources" / "funny"
     loader = DirectoryLoader(str(fpath), glob="*.md")
-    documents = loader.load()
+    documents = await loader.aload()
     for d in documents:
         d.metadata["source"] = "Funny"
     return documents
@@ -71,7 +67,7 @@ async def load_help_docs() -> list[Document]:
     log.debug("Loading help documents")
     fpath = Path(__file__).parent.parent / "resources" / "help"
     loader = DirectoryLoader(str(fpath), glob="*.md")
-    documents = loader.load()
+    documents = await loader.aload()
     for d in documents:
         src = Path(d.metadata["source"])
         d.metadata["source"] = src.stem.capitalize()
@@ -83,7 +79,7 @@ async def load_rule_style_docs(file: str | Path) -> list[Document]:
     loader = RuleDocumentLoader(str(file))
     async for doc in loader.alazy_load():
         log.debug(f"Document: {doc.page_content}")
-        log.debug(f"Document Source: {doc.metadata}")
+        log.debug(f"Document Metadata: {doc.metadata}")
         documents.append(doc)
     return documents
 
@@ -123,17 +119,27 @@ async def load_franchise_docs(franchises: list[FranchiseList]):
     loader = FranchiseDocumentLoader(franchises)
     async for doc in loader.alazy_load():
         log.debug(f"Document: {doc.page_content}")
-        log.debug(f"Document Source: {doc.metadata}")
+        log.debug(f"Document Metadata: {doc.metadata}")
         documents.append(doc)
     return documents
 
 
-async def load_player_docs(players: list[LeaguePlayer]):
+async def load_player_docs(players: list[LeaguePlayer], chunk_index: int = 0):
     documents = []
-    loader = PlayerDocumentLoader(players)
+    loader = PlayerDocumentLoader(players, chunk_index=chunk_index)
     async for doc in loader.alazy_load():
         log.debug(f"Document: {doc.page_content}")
-        log.debug(f"Document Source: {doc.metadata}")
+        log.debug(f"Document Metadata: {doc.metadata}")
+        documents.append(doc)
+    return documents
+
+
+async def load_match_docs(matches: list[MatchList], chunk_index: int = 0):
+    documents = []
+    loader = MatchDocumentLoader(matches, chunk_index=chunk_index)
+    async for doc in loader.alazy_load():
+        log.debug(f"Document: {doc.page_content}")
+        log.debug(f"Document Metadata: {doc.metadata}")
         documents.append(doc)
     return documents
 
@@ -143,7 +149,7 @@ async def load_team_docs(teams: list[Team]):
     loader = TeamDocumentLoader(teams)
     async for doc in loader.alazy_load():
         log.debug(f"Document: {doc.page_content}")
-        log.debug(f"Document Source: {doc.metadata}")
+        log.debug(f"Document Metadata: {doc.metadata}")
         documents.append(doc)
     return documents
 

@@ -1,5 +1,5 @@
 import logging
-from collections.abc import Iterator
+from collections.abc import AsyncIterator, Iterator
 
 from langchain_core.document_loaders import BaseLoader
 from langchain_core.documents import Document
@@ -24,10 +24,9 @@ class TeamDocumentLoader(BaseLoader):
     def __init__(self, teams: list[Team]) -> None:
         self.teams: list[Team] = teams
 
-    def lazy_load(self) -> Iterator[Document]:
-        """A lazy loader that reads RSC Rule style documents."""
-
-        for t in self.teams:
+    def _process_teams(self) -> Iterator[Document]:
+        """Process teams and yield Documents."""
+        for idx, t in enumerate(self.teams):
             if not (t.id and t.name and t.players):
                 continue
 
@@ -58,5 +57,14 @@ class TeamDocumentLoader(BaseLoader):
                     players=players_fmt,
                     captain=captain,
                 ),
-                metadata={"source": "Teams API", "id": str(t.id)},
+                metadata={"source": "Teams API", "id": str(t.id), "chunk_index": idx},
             )
+
+    def lazy_load(self) -> Iterator[Document]:
+        """A lazy loader that reads RSC Rule style documents."""
+        yield from self._process_teams()
+
+    async def alazy_load(self) -> AsyncIterator[Document]:
+        """An async lazy loader for RSC team documents."""
+        for doc in self._process_teams():
+            yield doc

@@ -16,6 +16,7 @@ from rsc.llm.create_db import (
     load_help_docs,
     load_player_docs,
     load_rule_style_docs,
+    load_match_docs,
     load_team_docs,
     markdown_to_documents,
     string_to_doc,
@@ -23,6 +24,7 @@ from rsc.llm.create_db import (
 from rsc.llm.query import llm_query
 from rsc.logs import GuildLogAdapter
 from rsc.types import LLMSettings
+from rsc.utils import utils
 
 if TYPE_CHECKING:
     from langchain_core.documents import Document
@@ -473,6 +475,12 @@ class LLMMixIn(RSCMixIn):
                 )
             )
 
+        current_season = await self.current_season(guild)
+        if not current_season:
+            raise ValueError("Current season is not configured, cannot create LLM Chroma DB.")
+        if not current_season.number:
+            raise ValueError("Current season number is not set, cannot create LLM Chroma DB.")
+
         # Read in Markdown documents
         log.info("Create dates document.")
         dates = await self._get_dates(guild)
@@ -521,8 +529,24 @@ class LLMMixIn(RSCMixIn):
         log.info("Creating player documents.")
         pcount = await self.total_players(guild)
         log.debug(f"Total Players: {pcount}")
+        player_index = 0
         async for player in self.paged_players(guild):
-            docs.extend(await load_player_docs([player]))
+            docs.extend(await load_player_docs([player], chunk_index=player_index))
+            player_index += 1
+
+        if interaction:
+            await interaction.edit_original_response(
+                embed=YellowEmbed(
+                    title="Creating Chroma DB",
+                    description="Loading match documents.",
+                )
+            )
+
+        log.info("Creating match documents.")
+        match_index = 0
+        async for match in self.paged_matches(guild, season_number=current_season.number):
+            docs.extend(await load_match_docs([match], chunk_index=match_index))
+            match_index += 1
 
         if interaction:
             await interaction.edit_original_response(
@@ -572,7 +596,9 @@ class LLMMixIn(RSCMixIn):
         cleaned_msg = message.clean_content.replace(f"@{message.guild.me.display_name}", "").strip()
         log.debug(f"Original Question: {cleaned_msg}")
 
-        display_name = f" {message.author.display_name} "
+        no_prefix = await utils.remove_prefix(message.author)
+        # display_name = f" {message.author.display_name} "
+        display_name = f" {no_prefix} "
         bot_name = f" {message.guild.me.display_name} "
         # Replace some key words
         cleaned_msg = cleaned_msg.replace(" My ", display_name)

@@ -1,5 +1,5 @@
 import logging
-from collections.abc import Iterator
+from collections.abc import AsyncIterator, Iterator
 
 from langchain_core.document_loaders import BaseLoader
 from langchain_core.documents import Document
@@ -18,16 +18,14 @@ FRANCHISE_INPUT = """
 
 
 class FranchiseDocumentLoader(BaseLoader):
-    """RSC Rule Document style loader"""
+    """RSC Franchise Document style loader"""
 
     def __init__(self, franchises: list[FranchiseList]) -> None:
         self.franchises: list[FranchiseList] = franchises
 
-    def lazy_load(self) -> Iterator[Document]:
-        """A lazy loader that reads RSC Rule style documents."""
-
-        final = []
-        for f in self.franchises:
+    def _process_franchises(self) -> Iterator[Document]:
+        """Process franchises and yield Documents."""
+        for idx, f in enumerate(self.franchises):
             if not (f.name and f.prefix and f.gm and f.gm.rsc_name and f.tiers and f.teams):
                 log.warning(f"Skipping franchise {f.id}. Missing required data for LLM input.")
                 continue
@@ -48,7 +46,7 @@ class FranchiseDocumentLoader(BaseLoader):
                     continue
                 teams.append(team.name)
 
-            input = FRANCHISE_INPUT.format(
+            content = FRANCHISE_INPUT.format(
                 name=f.name,
                 prefix=f.prefix,
                 gm=f.gm.rsc_name,
@@ -56,9 +54,16 @@ class FranchiseDocumentLoader(BaseLoader):
                 tiers=", ".join(tiers),
             )
 
-            final.append(input)
+            yield Document(
+                page_content=content,
+                metadata={"source": "Franchises API", "id": str(f.id), "chunk_index": idx},
+            )
 
-        yield Document(
-            page_content="\n".join(final),
-            metadata={"source": "Franchises API", "id": str(f.id)},
-        )
+    def lazy_load(self) -> Iterator[Document]:
+        """A lazy loader that reads RSC Franchise style documents."""
+        yield from self._process_franchises()
+
+    async def alazy_load(self) -> AsyncIterator[Document]:
+        """An async lazy loader for RSC Franchise documents."""
+        for doc in self._process_franchises():
+            yield doc
