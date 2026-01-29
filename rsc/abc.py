@@ -525,7 +525,7 @@ class RSCMixIn(ABC):
         self,
         guild: discord.Guild,
         id: int,
-    ) -> Match | None: ...
+    ) -> Match: ...
 
     @abstractmethod
     async def team_by_id(

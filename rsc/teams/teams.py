@@ -610,31 +610,34 @@ class TeamMixIn(RSCMixIn):
     ) -> list[TeamList]:
         """Fetch teams from API"""
         async with ApiClient(self._api_conf[guild.id]) as client:
-            api = TeamsApi(client)
-            teams = await api.teams_list(
-                seasons=seasons,
-                franchise=franchise,
-                name=name,
-                tier=tier,
-                league=self._league[guild.id],
-            )
-            # Populate cache
-            if teams:
-                if not all(t.name for t in teams):
-                    raise AttributeError("API returned a team with no name.")
+            try:
+                api = TeamsApi(client)
+                teams = await api.teams_list(
+                    seasons=seasons,
+                    franchise=franchise,
+                    name=name,
+                    tier=tier,
+                    league=self._league[guild.id],
+                )
+                # Populate cache
+                if teams:
+                    if not all(t.name for t in teams):
+                        raise AttributeError("API returned a team with no name.")
 
-                if self._team_cache.get(guild.id):
-                    log.debug(f"[{guild.name}] Adding new teams to cache")
-                    cached = set(self._team_cache[guild.id])
-                    different = {t.name for t in teams if t.name} - cached
-                    if different:
-                        log.debug(f"[{guild.name}] Teams being added to cache: {different}")
-                        self._team_cache[guild.id] += list(different)
-                else:
-                    log.debug(f"[{guild.name}] Starting fresh teams cache")
-                    self._team_cache[guild.id] = [t.name for t in teams if t.name]
-                self._team_cache[guild.id].sort()
-            return teams
+                    if self._team_cache.get(guild.id):
+                        log.debug(f"[{guild.name}] Adding new teams to cache")
+                        cached = set(self._team_cache[guild.id])
+                        different = {t.name for t in teams if t.name} - cached
+                        if different:
+                            log.debug(f"[{guild.name}] Teams being added to cache: {different}")
+                            self._team_cache[guild.id] += list(different)
+                    else:
+                        log.debug(f"[{guild.name}] Starting fresh teams cache")
+                        self._team_cache[guild.id] = [t.name for t in teams if t.name]
+                    self._team_cache[guild.id].sort()
+                return teams
+            except ApiException as exc:
+                raise RscException(exc)
 
     async def team_by_id(
         self,
@@ -643,8 +646,11 @@ class TeamMixIn(RSCMixIn):
     ) -> Team:
         """Fetch team data by id"""
         async with ApiClient(self._api_conf[guild.id]) as client:
-            api = TeamsApi(client)
-            return await api.teams_read(id)
+            try:
+                api = TeamsApi(client)
+                return await api.teams_read(id)
+            except ApiException as exc:
+                raise RscException(exc)
 
     async def team_players(
         self,
@@ -653,17 +659,23 @@ class TeamMixIn(RSCMixIn):
     ) -> list[Player]:
         """Fetch team data by id"""
         async with ApiClient(self._api_conf[guild.id]) as client:
-            api = TeamsApi(client)
-            return await api.teams_players(id)
+            try:
+                api = TeamsApi(client)
+                return await api.teams_players(id)
+            except ApiException as exc:
+                raise RscException(exc)
 
     async def next_match(
         self,
         guild: discord.Guild,
         id: int,
-    ) -> Match | None:
+    ) -> Match:
         async with ApiClient(self._api_conf[guild.id]) as client:
-            api = TeamsApi(client)
-            return await api.teams_next_match(id)
+            try:
+                api = TeamsApi(client)
+                return await api.teams_next_match(id)
+            except ApiException as exc:
+                raise RscException(exc)
 
     async def season_matches(
         self,
@@ -673,10 +685,13 @@ class TeamMixIn(RSCMixIn):
         preseason: bool = False,
     ) -> list[HighLevelMatch]:
         async with ApiClient(self._api_conf[guild.id]) as client:
-            api = TeamsApi(client)
-            matches = await api.teams_season_matches(id, preseason=preseason, season=season)
-            matches.sort(key=lambda x: cast(int, x.day))
-            return matches
+            try:
+                api = TeamsApi(client)
+                matches = await api.teams_season_matches(id, preseason=preseason, season=season)
+                matches.sort(key=lambda x: cast(int, x.day))
+                return matches
+            except ApiException as exc:
+                raise RscException(exc)
 
     async def team_stats(
         self,

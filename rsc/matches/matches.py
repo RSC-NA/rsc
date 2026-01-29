@@ -5,7 +5,7 @@ from collections.abc import AsyncIterator
 
 import discord
 from redbot.core import app_commands
-from rscapi import ApiClient, MatchesApi
+from rscapi import ApiClient, MatchesApi, TeamsApi
 from rscapi.exceptions import ApiException
 from rscapi.models.match import Match
 from rscapi.models.match_list import MatchList
@@ -14,7 +14,7 @@ from rscapi.models.match_score_report import MatchScoreReport
 from rscapi.models.match_submission import MatchSubmission
 
 from rsc.abc import RSCMixIn
-from rsc.embeds import BlueEmbed, ErrorEmbed, ExceptionErrorEmbed, YellowEmbed
+from rsc.embeds import BlueEmbed, ErrorEmbed, ExceptionErrorEmbed, YellowEmbed, ApiExceptionErrorEmbed
 from rsc.enums import (
     MatchFormat,
     MatchTeamEnum,
@@ -37,7 +37,7 @@ log = GuildLogAdapter(logger)
 
 
 class MatchMixIn(RSCMixIn):
-    def __init__(self):
+    def __init__(self) -> None:
         log.debug("Initializing MatchMixIn")
         super().__init__()
 
@@ -173,14 +173,14 @@ class MatchMixIn(RSCMixIn):
     @app_commands.describe(team="Get match information for a specific team (General Manager Only)")
     @app_commands.autocomplete(team=TeamMixIn.teams_autocomplete)  # type: ignore[type-var]
     @app_commands.guild_only
-    async def _match_cmd(self, interaction: discord.Interaction, team: str | None = None):
+    async def _match_cmd(self, interaction: discord.Interaction, team: str | None = None, day: int | None = None):
         guild = interaction.guild
         if not (guild and isinstance(interaction.user, discord.Member)):
             return
 
         await interaction.response.defer(ephemeral=True)
 
-        # Find the team ID of interaction user
+        # Find the team ID
         if team:
             # Get API id of team
             try:
@@ -188,41 +188,51 @@ class MatchMixIn(RSCMixIn):
             except ValueError as exc:
                 return await interaction.followup.send(embed=ExceptionErrorEmbed(exc_message=str(exc)), ephemeral=True)
         else:
-            player = await self.players(guild, discord_id=interaction.user.id, limit=1)
-            if not player:
+            plist = await self.players(guild, discord_id=interaction.user.id, limit=1)
+            if not plist:
                 await interaction.followup.send(
                     embed=ErrorEmbed(description="You are not currently signed up for the league."),
                     ephemeral=True,
                 )
                 return
-            if not (player[0].team and player[0].team.name):
+
+            player = plist.pop(0)
+            if not (player.team and player.team.id and player.team.name):
                 await interaction.followup.send(
                     embed=ErrorEmbed(description="You are not currently rostered on a team."),
                     ephemeral=True,
                 )
                 return
 
-            # Get API id of team
-            try:
-                if team:
-                    log.debug(f"Getting Team ID: {team}")
-                    team_id = await self.team_id_by_name(guild, name=team)
-                else:
-                    log.debug(f"Getting Team ID: {player[0].team.name}")
-                    team_id = await self.team_id_by_name(guild, name=player[0].team.name)
-            except ValueError as exc:
-                return await interaction.followup.send(embed=ExceptionErrorEmbed(exc_message=str(exc)), ephemeral=True)
+            # Get API ID of team
+            team_id = player.team.id
+
+            # # Get API id of team
+            # try:
+            #     if team:
+            #         log.debug(f"Getting Team ID: {team}")
+            #         team_id = await self.team_id_by_name(guild, name=team)
+            #     else:
+            #         log.debug(f"Getting Team ID: {player[0].team.name}")
+            #         team_id = await self.team_id_by_name(guild, name=player[0].team.name)
+            # except ValueError as exc:
+            #     return await interaction.followup.send(embed=ExceptionErrorEmbed(exc_message=str(exc)), ephemeral=True)
 
         # Get teams next match
         try:
-            log.debug(f"Getting match for team: {team_id}", guild=guild)
-            match = await self.next_match(guild, team_id)
-        except ApiException as exc:
+            if day:
+                log.debug(f"Getting match for team: {team_id} on day: {day}", guild=guild)
+                # Does not support preseason matches currently
+                match = await self.match_by_day(guild, team_id, day, preseason=False)
+            else:
+                log.debug(f"Getting match for team: {team_id}", guild=guild)
+                match = await self.next_match(guild, team_id)
+        except RscException as exc:
             log.debug(f"Match Return Status: {exc.status}")
             await interaction.followup.send(
-                embed=BlueEmbed(
+                embed=ApiExceptionErrorEmbed(
+                    exc,
                     title="Match Info",
-                    description="You do not have any upcoming matches.",
                 ),
                 ephemeral=True,
             )
@@ -308,7 +318,7 @@ class MatchMixIn(RSCMixIn):
 
         return today in season.season_tier_data[0].schedule.match_nights
 
-    async def matches_from_match_list(self, match_list: list[MatchList]):
+    async def matches_from_match_list(self, match_list: list[MatchList]) -> None:
         pass
 
     async def match_team_by_user(self, match: Match, member: discord.Member) -> MatchTeamEnum:
@@ -643,6 +653,20 @@ class MatchMixIn(RSCMixIn):
                 break
 
             offset += per_page
+
+    async def match_by_day(self, guild: discord.Guild, team_id: int, day: int, preseason: bool = False) -> Match:
+        async with ApiClient(self._api_conf[guild.id]) as client:
+            api = TeamsApi(client)
+            try:
+                log.debug(f"Fetching match for team ID: {team_id} on day: {day} (preseason={preseason})", guild=guild)
+                match: Match = await api.teams_match(
+                    id=team_id,
+                    day=day,
+                    preseason=int(preseason),
+                )
+                return match
+            except ApiException as exc:
+                raise RscException(response=exc)
 
     async def find_match(
         self,
