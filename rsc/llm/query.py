@@ -1,7 +1,11 @@
 #!/usr/bin/env python3
 
+# sql overrides - MUST happen before importing chromadb
+# import sys
+# __import__("pysqlite3")
+# sys.modules["sqlite3"] = sys.modules.pop("pysqlite3")
+
 import logging
-import sys
 from pathlib import Path
 
 import chromadb
@@ -26,12 +30,6 @@ logging.getLogger("httpcore").setLevel(logging.ERROR)
 logging.getLogger("httpx").setLevel(logging.ERROR)
 logging.getLogger("openai").setLevel(logging.ERROR)
 logging.getLogger("urllib3").setLevel(logging.ERROR)
-
-
-# sql overrides
-
-__import__("pysqlite3")
-sys.modules["sqlite3"] = sys.modules.pop("pysqlite3")
 
 # Prepare the DB.
 CHROMA_PATH = Path(__file__).parent / "db"

@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
 
+# sql overrides - MUST happen before importing chromadb
+# import sys
+# __import__("pysqlite3")
+# sys.modules["sqlite3"] = sys.modules.pop("pysqlite3")
+
 import hashlib
 import logging
 import shutil
-import sys
 import tempfile
 from collections.abc import Callable
 from pathlib import Path
@@ -39,11 +43,6 @@ logging.getLogger("MARKDOWN").setLevel(logging.ERROR)
 logging.getLogger("openai").setLevel(logging.ERROR)
 logging.getLogger("unstructured").setLevel(logging.ERROR)
 logging.getLogger("urllib3").setLevel(logging.ERROR)
-
-# sql overrides
-
-__import__("pysqlite3")
-sys.modules["sqlite3"] = sys.modules.pop("pysqlite3")
 
 # Paths
 
@@ -192,11 +191,22 @@ async def reset_collection(guild: discord.Guild):
         log.debug("Creating Chroma DB Directory", guild=guild)
         CHROMA_PATH.absolute().mkdir(parents=True, exist_ok=True)
 
-    chroma_client = chromadb.PersistentClient(
-        path=str(CHROMA_PATH.absolute()),
-        tenant=chromadb.config.DEFAULT_TENANT,
-        database=chromadb.config.DEFAULT_DATABASE,
-    )
+    try:
+        chroma_client = chromadb.PersistentClient(
+            path=str(CHROMA_PATH.absolute()),
+            tenant=chromadb.config.DEFAULT_TENANT,
+            database=chromadb.config.DEFAULT_DATABASE,
+        )
+    except Exception as e:
+        # Handle incompatible database schema (e.g., missing tenants table)
+        log.warning(f"ChromaDB schema incompatible, removing old database: {e}", guild=guild)
+        await rm_chroma_db()
+        CHROMA_PATH.absolute().mkdir(parents=True, exist_ok=True)
+        chroma_client = chromadb.PersistentClient(
+            path=str(CHROMA_PATH.absolute()),
+            tenant=chromadb.config.DEFAULT_TENANT,
+            database=chromadb.config.DEFAULT_DATABASE,
+        )
 
     collection_name = str(guild.id)
 
