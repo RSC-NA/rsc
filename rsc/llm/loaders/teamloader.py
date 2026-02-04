@@ -30,6 +30,7 @@ class TeamDocumentLoader(BaseLoader):
             if not (t.id and t.name and t.players):
                 continue
 
+            log.debug(f"Processing team: {t.name} ({t.id})")
             team_name: str = t.name
             franchise: str = t.franchise
             tier: str = t.tier

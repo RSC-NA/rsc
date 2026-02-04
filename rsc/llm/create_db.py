@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 
-import asyncio
 import hashlib
 import logging
 import shutil
@@ -9,8 +8,10 @@ import tempfile
 from collections.abc import Callable
 from pathlib import Path
 
+import chromadb
 import discord
 import httpx
+
 from langchain_community.document_loaders.directory import DirectoryLoader
 from langchain_community.vectorstores.chroma import Chroma
 from langchain_community.document_loaders import JSONLoader
@@ -178,42 +179,50 @@ async def generate_document_hashes(docs: list[Document]) -> list[str]:
 
 
 async def create_chroma_db(guild: discord.Guild, org_name: str, api_key: str, docs: list[Document]):
-    # Clear out the database first.
-    await rm_chroma_db()
-
     # Create directory if needed
     if not CHROMA_PATH.absolute().exists():
-        # Create brand new DB if it doesn't exist
         log.debug("Creating Chroma DB Directory", guild=guild)
         CHROMA_PATH.absolute().mkdir(parents=True, exist_ok=True)
-        await asyncio.sleep(5)
 
     log.debug("Saving Chroma DB.", guild=guild)
-    client = httpx.AsyncClient()
+    http_client = httpx.AsyncClient()
 
     try:
+        # Create a PersistentClient to ensure proper DB initialization
+        # We should probably use a local chromadb server instead
+        chroma_client = chromadb.PersistentClient(path=str(CHROMA_PATH.absolute()))
+
+        # Delete existing collection for this guild if it exists
+        collection_name = str(guild.id)
+        try:
+            chroma_client.delete_collection(name=collection_name)
+            log.debug(f"Deleted existing collection: {collection_name}", guild=guild)
+        except ValueError:
+            # Collection doesn't exist, that's fine
+            pass
+
         Chroma.from_documents(
             documents=docs,
-            collection_name=str(guild.id),
+            collection_name=collection_name,
+            client=chroma_client,
             embedding=OpenAIEmbeddings(
                 model="text-embedding-3-small",
                 organization=org_name,
                 api_key=SecretStr(api_key),
-                async_client=client,
+                async_client=http_client,
             ),
             collection_metadata={"hnsw:space": "cosine"},
-            persist_directory=str(CHROMA_PATH.absolute()),
         )
     finally:
-        await client.aclose()
+        await http_client.aclose()
     log.info(f"Saved {len(docs)} chunks to {CHROMA_PATH}.", guild=guild)
 
 
 async def rm_chroma_db():
+    """Remove the entire ChromaDB database directory. Use delete_collection() for per-guild cleanup."""
     if CHROMA_PATH.exists() and CHROMA_PATH.is_dir() and CHROMA_PATH.name == "db":
         log.debug(f"Deleting Chroma DB directory: {CHROMA_PATH.absolute()}")
         shutil.rmtree(CHROMA_PATH.absolute())
-        await asyncio.sleep(5)
 
 
 # if __name__ == "__main__":
