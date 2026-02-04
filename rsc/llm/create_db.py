@@ -1,35 +1,36 @@
 #!/usr/bin/env python3
 
 # sql overrides - MUST happen before importing chromadb
-# import sys
-# __import__("pysqlite3")
-# sys.modules["sqlite3"] = sys.modules.pop("pysqlite3")
+import sys
 
-import hashlib
-import logging
-import shutil
-import tempfile
-from collections.abc import Callable
-from pathlib import Path
+__import__("pysqlite3")
+sys.modules["sqlite3"] = sys.modules.pop("pysqlite3")
 
-import chromadb
-import discord
-import httpx
+import hashlib  # noqa: E402
+import logging  # noqa: E402
+import shutil  # noqa: E402
+import tempfile  # noqa: E402
+from collections.abc import Callable  # noqa: E402
+from pathlib import Path  # noqa: E402
 
-from langchain_community.document_loaders.directory import DirectoryLoader
-from langchain_community.vectorstores.chroma import Chroma
-from langchain_community.document_loaders import JSONLoader
-from langchain_core.documents import Document
-from langchain_openai.embeddings import OpenAIEmbeddings
-from langchain_text_splitters import MarkdownTextSplitter
-from pydantic.types import SecretStr
-from rscapi import MatchList
-from rscapi.models.franchise_list import FranchiseList
-from rscapi.models.league_player import LeaguePlayer
-from rscapi.models.team import Team
+import chromadb  # noqa: E402
+import discord  # noqa: E402
+import httpx  # noqa: E402
 
-from rsc.llm.loaders import FranchiseDocumentLoader, PlayerDocumentLoader, RuleDocumentLoader, TeamDocumentLoader, MatchDocumentLoader
-from rsc.logs import GuildLogAdapter
+from langchain_community.document_loaders.directory import DirectoryLoader  # noqa: E402
+from langchain_community.vectorstores.chroma import Chroma  # noqa: E402
+from langchain_community.document_loaders import JSONLoader  # noqa: E402
+from langchain_core.documents import Document  # noqa: E402
+from langchain_openai.embeddings import OpenAIEmbeddings  # noqa: E402
+from langchain_text_splitters import MarkdownTextSplitter  # noqa: E402
+from pydantic.types import SecretStr  # noqa: E402
+from rscapi import MatchList  # noqa: E402
+from rscapi.models.franchise_list import FranchiseList  # noqa: E402
+from rscapi.models.league_player import LeaguePlayer  # noqa: E402
+from rscapi.models.team import Team  # noqa: E402
+
+from rsc.llm.loaders import FranchiseDocumentLoader, PlayerDocumentLoader, RuleDocumentLoader, TeamDocumentLoader, MatchDocumentLoader  # noqa: E402
+from rsc.logs import GuildLogAdapter  # noqa: E402
 
 logger = logging.getLogger("red.rsc.llm.create")
 log = GuildLogAdapter(logger)

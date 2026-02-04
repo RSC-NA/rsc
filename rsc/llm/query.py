@@ -1,24 +1,25 @@
 #!/usr/bin/env python3
 
 # sql overrides - MUST happen before importing chromadb
-# import sys
-# __import__("pysqlite3")
-# sys.modules["sqlite3"] = sys.modules.pop("pysqlite3")
+import sys
 
-import logging
-from pathlib import Path
+__import__("pysqlite3")
+sys.modules["sqlite3"] = sys.modules.pop("pysqlite3")
 
-import chromadb
-import discord
-import httpx
+import logging  # noqa: E402
+from pathlib import Path  # noqa: E402
 
-from openai import AsyncOpenAI
-from langchain_chroma import Chroma
-from langchain_openai.embeddings import OpenAIEmbeddings
-from langchain_core.documents import Document
-from pydantic.types import SecretStr
+import chromadb  # noqa: E402
+import discord  # noqa: E402
+import httpx  # noqa: E402
 
-from rsc.logs import GuildLogAdapter
+from openai import AsyncOpenAI  # noqa: E402
+from langchain_chroma import Chroma  # noqa: E402
+from langchain_openai.embeddings import OpenAIEmbeddings  # noqa: E402
+from langchain_core.documents import Document  # noqa: E402
+from pydantic.types import SecretStr  # noqa: E402
+
+from rsc.logs import GuildLogAdapter  # noqa: E402
 
 
 logger = logging.getLogger("red.rsc.llm.query")
