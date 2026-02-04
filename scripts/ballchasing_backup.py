@@ -5,6 +5,7 @@ import asyncio
 import logging
 import os
 import sys
+from pydantic import ValidationError
 from pathlib import Path
 
 import aiohttp
@@ -23,7 +24,7 @@ if not bckey:
     sys.exit(1)
 
 async def download_group(
-    bapi: ballchasing.Api, group_id: str, folder: str, recursive=True
+    bapi: ballchasing.Api, group_id: str, folder: str, recursive=True, skip_errors: bool=False
 ) -> tuple[int, int]:
     """
     Download an entire group.
@@ -36,28 +37,33 @@ async def download_group(
     group_count = 0
     replay_count = 0
     log.debug("Processing group %s into %s", group_id, folder)
-    if recursive:
-        os.makedirs(folder, exist_ok=True)
-        async for child_group in bapi.get_groups(group=group_id):
-            child_group_count, child_replay_count = await download_group(
-                bapi, child_group.id, folder, recursive=True
-            )
-            group_count += child_group_count + 1
-            replay_count += child_replay_count
-        async for replay in bapi.get_replays(group_id=group_id):
-            log.debug("Downloading replay %s", replay.id)
-            replay_count += 1
-            await bapi.download_replay(replay.id, folder)
-    else:
-        async for replay in bapi.get_group_replays(group_id, recurse=False):
-            log.debug("Downloading replay %s", replay.id)
-            group_count += 1
-            replay_count += 1
-            await bapi.download_replay(replay.id, folder)
+    try:
+        if recursive:
+            os.makedirs(folder, exist_ok=True)
+            async for child_group in bapi.get_groups(group=group_id):
+                child_group_count, child_replay_count = await download_group(
+                    bapi, child_group.id, folder, recursive=True
+                )
+                group_count += child_group_count + 1
+                replay_count += child_replay_count
+            async for replay in bapi.get_replays(group_id=group_id):
+                log.debug("Downloading replay %s", replay.id)
+                replay_count += 1
+                await bapi.download_replay(replay.id, folder)
+        else:
+            async for replay in bapi.get_group_replays(group_id, recurse=False):
+                log.debug("Downloading replay %s", replay.id)
+                group_count += 1
+                replay_count += 1
+                await bapi.download_replay(replay.id, folder)
+    except ValidationError as exc:
+        log.error("Validation error for group %s: %s", group_id, exc)
+        if not skip_errors:
+            raise exc
     return group_count, replay_count
 
 
-async def process_group(group: str, output_directory: str, recursive: bool=False) -> tuple[int, int]:
+async def process_group(group: str, output_directory: str, recursive: bool=False, skip_errors: bool=False) -> tuple[int, int]:
     bapi = ballchasing.Api(auth_key=bckey, patreon_type=ballchasing.PatreonType.ORG)
     log.info("Checking if group exists: %s", group)
     base_group = await bapi.get_group(group)
@@ -83,6 +89,7 @@ if __name__ == "__main__":
     parser.add_argument("output", type=str, help="Output directory")
     parser.add_argument("-r", "--recursive", action="store_true", help="Download replays recursively", default=False)
     parser.add_argument("-d", "--debug", action="store_true", help="Enable debug logging", default=False)
+    parser.add_argument("--skip-errors", action="store_true", help="Skip errors during download", default=False)
     argv = parser.parse_args()
 
     group: str = argv.group
@@ -93,12 +100,14 @@ if __name__ == "__main__":
 
     log.info("Output directory: %s", output_dir)
     log.info("Recursive: %s", argv.recursive)
+    log.info("Skip errors: %s", argv.skip_errors)
 
     group_count, replay_count = asyncio.run(
         process_group(
             group=group,
             output_directory=str(output_dir),
             recursive=argv.recursive,
+            skip_errors=argv.skip_errors,
         )
     )
 

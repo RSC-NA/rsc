@@ -4,6 +4,7 @@ import logging
 import sys
 from pathlib import Path
 
+import chromadb
 import discord
 import httpx
 
@@ -232,10 +233,15 @@ async def llm_query(
     secret_key = SecretStr(api_key)
 
     try:
-        # Load DB
+        # Load DB with proper tenant/database structure
+        chroma_client = chromadb.PersistentClient(
+            path=str(CHROMA_PATH),
+            tenant=chromadb.config.DEFAULT_TENANT,
+            database=chromadb.config.DEFAULT_DATABASE,
+        )
         llm_db = Chroma(
             collection_name=str(guild.id),
-            persist_directory=str(CHROMA_PATH),
+            client=chroma_client,
             embedding_function=OpenAIEmbeddings(
                 model="text-embedding-3-small", organization=org_name, api_key=secret_key, http_async_client=http_client
             ),

@@ -10,7 +10,7 @@ from redbot.core import app_commands, commands
 from rsc.abc import RSCMixIn
 from rsc.embeds import BlueEmbed, ErrorEmbed, GreenEmbed, YellowEmbed
 from rsc.llm.create_db import (
-    create_chroma_db,
+    get_db_stats,
     load_franchise_docs,
     load_funny_docs,
     load_help_docs,
@@ -19,6 +19,8 @@ from rsc.llm.create_db import (
     load_match_docs,
     load_team_docs,
     markdown_to_documents,
+    reset_collection,
+    save_documents,
     string_to_doc,
 )
 from rsc.llm.query import llm_query
@@ -393,6 +395,35 @@ class LLMMixIn(RSCMixIn):
             ephemeral=True,
         )
 
+    @_llm_group.command(  # type: ignore[type-var]
+        name="dbstats", description="Show LLM database statistics"
+    )
+    async def _llm_dbstats_cmd(self, interaction: discord.Interaction):
+        """Show LLM database statistics"""
+        guild = interaction.guild
+        if not guild:
+            return
+
+        await interaction.response.defer(ephemeral=True)
+
+        stats = await get_db_stats(guild)
+
+        if not stats["exists"]:
+            embed: discord.Embed = YellowEmbed(
+                title="LLM Database Stats",
+                description="No database found for this server. Run `/llm createdb` to create one.",
+            )
+        else:
+            embed: discord.Embed = BlueEmbed(
+                title="LLM Database Stats",
+                description="ChromaDB statistics for this server",
+            )
+            embed.add_field(name="Collection Name", value=stats["collection_name"], inline=False)
+            embed.add_field(name="Document Count", value=f"{stats['document_count']:,}", inline=False)
+            embed.add_field(name="Database Path", value=stats["db_path"], inline=False)
+
+        await interaction.followup.send(embed=embed, ephemeral=True)
+
     @_llm_blacklist_group.command(  # type: ignore[type-var]
         name="show", description="Display the LLM channel blacklist"
     )
@@ -463,15 +494,13 @@ class LLMMixIn(RSCMixIn):
         if not (org and key):
             raise ValueError("OpenAI organization and or API key has not been configured.")
 
-        # Store
-        docs: list[Document] = []
-        rdocs: list[Document] = []
+        total_docs = 0
 
         if interaction:
             await interaction.edit_original_response(
                 embed=YellowEmbed(
                     title="Creating Chroma DB",
-                    description="Loading markdown documents.",
+                    description="Resetting database collection.",
                 )
             )
 
@@ -481,28 +510,50 @@ class LLMMixIn(RSCMixIn):
         if not current_season.number:
             raise ValueError("Current season number is not set, cannot create LLM Chroma DB.")
 
-        # Read in Markdown documents
+        # Reset the collection before adding new documents
+        await reset_collection(guild)
+
+        # ===== RULES & STATIC DOCUMENTS =====
+        if interaction:
+            await interaction.edit_original_response(
+                embed=YellowEmbed(
+                    title="Creating Chroma DB",
+                    description="Loading markdown documents.",
+                )
+            )
+
+        rule_docs: list[Document] = []
+
+        # Dates document
         log.info("Create dates document.")
         dates = await self._get_dates(guild)
         if dates:
             date_doc = await string_to_doc(dates)
-            docs.append(date_doc)
+            rule_docs.append(date_doc)
 
+        # Rule documents
         log.info("Creating rule documents.")
         rulepath = Path(__file__).parent.parent / "resources" / "rules"
         for fd in rulepath.glob("*.md"):
             log.debug(f"Rule Doc: {fd}")
             rdocs = await load_rule_style_docs(fd)
-            docs.extend(rdocs)
+            rule_docs.extend(rdocs)
 
+        # Help documents
         log.info("Creating help documents.")
         helpdocs = await load_help_docs()
-        docs.extend(await markdown_to_documents(helpdocs))
+        rule_docs.extend(await markdown_to_documents(helpdocs))
 
+        # Funny documents
         log.info("Creating funny documents.")
         funnydocs = await load_funny_docs()
-        docs.extend(await markdown_to_documents(funnydocs))
+        rule_docs.extend(await markdown_to_documents(funnydocs))
 
+        # Save rules/help/funny docs
+        await save_documents(guild, org, key, rule_docs)
+        total_docs += len(rule_docs)
+
+        # ===== FRANCHISE DOCUMENTS =====
         if interaction:
             await interaction.edit_original_response(
                 embed=YellowEmbed(
@@ -511,13 +562,15 @@ class LLMMixIn(RSCMixIn):
                 )
             )
 
-        # Get franchise data
         log.info("Creating franchise documents.")
         franchises: list[FranchiseList] = await self.franchises(guild)
         if franchises:
             log.debug(f"Franchise Count: {len(franchises)}")
-            docs.extend(await load_franchise_docs(franchises))
+            franchise_docs = await load_franchise_docs(franchises)
+            await save_documents(guild, org, key, franchise_docs)
+            total_docs += len(franchise_docs)
 
+        # ===== PLAYER DOCUMENTS =====
         if interaction:
             await interaction.edit_original_response(
                 embed=YellowEmbed(
@@ -527,13 +580,18 @@ class LLMMixIn(RSCMixIn):
             )
 
         log.info("Creating player documents.")
+        player_docs: list[Document] = []
         pcount = await self.total_players(guild)
         log.debug(f"Total Players: {pcount}")
         player_index = 0
         async for player in self.paged_players(guild):
-            docs.extend(await load_player_docs([player], chunk_index=player_index))
+            player_docs.extend(await load_player_docs([player], chunk_index=player_index))
             player_index += 1
 
+        await save_documents(guild, org, key, player_docs)
+        total_docs += len(player_docs)
+
+        # ===== MATCH DOCUMENTS =====
         if interaction:
             await interaction.edit_original_response(
                 embed=YellowEmbed(
@@ -543,11 +601,16 @@ class LLMMixIn(RSCMixIn):
             )
 
         log.info("Creating match documents.")
+        match_docs: list[Document] = []
         match_index = 0
         async for match in self.paged_matches(guild, season_number=current_season.number):
-            docs.extend(await load_match_docs([match], chunk_index=match_index))
+            match_docs.extend(await load_match_docs([match], chunk_index=match_index))
             match_index += 1
 
+        await save_documents(guild, org, key, match_docs)
+        total_docs += len(match_docs)
+
+        # ===== TEAM DOCUMENTS =====
         if interaction:
             await interaction.edit_original_response(
                 embed=YellowEmbed(
@@ -556,7 +619,6 @@ class LLMMixIn(RSCMixIn):
                 )
             )
 
-        # Get teams from franchise data to limit API calls
         log.info("Creating team documents.")
         teams: list[Team] = []
         for f in franchises:
@@ -570,23 +632,23 @@ class LLMMixIn(RSCMixIn):
             for t in fdata.teams:
                 teams.append(t)  # noqa: PERF402
 
-        # Load Teams
         if teams:
             log.debug(f"Team Count: {len(teams)}")
-            docs.extend(await load_team_docs(teams))
+            team_docs = await load_team_docs(teams)
+            await save_documents(guild, org, key, team_docs)
+            total_docs += len(team_docs)
 
         if interaction:
             await interaction.edit_original_response(
                 embed=YellowEmbed(
                     title="Creating Chroma DB",
-                    description="Saving database to disk.",
+                    description="Database saved successfully.",
                 )
             )
 
-        log.info(f"Chroma Document Total: {len(docs)}")
-        await create_chroma_db(guild=guild, org_name=org, api_key=key, docs=docs)
+        log.info(f"Chroma Document Total: {total_docs}")
         log.info("Chroma database created")
-        return len(docs)
+        return total_docs
 
     async def clean_question(self, message: discord.Message) -> str:
         if not message.guild:

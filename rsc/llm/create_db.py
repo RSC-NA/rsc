@@ -178,28 +178,67 @@ async def generate_document_hashes(docs: list[Document]) -> list[str]:
     return hashes
 
 
-async def create_chroma_db(guild: discord.Guild, org_name: str, api_key: str, docs: list[Document]):
+async def reset_collection(guild: discord.Guild):
+    """
+    Reset (delete) the collection for a guild to prepare for fresh data.
+
+    Structure:
+        - Tenant: default_tenant
+        - Database: default_database
+        - Collection: guild.id (all documents in one collection per guild)
+    """
     # Create directory if needed
     if not CHROMA_PATH.absolute().exists():
         log.debug("Creating Chroma DB Directory", guild=guild)
         CHROMA_PATH.absolute().mkdir(parents=True, exist_ok=True)
 
-    log.debug("Saving Chroma DB.", guild=guild)
+    chroma_client = chromadb.PersistentClient(
+        path=str(CHROMA_PATH.absolute()),
+        tenant=chromadb.config.DEFAULT_TENANT,
+        database=chromadb.config.DEFAULT_DATABASE,
+    )
+
+    collection_name = str(guild.id)
+
+    # Delete existing collection if it exists
+    existing_collections = [c.name for c in chroma_client.list_collections()]
+    if collection_name in existing_collections:
+        chroma_client.delete_collection(name=collection_name)
+        log.debug(f"Deleted existing collection: {collection_name}", guild=guild)
+    else:
+        log.debug(f"Collection {collection_name} does not exist, nothing to delete", guild=guild)
+
+
+async def save_documents(guild: discord.Guild, org_name: str, api_key: str, docs: list[Document]):
+    """
+    Add documents to the guild's collection. Does not delete existing documents.
+
+    Args:
+        guild: Discord guild
+        org_name: OpenAI organization name
+        api_key: OpenAI API key
+        docs: List of documents to add
+    """
+    if not docs:
+        log.debug("No documents to save", guild=guild)
+        return
+
+    # Create directory if needed
+    if not CHROMA_PATH.absolute().exists():
+        log.debug("Creating Chroma DB Directory", guild=guild)
+        CHROMA_PATH.absolute().mkdir(parents=True, exist_ok=True)
+
+    log.debug(f"Saving {len(docs)} documents to Chroma DB", guild=guild)
     http_client = httpx.AsyncClient()
 
     try:
-        # Create a PersistentClient to ensure proper DB initialization
-        # We should probably use a local chromadb server instead
-        chroma_client = chromadb.PersistentClient(path=str(CHROMA_PATH.absolute()))
+        chroma_client = chromadb.PersistentClient(
+            path=str(CHROMA_PATH.absolute()),
+            tenant=chromadb.config.DEFAULT_TENANT,
+            database=chromadb.config.DEFAULT_DATABASE,
+        )
 
-        # Delete existing collection for this guild if it exists
         collection_name = str(guild.id)
-        try:
-            chroma_client.delete_collection(name=collection_name)
-            log.debug(f"Deleted existing collection: {collection_name}", guild=guild)
-        except ValueError:
-            # Collection doesn't exist, that's fine
-            pass
 
         Chroma.from_documents(
             documents=docs,
@@ -215,7 +254,17 @@ async def create_chroma_db(guild: discord.Guild, org_name: str, api_key: str, do
         )
     finally:
         await http_client.aclose()
-    log.info(f"Saved {len(docs)} chunks to {CHROMA_PATH}.", guild=guild)
+
+    log.info(f"Saved {len(docs)} chunks to Chroma DB.", guild=guild)
+
+
+async def create_chroma_db(guild: discord.Guild, org_name: str, api_key: str, docs: list[Document]):
+    """
+    Reset collection and save all documents to the Chroma database.
+    Legacy function that resets and saves in one call.
+    """
+    await reset_collection(guild)
+    await save_documents(guild, org_name, api_key, docs)
 
 
 async def rm_chroma_db():
@@ -223,6 +272,47 @@ async def rm_chroma_db():
     if CHROMA_PATH.exists() and CHROMA_PATH.is_dir() and CHROMA_PATH.name == "db":
         log.debug(f"Deleting Chroma DB directory: {CHROMA_PATH.absolute()}")
         shutil.rmtree(CHROMA_PATH.absolute())
+
+
+async def get_db_stats(guild: discord.Guild) -> dict:
+    """
+    Get statistics about the ChromaDB for a guild.
+
+    Returns:
+        Dictionary with stats including:
+        - exists: Whether the database/collection exists
+        - collection_name: Name of the collection
+        - document_count: Number of documents in the collection
+        - db_path: Path to the database directory
+    """
+    stats = {
+        "exists": False,
+        "collection_name": str(guild.id),
+        "document_count": 0,
+        "db_path": str(CHROMA_PATH.absolute()),
+    }
+
+    if not CHROMA_PATH.exists():
+        return stats
+
+    try:
+        chroma_client = chromadb.PersistentClient(
+            path=str(CHROMA_PATH.absolute()),
+            tenant=chromadb.config.DEFAULT_TENANT,
+            database=chromadb.config.DEFAULT_DATABASE,
+        )
+
+        collection_name = str(guild.id)
+        existing_collections = [c.name for c in chroma_client.list_collections()]
+
+        if collection_name in existing_collections:
+            stats["exists"] = True
+            collection = chroma_client.get_collection(name=collection_name)
+            stats["document_count"] = collection.count()
+    except Exception as e:
+        log.error(f"Error getting DB stats: {e}", guild=guild)
+
+    return stats
 
 
 # if __name__ == "__main__":
