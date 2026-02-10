@@ -345,9 +345,16 @@ class BallchasingMixIn(RSCMixIn):
         log.debug(f"Found match: {match}", match=match)
 
         # Only GMs and team members can report a match by default
-        is_team_member = await self.discord_member_in_match(member, match)
-        is_franchise_gm = await self.is_match_franchise_gm(member=member, match=match)
-        is_admin = member.guild_permissions.manage_guild
+        try:
+            is_team_member = await self.discord_member_in_match(member, match)
+            is_franchise_gm = await self.is_match_franchise_gm(member=member, match=match)
+            is_admin = member.guild_permissions.manage_guild
+        except AttributeError as exc:
+            log.error(f"Match {match.id} is missing expected attributes: {exc}", match=match)
+            return await interaction.followup.send(
+                embed=ExceptionErrorEmbed(exc_message=str(exc)),
+                ephemeral=True,
+            )
 
         can_report = is_team_member or is_franchise_gm
         if override and not is_admin:
