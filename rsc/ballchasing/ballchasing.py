@@ -344,15 +344,16 @@ class BallchasingMixIn(RSCMixIn):
             )
         log.debug(f"Found match: {match}", match=match)
 
-        # Only GMs, Admins, and team members can report
-        if (
-            not (
-                await self.discord_member_in_match(member, match)
-                or await self.is_match_franchise_gm(member=member, match=match)
-                or member.guild_permissions.manage_guild
-            )
-            and not override
-        ):
+        # Only GMs and team members can report a match by default
+        is_team_member = await self.discord_member_in_match(member, match)
+        is_franchise_gm = await self.is_match_franchise_gm(member=member, match=match)
+        is_admin = member.guild_permissions.manage_guild
+
+        can_report = is_team_member or is_franchise_gm
+        if override and not is_admin:
+            # Admin can submit with override
+            can_report = can_report and await self.has_bc_permissions(member)
+        elif not can_report:
             return await interaction.followup.send(
                 embed=ErrorEmbed(description="You are not on one of the teams in this match."),
                 ephemeral=True,

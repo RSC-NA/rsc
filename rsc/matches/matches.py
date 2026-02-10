@@ -533,6 +533,10 @@ class MatchMixIn(RSCMixIn):
         return (home_fmt, away_fmt)
 
     async def is_match_franchise_gm(self, member: discord.Member, match: Match) -> bool:
+        if not (match.home_team.gm and match.away_team.gm):
+            raise AttributeError("Match is missing GM information.")
+        if not (match.home_team.gm.discord_id and match.away_team.gm.discord_id):
+            raise AttributeError("Match is missing GM Discord IDs.")
         return member.id in (match.home_team.gm.discord_id, match.away_team.gm.discord_id)
 
     async def is_match_franchise_agm(self, member: discord.Member, match: Match) -> bool:
