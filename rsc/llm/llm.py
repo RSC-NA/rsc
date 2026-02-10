@@ -23,7 +23,7 @@ from rsc.llm.create_db import (
     save_documents,
     string_to_doc,
 )
-from rsc.llm.query import llm_query
+from rsc.llm.query import llm_query, UserIdentity, clean_question as clean_question_impl
 from rsc.logs import GuildLogAdapter
 from rsc.types import LLMSettings
 from rsc.utils import utils
@@ -131,8 +131,14 @@ class LLMMixIn(RSCMixIn):
             log.warning("OpenAI Organization and or API key is not configured.", guild=guild)
             return
 
-        # Remove bot mention
-        cleaned_msg = await self.clean_question(message)
+        # Resolve user identity and clean the question
+        author = message.author
+        if isinstance(author, discord.Member):
+            user_identity = await self.resolve_user_identity(guild, author)
+        else:
+            # Fallback for User (non-member)
+            user_identity = UserIdentity(name=author.display_name)
+        cleaned_msg = await self.clean_question(message, user_identity)
 
         try:
             response, _sources = await llm_query(
@@ -142,6 +148,7 @@ class LLMMixIn(RSCMixIn):
                 question=cleaned_msg,
                 count=count,
                 threshold=threshold,
+                user_identity=user_identity,
             )
         except RuntimeError as exc:
             log.error(str(exc), exc_info=exc)
@@ -335,14 +342,35 @@ class LLMMixIn(RSCMixIn):
             )
 
         await interaction.response.defer()
+
+        # Resolve user identity and clean the question
+        member = interaction.user
+        if isinstance(member, discord.User):
+            # Convert User to Member if possible
+            member = guild.get_member(member.id) or member
+
+        user_identity = await self.resolve_user_identity(guild, member) if isinstance(member, discord.Member) else None
+
+        # Clean pronouns from the question
+        if user_identity:
+            cleaned_question = clean_question_impl(question, user_identity.name, guild.me.display_name)
+        else:
+            # Fall back to display name if not a member
+            display_name = getattr(member, "display_name", str(member))
+            cleaned_question = clean_question_impl(question, display_name, guild.me.display_name)
+
+        log.debug(f"Original question: {question}", guild=guild)
+        log.debug(f"Cleaned question: {cleaned_question}", guild=guild)
+
         try:
             response, sources = await llm_query(
                 guild=guild,
                 org_name=org,
                 api_key=key,
-                question=question,
+                question=cleaned_question,
                 count=count,
                 threshold=threshold,
+                user_identity=user_identity,
             )
         except RuntimeError as exc:
             return await interaction.followup.send(content=str(exc), ephemeral=True)
@@ -650,7 +678,46 @@ class LLMMixIn(RSCMixIn):
         log.info("Chroma database created")
         return total_docs
 
-    async def clean_question(self, message: discord.Message) -> str:
+    async def resolve_user_identity(
+        self,
+        guild: discord.Guild,
+        member: discord.Member,
+    ) -> UserIdentity | None:
+        """
+        Resolve user identity from Discord member to league player data.
+
+        Args:
+            guild: Discord guild
+            member: Discord member to look up
+
+        Returns:
+            UserIdentity with player data, or None if not found
+        """
+        try:
+            players = await self.players(guild, discord_id=member.id, limit=1)
+            if not players:
+                # Fall back to display name without prefix
+                no_prefix = await utils.remove_prefix(member)
+                return UserIdentity(name=no_prefix)
+
+            player = players[0]
+            return UserIdentity(
+                name=player.player.name if player.player else await utils.remove_prefix(member),
+                team=player.team.name if player.team else None,
+                franchise=player.team.franchise.name if player.team and player.team.franchise else None,
+                tier=player.tier.name if player.tier else None,
+                status=player.status,
+            )
+        except Exception as exc:
+            log.warning(f"Failed to resolve user identity: {exc}", guild=guild)
+            no_prefix = await utils.remove_prefix(member)
+            return UserIdentity(name=no_prefix)
+
+    async def clean_question(
+        self,
+        message: discord.Message,
+        user_identity: UserIdentity | None = None,
+    ) -> str:
         if not message.guild:
             return message.clean_content
 
@@ -658,23 +725,18 @@ class LLMMixIn(RSCMixIn):
         cleaned_msg = message.clean_content.replace(f"@{message.guild.me.display_name}", "").strip()
         log.debug(f"Original Question: {cleaned_msg}")
 
-        no_prefix = await utils.remove_prefix(message.author)
-        # display_name = f" {message.author.display_name} "
-        display_name = f" {no_prefix} "
-        bot_name = f" {message.guild.me.display_name} "
-        # Replace some key words
-        cleaned_msg = cleaned_msg.replace(" My ", display_name)
-        cleaned_msg = cleaned_msg.replace(" my ", display_name)
-        cleaned_msg = cleaned_msg.replace(" I ", display_name)
-        cleaned_msg = cleaned_msg.replace(" i ", display_name)
-        cleaned_msg = cleaned_msg.replace(" I?", display_name)
-        cleaned_msg = cleaned_msg.replace(" i?", display_name)
-        cleaned_msg = cleaned_msg.replace("Your ", bot_name)
-        cleaned_msg = cleaned_msg.replace("your ", bot_name)
-        cleaned_msg = cleaned_msg.replace("You ", bot_name)
-        cleaned_msg = cleaned_msg.replace("you ", bot_name)
-        cleaned_msg = cleaned_msg.replace(" Me ", display_name)
-        cleaned_msg = cleaned_msg.replace(" me ", display_name)
+        # Get user name from identity or fall back to display name
+        if user_identity:
+            user_name = user_identity.name
+        elif isinstance(message.author, discord.Member):
+            user_name = await utils.remove_prefix(message.author)
+        else:
+            user_name = message.author.display_name
+
+        bot_name = message.guild.me.display_name
+
+        # Use the regex-based pronoun replacement
+        cleaned_msg = clean_question_impl(cleaned_msg, user_name, bot_name)
 
         log.debug(f"Cleaned Question: {cleaned_msg}")
 

@@ -7,6 +7,8 @@ __import__("pysqlite3")
 sys.modules["sqlite3"] = sys.modules.pop("pysqlite3")
 
 import logging  # noqa: E402
+import re  # noqa: E402
+from dataclasses import dataclass  # noqa: E402
 from pathlib import Path  # noqa: E402
 
 import chromadb  # noqa: E402
@@ -43,10 +45,75 @@ OPENAI_TEMPERATURE = 0.3
 DYNAMIC_CUTOFF = 0.65
 
 
+# User Identity
+@dataclass
+class UserIdentity:
+    """Identity information for the user asking the question."""
+
+    name: str
+    team: str | None = None
+    franchise: str | None = None
+    tier: str | None = None
+    status: str | None = None
+
+
+def format_user_context(identity: UserIdentity | None) -> str:
+    """Format user identity for inclusion in the system prompt."""
+    if not identity:
+        return ""
+
+    context_parts = [f"The user asking this question is {identity.name}"]
+
+    if identity.status in ("RO", "IR", "AR", "RN"):  # Rostered statuses
+        if identity.team and identity.franchise and identity.tier:
+            context_parts.append(f", who plays for {identity.team} ({identity.franchise}) in the {identity.tier} tier")
+    elif identity.status in ("FA", "DE", "PF", "PW"):  # Free agent statuses
+        if identity.tier:
+            context_parts.append(f", a free agent in the {identity.tier} tier")
+        else:
+            context_parts.append(", a free agent")
+
+    context_parts.append(".")
+    return "".join(context_parts)
+
+
+def clean_question(text: str, user_name: str, bot_name: str | None = None) -> str:
+    """
+    Clean and normalize a question by substituting pronouns with actual names.
+
+    Args:
+        text: The question text to clean
+        user_name: The name to substitute for first-person pronouns (I, me, my, etc.)
+        bot_name: The name to substitute for second-person pronouns (you, your, etc.)
+
+    Returns:
+        Cleaned question with pronouns replaced
+    """
+    cleaned = text
+
+    # First-person pronouns (referring to the user)
+    # Handle contractions first (I'm, I've, I'd, I'll)
+    cleaned = re.sub(r"\bI'?m\b", f"{user_name} is", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\bI'?ve\b", f"{user_name} has", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\bI'?d\b", f"{user_name} would", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\bI'?ll\b", f"{user_name} will", cleaned, flags=re.IGNORECASE)
+
+    # Standard first-person pronouns
+    cleaned = re.sub(r"\b(I|me)\b", user_name, cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\b(my|mine)\b", f"{user_name}'s", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\bmyself\b", user_name, cleaned, flags=re.IGNORECASE)
+
+    # Second-person pronouns (referring to the bot)
+    if bot_name:
+        cleaned = re.sub(r"\b(you|your|yours|yourself)\b", bot_name, cleaned, flags=re.IGNORECASE)
+
+    return cleaned
+
+
 # Template
 PROMPT_TEMPLATE = """
 You are a discord bot that runs a gaming league called RSC. The league is for the game Rocket League and is structured similar to the NFL.
-
+{user_context}
 You have access to the following context from the RSC rulebooks, team information, and player information:
 
 {context}
@@ -210,6 +277,7 @@ async def llm_query(
     threshold: float = 0.4,
     count: int = 5,
     model: str = "gpt-5.2",
+    user_identity: UserIdentity | None = None,
 ) -> tuple[str | None, list[str | None]]:
     """
     Query the LLM with context from ChromaDB.
@@ -222,6 +290,7 @@ async def llm_query(
         threshold: Minimum similarity score (0-1)
         count: Maximum number of documents to retrieve
         model: OpenAI model to use (default: gpt-4o)
+        user_identity: Optional identity of the user asking the question
 
     Returns:
         Tuple of (response_text, source_list)
@@ -297,8 +366,9 @@ async def llm_query(
         context_text, sources = build_context(final_docs)
         log.debug(f"Context: {context_text}", guild=guild)
 
-        # Prompt
-        prompt = PROMPT_TEMPLATE.format(context=context_text)
+        # Prompt with optional user context
+        user_context = format_user_context(user_identity)
+        prompt = PROMPT_TEMPLATE.format(context=context_text, user_context=user_context)
 
         messages = [
             {"role": "system", "content": prompt},
