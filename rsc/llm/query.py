@@ -113,7 +113,9 @@ def clean_question(text: str, user_name: str, bot_name: str | None = None) -> st
 # Template
 PROMPT_TEMPLATE = """
 You are a discord bot that runs a gaming league called RSC. The league is for the game Rocket League and is structured similar to the NFL.
+
 {user_context}
+
 You have access to the following context from the RSC rulebooks, team information, and player information:
 
 {context}

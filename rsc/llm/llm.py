@@ -631,8 +631,13 @@ class LLMMixIn(RSCMixIn):
         log.info("Creating match documents.")
         match_docs: list[Document] = []
         match_index = 0
+
+        # Create a match fetcher that captures the guild
+        async def fetch_match(match_id: int):
+            return await self.match_by_id(guild, match_id)
+
         async for match in self.paged_matches(guild, season_number=current_season.number):
-            match_docs.extend(await load_match_docs([match], chunk_index=match_index))
+            match_docs.extend(await load_match_docs([match], chunk_index=match_index, match_fetcher=fetch_match))
             match_index += 1
 
         await save_documents(guild, org, key, match_docs)

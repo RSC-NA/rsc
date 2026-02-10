@@ -30,6 +30,7 @@ from rscapi.models.league_player import LeaguePlayer  # noqa: E402
 from rscapi.models.team import Team  # noqa: E402
 
 from rsc.llm.loaders import FranchiseDocumentLoader, PlayerDocumentLoader, RuleDocumentLoader, TeamDocumentLoader, MatchDocumentLoader  # noqa: E402
+from rsc.llm.loaders.matchloader import MatchFetcher  # noqa: E402
 from rsc.logs import GuildLogAdapter  # noqa: E402
 
 logger = logging.getLogger("red.rsc.llm.create")
@@ -135,9 +136,13 @@ async def load_player_docs(players: list[LeaguePlayer], chunk_index: int = 0):
     return documents
 
 
-async def load_match_docs(matches: list[MatchList], chunk_index: int = 0):
+async def load_match_docs(
+    matches: list[MatchList],
+    chunk_index: int = 0,
+    match_fetcher: MatchFetcher | None = None,
+):
     documents = []
-    loader = MatchDocumentLoader(matches, chunk_index=chunk_index)
+    loader = MatchDocumentLoader(matches, chunk_index=chunk_index, match_fetcher=match_fetcher)
     async for doc in loader.alazy_load():
         log.debug(f"Document: {doc.page_content}")
         log.debug(f"Document Metadata: {doc.metadata}")
