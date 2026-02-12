@@ -13,3 +13,6 @@ Tracker*.json
 
 # Chroma DB
 rsc/llm/db/
+
+# Other
+trackers.json

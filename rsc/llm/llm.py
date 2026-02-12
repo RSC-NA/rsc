@@ -13,6 +13,7 @@ from rsc.embeds import BlueEmbed, ErrorEmbed, GreenEmbed, YellowEmbed
 from rsc.llm.create_db import (
     delete_documents_by_type,
     get_db_stats,
+    load_current_season_doc,
     load_franchise_docs,
     load_funny_docs,
     load_help_docs,
@@ -39,6 +40,7 @@ class DocumentType(Enum):
     PLAYERS = "players"
     MATCHES = "matches"
     TEAMS = "teams"
+    SEASON = "season"
 
 
 if TYPE_CHECKING:
@@ -148,6 +150,7 @@ class LLMMixIn(RSCMixIn):
         author = message.author
         tz = await self.timezone(guild)
         msg_datetime = message.created_at.astimezone(tz)
+        log.debug("Resolving user identity for LLM mention response.", guild=guild)
         if isinstance(author, discord.Member):
             user_identity = await self.resolve_user_identity(guild, author, current_datetime=msg_datetime)
         else:
@@ -455,6 +458,7 @@ class LLMMixIn(RSCMixIn):
             app_commands.Choice(name="Players", value="players"),
             app_commands.Choice(name="Matches", value="matches"),
             app_commands.Choice(name="Teams", value="teams"),
+            app_commands.Choice(name="Season", value="season"),
         ]
     )
     async def _llm_refresh_cmd(self, interaction: discord.Interaction, doc_type: app_commands.Choice[str]):
@@ -638,6 +642,16 @@ class LLMMixIn(RSCMixIn):
             )
         total_docs += await self._process_rules_documents(guild, org, key)
 
+        # ===== CURRENT SEASON DOCUMENT =====
+        if interaction:
+            await interaction.edit_original_response(
+                embed=YellowEmbed(
+                    title="Creating Chroma DB",
+                    description="Loading current season document.",
+                )
+            )
+        total_docs += await self._process_current_season_document(guild, org, key)
+
         # ===== FRANCHISE DOCUMENTS =====
         if interaction:
             await interaction.edit_original_response(
@@ -690,6 +704,16 @@ class LLMMixIn(RSCMixIn):
         log.info("Chroma database created")
         return total_docs
 
+    async def _process_current_season_document(self, guild: discord.Guild, org: str, key: str) -> int:
+        """Process and save current season document."""
+        log.info("Creating current season document.", guild=guild)
+        season = await self.current_season(guild)
+        season_doc = await load_current_season_doc(season)
+
+        await save_documents(guild, org, key, [season_doc])
+        log.info("Saved current season document.", guild=guild)
+        return 1
+
     async def _process_rules_documents(self, guild: discord.Guild, org: str, key: str) -> int:
         """Process and save rules, help, and funny documents."""
         log.info("Creating rules/help/funny documents.", guild=guild)
@@ -734,7 +758,7 @@ class LLMMixIn(RSCMixIn):
         log.info(f"Saved {len(rule_docs)} rules/help/funny documents.", guild=guild)
         return len(rule_docs)
 
-    async def _process_franchise_documents(self, guild: discord.Guild, org: str, key: str) -> int:
+    async def _process_franchise_documents(self, guild: discord.Guild, org: str, key: str, current_season: int | None = None) -> int:
         """Process and save franchise documents."""
         log.info("Creating franchise documents.", guild=guild)
         franchises: list[FranchiseList] = await self.franchises(guild)
@@ -742,8 +766,12 @@ class LLMMixIn(RSCMixIn):
             log.debug("No franchises found.", guild=guild)
             return 0
 
+        standings = None
+        if current_season:
+            standings = await self.franchise_standings(guild, season_id=current_season)
+
         log.debug(f"Franchise Count: {len(franchises)}", guild=guild)
-        franchise_docs = await load_franchise_docs(franchises)
+        franchise_docs = await load_franchise_docs(franchises, standings=standings)
         for doc in franchise_docs:
             doc.metadata["type"] = DocumentType.FRANCHISES.value
         await save_documents(guild, org, key, franchise_docs)
@@ -866,13 +894,15 @@ class LLMMixIn(RSCMixIn):
             case DocumentType.RULES:
                 count = await self._process_rules_documents(guild, org, key)
             case DocumentType.FRANCHISES:
-                count = await self._process_franchise_documents(guild, org, key)
+                count = await self._process_franchise_documents(guild, org, key, current_season.id)
             case DocumentType.PLAYERS:
                 count = await self._process_player_documents(guild, org, key)
             case DocumentType.MATCHES:
                 count = await self._process_match_documents(guild, org, key, current_season.number)
             case DocumentType.TEAMS:
                 count = await self._process_team_documents(guild, org, key)
+            case DocumentType.SEASON:
+                count = await self._process_current_season_document(guild, org, key)
 
         return count
 

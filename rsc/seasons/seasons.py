@@ -42,13 +42,13 @@ class SeasonsMixIn(RSCMixIn):
 
     # API Commands
 
-    async def seasons(self, guild: discord.Guild) -> list[Season]:
+    async def seasons(self, guild: discord.Guild, number: int | None = None, current: bool = False) -> list[Season]:
         async with ApiClient(self._api_conf[guild.id]) as client:
             api = SeasonsApi(client)
+            league_id = self._league[guild.id]
             try:
-                season_list = await api.seasons_list()
-                seasons = [x for x in season_list if x.league.id == self._league[guild.id]]
-                return seasons
+                season_list = await api.seasons_list(league=league_id, number=number, current=current)
+                return season_list
             except ApiException as exc:
                 raise RscException(response=exc)
 

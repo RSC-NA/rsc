@@ -10,7 +10,6 @@ from rsc.embeds import ApiExceptionErrorEmbed, BlueEmbed, ErrorEmbed, YellowEmbe
 from rsc.exceptions import RscException
 from rsc.teams import TeamMixIn
 from rsc.tiers import TierMixIn
-from rsc.utils import utils
 
 log = logging.getLogger("red.rsc.stats")
 
@@ -45,8 +44,11 @@ class StatsMixIn(RSCMixIn):
             sdata = await self.current_season(guild)
         else:
             log.debug(f"Getting season information for S{season}")
-            slist = await self.league_seasons(guild)
-            sdata = next((x for x in slist if x.number == season), None)
+            slist = await self.seasons(guild, number=season)
+            if not slist:
+                await interaction.followup.send(embed=ErrorEmbed(description=f"No season data found for S{season}"))
+                return
+            sdata = slist.pop(0)
 
         log.debug(sdata)
         if not sdata:
@@ -85,8 +87,8 @@ class StatsMixIn(RSCMixIn):
             inline=True,
         )
         embed.add_field(
-            name="Win Percent",
-            value="\n".join([f"{x.win_percentage:.2%}" for x in standings]),
+            name="Record",
+            value="\n".join([f"{x.wins} - {x.losses}" for x in standings]),
             inline=True,
         )
 
@@ -97,8 +99,65 @@ class StatsMixIn(RSCMixIn):
     )
     @app_commands.autocomplete(tier=TierMixIn.tier_autocomplete)  # type: ignore[type-var]
     async def _tier_standings_cmd(self, interaction: discord.Interaction, tier: str, season: int | None = None):
-        tier = tier.capitalize()
-        await utils.not_implemented(interaction)
+        guild = interaction.guild
+        if not guild:
+            return
+        await interaction.response.defer(ephemeral=False)
+
+        tier_data = await self.tiers(guild, name=tier)
+        if not tier_data:
+            await interaction.followup.send(embed=ErrorEmbed(description=f"No tier found with the name: `{tier}`"))
+            return
+
+        if len(tier_data) > 1:
+            await interaction.followup.send(embed=ErrorEmbed(description=f"Found multiple tiers matching: `{tier}`"))
+            return
+
+        tier_info = tier_data.pop(0)
+
+        if not tier_info.id:
+            await interaction.followup.send(embed=ErrorEmbed(description="API returned a tier with no ID. Please submit a modmail."))
+            return
+
+        if not season:
+            current_season = await self.current_season(guild)
+            if not current_season:
+                await interaction.followup.send(
+                    embed=ErrorEmbed(description="Could not determine current season. Please specify a season number.")
+                )
+                return
+            season = current_season.number
+
+        tier_id = tier_info.id
+
+        standings = await self.tier_standings(guild, tier_id=tier_id, season=season)
+
+        if not standings:
+            await interaction.followup.send(embed=ErrorEmbed(description=f"No tier standings returned for `{tier}` in S{season}"))
+            return
+
+        embed = BlueEmbed(
+            title=f"S{season} {tier} Standings",
+            description=f"Displaying standings for {tier} tier.",
+        )
+
+        embed.add_field(
+            name="Rank",
+            value="\n".join([str(x.rank) for x in standings]),
+            inline=True,
+        )
+        embed.add_field(
+            name="Team",
+            value="\n".join([x.team for x in standings]),
+            inline=True,
+        )
+        embed.add_field(
+            name="Record",
+            value="\n".join([f"{x.games_won} - {x.games_lost}" for x in standings]),
+            inline=True,
+        )
+
+        await interaction.followup.send(embed=embed, ephemeral=False)
 
     @app_commands.command(  # type: ignore[type-var]
         name="playerstats", description="Display RSC stats for a player"
@@ -245,7 +304,7 @@ class StatsMixIn(RSCMixIn):
         embed.add_field(name="Shots", value=str(stats.shots), inline=True)
         embed.add_field(
             name="Shot Percentage",
-            value=f"{stats.shooting_percentage:.1%}",
+            value=f"{stats.shooting_percentage:>.2f}%",
             inline=True,
         )
 

@@ -35,6 +35,7 @@ from rscapi.models.team import Team
 from rscapi.models.team_create import TeamCreate
 from rscapi.models.team_list import TeamList
 from rscapi.models.team_season_stats import TeamSeasonStats
+from rscapi.models.team_standings import TeamStandings
 from rscapi.models.tier import Tier
 from rscapi.models.tracker_link import TrackerLink
 from rscapi.models.tracker_link_stats import TrackerLinkStats
@@ -469,7 +470,7 @@ class RSCMixIn(ABC):
     # Seasons
 
     @abstractmethod
-    async def seasons(self, guild: discord.Guild) -> list[Season]: ...
+    async def seasons(self, guild: discord.Guild, number: int | None = None, current: bool = False) -> list[Season]: ...
 
     @abstractmethod
     async def season_by_id(self, guild: discord.Guild, season_id: int) -> Season: ...
@@ -513,6 +514,9 @@ class RSCMixIn(ABC):
         name: str | None = None,
         tier: str | None = None,
     ) -> list[TeamList]: ...
+
+    @abstractmethod
+    async def tier_standings(self, guild: discord.Guild, tier_id: int, season: int) -> list[TeamStandings]: ...
 
     @abstractmethod
     async def season_matches(

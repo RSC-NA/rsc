@@ -28,6 +28,8 @@ from rscapi import MatchList  # noqa: E402
 from rscapi.models.franchise_list import FranchiseList  # noqa: E402
 from rscapi.models.league_player import LeaguePlayer  # noqa: E402
 from rscapi.models.team import Team  # noqa: E402
+from rscapi.models.franchise_standings import FranchiseStandings  # noqa: E402
+from rscapi.models.season import Season  # noqa: E402
 
 from rsc.llm.loaders import FranchiseDocumentLoader, PlayerDocumentLoader, RuleDocumentLoader, TeamDocumentLoader, MatchDocumentLoader  # noqa: E402
 from rsc.llm.loaders.matchloader import MatchFetcher  # noqa: E402
@@ -63,6 +65,12 @@ async def load_funny_docs() -> list[Document]:
 
 async def string_to_doc(text: str) -> Document:
     return Document(page_content=text)
+
+
+async def load_current_season_doc(season: Season) -> Document:
+    content = f"The current season is Season {season.number} for League {season.league.name}."
+    metadata = {"source": "API", "type": "current_season", "id": season.id}
+    return Document(page_content=content, metadata=metadata)
 
 
 async def load_help_docs() -> list[Document]:
@@ -116,9 +124,9 @@ async def json_to_docs(data: str, jq_schema: str, metadata_func: Callable | None
     return chunks
 
 
-async def load_franchise_docs(franchises: list[FranchiseList]):
+async def load_franchise_docs(franchises: list[FranchiseList], standings: list[FranchiseStandings] | None = None):
     documents = []
-    loader = FranchiseDocumentLoader(franchises)
+    loader = FranchiseDocumentLoader(franchises, standings=standings)
     async for doc in loader.alazy_load():
         log.debug(f"Document: {doc.page_content}")
         log.debug(f"Document Metadata: {doc.metadata}")

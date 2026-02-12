@@ -4,6 +4,7 @@ from collections.abc import AsyncIterator, Iterator
 from langchain_core.document_loaders import BaseLoader
 from langchain_core.documents import Document
 from rscapi.models.franchise_list import FranchiseList
+from rscapi.models.franchise_standings import FranchiseStandings
 
 log = logging.getLogger("red.rsc.llm.loaders.franchiseloader")
 
@@ -14,14 +15,18 @@ FRANCHISE_INPUT = """
 {name} has the following teams in their franchise: {teams}
 
 {name} has the following tiers in their franchise: {tiers}
+
+{name} has the following season record.
+{record}
 """  # noqa: E501
 
 
 class FranchiseDocumentLoader(BaseLoader):
     """RSC Franchise Document style loader"""
 
-    def __init__(self, franchises: list[FranchiseList]) -> None:
+    def __init__(self, franchises: list[FranchiseList], standings: list[FranchiseStandings] | None = None) -> None:
         self.franchises: list[FranchiseList] = franchises
+        self.standings = standings
 
     def _process_franchises(self) -> Iterator[Document]:
         """Process franchises and yield Documents."""
@@ -46,12 +51,20 @@ class FranchiseDocumentLoader(BaseLoader):
                     continue
                 teams.append(team.name)
 
+            # Get record if available
+            record = "No standings or record available"
+            if self.standings:
+                for s in self.standings:
+                    if s.franchise.lower() == f.name.lower():
+                        record = f"Wins: {s.wins}\nLosses: {s.losses}"
+
             content = FRANCHISE_INPUT.format(
                 name=f.name,
                 prefix=f.prefix,
                 gm=f.gm.rsc_name,
                 teams=", ".join(teams),
                 tiers=", ".join(tiers),
+                record=record,
             )
 
             yield Document(

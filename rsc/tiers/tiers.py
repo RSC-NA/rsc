@@ -6,6 +6,7 @@ from redbot.core import app_commands
 from rscapi import ApiClient, TiersApi
 from rscapi.exceptions import ApiException
 from rscapi.models.tier import Tier
+from rscapi.models.team_standings import TeamStandings
 
 from rsc.abc import RSCMixIn
 from rsc.embeds import BlueEmbed, ErrorEmbed
@@ -130,6 +131,17 @@ class TierMixIn(RSCMixIn):
                 else:
                     self._tier_cache[guild.id] = [t.name for t in tiers if t.name]
             return tiers
+
+    async def tier_standings(self, guild: discord.Guild, tier_id: int, season: int) -> list[TeamStandings]:
+        """Fetch a list of tiers"""
+        async with ApiClient(self._api_conf[guild.id]) as client:
+            api = TiersApi(client)
+            try:
+                standings: list[TeamStandings] = await api.tiers_standings(id=tier_id, season=season)
+                standings.sort(key=lambda t: (t.rank, t.team))
+                return standings
+            except ApiException as exc:
+                raise RscException(response=exc)
 
     async def create_tier(self, guild: discord.Guild, name: str, color: int, position: int) -> Tier:
         async with ApiClient(self._api_conf[guild.id]) as client:
