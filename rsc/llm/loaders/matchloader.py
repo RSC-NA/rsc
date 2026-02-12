@@ -1,18 +1,18 @@
 import logging
 from collections.abc import AsyncIterator, Awaitable, Callable, Iterator
-from datetime import UTC, datetime, tzinfo
+from datetime import UTC, datetime
 
 from langchain_core.document_loaders import BaseLoader
 from langchain_core.documents import Document
-from rscapi.models.match import Match
 from rscapi.models.match_list import MatchList
 from rscapi.models.match_results import MatchResults
 from rsc.enums import MatchType
+from rsc.exceptions import RscException
 
 log = logging.getLogger("red.rsc.llm.loaders.matchloader")
 
 # Type alias for match fetcher callback
-MatchFetcher = Callable[[int], Awaitable[Match]]
+MatchFetcher = Callable[[int], Awaitable[MatchResults]]
 
 
 def is_match_in_past(match_date: datetime | None) -> bool:
@@ -23,49 +23,6 @@ def is_match_in_past(match_date: datetime | None) -> bool:
     effective_tz = match_date.tzinfo or UTC
     now = datetime.now(effective_tz)
     return match_date < now
-
-
-def get_relative_time_description(match_date: datetime | None, tz: tzinfo | None = None) -> str:
-    """Convert a match date to a human-readable relative time description.
-
-    Args:
-        match_date: The match datetime (should be timezone-aware)
-        tz: Optional timezone to use for "now". If None, uses the match's timezone
-            or falls back to UTC.
-    """
-    if not match_date:
-        return "Date not yet scheduled"
-
-    # Use provided tz, or match's tz, or fallback to UTC
-    effective_tz = tz or match_date.tzinfo or UTC
-    now = datetime.now(effective_tz)
-    # Normalize to start of day for comparison
-    today = now.replace(hour=0, minute=0, second=0, microsecond=0)
-    match_day = match_date.replace(hour=0, minute=0, second=0, microsecond=0)
-
-    delta = (match_day - today).days
-
-    if delta < 0:
-        # Past matches
-        if delta == -1:
-            return "This match was yesterday (already played)"
-        elif delta >= -7:
-            return f"This match was {abs(delta)} days ago (already played)"
-        elif delta >= -14:
-            return "This match was last week (already played)"
-        else:
-            return f"This match was {abs(delta)} days ago (already played)"
-    elif delta == 0:
-        return "This match is TODAY"
-    elif delta == 1:
-        return "This match is TOMORROW"
-    elif delta <= 7:
-        return f"This match is in {delta} days (this week)"
-    elif delta <= 14:
-        return f"This match is in {delta} days (next week)"
-    else:
-        weeks = delta // 7
-        return f"This match is in {delta} days (about {weeks} weeks away)"
 
 
 def format_match_results(results: MatchResults | None, home_team: str, away_team: str) -> str:
@@ -109,11 +66,35 @@ def format_match_results(results: MatchResults | None, home_team: str, away_team
     return "\n".join(result_lines)
 
 
+def get_match_status(match_date: datetime | None) -> str:
+    """Get a simple temporal status for the match.
+
+    This provides semantic markers for vector search to distinguish
+    past/future matches when users ask about 'last' or 'next' matches.
+    """
+    if not match_date:
+        return "Status: SCHEDULED (date TBD)"
+
+    effective_tz = match_date.tzinfo or UTC
+    now = datetime.now(effective_tz)
+    today = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    match_day = match_date.replace(hour=0, minute=0, second=0, microsecond=0)
+
+    delta = (match_day - today).days
+
+    if delta < 0:
+        return "Status: COMPLETED (past match, already played)"
+    elif delta == 0:
+        return "Status: TODAY (match day)"
+    else:
+        return "Status: SCHEDULED (upcoming future match)"
+
+
 MATCH_INPUT = """
 {match_day}
+{status}
 
 Date: {date}
-{relative_time}
 
 Home Team: {home_team}
 Away Team: {away_team}
@@ -161,7 +142,7 @@ class MatchDocumentLoader(BaseLoader):
                 match_day = "Match"
 
         date_fmt = m.var_date.strftime("%m-%d-%Y") if m.var_date else "TBD"
-        relative_time = get_relative_time_description(m.var_date)
+        status = get_match_status(m.var_date)
         results_str = ""
         if results:
             results_str = format_match_results(
@@ -172,8 +153,8 @@ class MatchDocumentLoader(BaseLoader):
 
         content = MATCH_INPUT.format(
             match_day=match_day,
+            status=status,
             date=date_fmt,
-            relative_time=relative_time,
             home_team=m.home_team,
             away_team=m.away_team,
             results=results_str,
@@ -208,8 +189,13 @@ class MatchDocumentLoader(BaseLoader):
             match_id = m.id
             if self.match_fetcher and match_id is not None and is_match_in_past(m.var_date):
                 try:
-                    full_match = await self.match_fetcher(match_id)
-                    results = getattr(full_match, "results", None)
+                    results = await self.match_fetcher(match_id)
+                except RscException as e:
+                    # Silently skip 404 errors (match not found)
+                    if e.status == 404:
+                        log.debug(f"Match {match_id} not found or invalid (HTTP {e.status})")
+                    else:
+                        log.error(f"Failed to fetch match {match_id} results: HTTP {e.status} - {e.reason}")
                 except Exception as e:
                     log.warning(f"Failed to fetch match {match_id} results: {e}")
 

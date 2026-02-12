@@ -225,6 +225,55 @@ async def reset_collection(guild: discord.Guild):
         log.debug(f"Collection {collection_name} does not exist, nothing to delete", guild=guild)
 
 
+async def delete_documents_by_type(guild: discord.Guild, doc_type: str) -> int:
+    """
+    Delete documents from the collection matching a specific type.
+
+    Args:
+        guild: Discord guild
+        doc_type: Document type to delete (matches 'type' metadata field)
+
+    Returns:
+        Number of documents deleted
+    """
+    if not CHROMA_PATH.exists():
+        log.debug("ChromaDB does not exist, nothing to delete", guild=guild)
+        return 0
+
+    try:
+        chroma_client = chromadb.PersistentClient(
+            path=str(CHROMA_PATH.absolute()),
+            tenant=chromadb.config.DEFAULT_TENANT,
+            database=chromadb.config.DEFAULT_DATABASE,
+        )
+
+        collection_name = str(guild.id)
+        existing_collections = [c.name for c in chroma_client.list_collections()]
+
+        if collection_name not in existing_collections:
+            log.debug(f"Collection {collection_name} does not exist", guild=guild)
+            return 0
+
+        collection = chroma_client.get_collection(name=collection_name)
+
+        # Get documents matching the type
+        results = collection.get(where={"type": doc_type})
+        doc_ids = results.get("ids", [])
+
+        if not doc_ids:
+            log.debug(f"No documents found with type '{doc_type}'", guild=guild)
+            return 0
+
+        # Delete the matching documents
+        collection.delete(ids=doc_ids)
+        log.info(f"Deleted {len(doc_ids)} documents with type '{doc_type}'", guild=guild)
+        return len(doc_ids)
+
+    except Exception as e:
+        log.error(f"Error deleting documents by type: {e}", guild=guild)
+        return 0
+
+
 async def save_documents(guild: discord.Guild, org_name: str, api_key: str, docs: list[Document]):
     """
     Add documents to the guild's collection. Does not delete existing documents.

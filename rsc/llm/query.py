@@ -9,6 +9,7 @@ sys.modules["sqlite3"] = sys.modules.pop("pysqlite3")
 import logging  # noqa: E402
 import re  # noqa: E402
 from dataclasses import dataclass  # noqa: E402
+from datetime import datetime  # noqa: E402
 from pathlib import Path  # noqa: E402
 
 import chromadb  # noqa: E402
@@ -55,6 +56,7 @@ class UserIdentity:
     franchise: str | None = None
     tier: str | None = None
     status: str | None = None
+    current_datetime: datetime | None = None
 
 
 def format_user_context(identity: UserIdentity | None) -> str:
@@ -62,7 +64,19 @@ def format_user_context(identity: UserIdentity | None) -> str:
     if not identity:
         return ""
 
-    context_parts = [f"The user asking this question is {identity.name}"]
+    context_parts = []
+
+    # Add current datetime context first
+    if identity.current_datetime:
+        dt_str = identity.current_datetime.strftime("%A, %B %d, %Y at %I:%M %p %Z")
+        context_parts.append(f"Current Date and Time: {dt_str}\n")
+        context_parts.append(
+            "Use the current date above to determine relative time references "
+            '(e.g., "today", "tomorrow", "yesterday", "this week", "last week") '
+            "when answering questions about match schedules.\n\n"
+        )
+
+    context_parts.append(f"The user asking this question is {identity.name}")
 
     if identity.status in ("RO", "IR", "AR", "RN"):  # Rostered statuses
         if identity.team and identity.franchise and identity.tier:
@@ -193,13 +207,23 @@ def apply_dynamic_cutoff(
 
 def build_context(
     docs: list[tuple[Document, float, float]],
-) -> tuple[str, list[str | None]]:
+) -> tuple[str, list[dict[str, str | None]]]:
     """
-    Assemble final prompt context and source list.
+    Assemble final prompt context and source list with full metadata.
+
+    Returns:
+        Tuple of (context_string, list of metadata dicts with source, id, etc.)
     """
     context = "\n\n---\n\n".join(f"[Relevance {score:.2f}]\n{doc.page_content}" for doc, _distance, score in docs)
 
-    sources = [doc.metadata.get("source") for doc, _distance, _score in docs]
+    sources = [
+        {
+            "source": doc.metadata.get("source"),
+            "id": doc.metadata.get("id"),
+            "chunk_index": doc.metadata.get("chunk_index"),
+        }
+        for doc, _distance, _score in docs
+    ]
 
     return context, sources
 
@@ -280,7 +304,7 @@ async def llm_query(
     count: int = 5,
     model: str = "gpt-5.2",
     user_identity: UserIdentity | None = None,
-) -> tuple[str | None, list[str | None]]:
+) -> tuple[str | None, list[dict[str, str | None]]]:
     """
     Query the LLM with context from ChromaDB.
 
@@ -317,14 +341,33 @@ async def llm_query(
             ),
         )
 
-        # Add date context for match-related questions
-        if "match" in question.lower():
-            log.debug("Question appears to be match-related.", guild=guild)
-            question += f"\nDate: {discord.utils.utcnow().date().strftime('%m-%d-%Y')}"
+        # Build enriched search query with user context for better ChromaDB retrieval
+        # Always include available context - embeddings handle extra context gracefully
+        search_query = question
+        query_context_parts: list[str] = []
+
+        if user_identity:
+            # Always include user/team context for personalized retrieval
+            if user_identity.team:
+                query_context_parts.append(f"Team: {user_identity.team}")
+            if user_identity.franchise:
+                query_context_parts.append(f"Franchise: {user_identity.franchise}")
+            if user_identity.tier:
+                query_context_parts.append(f"Tier: {user_identity.tier}")
+            query_context_parts.append(f"Player: {user_identity.name}")
+
+            # Always include current date for temporal awareness
+            if user_identity.current_datetime:
+                date_str = user_identity.current_datetime.strftime("%m-%d-%Y")
+                query_context_parts.append(f"Current Date: {date_str}")
+
+        if query_context_parts:
+            search_query = f"{question}\n" + "\n".join(query_context_parts)
+            log.debug(f"Enriched query context: {query_context_parts}", guild=guild)
 
         # Search the DB with distance scores (lower is better)
-        log.debug(f"Initial Question: {question}", guild=guild)
-        similar = await llm_db.asimilarity_search_with_score(question, k=count)
+        log.debug(f"Search Query: {search_query}", guild=guild)
+        similar = await llm_db.asimilarity_search_with_score(search_query, k=count)
 
         if not similar:
             log.debug("Unable to find matching results.", guild=guild)
@@ -368,9 +411,12 @@ async def llm_query(
         context_text, sources = build_context(final_docs)
         log.debug(f"Context: {context_text}", guild=guild)
 
-        # Prompt with optional user context
+        # Prompt with user context (includes datetime if provided)
         user_context = format_user_context(user_identity)
-        prompt = PROMPT_TEMPLATE.format(context=context_text, user_context=user_context)
+        prompt = PROMPT_TEMPLATE.format(
+            context=context_text,
+            user_context=user_context,
+        )
 
         messages = [
             {"role": "system", "content": prompt},

@@ -359,6 +359,9 @@ class RSCMixIn(ABC):
     ) -> list[Match]: ...
 
     @abstractmethod
+    async def match_results(self, guild: discord.Guild, id: int) -> MatchResults: ...
+
+    @abstractmethod
     async def match_by_id(self, guild: discord.Guild, id: int) -> Match: ...
 
     # Members

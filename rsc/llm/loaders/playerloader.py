@@ -74,12 +74,18 @@ class PlayerDocumentLoader(BaseLoader):
 
     def _get_roster_data(self, p: LeaguePlayer) -> dict:
         """Extract roster data from player."""
+        player_name = p.player.name if p.player else None
+        team_name = p.team.name if p.team else None
+        franchise_name = p.team.franchise.name if p.team and p.team.franchise else None
+        gm_name = p.team.franchise.gm.rsc_name if p.team and p.team.franchise and p.team.franchise.gm else None
+        tier_name = p.tier.name if p.tier else None
+
         return {
-            "name": p.player.name,
-            "team": p.team.name,
-            "franchise": p.team.franchise.name,
-            "gm": p.team.franchise.gm.rsc_name,
-            "tier": p.tier.name,
+            "name": player_name,
+            "team": team_name,
+            "franchise": franchise_name,
+            "gm": gm_name,
+            "tier": tier_name,
         }
 
     def _process_players(self) -> Iterator[Document]:

@@ -9,6 +9,7 @@ sys.path.insert(0, str(project_root))
 
 from rsc.core import RSC
 from rsc.exceptions import RscException
+from rscapi.models import MatchResults
 
 from .utils import random_string
 
@@ -107,6 +108,40 @@ class TestMatchesApiCalls:
                 pytest.fail(f"upload_match_media() raised unexpected RscException: {e}")
         except Exception as e:
             pytest.fail(f"upload_match_media() raised unexpected exception: {e}")
+
+    @pytest.mark.asyncio
+    async def test_fetch_match_results_success(self, rsc_bot: RSC, mock_guild, mock_member):
+        """Test that match_results() API call doesn't raise exceptions and returns expected data."""
+        MATCH_ID = 31488  # Example match ID to test results fetching
+
+        # Test valid match results fetching
+        results: MatchResults = await rsc_bot.match_results(mock_guild, MATCH_ID)
+        if not results:
+            pytest.fail(f"No match results found for ID {MATCH_ID}")
+
+        assert isinstance(results, MatchResults), f"Expected MatchResults type, got {type(results)}"
+        assert isinstance(results.home_wins, int), "home_score should be an integer"
+        assert isinstance(results.away_wins, int), "away_score should be an integer"
+        assert isinstance(results.ballchasing_group, str) , "Ballchasing group should be a string"
+        print(f"✓ match_results() succeeded for match ID {MATCH_ID}")
+
+
+    @pytest.mark.asyncio
+    async def test_fetch_match_results_not_found(self, rsc_bot: RSC, mock_guild):
+        """Test that match_results() API call correctly handles 404 Not Found."""
+        # Test NotFound 404 handling
+        INVALID_MATCH_ID = 2  # Assuming this ID does not exist
+        try:
+            result = await rsc_bot.match_results(mock_guild, INVALID_MATCH_ID)
+            pytest.fail(f"match_results() should have raised RscException for invalid ID {INVALID_MATCH_ID}")
+        except RscException as e:
+            print(f"Match results status code for invalid ID {INVALID_MATCH_ID}: {e.status} {e.reason}")
+            if e.status == 404:
+                print(f"✓ match_results() correctly raised 404 for invalid ID {INVALID_MATCH_ID}")
+            else:
+                pytest.fail(f"match_results() raised unexpected RscException status {e.status} for invalid ID {INVALID_MATCH_ID}")
+
+
 
 
 class TestMatchesApiDataStructures:

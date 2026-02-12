@@ -761,3 +761,12 @@ class MatchMixIn(RSCMixIn):
                 return await api.matches_create(data)
             except ApiException as exc:
                 raise RscException(response=exc)
+
+    async def match_results(self, guild: discord.Guild, id: int) -> MatchResults:
+        """Fetch Match results object by ID"""
+        async with ApiClient(self._api_conf[guild.id]) as client:
+            api = MatchesApi(client)
+            try:
+                return await api.matches_results(id)
+            except ApiException as exc:
+                raise RscException(response=exc)
