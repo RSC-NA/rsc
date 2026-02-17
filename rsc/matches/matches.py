@@ -666,7 +666,7 @@ class MatchMixIn(RSCMixIn):
                 match: Match = await api.teams_match(
                     id=team_id,
                     day=day,
-                    preseason=int(preseason),
+                    preseason=preseason,
                 )
                 return match
             except ApiException as exc:
