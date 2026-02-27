@@ -2,6 +2,7 @@
 
 import asyncio
 import os
+import sys
 from typing import AsyncIterator
 
 from rscapi import ApiClient, Configuration, LeaguePlayersApi
@@ -9,6 +10,7 @@ from rscapi.models.league_player import LeaguePlayer
 
 API_KEY = os.environ.get("RSC_API_KEY")
 API_HOST = "https://api.rscna.com/api/v1"
+# API_HOST = "http://127.0.0.1:8000/api/v1"
 
 CONF = Configuration(
     host=API_HOST,
@@ -93,8 +95,15 @@ async def players(
 
 async def get_paged_rostered_players():
     total = 0
+    seen = []
     async for api_player in paged_players(season_number=25):
         total += 1
+        if api_player.id in seen:
+            print(f"Duplicate player found: {api_player.id} - {api_player.player.name} ({api_player.player.discord_id})")
+            sys.exit(1)
+        else:
+            print(f"New Player: {api_player.id} - {api_player.player.name} ({api_player.player.discord_id})")
+            seen.append(api_player.id)
 
     print(f"Total players returned from paged players: {total}")
 
