@@ -142,7 +142,7 @@ class CombineManagerMixIn(RSCMixIn):
             return await interaction.followup.send(embed=ErrorEmbed(description="Admin role does not exist."))
 
         # Admin only overwrites
-        admin_overwrites: MutableMapping[discord.Member | discord.Role, discord.PermissionOverwrite] = {
+        admin_overwrites: MutableMapping[discord.Role | discord.Member | discord.Object, discord.PermissionOverwrite] = {
             guild.default_role: discord.PermissionOverwrite(
                 view_channel=True,
                 connect=False,
@@ -183,7 +183,7 @@ class CombineManagerMixIn(RSCMixIn):
             )
 
         # Configure permissions
-        player_overwrites: MutableMapping[discord.Member | discord.Role, discord.PermissionOverwrite] = {
+        player_overwrites: MutableMapping[discord.Role | discord.Member | discord.Object, discord.PermissionOverwrite] = {
             guild.default_role: discord.PermissionOverwrite(
                 view_channel=True,
                 connect=False,

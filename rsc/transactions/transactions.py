@@ -2332,6 +2332,8 @@ class TransactionMixIn(RSCMixIn):
                 tvalue = TradeValue(pick=DraftPick(tier=tier.capitalize(), round=round, number=pick, future=False))
                 log.debug(tvalue, guild=guild)
 
+                if not sfranchise:
+                    raise TradeParserException(message="Unable to determine source franchise for pick trade.")
                 item = TradeItem(source=sfranchise, destination=dest_franchise, value=tvalue)
                 trade_list.append(item)
 

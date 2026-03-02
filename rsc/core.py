@@ -6,7 +6,7 @@ from zoneinfo import ZoneInfo
 from aiohttp import web
 import discord
 import pytz
-import validators  # type: ignore[import-untyped]
+import validators
 from pydantic import ValidationError
 from redbot.core import Config, app_commands, commands
 from redbot.core.bot import Red

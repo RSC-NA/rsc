@@ -117,7 +117,7 @@ class StatsMixIn(RSCMixIn):
 
         if not season:
             current_season = await self.current_season(guild)
-            if not current_season:
+            if not (current_season and current_season.number):
                 await interaction.followup.send(
                     embed=ErrorEmbed(description="Could not determine current season. Please specify a season number.")
                 )
