@@ -3,7 +3,7 @@ import logging
 import discord
 from redbot.core import app_commands, commands
 
-from rsc.abc import RSCMixIn
+from rsc.protocols import RSCProtocol
 from rsc.embeds import BlueEmbed, SuccessEmbed
 from rsc.types import WelcomeSettings
 
@@ -12,7 +12,7 @@ log = logging.getLogger("red.rsc.welcome")
 defaults_guild = WelcomeSettings(WelcomeChannel=None, WelcomeMsg=None, WelcomeRoles=[], WelcomeStatus=False)
 
 
-class WelcomeMixIn(RSCMixIn):
+class WelcomeMixIn(RSCProtocol):
     def __init__(self):
         log.debug("Initializing WelcomeMixIn")
         # Prepare configuration group
@@ -51,9 +51,7 @@ class WelcomeMixIn(RSCMixIn):
         default_permissions=discord.Permissions(manage_roles=True),
     )
 
-    @_rsc_welcome.command(  # type: ignore[type-var]
-        name="settings", description="Display the current RSC welcome settings."
-    )
+    @_rsc_welcome.command(name="settings", description="Display the current RSC welcome settings.")
     async def _rsc_welcome_settings(self, interaction: discord.Interaction):
         guild = interaction.guild
         if not guild:
@@ -82,9 +80,7 @@ class WelcomeMixIn(RSCMixIn):
         settings_embed.add_field(name="Welcome Message", value=welcome_msg, inline=False)
         await interaction.response.send_message(embed=settings_embed, ephemeral=True)
 
-    @_rsc_welcome.command(  # type: ignore[type-var]
-        name="toggle", description="Toggle the welcome message on or off"
-    )
+    @_rsc_welcome.command(name="toggle", description="Toggle the welcome message on or off")
     async def _rsc_welcome_toggle(self, interaction: discord.Interaction):
         if not interaction.guild:
             return
@@ -103,7 +99,7 @@ class WelcomeMixIn(RSCMixIn):
             ephemeral=True,
         )
 
-    @_rsc_welcome.command(name="channel", description="Modify the welcome channel")  # type: ignore[type-var]
+    @_rsc_welcome.command(name="channel", description="Modify the welcome channel")
     @app_commands.describe(channel="Channel to send welcome message in. (Must be text channel)")
     async def _rsc_welcome_channel(self, interaction: discord.Interaction, channel: discord.TextChannel):
         if not interaction.guild:
@@ -115,7 +111,7 @@ class WelcomeMixIn(RSCMixIn):
             ephemeral=True,
         )
 
-    @_rsc_welcome.command(  # type: ignore[type-var]
+    @_rsc_welcome.command(
         name="message",
         description="Modify the welcome message when a user joins the server (Max 512 characters)",
     )
@@ -129,7 +125,7 @@ class WelcomeMixIn(RSCMixIn):
         embed = SuccessEmbed(title="Welcome Message Configured", description=msg)
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-    @_rsc_welcome.command(  # type: ignore[type-var]
+    @_rsc_welcome.command(
         name="roles",
         description="Modify the roles a user receives when joining the server",
     )

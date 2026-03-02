@@ -2,6 +2,7 @@ import logging
 
 import discord
 from redbot.core import app_commands
+from pprint import pformat
 
 from rsc.admin import AdminMixIn
 from rsc.embeds import ApiExceptionErrorEmbed, BlueEmbed, ErrorEmbed, YellowEmbed
@@ -27,7 +28,7 @@ class AdminStatsMixIn(AdminMixIn):
         default_permissions=discord.Permissions(manage_guild=True),
     )
 
-    @_stats.command(name="intents", description="Intent to Play statistics")  # type: ignore[type-var]
+    @_stats.command(name="intents", description="Intent to Play statistics")
     async def _intent_stats_cmd(self, interaction: discord.Interaction):
         guild = interaction.guild
         if not guild:
@@ -102,7 +103,7 @@ class AdminStatsMixIn(AdminMixIn):
 
         await interaction.followup.send(embed=embed)
 
-    @_stats.command(name="intentbyfranchise", description="Intent to Play statistics by Franchise")  # type: ignore[type-var]
+    @_stats.command(name="intentbyfranchise", description="Intent to Play statistics by Franchise")
     async def _intent_stats_franchise_cmd(self, interaction: discord.Interaction):
         guild = interaction.guild
         if not guild:
@@ -183,7 +184,7 @@ class AdminStatsMixIn(AdminMixIn):
 
         await interaction.followup.send(embed=embed)
 
-    @_stats.command(name="current", description="Current season statistics")  # type: ignore[type-var]
+    @_stats.command(name="current", description="Current season statistics")
     async def _current_season_stats_cmd(self, interaction: discord.Interaction):
         guild = interaction.guild
         if not guild:
@@ -236,8 +237,6 @@ class AdminStatsMixIn(AdminMixIn):
         for s in Status:
             status_dict[s.full_name] = sum(1 for p in lplayers if p.status == s)
 
-        from pprint import pformat
-
         log.debug(f"Final Results:\n\n{pformat(status_dict)}")
 
         embed = BlueEmbed(
@@ -253,7 +252,7 @@ class AdminStatsMixIn(AdminMixIn):
 
         await interaction.followup.send(embed=embed)
 
-    @_stats.command(name="signups", description="RSC sign-up statistics")  # type: ignore[type-var]
+    @_stats.command(name="signups", description="RSC sign-up statistics")
     async def _signups_stats_cmd(self, interaction: discord.Interaction):
         guild = interaction.guild
         if not guild:
@@ -305,8 +304,6 @@ class AdminStatsMixIn(AdminMixIn):
         status_dict = {}
         for s in Status:
             status_dict[s.full_name] = sum(1 for p in lplayers if p.status == s)
-
-        from pprint import pformat
 
         log.debug(f"Final Results:\n\n{pformat(status_dict)}")
 

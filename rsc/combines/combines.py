@@ -1,10 +1,11 @@
 import logging
 from functools import wraps
+from typing import Generic
 
 import discord
 from redbot.core import app_commands
 
-from rsc.abc import RSCMixIn
+from rsc.protocols import RSC_T
 from rsc.combines import api, models
 from rsc.combines.manager import CombineManagerMixIn
 from rsc.combines.runner import CombineRunnerMixIn
@@ -12,6 +13,7 @@ from rsc.embeds import BlueEmbed, ErrorEmbed, YellowEmbed
 from rsc.exceptions import BadGateway
 from rsc.tiers import TierMixIn
 from rsc.types import CombineSettings
+
 
 log = logging.getLogger("red.rsc.combines")
 
@@ -50,7 +52,7 @@ def active_combines(f):  # noqa: ANN001
     return combine_wrapper
 
 
-class CombineMixIn(CombineRunnerMixIn, CombineManagerMixIn, RSCMixIn):
+class CombineMixIn(CombineRunnerMixIn, CombineManagerMixIn, Generic[RSC_T]):
     def __init__(self):
         log.debug("Initializing CombineMixIn")
         super().__init__()
@@ -65,9 +67,7 @@ class CombineMixIn(CombineRunnerMixIn, CombineManagerMixIn, RSCMixIn):
 
     # Commands
 
-    @_combines.command(  # type: ignore[type-var]
-        name="checkin", description="Check in for an RSC combines match"
-    )
+    @_combines.command(name="checkin", description="Check in for an RSC combines match")
     @active_combines
     async def _combines_check_in_cmd(self, interaction: discord.Interaction):
         guild = interaction.guild
@@ -104,9 +104,7 @@ class CombineMixIn(CombineRunnerMixIn, CombineManagerMixIn, RSCMixIn):
             ephemeral=True,
         )
 
-    @_combines.command(  # type: ignore[type-var]
-        name="checkout", description="Check out of RSC combines"
-    )
+    @_combines.command(name="checkout", description="Check out of RSC combines")
     @active_combines
     async def _combines_check_out_cmd(self, interaction: discord.Interaction):
         guild = interaction.guild
@@ -146,9 +144,7 @@ class CombineMixIn(CombineRunnerMixIn, CombineManagerMixIn, RSCMixIn):
             ephemeral=True,
         )
 
-    @_combines.command(  # type: ignore[type-var]
-        name="lobbyinfo", description="Get your active combines game lobby info"
-    )
+    @_combines.command(name="lobbyinfo", description="Get your active combines game lobby info")
     @active_combines
     async def _combines_lobby_info_cmd(self, interaction: discord.Interaction, lobby_id: int | None = None):
         guild = interaction.guild
@@ -203,10 +199,8 @@ class CombineMixIn(CombineRunnerMixIn, CombineManagerMixIn, RSCMixIn):
 
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-    @_combines.command(  # type: ignore[type-var]
-        name="active", description="Display active combine games"
-    )
-    @app_commands.autocomplete(tier=TierMixIn.tier_autocomplete)  # type: ignore[type-var]
+    @_combines.command(name="active", description="Display active combine games")
+    @app_commands.autocomplete(tier=TierMixIn.tier_autocomplete)
     @app_commands.describe(
         player="Only show games with containing discord member (Optional)",
         tier="Only show games with average tier (Optional)",

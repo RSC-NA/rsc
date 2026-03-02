@@ -72,7 +72,7 @@ class AdminInactivityMixIn(AdminMixIn):
 
     # Commands
 
-    @_inactive.command(  # type: ignore[type-var]
+    @_inactive.command(
         name="start",
         description="Create a channel and ping for inactive check. (DE players only)",
     )
@@ -179,9 +179,7 @@ class AdminInactivityMixIn(AdminMixIn):
             ephemeral=True,
         )
 
-    @_inactive.command(  # type: ignore[type-var]
-        name="stop", description="End inactivity check and delete channel."
-    )
+    @_inactive.command(name="stop", description="End inactivity check and delete channel.")
     async def _admin_inactive_check_stop_cmd(self, interaction: discord.Interaction):
         guild = interaction.guild
         if not guild:
@@ -210,9 +208,7 @@ class AdminInactivityMixIn(AdminMixIn):
             ephemeral=True,
         )
 
-    @_inactive.command(  # type: ignore[type-var]
-        name="manual", description="Manually change a players activity check status"
-    )
+    @_inactive.command(name="manual", description="Manually change a players activity check status")
     @app_commands.describe(player="RSC discord member", status="Active or Not Active")
     async def _admin_inactive_check_manual_cmd(
         self,

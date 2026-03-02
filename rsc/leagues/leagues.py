@@ -2,7 +2,7 @@ import logging
 from collections.abc import AsyncIterator
 from datetime import datetime
 
-import aiohttp
+from aiohttp import web
 import discord
 from redbot.core import app_commands
 from rscapi import ApiClient, LeaguePlayersApi, LeaguesApi
@@ -12,7 +12,7 @@ from rscapi.models.league_player import LeaguePlayer
 from rscapi.models.league_player_patch import LeaguePlayerPatch
 from rscapi.models.season import Season
 
-from rsc.abc import RSCMixIn
+from rsc.protocols import RSCProtocol
 from rsc.embeds import BlueEmbed, ErrorEmbed, YellowEmbed
 from rsc.enums import Status
 from rsc.exceptions import RscException
@@ -23,19 +23,19 @@ from rsc.utils.pagify import Pagify
 log = logging.getLogger("red.rsc.leagues")
 
 
-class LeagueMixIn(RSCMixIn):
+class LeagueMixIn(RSCProtocol):
     def __init__(self):
         log.debug("Initializing LeagueMixIn")
         super().__init__()
 
     # Web App
 
-    async def league_player_update_handler(self, request: aiohttp.web.Request):
+    async def league_player_update_handler(self, request: web.Request):
         log.debug("Got league player update event.")
 
     # Commands
 
-    @app_commands.command(name="leagues", description="Show all RSC leagues")  # type: ignore[type-var]
+    @app_commands.command(name="leagues", description="Show all RSC leagues")
     @app_commands.guild_only
     async def _leagues(self, interaction: discord.Interaction):
         guild = interaction.guild
@@ -60,9 +60,7 @@ class LeagueMixIn(RSCMixIn):
             embed.set_thumbnail(url=guild.icon.url)
         await interaction.response.send_message(embed=embed)
 
-    @app_commands.command(  # type: ignore[type-var]
-        name="leagueinfo", description="Show league and current season information"
-    )
+    @app_commands.command(name="leagueinfo", description="Show league and current season information")
     @app_commands.guild_only
     async def _leagues_info(self, interaction: discord.Interaction):
         if not interaction.guild:
@@ -83,15 +81,13 @@ class LeagueMixIn(RSCMixIn):
         # )
         # TODO - Is this useful?
 
-    @app_commands.command(  # type: ignore[type-var]
-        name="drafteligible", description="Display draft eligible players"
-    )
+    @app_commands.command(name="drafteligible", description="Display draft eligible players")
     @app_commands.describe(
         tier="Tier to search",
         season="RSC Season (Default: current)",
         limit="Max number of results to display (Default: 50)",
     )
-    @app_commands.autocomplete(tier=TierMixIn.tier_autocomplete)  # type: ignore[type-var]
+    @app_commands.autocomplete(tier=TierMixIn.tier_autocomplete)
     @app_commands.guild_only
     async def _draft_eligible_cmd(
         self,
@@ -163,9 +159,7 @@ class LeagueMixIn(RSCMixIn):
 
             await interaction.followup.send(embed=embed, ephemeral=True)
 
-    @app_commands.command(  # type: ignore[type-var]
-        name="season", description="Display current RSC season for league"
-    )
+    @app_commands.command(name="season", description="Display current RSC season for league")
     @app_commands.guild_only
     async def _season(self, interaction: discord.Interaction):
         guild = interaction.guild
@@ -190,7 +184,7 @@ class LeagueMixIn(RSCMixIn):
             embed.set_thumbnail(url=guild.icon.url)
         await interaction.response.send_message(embed=embed)
 
-    @app_commands.command(name="dates", description="Display important RSC dates")  # type: ignore[type-var]
+    @app_commands.command(name="dates", description="Display important RSC dates")
     @app_commands.guild_only
     async def _dates_cmd(self, interaction: discord.Interaction):
         guild = interaction.guild

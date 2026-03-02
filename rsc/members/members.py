@@ -21,7 +21,7 @@ from rscapi.models.player_signup_schema import PlayerSignupSchema
 from rscapi.models.update_member_rsc_name import UpdateMemberRSCName
 from rscapi.models.drop_a_player_from_a_league import DropAPlayerFromALeague
 
-from rsc.abc import RSCMixIn
+from rsc.protocols import RSCProtocol
 from rsc.embeds import (
     ApiExceptionErrorEmbed,
     BlueEmbed,
@@ -50,7 +50,7 @@ logger = logging.getLogger("red.rsc.members")
 log = GuildLogAdapter(logger)
 
 
-class MemberMixIn(RSCMixIn):
+class MemberMixIn(RSCProtocol):
     def __init__(self):
         log.debug("Initializing MemberMixIn")
         super().__init__()
@@ -81,9 +81,7 @@ class MemberMixIn(RSCMixIn):
 
     # App Commands
 
-    @app_commands.command(  # type: ignore[type-var]  # type: ignore[type-var]
-        name="signupstatus", description="Check your status for the next RSC season"
-    )
+    @app_commands.command(name="signupstatus", description="Check your status for the next RSC season")
     @app_commands.guild_only
     async def _member_signup_status(self, interaction: discord.Interaction):
         guild = interaction.guild
@@ -166,9 +164,7 @@ class MemberMixIn(RSCMixIn):
             )
         )
 
-    @_intent.command(  # type: ignore[type-var]  # type: ignore[type-var]
-        name="status", description="Display intent to play status for next season"
-    )
+    @_intent.command(name="status", description="Display intent to play status for next season")
     @app_commands.guild_only
     async def _intents_status_cmd(self, interaction: discord.Interaction):
         guild = interaction.guild
@@ -229,9 +225,7 @@ class MemberMixIn(RSCMixIn):
 
         await interaction.followup.send(embed=embed)
 
-    @_intent.command(  # type: ignore[type-var]
-        name="search", description="Search for intent to play status (Limit: 50)"
-    )
+    @_intent.command(name="search", description="Search for intent to play status (Limit: 50)")
     @app_commands.autocomplete(
         franchise=FranchiseMixIn.franchise_autocomplete,
         team=TeamMixIn.teams_autocomplete,
@@ -387,9 +381,7 @@ class MemberMixIn(RSCMixIn):
 
         await interaction.followup.send(embed=embed)
 
-    @_intent.command(  # type: ignore[type-var]
-        name="declare", description="Declare your intent to play next season of RSC"
-    )
+    @_intent.command(name="declare", description="Declare your intent to play next season of RSC")
     @app_commands.guild_only
     async def _intents_declare_cmd(self, interaction: discord.Interaction):
         guild = interaction.guild
@@ -454,7 +446,7 @@ class MemberMixIn(RSCMixIn):
         embed: discord.Embed = SuccessEmbed(title="Intent to Play Declared", description=desc)
         await interaction.edit_original_response(embed=embed, view=None)
 
-    @app_commands.command(name="signup", description="Sign up for the next RSC season")  # type: ignore[type-var]
+    @app_commands.command(name="signup", description="Sign up for the next RSC season")
     @app_commands.guild_only
     async def _member_signup(self, interaction: discord.Interaction):
         guild = interaction.guild
@@ -541,9 +533,7 @@ class MemberMixIn(RSCMixIn):
         )
         await interaction.edit_original_response(embed=success_embed, view=None)
 
-    @app_commands.command(  # type: ignore[type-var]
-        name="permfa", description="Sign up as an permanent free agent"
-    )
+    @app_commands.command(name="permfa", description="Sign up as an permanent free agent")
     @app_commands.guild_only
     async def _member_permfa_signup(self, interaction: discord.Interaction):
         guild = interaction.guild
@@ -624,9 +614,7 @@ class MemberMixIn(RSCMixIn):
         )
         await interaction.edit_original_response(embed=success_embed, view=None)
 
-    @app_commands.command(  # type: ignore[type-var]
-        name="playerinfo", description="Display league information about a player"
-    )
+    @app_commands.command(name="playerinfo", description="Display league information about a player")
     @app_commands.describe(player="Player discord name to query")
     @app_commands.guild_only
     async def _playerinfo_cmd(self, interaction: discord.Interaction, player: discord.Member):
@@ -694,11 +682,9 @@ class MemberMixIn(RSCMixIn):
         else:
             await interaction.followup.send(embed=embed)
 
-    @app_commands.command(  # type: ignore[type-var]
-        name="waivers", description="Display players currently on waivers"
-    )
+    @app_commands.command(name="waivers", description="Display players currently on waivers")
     @app_commands.describe(tier='Waiver tier name (Ex: "Elite")')
-    @app_commands.autocomplete(tier=TierMixIn.tier_autocomplete)  # type: ignore[type-var]
+    @app_commands.autocomplete(tier=TierMixIn.tier_autocomplete)
     @app_commands.guild_only
     async def _waivers(self, interaction: discord.Interaction, tier: str):
         guild = interaction.guild
@@ -722,7 +708,7 @@ class MemberMixIn(RSCMixIn):
             await interaction.followup.send(embed=embed)
             return
 
-        players.sort(key=lambda x: cast(str, x.player.name), reverse=True)
+        players.sort(key=lambda x: cast("str", x.player.name), reverse=True)
 
         waiver_dates = []
         members = []
@@ -742,7 +728,7 @@ class MemberMixIn(RSCMixIn):
 
         await interaction.followup.send(embed=embed)
 
-    @app_commands.command(name="staff", description="Display RSC Committees and Staff")  # type: ignore[type-var]
+    @app_commands.command(name="staff", description="Display RSC Committees and Staff")
     @app_commands.guild_only
     async def _staff_cmd(self, interaction: discord.Interaction):
         await utils.not_implemented(interaction)

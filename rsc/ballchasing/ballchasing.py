@@ -13,7 +13,7 @@ from redbot.core import app_commands
 from rscapi.models.match import Match
 from rscapi.models.match_results import MatchResults
 
-from rsc.abc import RSCMixIn
+from rsc.protocols import RSCProtocol
 from rsc.ballchasing import groups, process, validation
 from rsc.embeds import (
     ApiExceptionErrorEmbed,
@@ -55,7 +55,7 @@ LARGE_BATCH_SIZE = 10
 SMALL_BATCH_SIZE = 5
 
 
-class BallchasingMixIn(RSCMixIn):
+class BallchasingMixIn(RSCProtocol):
     def __init__(self):
         log.debug("Initializing BallchasingMixIn")
 
@@ -82,7 +82,7 @@ class BallchasingMixIn(RSCMixIn):
 
     # Sub Commands
 
-    @_ballchasing.command(  # type: ignore[type-var]
+    @_ballchasing.command(
         name="settings",
         description="Display settings for ballchasing replay management",
     )
@@ -132,9 +132,7 @@ class BallchasingMixIn(RSCMixIn):
 
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-    @_ballchasing.command(  # type: ignore[type-var]
-        name="key", description="Configure the Ballchasing API key for the server"
-    )
+    @_ballchasing.command(name="key", description="Configure the Ballchasing API key for the server")
     @app_commands.checks.has_permissions(manage_guild=True)
     async def _bc_key(self, interaction: discord.Interaction, key: str):
         if not interaction.guild:
@@ -145,7 +143,7 @@ class BallchasingMixIn(RSCMixIn):
             ephemeral=True,
         )
 
-    @_ballchasing.command(  # type: ignore[type-var]
+    @_ballchasing.command(
         name="manager",
         description="Configure the ballchasing management role (Ex: @Stats Committee)",
     )
@@ -159,7 +157,7 @@ class BallchasingMixIn(RSCMixIn):
             ephemeral=True,
         )
 
-    @_ballchasing.command(  # type: ignore[type-var]
+    @_ballchasing.command(
         name="log",
         description="Configure the logging channel for Ballchasing commands (Ex: #stats-committee)",
     )
@@ -173,7 +171,7 @@ class BallchasingMixIn(RSCMixIn):
             ephemeral=True,
         )
 
-    @_ballchasing.command(  # type: ignore[type-var]
+    @_ballchasing.command(
         name="category",
         description="Configure the score reporting category for the server",
     )
@@ -188,7 +186,7 @@ class BallchasingMixIn(RSCMixIn):
             ephemeral=True,
         )
 
-    @_ballchasing.command(  # type: ignore[type-var]
+    @_ballchasing.command(
         name="toplevelgroup",
         description="Configure the top level ballchasing group for RSC",
     )
@@ -210,7 +208,7 @@ class BallchasingMixIn(RSCMixIn):
 
     # Commands
 
-    @_ballchasing.command(  # type: ignore[type-var]
+    @_ballchasing.command(
         name="scanmissing",
         description="Find missing matches in ballchasing",
     )
@@ -226,14 +224,14 @@ class BallchasingMixIn(RSCMixIn):
     ):
         await utils.not_implemented(interaction)
 
-    @app_commands.command(  # type: ignore[type-var]
+    @app_commands.command(
         name="reportmatch",
         description="Report the results of your RSC match",
     )
     @app_commands.autocomplete(
         home=TeamMixIn.teams_autocomplete,
         away=TeamMixIn.teams_autocomplete,
-    )  # type: ignore[type-var]
+    )
     @app_commands.describe(
         home="Home team name",
         away="Away team name",

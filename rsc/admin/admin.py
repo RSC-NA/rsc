@@ -2,8 +2,9 @@ import logging
 
 import discord
 from redbot.core import app_commands
+from typing import Generic
 
-from rsc.abc import RSCMixIn
+from rsc.protocols import RSC_T
 from rsc.admin.modals import LeagueDatesModal
 from rsc.embeds import BlueEmbed, SuccessEmbed
 from rsc.logs import GuildLogAdapter
@@ -24,13 +25,15 @@ defaults_guild = AdminSettings(
 )
 
 
-class AdminMixIn(RSCMixIn):
+class AdminMixIn(Generic[RSC_T]):
     def __init__(self):
         log.debug("Initializing AdminMixIn")
+        self.setup_config()
+        super().__init__()
 
+    def setup_config(self):
         self.config.init_custom("Admin", 1)
         self.config.register_custom("Admin", **defaults_guild)
-        super().__init__()
 
     # Top Level Group
 
@@ -43,7 +46,7 @@ class AdminMixIn(RSCMixIn):
 
     # Settings
 
-    @_admin.command(name="settings", description="Display RSC Admin settings.")  # type: ignore[type-var]
+    @_admin.command(name="settings", description="Display RSC Admin settings.")
     async def _admin_settings_cmd(self, interaction: discord.Interaction):
         guild = interaction.guild
         if not guild:
@@ -86,7 +89,7 @@ class AdminMixIn(RSCMixIn):
             ephemeral=True,
         )
 
-    @_admin.command(name="dates", description="Configure the dates command output")  # type: ignore[type-var]
+    @_admin.command(name="dates", description="Configure the dates command output")
     async def _admin_set_dates(self, interaction: discord.Interaction):
         if not interaction.guild:
             return
@@ -97,9 +100,7 @@ class AdminMixIn(RSCMixIn):
 
         await self._set_dates(interaction.guild, value=dates_modal.date_input.value)
 
-    @_admin.command(  # type: ignore[type-var]
-        name="pfachnanel", description="Configure the PermFA announcement channel"
-    )
+    @_admin.command(name="pfachnanel", description="Configure the PermFA announcement channel")
     @app_commands.describe(channel="Discord channel to announce PermFAs")
     async def _admin_set_pfa_channel_cmd(self, interaction: discord.Interaction, channel: discord.TextChannel):
         if not interaction.guild:

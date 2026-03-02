@@ -5,7 +5,7 @@ import aiofiles
 import discord
 from redbot.core import app_commands
 
-from rsc.abc import RSCMixIn
+from rsc.protocols import RSCProtocol
 from rsc.embeds import ErrorEmbed
 
 log = logging.getLogger("red.rsc.developer")
@@ -13,7 +13,7 @@ log = logging.getLogger("red.rsc.developer")
 BUFMAX = 1984
 
 
-class DeveloperMixIn(RSCMixIn):
+class DeveloperMixIn(RSCProtocol):
     def __init__(self):
         log.debug("Initializing DeveloperMixIn")
         super().__init__()
@@ -29,7 +29,7 @@ class DeveloperMixIn(RSCMixIn):
 
     # Commands
 
-    @_log_group.command(  # type: ignore[type-var]
+    @_log_group.command(
         name="tail",
         description=f"Tail the latest log file (Max {BUFMAX} bytes)",
     )

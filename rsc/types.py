@@ -72,6 +72,9 @@ class Accolades:
             f"{COMBINE_CUP_EMOJI * self.combine_cup}"
         )
 
+    def __hash__(self) -> int:
+        return hash((self.trophy, self.star, self.devleague, self.combine_cup))
+
     def __eq__(self, other: object):
         if isinstance(other, int):
             return self.total == other
@@ -86,7 +89,7 @@ class Accolades:
             return self.total > other.total
         return NotImplemented
 
-    def __lt(self, other: object):
+    def __lt__(self, other: object):
         if isinstance(other, int):
             return self.total < other
         if isinstance(other, Accolades):
@@ -100,7 +103,7 @@ class Accolades:
             return self.total >= other.total
         return NotImplemented
 
-    def __le(self, other: object):
+    def __le__(self, other: object):
         if isinstance(other, int):
             return self.total <= other
         if isinstance(other, Accolades):

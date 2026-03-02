@@ -6,7 +6,7 @@ from discord.ext import tasks
 from redbot.core import Config, app_commands
 from rscapi.models.league_player import LeaguePlayer
 
-from rsc.abc import RSCMixIn
+from rsc.protocols import RSCProtocol
 from rsc.embeds import ErrorEmbed, SuccessEmbed
 from rsc.enums import Status
 from rsc.freeagents.views import CheckInView, CheckOutView
@@ -24,7 +24,7 @@ FA_LOOP_TIME = time(hour=17)
 defaults_guild: dict[str, list[CheckIn]] = {"CheckIns": []}
 
 
-class FreeAgentMixIn(RSCMixIn):
+class FreeAgentMixIn(RSCProtocol):
     def __init__(self):
         log.debug("Initializing FreeAgentMixIn")
 
@@ -90,11 +90,9 @@ class FreeAgentMixIn(RSCMixIn):
 
     # Commands
 
-    @app_commands.command(  # type: ignore[type-var]
-        name="freeagents", description="List free agents in a specified tier"
-    )
+    @app_commands.command(name="freeagents", description="List free agents in a specified tier")
     @app_commands.describe(tier='Free agent tier (Ex: "Elite")')
-    @app_commands.autocomplete(tier=TierMixIn.tier_autocomplete)  # type: ignore[type-var]
+    @app_commands.autocomplete(tier=TierMixIn.tier_autocomplete)
     @app_commands.guild_only
     async def _free_agents(self, interaction: discord.Interaction, tier: str):
         guild = interaction.guild
@@ -140,7 +138,7 @@ class FreeAgentMixIn(RSCMixIn):
 
         await interaction.followup.send(embed=embed)
 
-    @_free_agent_group.command(  # type: ignore[type-var]
+    @_free_agent_group.command(
         name="checkin",
         description="Check in as an available free agent for the current match day",
     )
@@ -226,7 +224,7 @@ class FreeAgentMixIn(RSCMixIn):
             )
             await self.add_checkin(guild, checkin)
 
-    @_free_agent_group.command(  # type: ignore[type-var]
+    @_free_agent_group.command(
         name="checkout",
         description="Check out as an available free agent for the current match day",
     )
@@ -254,12 +252,12 @@ class FreeAgentMixIn(RSCMixIn):
         if checkout_view.result:
             await self.remove_checkin(guild, checkin)
 
-    @_free_agent_group.command(  # type: ignore[type-var]
+    @_free_agent_group.command(
         name="availability",
         description="Get list of available free agents for specified tier",
     )
     @app_commands.describe(tier='Free agent tier (Ex: "Elite")')
-    @app_commands.autocomplete(tier=TierMixIn.tier_autocomplete)  # type: ignore[type-var]
+    @app_commands.autocomplete(tier=TierMixIn.tier_autocomplete)
     @app_commands.guild_only
     async def _fa_availability_cmd(self, interaction: discord.Interaction, tier: str):
         guild = interaction.guild
@@ -301,12 +299,12 @@ class FreeAgentMixIn(RSCMixIn):
             )
         await interaction.response.send_message(embed=embed)
 
-    @app_commands.command(  # type: ignore[type-var]
+    @app_commands.command(
         name="clearavailability",
         description="Clear free agent availability for a specified tier",
     )
     @app_commands.describe(tier='Free agent tier (Ex: "Elite")')
-    @app_commands.autocomplete(tier=TierMixIn.tier_autocomplete)  # type: ignore[type-var]
+    @app_commands.autocomplete(tier=TierMixIn.tier_autocomplete)
     @app_commands.checks.has_permissions(manage_guild=True)
     @app_commands.guild_only
     async def _clear_fa_availability(self, interaction: discord.Interaction, tier: str):
@@ -317,7 +315,7 @@ class FreeAgentMixIn(RSCMixIn):
         await self.clear_checkins_by_tier(interaction.guild, tier)
         await interaction.response.send_message(embed=SuccessEmbed(description=f"Cleared all free agent availability for **{tier}**"))
 
-    @app_commands.command(  # type: ignore[type-var]
+    @app_commands.command(
         name="clearallavailability",
         description="Clear free agent availability for all tiers",
     )

@@ -8,13 +8,13 @@ from rscapi.models.franchise_standings import FranchiseStandings
 from rscapi.models.intent_to_play import IntentToPlay
 from rscapi.models.season import Season
 
-from rsc.abc import RSCMixIn
+from rsc.protocols import RSCProtocol
 from rsc.exceptions import LeagueNotConfigured, RscException
 
 log = logging.getLogger("red.rsc.seasons")
 
 
-class SeasonsMixIn(RSCMixIn):
+class SeasonsMixIn(RSCProtocol):
     def __init__(self):
         log.debug("Initializing SeasonsMixIn")
         super().__init__()

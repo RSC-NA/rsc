@@ -2,7 +2,7 @@ import logging
 import discord
 from redbot.core import app_commands
 
-from rsc.abc import RSCMixIn
+from rsc.protocols import RSCProtocol
 from rsc import const
 from rsc.embeds import ErrorEmbed, ExceptionErrorEmbed
 from rsc.types import Accolades
@@ -14,7 +14,7 @@ logger = logging.getLogger("red.rsc.trophy")
 log = GuildLogAdapter(logger)
 
 
-class TrophyMixIn(RSCMixIn):
+class TrophyMixIn(RSCProtocol):
     def __init__(self):
         log.debug("Initializing TrophyMixIn")
         super().__init__()
@@ -30,7 +30,7 @@ class TrophyMixIn(RSCMixIn):
 
     # Settings
 
-    @_accolades.command(name="addtrophy", description="Add a trophy for a championship win")  # type: ignore[type-var]
+    @_accolades.command(name="addtrophy", description="Add a trophy for a championship win")
     async def _accolades_add_trophy_cmd(self, interaction: discord.Interaction, player: discord.Member):
         guild = interaction.guild
         if not guild:
@@ -47,7 +47,7 @@ class TrophyMixIn(RSCMixIn):
 
         return await interaction.response.send_message(f"Added a trophy for {player.mention}.", ephemeral=True)
 
-    @_accolades.command(name="adddevleague", description="Add a dev league championship trophy")  # type: ignore[type-var]
+    @_accolades.command(name="adddevleague", description="Add a dev league championship trophy")
     async def _accolades_add_dev_league_cmd(self, interaction: discord.Interaction, player: discord.Member):
         guild = interaction.guild
         if not guild:
@@ -65,7 +65,7 @@ class TrophyMixIn(RSCMixIn):
 
         return await interaction.response.send_message(f"Added dev league trophy for {player.mention}.", ephemeral=True)
 
-    @_accolades.command(name="addstar", description="Add a star for MVP/All-Star season")  # type: ignore[type-var]
+    @_accolades.command(name="addstar", description="Add a star for MVP/All-Star season")
     async def _accolades_add_star_cmd(self, interaction: discord.Interaction, player: discord.Member):
         guild = interaction.guild
         if not guild:
@@ -83,7 +83,7 @@ class TrophyMixIn(RSCMixIn):
 
         return await interaction.response.send_message(f"Added dev league trophy for {player.mention}.", ephemeral=True)
 
-    @_accolades.command(name="addcombinecup", description="Add a combine cup trophy")  # type: ignore[type-var]
+    @_accolades.command(name="addcombinecup", description="Add a combine cup trophy")
     async def _accolades_add_combine_cup_cmd(self, interaction: discord.Interaction, player: discord.Member):
         guild = interaction.guild
         if not guild:
@@ -101,7 +101,7 @@ class TrophyMixIn(RSCMixIn):
 
         return await interaction.response.send_message(f"Added combine cup trophy for {player.mention}.", ephemeral=True)
 
-    @_accolades.command(name="masstrophy", description="Add multiple trophies at once by discord IDs")  # type: ignore[type-var]
+    @_accolades.command(name="masstrophy", description="Add multiple trophies at once by discord IDs")
     @app_commands.choices(
         trophy=[
             app_commands.Choice(name="Championship", value=const.TROPHY_EMOJI),

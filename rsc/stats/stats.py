@@ -5,7 +5,7 @@ from redbot.core import app_commands
 from rscapi.models.player_season_stats import PlayerSeasonStats
 from rscapi.models.team_season_stats import TeamSeasonStats
 
-from rsc.abc import RSCMixIn
+from rsc.protocols import RSCProtocol
 from rsc.embeds import ApiExceptionErrorEmbed, BlueEmbed, ErrorEmbed, YellowEmbed
 from rsc.exceptions import RscException
 from rsc.teams import TeamMixIn
@@ -14,7 +14,7 @@ from rsc.tiers import TierMixIn
 log = logging.getLogger("red.rsc.stats")
 
 
-class StatsMixIn(RSCMixIn):
+class StatsMixIn(RSCProtocol):
     def __init__(self):
         log.debug("Initializing StatsMixIn")
         super().__init__()
@@ -29,9 +29,7 @@ class StatsMixIn(RSCMixIn):
 
     # App Commands
 
-    @_standings_group.command(  # type: ignore[type-var]
-        name="franchise", description="Display franchise standings for season"
-    )
+    @_standings_group.command(name="franchise", description="Display franchise standings for season")
     async def _franchise_standings_cmd(self, interaction: discord.Interaction, season: int | None = None):
         guild = interaction.guild
         if not guild:
@@ -94,10 +92,8 @@ class StatsMixIn(RSCMixIn):
 
         await interaction.followup.send(embed=embed, ephemeral=False)
 
-    @_standings_group.command(  # type: ignore[type-var]
-        name="tier", description="Display tier standings for season"
-    )
-    @app_commands.autocomplete(tier=TierMixIn.tier_autocomplete)  # type: ignore[type-var]
+    @_standings_group.command(name="tier", description="Display tier standings for season")
+    @app_commands.autocomplete(tier=TierMixIn.tier_autocomplete)
     async def _tier_standings_cmd(self, interaction: discord.Interaction, tier: str, season: int | None = None):
         guild = interaction.guild
         if not guild:
@@ -159,9 +155,7 @@ class StatsMixIn(RSCMixIn):
 
         await interaction.followup.send(embed=embed, ephemeral=False)
 
-    @app_commands.command(  # type: ignore[type-var]
-        name="playerstats", description="Display RSC stats for a player"
-    )
+    @app_commands.command(name="playerstats", description="Display RSC stats for a player")
     @app_commands.describe(player="RSC Discord Member")
     @app_commands.guild_only
     async def _player_stats_cmd(
@@ -207,10 +201,8 @@ class StatsMixIn(RSCMixIn):
 
         await interaction.followup.send(embed=embed)
 
-    @app_commands.command(  # type: ignore[type-var]
-        name="teamstats", description="Display RSC stats for an RSC team"
-    )
-    @app_commands.autocomplete(team=TeamMixIn.teams_autocomplete)  # type: ignore[type-var]
+    @app_commands.command(name="teamstats", description="Display RSC stats for an RSC team")
+    @app_commands.autocomplete(team=TeamMixIn.teams_autocomplete)
     @app_commands.guild_only
     async def _team_stats_cmd(
         self,

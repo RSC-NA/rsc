@@ -4,7 +4,7 @@ import discord
 from aiohttp.client_exceptions import ClientConnectionError
 from redbot.core import app_commands
 
-from rsc.abc import RSCMixIn
+from rsc.protocols import RSCProtocol
 from rsc.devleague import api
 from rsc.embeds import BlueEmbed, ErrorEmbed, OrangeEmbed, SuccessEmbed
 
@@ -13,7 +13,7 @@ log = logging.getLogger("red.rsc.devleague")
 BUFMAX = 1984
 
 
-class DevLeagueMixIn(RSCMixIn):
+class DevLeagueMixIn(RSCProtocol):
     def __init__(self):
         log.debug("Initializing DevLeagueMixIn")
         super().__init__()
@@ -28,7 +28,7 @@ class DevLeagueMixIn(RSCMixIn):
 
     # Commands
 
-    @_dev_league.command(  # type: ignore[type-var]
+    @_dev_league.command(
         name="status",
         description="Check your status for Dev League",
     )
@@ -65,7 +65,7 @@ class DevLeagueMixIn(RSCMixIn):
 
         await interaction.followup.send(embed=embed)
 
-    @_dev_league.command(  # type: ignore[type-var]
+    @_dev_league.command(
         name="checkin",
         description="Check in for dev league",
     )
@@ -96,7 +96,7 @@ class DevLeagueMixIn(RSCMixIn):
         )
         await interaction.followup.send(embed=embed)
 
-    @_dev_league.command(  # type: ignore[type-var]
+    @_dev_league.command(
         name="checkout",
         description="Check out of dev league",
     )

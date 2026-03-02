@@ -14,14 +14,14 @@ from rscapi.models.franchise_list import FranchiseList
 from rscapi.models.rebrand_a_franchise import RebrandAFranchise
 from rscapi.models.transfer_franchise import TransferFranchise
 
-from rsc.abc import RSCMixIn
+from rsc.protocols import RSCProtocol
 from rsc.embeds import BlueEmbed
 from rsc.exceptions import RscException
 
 log = logging.getLogger("red.rsc.franchises")
 
 
-class FranchiseMixIn(RSCMixIn):
+class FranchiseMixIn(RSCProtocol):
     def __init__(self):
         log.debug("Initializing FranchiseMixIn")
         self._franchise_cache: dict[int, list[str]] = {}
@@ -50,9 +50,7 @@ class FranchiseMixIn(RSCMixIn):
 
     # Commands
 
-    @app_commands.command(  # type: ignore[type-var]
-        name="franchises", description="Get a list of all RSC franchises"
-    )
+    @app_commands.command(name="franchises", description="Get a list of all RSC franchises")
     @app_commands.guild_only
     async def _franchises(self, interaction: discord.Interaction):
         """Get a list of all RSC franchises"""
@@ -181,7 +179,7 @@ class FranchiseMixIn(RSCMixIn):
                 if not all(f.name for f in flist):
                     raise AttributeError("API returned a franchise with no name.")
 
-                flist.sort(key=lambda f: cast(str, f.name))
+                flist.sort(key=lambda f: cast("str", f.name))
                 if self._franchise_cache.get(guild.id):
                     cached = set(self._franchise_cache[guild.id])
                     different = {f.name for f in flist if f.name} - cached

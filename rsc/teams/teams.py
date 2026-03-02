@@ -16,7 +16,7 @@ from rscapi.models.team_list import TeamList
 from rscapi.models.team_season_stats import TeamSeasonStats
 from rscapi.models.tier import Tier
 
-from rsc.abc import RSCMixIn
+from rsc.protocols import RSCProtocol
 from rsc.embeds import (
     ApiExceptionErrorEmbed,
     BlueEmbed,
@@ -34,7 +34,7 @@ logger = logging.getLogger("red.rsc.teams")
 log = GuildLogAdapter(logger)
 
 
-class TeamMixIn(RSCMixIn):
+class TeamMixIn(RSCProtocol):
     def __init__(self):
         log.debug("Initializing TeamMixIn")
         self._team_cache: dict[int, list[str]] = {}
@@ -67,10 +67,8 @@ class TeamMixIn(RSCMixIn):
 
     # Commands
 
-    @_teams.command(  # type: ignore[type-var]
-        name="franchise", description="Get a list of teams for a franchise"
-    )
-    @app_commands.autocomplete(franchise=FranchiseMixIn.franchise_autocomplete)  # type: ignore[type-var]
+    @_teams.command(name="franchise", description="Get a list of teams for a franchise")
+    @app_commands.autocomplete(franchise=FranchiseMixIn.franchise_autocomplete)
     @app_commands.describe(franchise="Teams in a franchise")
     @app_commands.guild_only
     async def _teams_franchise_cmd(
@@ -102,10 +100,8 @@ class TeamMixIn(RSCMixIn):
 
         await interaction.followup.send(embed=embed)
 
-    @_teams.command(  # type: ignore[type-var]
-        name="tier", description="Get a list of teams in a tier"
-    )
-    @app_commands.autocomplete(tier=TierMixIn.tier_autocomplete)  # type: ignore[type-var]
+    @_teams.command(name="tier", description="Get a list of teams in a tier")
+    @app_commands.autocomplete(tier=TierMixIn.tier_autocomplete)
     @app_commands.describe(tier="Teams in a league tier")
     @app_commands.guild_only
     async def _teams_tier_cmd(
@@ -142,7 +138,7 @@ class TeamMixIn(RSCMixIn):
                 )
 
         # Sort by Team Name
-        teams.sort(key=lambda x: cast(str, x.name))
+        teams.sort(key=lambda x: cast("str", x.name))
 
         embed = BlueEmbed()
         embed.title = f"{tier} Teams"
@@ -165,9 +161,9 @@ class TeamMixIn(RSCMixIn):
             embed.set_thumbnail(url=guild.icon.url)
         await interaction.followup.send(embed=embed)
 
-    @app_commands.command(name="roster", description="Get roster for a team")  # type: ignore[type-var]
+    @app_commands.command(name="roster", description="Get roster for a team")
     @app_commands.describe(team="Team name to search")
-    @app_commands.autocomplete(team=teams_autocomplete)  # type: ignore[type-var]
+    @app_commands.autocomplete(team=teams_autocomplete)
     @app_commands.guild_only
     async def _roster_cmd(
         self,
@@ -203,8 +199,8 @@ class TeamMixIn(RSCMixIn):
 
     _captains = app_commands.Group(name="captains", description="Get information on team captains", guild_only=True)
 
-    @_captains.command(name="team", description="Team to query")  # type: ignore[type-var]
-    @app_commands.autocomplete(team=teams_autocomplete)  # type: ignore[type-var]
+    @_captains.command(name="team", description="Team to query")
+    @app_commands.autocomplete(team=teams_autocomplete)
     async def _captains_team(
         self,
         interaction: discord.Interaction,
@@ -249,11 +245,9 @@ class TeamMixIn(RSCMixIn):
         embed = discord.Embed(title=f"{team} Team Captain", description=desc, color=tier_color)
         await interaction.followup.send(embed=embed)
 
-    @_captains.command(  # type: ignore[type-var]
-        name="tier", description="Display captains of all teams in a tier"
-    )
+    @_captains.command(name="tier", description="Display captains of all teams in a tier")
     @app_commands.describe(tier="Tier to query")
-    @app_commands.autocomplete(tier=TierMixIn.tier_autocomplete)  # type: ignore[type-var]
+    @app_commands.autocomplete(tier=TierMixIn.tier_autocomplete)
     async def _captains_tier(self, interaction: discord.Interaction, tier: str):
         """Get a list of captains by search criteria"""
         guild = interaction.guild
@@ -266,7 +260,7 @@ class TeamMixIn(RSCMixIn):
         captains = await self.tier_captains(guild, tier)
 
         fteams = await self.teams(guild, tier=tier)
-        fteams.sort(key=lambda x: cast(str, x.name))
+        fteams.sort(key=lambda x: cast("str", x.name))
 
         if not fteams:
             await interaction.followup.send(
@@ -307,11 +301,9 @@ class TeamMixIn(RSCMixIn):
         )
         await interaction.followup.send(embed=embed)
 
-    @_captains.command(  # type: ignore[type-var]
-        name="franchise", description="Display captains of all teams in a franchise"
-    )
+    @_captains.command(name="franchise", description="Display captains of all teams in a franchise")
     @app_commands.describe(franchise="Franchise name")
-    @app_commands.autocomplete(franchise=FranchiseMixIn.franchise_autocomplete)  # type: ignore[type-var]
+    @app_commands.autocomplete(franchise=FranchiseMixIn.franchise_autocomplete)
     async def _captains_franchise(
         self,
         interaction: discord.Interaction,
@@ -342,7 +334,7 @@ class TeamMixIn(RSCMixIn):
         fteams = await self.teams(guild, franchise=captains[0].team.franchise.name)
 
         # This is validated in franchise_captains()
-        fteams.sort(key=lambda t: cast(int, t.tier.position), reverse=True)  # type: ignore[type-var]
+        fteams.sort(key=lambda t: cast("int", t.tier.position), reverse=True)
 
         cpt_fmt: list[tuple[str, str, str]] = []
         for t in fteams:
@@ -445,7 +437,7 @@ class TeamMixIn(RSCMixIn):
             if not (c.team and c.team.name):
                 raise AttributeError(f"LeaguePlayer {c.id} captain is missing team data.")
 
-        captains.sort(key=lambda c: cast(str, c.team.name))  # type: ignore[type-var]
+        captains.sort(key=lambda c: cast("str", c.team.name))
         return captains
 
     async def franchise_captains(self, guild: discord.Guild, franchise_name: str) -> list[LeaguePlayer]:
@@ -459,7 +451,7 @@ class TeamMixIn(RSCMixIn):
             if not (c.tier and c.tier.position):
                 raise AttributeError(f"LeaguePlayer {c.id} captain is missing tier data.")
 
-        captains.sort(key=lambda c: cast(int, c.tier.position), reverse=True)  # type: ignore[type-var]
+        captains.sort(key=lambda c: cast("int", c.tier.position), reverse=True)
         return captains
 
     async def build_franchise_teams_embed(self, guild: discord.Guild, teams: list[TeamList]) -> discord.Embed:
@@ -482,7 +474,7 @@ class TeamMixIn(RSCMixIn):
         if teams[0].franchise and teams[0].franchise.gm:
             gm_id = teams[0].franchise.gm.discord_id
 
-        teams.sort(key=lambda t: cast(str, t.tier.position), reverse=True)  # type: ignore[type-var]
+        teams.sort(key=lambda t: cast("str", t.tier.position), reverse=True)
 
         embed = BlueEmbed(description=f"GM: <@!{gm_id}>")
         embed.title = f"{teams[0].franchise.name}"
@@ -688,7 +680,7 @@ class TeamMixIn(RSCMixIn):
             try:
                 api = TeamsApi(client)
                 matches = await api.teams_season_matches(id, preseason=preseason, season=season)
-                matches.sort(key=lambda x: cast(int, x.day))
+                matches.sort(key=lambda x: cast("int", x.day))
                 return matches
             except ApiException as exc:
                 raise RscException(exc)

@@ -115,8 +115,8 @@ class AdminAuditMixIn(AdminMixIn):
             if current.lower() in action.name.lower()
         ]
 
-    @_stats.command(name="search", description="Search server audit log for an action")  # type: ignore[type-var]
-    @app_commands.autocomplete(action=audit_action_autocomplete)  # type: ignore[type-var]
+    @_stats.command(name="search", description="Search server audit log for an action")
+    @app_commands.autocomplete(action=audit_action_autocomplete)
     async def _admin_audit_search_cmd(
         self,
         interaction: discord.Interaction,
@@ -130,17 +130,23 @@ class AdminAuditMixIn(AdminMixIn):
         if not guild:
             return
 
+        audit_action = None
         if action:
             try:
-                action = discord.AuditLogAction(int(action))
+                audit_action = discord.AuditLogAction(int(action))
             except ValueError:
                 return await interaction.response.send_message(
                     embed=ErrorEmbed(title="Invalid Action", description="The specified action is not valid."), ephemeral=True
                 )
 
+        if not audit_action:
+            return await interaction.response.send_message(
+                embed=ErrorEmbed(title="Action Required", description="Please specify an action to search for."), ephemeral=True
+            )
+
         if user:
-            async for entry in guild.audit_logs(action=action, limit=limit, before=before, after=after, user=user):
+            async for entry in guild.audit_logs(action=audit_action, limit=limit, before=before, after=after, user=user):
                 log.debug(f"Entry: {entry}")
         else:
-            async for entry in guild.audit_logs(action=action, limit=limit, before=before, after=after):
+            async for entry in guild.audit_logs(action=audit_action, limit=limit, before=before, after=after):
                 log.debug(f"Entry: {entry}")

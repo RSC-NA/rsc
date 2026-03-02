@@ -1,13 +1,17 @@
+from __future__ import annotations
+
 from functools import wraps
+from typing import TYPE_CHECKING
 
-import discord
 
-from rsc.abc import RSCMixIn
+if TYPE_CHECKING:
+    import discord
+    from rsc.protocols import RSCProtocol
 
 
 def apicall(f):  # noqa: ANN001
     @wraps(f)
-    def wrapper(self: RSCMixIn, guild: discord.Guild, *args, **kwargs):
+    def wrapper(self: RSCProtocol, guild: discord.Guild, *args, **kwargs):
         if not self._league.get(guild.id):
             raise ValueError(f"[{guild.name}] Guild does not have a league ID.")
 

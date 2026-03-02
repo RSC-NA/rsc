@@ -13,7 +13,7 @@ from rscapi.models.franchise_list import FranchiseList
 from rscapi.models.league_player import LeaguePlayer
 
 from rsc import const
-from rsc.abc import RSCMixIn
+from rsc.protocols import RSCProtocol
 from rsc.embeds import (
     ErrorEmbed,
     BetterEmbed,
@@ -539,13 +539,13 @@ async def async_iter_gather(result: AsyncIterator) -> list:
     return [r async for r in result]
 
 
-class UtilsMixIn(RSCMixIn):
+class UtilsMixIn(RSCProtocol):
     def __init__(self):
         log.debug("Initializing UtilsMixIn")
 
         super().__init__()
 
-    @app_commands.command(  # type: ignore[type-var]
+    @app_commands.command(
         name="getreactlist",
         description="Get a list of users who reacted to a message",
     )
@@ -596,7 +596,7 @@ class UtilsMixIn(RSCMixIn):
             else:
                 await interaction.followup.send(content=f"{r.emoji} - Count {r.count}\n\n```\n{fmt}```\n", ephemeral=True)
 
-    @app_commands.command(  # type: ignore[type-var]
+    @app_commands.command(
         name="getmassid",
         description="Mass lookup version of /getid.",
     )
@@ -615,7 +615,7 @@ class UtilsMixIn(RSCMixIn):
 
         await interaction.response.send_message(content=desc, ephemeral=True)
 
-    @app_commands.command(  # type: ignore[type-var]
+    @app_commands.command(
         name="getid",
         description="Lookup discord member account identifiers",
     )
@@ -628,7 +628,7 @@ class UtilsMixIn(RSCMixIn):
             ephemeral=True,
         )
 
-    @app_commands.command(  # type: ignore[type-var]
+    @app_commands.command(
         name="userinfo",
         description="Display discord user information for a user",
     )
@@ -735,7 +735,7 @@ class UtilsMixIn(RSCMixIn):
 
         await interaction.response.send_message(embed=data)
 
-    @app_commands.command(  # type: ignore[type-var]
+    @app_commands.command(
         name="serverinfo",
         description="Display information about the discord server",
     )
@@ -935,7 +935,7 @@ class UtilsMixIn(RSCMixIn):
 
         await interaction.response.send_message(embed=data)
 
-    @app_commands.command(  # type: ignore[type-var]
+    @app_commands.command(
         name="getallwithrole",
         description="Get all users with the specified role(s). (Max 4 roles)",
     )
@@ -996,9 +996,7 @@ class UtilsMixIn(RSCMixIn):
         else:
             await interaction.followup.send(embed=embed, ephemeral=True)
 
-    @app_commands.command(  # type: ignore[type-var]
-        name="addrole", description="Add a role to the specified user"
-    )
+    @app_commands.command(name="addrole", description="Add a role to the specified user")
     @app_commands.describe(role="Discord role to add", member="Player discord name")
     @app_commands.checks.has_permissions(manage_roles=True)
     @app_commands.checks.bot_has_permissions(manage_roles=True)
@@ -1042,9 +1040,7 @@ class UtilsMixIn(RSCMixIn):
                 ephemeral=True,
             )
 
-    @app_commands.command(  # type: ignore[type-var]
-        name="bulkaddrole", description="Add a role a list of user(s) or another role"
-    )
+    @app_commands.command(name="bulkaddrole", description="Add a role a list of user(s) or another role")
     @app_commands.describe(
         role="Discord role to add",
         members='Space delimited discord IDs to apply role. (Example: "138778232802508801 352600418062303244") (Optional)',
@@ -1113,9 +1109,7 @@ class UtilsMixIn(RSCMixIn):
             )
         await interaction.edit_original_response(embed=embed, view=None)
 
-    @app_commands.command(  # type: ignore[type-var]
-        name="removerole", description="Remove a role to the specified user"
-    )
+    @app_commands.command(name="removerole", description="Remove a role to the specified user")
     @app_commands.describe(role="Discord role to remove", member="Player discord name")
     @app_commands.checks.has_permissions(manage_roles=True)
     @app_commands.checks.bot_has_permissions(manage_roles=True)
@@ -1159,9 +1153,7 @@ class UtilsMixIn(RSCMixIn):
                 ephemeral=True,
             )
 
-    @app_commands.command(  # type: ignore[type-var]
-        name="bulkremoverole", description="Remove a role a list of user(s)"
-    )
+    @app_commands.command(name="bulkremoverole", description="Remove a role a list of user(s)")
     @app_commands.describe(
         role="Discord role to remove",
         members='Space delimited discord IDs to remove role. (Example: "138778232802508801 352600418062303244")',
@@ -1220,7 +1212,7 @@ class UtilsMixIn(RSCMixIn):
             )
         await interaction.edit_original_response(embed=embed, view=None)
 
-    @app_commands.command(  # type: ignore[type-var]
+    @app_commands.command(
         name="setchannelperm",
         description="Modify channel permissions for a role or member",
     )
@@ -1352,7 +1344,7 @@ class UtilsMixIn(RSCMixIn):
             self.handle_watching(user),
             self.handle_competing(user),
         ]:
-            status_string, status_type = a
+            status_string, _ = a
             if status_string is None:
                 continue
             string += f"{status_string}\n"

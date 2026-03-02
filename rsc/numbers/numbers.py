@@ -8,7 +8,7 @@ from rscapi import ApiClient, NumbersApi
 from rscapi.exceptions import ApiException
 from rscapi.models.player_mmr import PlayerMMR
 
-from rsc.abc import RSCMixIn
+from rsc.protocols import RSCProtocol
 from rsc.embeds import ApiExceptionErrorEmbed, BlueEmbed, GreenEmbed, YellowEmbed
 from rsc.exceptions import RscException
 from rsc.types import NumbersSettings
@@ -19,7 +19,7 @@ log = logging.getLogger("red.rsc.transactions")
 defaults_guild = NumbersSettings(NumbersRole=None)
 
 
-class NumberMixIn(RSCMixIn):
+class NumberMixIn(RSCProtocol):
     def __init__(self):
         log.debug("Initializing NumberMixIn")
         # Prepare configuration group
@@ -53,9 +53,7 @@ class NumberMixIn(RSCMixIn):
 
     # App Commands
 
-    @_numbers.command(  # type: ignore[type-var]
-        name="settings", description="Configure numbers module settings"
-    )
+    @_numbers.command(name="settings", description="Configure numbers module settings")
     @app_commands.checks.has_permissions(manage_guild=True)
     async def _numbers_settings_cmd(self, interaction: discord.Interaction):
         guild = interaction.guild
@@ -77,9 +75,7 @@ class NumberMixIn(RSCMixIn):
 
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-    @_numbers.command(  # type: ignore[type-var]
-        name="role", description="Configure the Number Committee role"
-    )
+    @_numbers.command(name="role", description="Configure the Number Committee role")
     @app_commands.checks.has_permissions(manage_guild=True)
     async def _set_numbers_role_cmd(self, interaction: discord.Interaction, role: discord.Role):
         guild = interaction.guild
@@ -94,9 +90,7 @@ class NumberMixIn(RSCMixIn):
         )
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-    @_numbers.command(  # type: ignore[type-var]
-        name="peaks", description="Display player MMR peaks for a psyonix season"
-    )
+    @_numbers.command(name="peaks", description="Display player MMR peaks for a psyonix season")
     @app_commands.describe(player="RSC Discord Member", psyonix_season="Pysonix season to display")
     async def _numbers_peaks_cmd(
         self,
@@ -151,7 +145,7 @@ class NumberMixIn(RSCMixIn):
         )
         await interaction.followup.send(embed=embed)
 
-    @_numbers.command(  # type: ignore[type-var]
+    @_numbers.command(
         name="gamesplayed",
         description="Display tracker games played for a pysonix season",
     )
@@ -179,7 +173,7 @@ class NumberMixIn(RSCMixIn):
 
         pulls_fmt = await self.filter_no_games_played_mmr_pulls(pulls)
         log.debug(f"Total Filtered MMR pulls: {len(pulls)}")
-        pulls_fmt.sort(key=lambda x: cast(int, x.threes_games_played), reverse=True)
+        pulls_fmt.sort(key=lambda x: cast("int", x.threes_games_played), reverse=True)
 
         embed = YellowEmbed(
             title="Player Games Played",

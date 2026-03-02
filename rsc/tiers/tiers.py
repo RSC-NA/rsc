@@ -8,14 +8,14 @@ from rscapi.exceptions import ApiException
 from rscapi.models.tier import Tier
 from rscapi.models.team_standings import TeamStandings
 
-from rsc.abc import RSCMixIn
+from rsc.protocols import RSCProtocol
 from rsc.embeds import BlueEmbed, ErrorEmbed
 from rsc.exceptions import RscException
 
 log = logging.getLogger("red.rsc.tiers")
 
 
-class TierMixIn(RSCMixIn):
+class TierMixIn(RSCProtocol):
     def __init__(self):
         log.debug("Initializing TierMixIn")
         self._tier_cache: dict[int, list[str]] = {}
@@ -41,7 +41,7 @@ class TierMixIn(RSCMixIn):
 
     # Commands
 
-    @app_commands.command(name="tiers", description="Get a list of all league tiers")  # type: ignore[type-var]
+    @app_commands.command(name="tiers", description="Get a list of all league tiers")
     @app_commands.guild_only
     async def _tiers(self, interaction: discord.Interaction):
         """Get a list of all league tiers"""
@@ -116,7 +116,7 @@ class TierMixIn(RSCMixIn):
         async with ApiClient(self._api_conf[guild.id]) as client:
             api = TiersApi(client)
             tiers = await api.tiers_list(name=name, league=self._league[guild.id])
-            tiers.sort(key=lambda t: cast(int, t.position), reverse=True)
+            tiers.sort(key=lambda t: cast("int", t.position), reverse=True)
 
             # Populate cache
             if tiers:

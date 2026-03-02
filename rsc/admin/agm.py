@@ -29,7 +29,7 @@ class AdminAGMMixIn(AdminMixIn):
         default_permissions=discord.Permissions(manage_guild=True),
     )
 
-    @_agm.command(name="message", description="Configure the AGM promotion message")  # type: ignore[type-var]
+    @_agm.command(name="message", description="Configure the AGM promotion message")
     async def _agm_set_message_cmd(self, interaction: discord.Interaction):
         if not interaction.guild:
             return
@@ -40,11 +40,9 @@ class AdminAGMMixIn(AdminMixIn):
 
         await self._set_agm_message(interaction.guild, value=agm_msg_modal.agm_msg.value)
 
-    @_agm.command(  # type: ignore[type-var]
-        name="add", description="Add an Assistant GM to a franchise"
-    )
+    @_agm.command(name="add", description="Add an Assistant GM to a franchise")
     @app_commands.describe(franchise="Franchise name", agm="Player to promote to AGM")
-    @app_commands.autocomplete(franchise=FranchiseMixIn.franchise_autocomplete)  # type: ignore[type-var]
+    @app_commands.autocomplete(franchise=FranchiseMixIn.franchise_autocomplete)
     async def _franchise_promote_agm_cmd(
         self,
         interaction: discord.Interaction,
@@ -105,8 +103,18 @@ class AdminAGMMixIn(AdminMixIn):
         await agm.add_roles(agm_role, league_role, new_franchise_role)
 
         # Change Prefix
-        new_name = await utils.format_discord_prefix(member=agm, prefix=fdata.prefix)
-        await agm.edit(nick=new_name)
+        if fdata.prefix:
+            new_name = await utils.format_discord_prefix(member=agm, prefix=fdata.prefix)
+            await agm.edit(nick=new_name)
+        else:
+            log.warning(f"Franchise {franchise} does not have a prefix configured. Skipping nickname update for {agm.display_name}.")
+            await interaction.followup.send(
+                content=(
+                    f"{agm.mention} has been promoted to AGM for **{franchise}**, "
+                    "but the franchise does not have a prefix configured so their nickname was not updated."
+                ),
+                ephemeral=True,
+            )
 
         # Add AGM permissions to transaction channel
         agm_overwrite = discord.PermissionOverwrite(
@@ -143,11 +151,9 @@ class AdminAGMMixIn(AdminMixIn):
 
         await interaction.followup.send(embed=embed, ephemeral=True)
 
-    @_agm.command(  # type: ignore[type-var]
-        name="remove", description="Remove an Assistant GM from a franchise"
-    )
+    @_agm.command(name="remove", description="Remove an Assistant GM from a franchise")
     @app_commands.describe(franchise="Franchise name", agm="Player to remove from AGM")
-    @app_commands.autocomplete(franchise=FranchiseMixIn.franchise_autocomplete)  # type: ignore[type-var]
+    @app_commands.autocomplete(franchise=FranchiseMixIn.franchise_autocomplete)
     async def _franchise_remove_agm_cmd(
         self,
         interaction: discord.Interaction,

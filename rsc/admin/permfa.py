@@ -60,7 +60,7 @@
 
 #     # Commands
 
-#     @_permfa.command(name="convert", description="Convert PermFAs in the API and discord")  # type: ignore[type-var]
+#     @_permfa.command(name="convert", description="Convert PermFAs in the API and discord")
 #     async def _admin_convert_permfa_cmd(self, interaction: discord.Interaction):
 #         guild = interaction.guild
 #         if not (guild and isinstance(interaction.user, discord.Member)):

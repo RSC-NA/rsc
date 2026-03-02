@@ -39,7 +39,7 @@ class BallchasingProcessingView(AuthorOnlyView):
         self.totals: dict[str, int] = {}
         self.add_item(CancelButton())
 
-        self.tiers.sort(key=lambda x: cast(int, x.position), reverse=True)
+        self.tiers.sort(key=lambda x: cast("int", x.position), reverse=True)
 
         for m in self.matches:
             tier = m.home_team.tier

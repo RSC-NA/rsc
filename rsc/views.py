@@ -144,7 +144,8 @@ class LeagueSelect(discord.ui.Select):
             self.add_option(label=league.name, value=str(league.id))
 
     async def callback(self, interaction: discord.Interaction):
-        await self.view.save_selection(interaction, self.values)
+        if self.view:
+            await self.view.save_selection(interaction, self.values)
 
 
 class LeagueSelectView(AuthorOnlyView):

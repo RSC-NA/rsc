@@ -13,7 +13,7 @@ from rscapi.models.match_results import MatchResults
 from rscapi.models.match_score_report import MatchScoreReport
 from rscapi.models.match_submission import MatchSubmission
 
-from rsc.abc import RSCMixIn
+from rsc.protocols import RSCProtocol
 from rsc.embeds import BlueEmbed, ErrorEmbed, ExceptionErrorEmbed, YellowEmbed, ApiExceptionErrorEmbed
 from rsc.enums import (
     MatchFormat,
@@ -36,18 +36,18 @@ logger = logging.getLogger("red.rsc.matches")
 log = GuildLogAdapter(logger)
 
 
-class MatchMixIn(RSCMixIn):
+class MatchMixIn(RSCProtocol):
     def __init__(self) -> None:
         log.debug("Initializing MatchMixIn")
         super().__init__()
 
     # App Commands
 
-    @app_commands.command(  # type: ignore[type-var]
+    @app_commands.command(
         name="schedule",
         description="Display your team or another teams entire schedule",
     )
-    @app_commands.autocomplete(team=TeamMixIn.teams_autocomplete)  # type: ignore[type-var]
+    @app_commands.autocomplete(team=TeamMixIn.teams_autocomplete)
     @app_commands.describe(
         team="Get the schedule for a specific team (Optional)",
         preseason="Include preseason matches (Default: False)",
@@ -166,12 +166,12 @@ class MatchMixIn(RSCMixIn):
 
         await interaction.followup.send(embed=embed)
 
-    @app_commands.command(  # type: ignore[type-var]
+    @app_commands.command(
         name="match",
         description="Get information about your upcoming match",
     )
     @app_commands.describe(team="Get match information for a specific team (General Manager Only)")
-    @app_commands.autocomplete(team=TeamMixIn.teams_autocomplete)  # type: ignore[type-var]
+    @app_commands.autocomplete(team=TeamMixIn.teams_autocomplete)
     @app_commands.guild_only
     async def _match_cmd(self, interaction: discord.Interaction, team: str | None = None, day: int | None = None):
         guild = interaction.guild
@@ -473,7 +473,8 @@ class MatchMixIn(RSCMixIn):
                     continue
 
             # GM
-            if isinstance(m, discord.Member) and match.home_team.gm.discord_id == m.id:
+
+            if match.home_team.gm and isinstance(m, discord.Member) and match.home_team.gm.discord_id == m.id:
                 name = f"{name} (GM)"
 
             home_players.append(name)
@@ -507,7 +508,7 @@ class MatchMixIn(RSCMixIn):
                     continue
 
             # GM
-            if isinstance(m, discord.Member) and match.away_team.gm.discord_id == m.id:
+            if match.away_team.gm and isinstance(m, discord.Member) and match.away_team.gm.discord_id == m.id:
                 name = f"{name} (GM)"
 
             away_players.append(name)
@@ -545,6 +546,9 @@ class MatchMixIn(RSCMixIn):
         if agm_role not in member.roles:
             log.debug("Member is not AGM", guild=guild)
             return False
+
+        if not (match.home_team.franchise and match.away_team.franchise):
+            raise AttributeError("Match is missing franchise information.")
 
         hfranchise = match.home_team.franchise.lower()
         afranchise = match.away_team.franchise.lower()

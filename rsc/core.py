@@ -3,10 +3,10 @@ import itertools
 import logging
 from zoneinfo import ZoneInfo
 
-import aiohttp
+from aiohttp import web
 import discord
 import pytz
-import validators  # type: ignore[import-untyped]
+import validators
 from pydantic import ValidationError
 from redbot.core import Config, app_commands, commands
 from redbot.core.bot import Red
@@ -51,6 +51,7 @@ from rsc.utils import UtilsMixIn
 from rsc.utils.trophy import TrophyMixIn
 from rsc.views import LeagueSelectView, RSCSetupModal
 from rsc.welcome import WelcomeMixIn
+from rsc.protocols import RSCProtocol
 
 logger = logging.getLogger("red.rsc.core")
 log = GuildLogAdapter(logger)
@@ -66,39 +67,39 @@ defaults_guild = {
 
 
 class RSC(
-    AdminAGMMixIn,
-    AdminAuditMixIn,
-    AdminFranchiseMixIn,
-    AdminInactivityMixIn,
-    AdminIntentsMixIn,
-    AdminMatchMixIn,
-    AdminMembersMixIn,
+    AdminAGMMixIn[RSCProtocol],
+    AdminAuditMixIn[RSCProtocol],
+    AdminFranchiseMixIn[RSCProtocol],
+    AdminInactivityMixIn[RSCProtocol],
+    AdminIntentsMixIn[RSCProtocol],
+    AdminMatchMixIn[RSCProtocol],
+    AdminMembersMixIn[RSCProtocol],
     # AdminPermFAMixIn,
-    AdminStatsMixIn,
-    AdminSyncMixIn,
-    BallchasingMixIn,
-    CombineMixIn,
-    DeveloperMixIn,
-    DevLeagueMixIn,
-    ExtrasMixIn,
-    FranchiseMixIn,
-    FreeAgentMixIn,
-    LeagueMixIn,
-    LLMMixIn,
-    MatchMixIn,
-    MemberMixIn,
-    ModeratorMixIn,
-    NumberMixIn,
-    SeasonsMixIn,
-    StatsMixIn,
-    TeamMixIn,
-    ThreadMixIn,
-    TierMixIn,
-    TrackerMixIn,
-    TransactionMixIn,
-    TrophyMixIn,
-    UtilsMixIn,
-    WelcomeMixIn,
+    AdminStatsMixIn[RSCProtocol],
+    AdminSyncMixIn[RSCProtocol],
+    BallchasingMixIn[RSCProtocol],
+    CombineMixIn[RSCProtocol],
+    DeveloperMixIn[RSCProtocol],
+    DevLeagueMixIn[RSCProtocol],
+    ExtrasMixIn[RSCProtocol],
+    FranchiseMixIn[RSCProtocol],
+    FreeAgentMixIn[RSCProtocol],
+    LeagueMixIn[RSCProtocol],
+    LLMMixIn[RSCProtocol],
+    MatchMixIn[RSCProtocol],
+    MemberMixIn[RSCProtocol],
+    ModeratorMixIn[RSCProtocol],
+    NumberMixIn[RSCProtocol],
+    SeasonsMixIn[RSCProtocol],
+    StatsMixIn[RSCProtocol],
+    TeamMixIn[RSCProtocol],
+    ThreadMixIn[RSCProtocol],
+    TierMixIn[RSCProtocol],
+    TrackerMixIn[RSCProtocol],
+    TransactionMixIn[RSCProtocol],
+    TrophyMixIn[RSCProtocol],
+    UtilsMixIn[RSCProtocol],
+    WelcomeMixIn[RSCProtocol],
     commands.Cog,
     metaclass=CompositeMetaClass,
 ):
@@ -230,7 +231,7 @@ class RSC(
     async def start_webapp(self):
         log.debug("Starting Web App")
 
-        self._web_app = aiohttp.web.Application()
+        self._web_app = web.Application()
 
         # Combines
         self._web_app.router.add_post("/combines_match", self.start_combines_game)
@@ -238,9 +239,9 @@ class RSC(
         self._web_app.router.add_post("/league_player_update", self.league_player_update_handler)
 
         # Runner and Site
-        self._web_runner = aiohttp.web.AppRunner(self._web_app)
+        self._web_runner = web.AppRunner(self._web_app)
         await self._web_runner.setup()
-        self._web_site = aiohttp.web.TCPSite(self._web_runner, "localhost", 8008)
+        self._web_site = web.TCPSite(self._web_runner, "localhost", 8008)
 
         self._web_app_task = self.bot.loop.create_task(self._web_site.start())
 
@@ -286,7 +287,7 @@ class RSC(
         default_permissions=discord.Permissions(manage_guild=True),
     )
 
-    @rsc_settings.command(name="key", description="Configure the RSC API key.")  # type: ignore[type-var]
+    @rsc_settings.command(name="key", description="Configure the RSC API key.")
     async def _rsc_set_key(self, interaction: discord.Interaction, key: str):
         if not interaction.guild:
             return
@@ -299,7 +300,7 @@ class RSC(
             ephemeral=True,
         )
 
-    @rsc_settings.command(name="url", description="Configure the RSC API web address.")  # type: ignore[type-var]
+    @rsc_settings.command(name="url", description="Configure the RSC API web address.")
     async def _rsc_set_url(self, interaction: discord.Interaction, url: str):
         if not interaction.guild:
             return
@@ -312,9 +313,7 @@ class RSC(
             ephemeral=True,
         )
 
-    @rsc_settings.command(  # type: ignore[type-var]
-        name="settings", description="Display the current RSC API settings."
-    )
+    @rsc_settings.command(name="settings", description="Display the current RSC API settings.")
     async def _rsc_settings(self, interaction: discord.Interaction):
         guild = interaction.guild
         if not guild:
@@ -344,9 +343,7 @@ class RSC(
         settings_embed.add_field(name="Time Zone", value=tz, inline=False)
         await interaction.response.send_message(embed=settings_embed, ephemeral=True)
 
-    @rsc_settings.command(  # type: ignore[type-var]
-        name="league", description="Set the league this guild correlates to in the API"
-    )
+    @rsc_settings.command(name="league", description="Set the league this guild correlates to in the API")
     async def _rsc_league(self, interaction: discord.Interaction):
         if not interaction.guild:
             return None
@@ -364,9 +361,7 @@ class RSC(
                 embed=SuccessEmbed(description=f"Configured the server league to **{league_name}**"),
             )
 
-    @rsc_settings.command(  # type: ignore[type-var]
-        name="setup", description="Perform some basic first time setup for the server"
-    )
+    @rsc_settings.command(name="setup", description="Perform some basic first time setup for the server")
     async def _rsc_setup(self, interaction: discord.Interaction):
         if not interaction.guild:
             return
@@ -397,9 +392,7 @@ class RSC(
         await self._set_api_key(interaction.guild, setup_modal.key.value)
         await interaction.followup.send(embed=SuccessEmbed(description="Successfully configured RSC API key and url"))
 
-    @rsc_settings.command(  # type: ignore[type-var]
-        name="timezone", description="Set the desired time zone for the guild"
-    )
+    @rsc_settings.command(name="timezone", description="Set the desired time zone for the guild")
     @app_commands.describe(timezone="Common time zone string (Ex: America/New_York)")
     @app_commands.autocomplete(timezone=timezone_autocomplete)
     async def _rsc_timezone(self, interaction: discord.Interaction, timezone: str):
@@ -419,7 +412,7 @@ class RSC(
             ephemeral=True,
         )
 
-    @rsc_settings.command(  # type: ignore[type-var]
+    @rsc_settings.command(
         name="loglevel",
         description="Modify the log level of the bot (Development Feature)",
     )
@@ -430,7 +423,7 @@ class RSC(
 
     # Non-Group Commands
 
-    @app_commands.command(name="whatami", description="What am I?")  # type: ignore[type-var]
+    @app_commands.command(name="whatami", description="What am I?")
     async def _whatami(self, interaction: discord.Interaction):
         embed = BlueEmbed(
             title="What Am I?",
@@ -441,9 +434,7 @@ class RSC(
         )
         await interaction.response.send_message(embed=embed)
 
-    @app_commands.command(  # type: ignore[type-var]
-        name="help", description="Display a help for RSC Bot or a specific command."
-    )
+    @app_commands.command(name="help", description="Display a help for RSC Bot or a specific command.")
     @app_commands.describe(command="Display help for a specific command.")
     @app_commands.autocomplete(command=command_autocomplete)
     @app_commands.guild_only
@@ -470,7 +461,7 @@ class RSC(
                 if cmd.name.lower() == "ballchasing":
                     stats_role = await self._get_bc_manager_role(guild)
                     if (stats_role and stats_role in interaction.user.roles) or interaction.user.guild_permissions.manage_guild:
-                        groups.append(cmd)  # type: ignore[arg-type]
+                        groups.append(cmd)
                     continue
 
                 if isinstance(cmd, discord.app_commands.Group):
@@ -504,7 +495,7 @@ class RSC(
             await interaction.response.send_message(embeds=embeds, ephemeral=True)
         else:
             cmd = None
-            for c in self.walk_app_commands():  # type: ignore[assignment]
+            for c in self.walk_app_commands():
                 if c.name == "feet":
                     continue
                 if c.qualified_name == command:
