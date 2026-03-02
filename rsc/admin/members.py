@@ -40,9 +40,7 @@ class AdminMembersMixIn(AdminMixIn):
         default_permissions=discord.Permissions(manage_guild=True),
     )
 
-    @_members.command(  # type: ignore[type-var]
-        name="namehistory", description="Get an RSC discord members API name history"
-    )
+    @_members.command(name="namehistory", description="Get an RSC discord members API name history")
     @app_commands.describe(
         member="RSC discord member",
     )
@@ -82,7 +80,7 @@ class AdminMembersMixIn(AdminMixIn):
         )
         await interaction.followup.send(embed=embed)
 
-    @_members.command(name="changename", description="Change RSC name for a member")  # type: ignore[type-var]
+    @_members.command(name="changename", description="Change RSC name for a member")
     @app_commands.describe(
         member="RSC discord member",
         name="New player name",
@@ -157,9 +155,7 @@ class AdminMembersMixIn(AdminMixIn):
 
         await interaction.followup.send(embed=SuccessEmbed(description=f"Player RSC name has been updated to {member.mention}"))
 
-    @_members.command(  # type: ignore[type-var]
-        name="transfer", description="Transfer membership to a new Discord account"
-    )
+    @_members.command(name="transfer", description="Transfer membership to a new Discord account")
     @app_commands.describe(
         old="Old Discord ID",
         new="New Discord Member",
@@ -198,7 +194,7 @@ class AdminMembersMixIn(AdminMixIn):
             embed=SuccessEmbed(description=f"Transferred membership of {old} to {new.mention}"),
         )
 
-    @_members.command(name="patch", description="Patch a league player in the API")  # type: ignore[type-var]
+    @_members.command(name="patch", description="Patch a league player in the API")
     @app_commands.describe(
         player="Discord member to patch",
         status="Player status",
@@ -209,7 +205,7 @@ class AdminMembersMixIn(AdminMixIn):
         contract_length="Contract Length",
         waiver_period='Waiver start date (Example: "2025-01-25")',
     )
-    @app_commands.autocomplete(tier=TierMixIn.tier_autocomplete, team=TeamMixIn.teams_autocomplete)
+    @app_commands.autocomplete(tier=TierMixIn.tier_autocomplete, team=TeamMixIn.teams_autocomplete)  # ty:ignore[invalid-argument-type]
     async def _member_patch_cmd(
         self,
         interaction: discord.Interaction,
@@ -330,7 +326,7 @@ class AdminMembersMixIn(AdminMixIn):
 
         await interaction.followup.send(embed=embed)
 
-    @_members.command(name="create", description="Create an RSC member in the API")  # type: ignore[type-var]
+    @_members.command(name="create", description="Create an RSC member in the API")
     @app_commands.describe(
         member="Discord member being added",
         rsc_name="RSC player name (Defaults to members display name)",
@@ -363,7 +359,7 @@ class AdminMembersMixIn(AdminMixIn):
             ephemeral=True,
         )
 
-    @_members.command(name="delete", description="Delete an RSC member in the API")  # type: ignore[type-var]
+    @_members.command(name="delete", description="Delete an RSC member in the API")
     @app_commands.describe(member="RSC discord member")
     async def _member_delete(self, interaction: discord.Interaction, member: discord.Member):
         if not interaction.guild:
@@ -379,9 +375,7 @@ class AdminMembersMixIn(AdminMixIn):
             ephemeral=True,
         )
 
-    @_members.command(  # type: ignore[type-var]
-        name="list", description="Fetch a list of members based on specified criteria."
-    )
+    @_members.command(name="list", description="Fetch a list of members based on specified criteria.")
     @app_commands.describe(
         rsc_name="RSC in-game player name (Do not include prefix)",
         discord_username="Player discord username without discriminator",
@@ -465,9 +459,7 @@ class AdminMembersMixIn(AdminMixIn):
 
         await interaction.followup.send(embed=embed, ephemeral=True)
 
-    @_members.command(  # type: ignore[type-var]
-        name="signup", description="Sign a player up for the latest RSC season"
-    )
+    @_members.command(name="signup", description="Sign a player up for the latest RSC season")
     @app_commands.describe(
         player_type="New or Former Player",
         member="Discord member being added",
@@ -517,9 +509,7 @@ class AdminMembersMixIn(AdminMixIn):
             embed=SuccessEmbed(description=f"{member.mention} has been signed up for the latest season of RSC.")
         )
 
-    @_members.command(  # type: ignore[type-var]
-        name="notinserver", description="Find API league players not in the server"
-    )
+    @_members.command(name="notinserver", description="Find API league players not in the server")
     @app_commands.describe(
         status="Only check league players with this status",
     )

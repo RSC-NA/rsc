@@ -43,11 +43,11 @@ class MatchMixIn(RSCMixIn):
 
     # App Commands
 
-    @app_commands.command(  # type: ignore[type-var]
+    @app_commands.command(
         name="schedule",
         description="Display your team or another teams entire schedule",
     )
-    @app_commands.autocomplete(team=TeamMixIn.teams_autocomplete)  # type: ignore[type-var]
+    @app_commands.autocomplete(team=TeamMixIn.teams_autocomplete)
     @app_commands.describe(
         team="Get the schedule for a specific team (Optional)",
         preseason="Include preseason matches (Default: False)",
@@ -122,9 +122,10 @@ class MatchMixIn(RSCMixIn):
             )
 
         # Get tier color
+        tier_color = discord.Color.default()
         if tier:
             tier_color = await tier_color_by_name(guild, tier)
-        else:
+        elif schedule[0].home_team.tier:
             tier_color = await tier_color_by_name(guild, schedule[0].home_team.tier)
 
         # Sorting
@@ -166,12 +167,12 @@ class MatchMixIn(RSCMixIn):
 
         await interaction.followup.send(embed=embed)
 
-    @app_commands.command(  # type: ignore[type-var]
+    @app_commands.command(
         name="match",
         description="Get information about your upcoming match",
     )
     @app_commands.describe(team="Get match information for a specific team (General Manager Only)")
-    @app_commands.autocomplete(team=TeamMixIn.teams_autocomplete)  # type: ignore[type-var]
+    @app_commands.autocomplete(team=TeamMixIn.teams_autocomplete)
     @app_commands.guild_only
     async def _match_cmd(self, interaction: discord.Interaction, team: str | None = None, day: int | None = None):
         guild = interaction.guild
@@ -324,10 +325,10 @@ class MatchMixIn(RSCMixIn):
     async def match_team_by_user(self, match: Match, member: discord.Member) -> MatchTeamEnum:
         """Determine if the user is on the home or away team"""
         # Check if GM of team
-        if match.home_team.gm.discord_id == member.id:
+        if match.home_team.gm and match.home_team.gm.discord_id == member.id:
             return MatchTeamEnum.HOME
 
-        if match.away_team.gm.discord_id == member.id:
+        if match.away_team.gm and match.away_team.gm.discord_id == member.id:
             return MatchTeamEnum.AWAY
 
         # Iterate players for member ID match
@@ -349,9 +350,9 @@ class MatchMixIn(RSCMixIn):
         # Check AGM
         if await self.is_match_franchise_agm(member, match):
             for role in member.roles:
-                if match.home_team.franchise.lower() in role.name.lower():
+                if match.home_team.franchise and match.home_team.franchise.lower() in role.name.lower():
                     return MatchTeamEnum.HOME
-                if match.away_team.franchise.lower() in role.name.lower():
+                if match.away_team.franchise and match.away_team.franchise.lower() in role.name.lower():
                     return MatchTeamEnum.AWAY
 
         raise ValueError(f"{member.display_name} is not a valid player in this match")
@@ -366,7 +367,10 @@ class MatchMixIn(RSCMixIn):
         """Build the match information embed"""
         # Get embed color by tier
         tier = match.home_team.tier
-        tier_color = await tier_color_by_name(guild, tier)
+
+        tier_color = discord.Color.default()
+        if tier:
+            tier_color = await tier_color_by_name(guild, tier)
 
         # Format match day
         if match.match_type == MatchType.PRESEASON:
@@ -435,7 +439,7 @@ class MatchMixIn(RSCMixIn):
         away_gm: str | None = None
 
         # Get GM for each team.
-        if with_gm:
+        if with_gm and match.home_team.franchise and match.away_team.franchise:
             hgm = await self.franchise_gm_by_name(guild, name=match.home_team.franchise)
             if hgm and hgm.rsc_name:
                 home_gm = hgm.rsc_name
@@ -473,7 +477,7 @@ class MatchMixIn(RSCMixIn):
                     continue
 
             # GM
-            if isinstance(m, discord.Member) and match.home_team.gm.discord_id == m.id:
+            if isinstance(m, discord.Member) and match.home_team.gm and match.home_team.gm.discord_id == m.id:
                 name = f"{name} (GM)"
 
             home_players.append(name)
@@ -507,7 +511,7 @@ class MatchMixIn(RSCMixIn):
                     continue
 
             # GM
-            if isinstance(m, discord.Member) and match.away_team.gm.discord_id == m.id:
+            if isinstance(m, discord.Member) and match.away_team.gm and match.away_team.gm.discord_id == m.id:
                 name = f"{name} (GM)"
 
             away_players.append(name)
@@ -546,16 +550,22 @@ class MatchMixIn(RSCMixIn):
             log.debug("Member is not AGM", guild=guild)
             return False
 
-        hfranchise = match.home_team.franchise.lower()
-        afranchise = match.away_team.franchise.lower()
+        hfranchise = None
+        if match.home_team.franchise:
+            hfranchise = match.home_team.franchise.lower()
+
+        afranchise = None
+        if match.away_team.franchise:
+            afranchise = match.away_team.franchise.lower()
+
         log.debug(f"Home Franchise: {hfranchise} Away Franchise: {afranchise}", guild=guild)
         matching_franchise = False
         for role in member.roles:
             log.debug(f"Checking for franchise role: {role.name}", guild=guild)
-            if hfranchise in role.name.lower():
+            if hfranchise and hfranchise in role.name.lower():
                 matching_franchise = True
                 break
-            if afranchise in role.name.lower():
+            if afranchise and afranchise in role.name.lower():
                 matching_franchise = True
                 break
 

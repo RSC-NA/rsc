@@ -319,8 +319,8 @@ async def save_documents(guild: discord.Guild, org_name: str, api_key: str, docs
             client=chroma_client,
             embedding=OpenAIEmbeddings(
                 model="text-embedding-3-small",
-                organization=org_name,
-                api_key=SecretStr(api_key),
+                openai_organization=org_name,
+                openai_api_key=SecretStr(api_key),
                 async_client=http_client,
             ),
             collection_metadata={"hnsw:space": "cosine"},

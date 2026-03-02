@@ -27,7 +27,7 @@ class AdminStatsMixIn(AdminMixIn):
         default_permissions=discord.Permissions(manage_guild=True),
     )
 
-    @_stats.command(name="intents", description="Intent to Play statistics")  # type: ignore[type-var]
+    @_stats.command(name="intents", description="Intent to Play statistics")
     async def _intent_stats_cmd(self, interaction: discord.Interaction):
         guild = interaction.guild
         if not guild:
@@ -102,7 +102,7 @@ class AdminStatsMixIn(AdminMixIn):
 
         await interaction.followup.send(embed=embed)
 
-    @_stats.command(name="intentbyfranchise", description="Intent to Play statistics by Franchise")  # type: ignore[type-var]
+    @_stats.command(name="intentbyfranchise", description="Intent to Play statistics by Franchise")
     async def _intent_stats_franchise_cmd(self, interaction: discord.Interaction):
         guild = interaction.guild
         if not guild:
@@ -183,7 +183,7 @@ class AdminStatsMixIn(AdminMixIn):
 
         await interaction.followup.send(embed=embed)
 
-    @_stats.command(name="current", description="Current season statistics")  # type: ignore[type-var]
+    @_stats.command(name="current", description="Current season statistics")
     async def _current_season_stats_cmd(self, interaction: discord.Interaction):
         guild = interaction.guild
         if not guild:
@@ -253,7 +253,7 @@ class AdminStatsMixIn(AdminMixIn):
 
         await interaction.followup.send(embed=embed)
 
-    @_stats.command(name="signups", description="RSC sign-up statistics")  # type: ignore[type-var]
+    @_stats.command(name="signups", description="RSC sign-up statistics")
     async def _signups_stats_cmd(self, interaction: discord.Interaction):
         guild = interaction.guild
         if not guild:

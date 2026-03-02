@@ -196,7 +196,7 @@ class LLMMixIn(RSCMixIn):
     # Group commands
 
     # Settings
-    @_llm_group.command(name="settings", description="Display LLM settings")  # type: ignore[type-var]
+    @_llm_group.command(name="settings", description="Display LLM settings")
     async def _llm_settings_cmd(self, interaction: discord.Interaction):
         guild = interaction.guild
         if not guild:
@@ -238,9 +238,7 @@ class LLMMixIn(RSCMixIn):
 
         await interaction.response.send_message(embed=settings_embed, ephemeral=True)
 
-    @_llm_group.command(  # type: ignore[type-var]
-        name="toggle", description="Toggle llm on or off"
-    )
+    @_llm_group.command(name="toggle", description="Toggle llm on or off")
     async def _llm_toggle_cmd(self, interaction: discord.Interaction):
         """Toggle LLM on or off"""
         guild = interaction.guild
@@ -262,9 +260,7 @@ class LLMMixIn(RSCMixIn):
             ephemeral=True,
         )
 
-    @_llm_group.command(  # type: ignore[type-var]
-        name="organization", description="Configure the OpenAI organization"
-    )
+    @_llm_group.command(name="organization", description="Configure the OpenAI organization")
     @app_commands.describe(name="OpenAI Organization")
     async def _llm_openai_org_cmd(self, interaction: discord.Interaction, name: str):
         """Configure OpenAI Organization"""
@@ -282,9 +278,7 @@ class LLMMixIn(RSCMixIn):
             ephemeral=True,
         )
 
-    @_llm_group.command(  # type: ignore[type-var]
-        name="apikey", description="Configure the OpenAI API key"
-    )
+    @_llm_group.command(name="apikey", description="Configure the OpenAI API key")
     @app_commands.describe(key="OpenAI API Key")
     async def _llm_openai_key_cmd(self, interaction: discord.Interaction, key: str):
         """Configure OpenAI API Key"""
@@ -302,9 +296,7 @@ class LLMMixIn(RSCMixIn):
             ephemeral=True,
         )
 
-    @_llm_group.command(  # type: ignore[type-var]
-        name="count", description="Configure the LLM max similarity count"
-    )
+    @_llm_group.command(name="count", description="Configure the LLM max similarity count")
     @app_commands.describe(count="Number of similarity matches to get from DB")
     async def _llm_count_cmd(self, interaction: discord.Interaction, count: int):
         """Configure LLM similarity count"""
@@ -322,9 +314,7 @@ class LLMMixIn(RSCMixIn):
             ephemeral=True,
         )
 
-    @_llm_group.command(  # type: ignore[type-var]
-        name="threshold", description="Configure the LLM threshold"
-    )
+    @_llm_group.command(name="threshold", description="Configure the LLM threshold")
     @app_commands.describe(threshold="Float threshold for finding similarities (Default: 0.65)")
     async def _llm_threshold_cmd(self, interaction: discord.Interaction, threshold: float):
         """Configure LLM threshold"""
@@ -342,7 +332,7 @@ class LLMMixIn(RSCMixIn):
             ephemeral=True,
         )
 
-    @_llm_group.command(name="query", description="Query the RSC LLM")  # type: ignore[type-var]
+    @_llm_group.command(name="query", description="Query the RSC LLM")
     @app_commands.describe(question="Question to ask the RSC LLM")
     async def _llm_query_cmd(self, interaction: discord.Interaction, question: str):
         """Query the RSC LLM with a question"""
@@ -418,9 +408,7 @@ class LLMMixIn(RSCMixIn):
 
         await interaction.followup.send(embed=embed)
 
-    @_llm_group.command(  # type: ignore[type-var]
-        name="createdb", description="Create the LLM Chroma DB"
-    )
+    @_llm_group.command(name="createdb", description="Create the LLM Chroma DB")
     async def _llm_createdb_cmd(self, interaction: discord.Interaction):
         """Create the LLM Chroma DB"""
         guild = interaction.guild
@@ -447,9 +435,7 @@ class LLMMixIn(RSCMixIn):
             ephemeral=True,
         )
 
-    @_llm_group.command(  # type: ignore[type-var]
-        name="refresh", description="Refresh a specific document type in the LLM Chroma DB"
-    )
+    @_llm_group.command(name="refresh", description="Refresh a specific document type in the LLM Chroma DB")
     @app_commands.describe(doc_type="Type of documents to refresh")
     @app_commands.choices(
         doc_type=[
@@ -491,9 +477,7 @@ class LLMMixIn(RSCMixIn):
             ephemeral=True,
         )
 
-    @_llm_group.command(  # type: ignore[type-var]
-        name="resetdb", description="Reset the LLM Chroma DB (deletes all documents)"
-    )
+    @_llm_group.command(name="resetdb", description="Reset the LLM Chroma DB (deletes all documents)")
     async def _llm_resetdb_cmd(self, interaction: discord.Interaction):
         """Reset the LLM Chroma DB by deleting all documents"""
         guild = interaction.guild
@@ -514,9 +498,7 @@ class LLMMixIn(RSCMixIn):
             ephemeral=True,
         )
 
-    @_llm_group.command(  # type: ignore[type-var]
-        name="dbstats", description="Show LLM database statistics"
-    )
+    @_llm_group.command(name="dbstats", description="Show LLM database statistics")
     async def _llm_dbstats_cmd(self, interaction: discord.Interaction):
         """Show LLM database statistics"""
         guild = interaction.guild
@@ -543,9 +525,7 @@ class LLMMixIn(RSCMixIn):
 
         await interaction.followup.send(embed=embed, ephemeral=True)
 
-    @_llm_blacklist_group.command(  # type: ignore[type-var]
-        name="show", description="Display the LLM channel blacklist"
-    )
+    @_llm_blacklist_group.command(name="show", description="Display the LLM channel blacklist")
     async def _llm_blacklist_show_cmd(self, interaction: discord.Interaction):
         """Display the LLM channel blacklist"""
         guild = interaction.guild
@@ -572,9 +552,7 @@ class LLMMixIn(RSCMixIn):
         embed.add_field(name="Channels", value=blacklist_fmt, inline=False)
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-    @_llm_blacklist_group.command(  # type: ignore[type-var]
-        name="add", description="Add a channel to the LLM blacklist"
-    )
+    @_llm_blacklist_group.command(name="add", description="Add a channel to the LLM blacklist")
     @app_commands.describe(channel="Discord text channel to blacklist")
     async def _llm_blacklist_add_cmd(self, interaction: discord.Interaction, channel: discord.TextChannel):
         """Add a channel to the LLM blacklist"""
@@ -589,9 +567,7 @@ class LLMMixIn(RSCMixIn):
         )
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-    @_llm_blacklist_group.command(  # type: ignore[type-var]
-        name="rm", description="Remove a channel from the LLM blacklist"
-    )
+    @_llm_blacklist_group.command(name="rm", description="Remove a channel from the LLM blacklist")
     @app_commands.describe(channel="Discord text channel to remove")
     async def _llm_blacklist_rm_cmd(self, interaction: discord.Interaction, channel: discord.TextChannel):
         """Remove a channel from the LLM blacklist"""
@@ -708,6 +684,9 @@ class LLMMixIn(RSCMixIn):
         """Process and save current season document."""
         log.info("Creating current season document.", guild=guild)
         season = await self.current_season(guild)
+        if not season:
+            log.warning("API returned no current season.", guild=guild)
+            return 0
         season_doc = await load_current_season_doc(season)
 
         await save_documents(guild, org, key, [season_doc])

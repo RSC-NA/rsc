@@ -11,6 +11,7 @@ import re  # noqa: E402
 from dataclasses import dataclass  # noqa: E402
 from datetime import datetime  # noqa: E402
 from pathlib import Path  # noqa: E402
+from typing import TYPE_CHECKING  # noqa: E402
 
 import chromadb  # noqa: E402
 import discord  # noqa: E402
@@ -23,6 +24,10 @@ from langchain_core.documents import Document  # noqa: E402
 from pydantic.types import SecretStr  # noqa: E402
 
 from rsc.logs import GuildLogAdapter  # noqa: E402
+
+
+if TYPE_CHECKING:
+    from openai.types.chat import ChatCompletionMessageParam
 
 
 logger = logging.getLogger("red.rsc.llm.query")
@@ -337,7 +342,7 @@ async def llm_query(
             collection_name=str(guild.id),
             client=chroma_client,
             embedding_function=OpenAIEmbeddings(
-                model="text-embedding-3-small", organization=org_name, api_key=secret_key, http_async_client=http_client
+                model="text-embedding-3-small", openai_organization=org_name, openai_api_key=secret_key, http_async_client=http_client
             ),
         )
 
@@ -418,7 +423,7 @@ async def llm_query(
             user_context=user_context,
         )
 
-        messages = [
+        messages: list[ChatCompletionMessageParam] = [
             {"role": "system", "content": prompt},
             {"role": "user", "content": question},
         ]

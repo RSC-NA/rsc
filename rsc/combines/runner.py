@@ -2,7 +2,7 @@ import asyncio
 import json
 import logging
 
-import aiohttp
+from aiohttp import web
 import discord
 import pydantic
 
@@ -23,7 +23,7 @@ class CombineRunnerMixIn(RSCMixIn):
         log.debug("Initializing CombineMixIn:Runner")
         super().__init__()
 
-    async def combines_event_handler(self, request: aiohttp.web.Request):
+    async def combines_event_handler(self, request: web.Request):
         log.debug("Received combines event")
 
         try:
@@ -34,10 +34,10 @@ class CombineRunnerMixIn(RSCMixIn):
             event = models.CombineEvent(**data)
         except json.JSONDecodeError:
             log.warning("Received combines webhook with no JSON data")
-            return aiohttp.web.Response(status=400)  # 400 Bad Request
+            return web.Response(status=400)  # 400 Bad Request
         except pydantic.ValidationError as exc:
             log.exception("Error deserializing combine game lobby", exc_info=exc)
-            return aiohttp.web.Response(status=400)  # 400 Bad Request
+            return web.Response(status=400)  # 400 Bad Request
 
         # Only support RSC NA 3v3 right now
         log.debug(f"Looking for Guild ID: {event.guild_id}")
@@ -49,29 +49,29 @@ class CombineRunnerMixIn(RSCMixIn):
 
         if not guild:
             log.error("Bot is not in the configured combines guild")
-            return aiohttp.web.Response(status=503)  # 503 Service Unavailable
+            return web.Response(status=503)  # 503 Service Unavailable
 
         match event.message_type:
             case models.CombineEventType.Finished:
                 if not event.match_id:
                     log.warning("Received finished combine lobby but no lobby id.")
-                    return aiohttp.web.Response(status=400)  # 400 Bad Request
+                    return web.Response(status=400)  # 400 Bad Request
                 else:
                     task = asyncio.create_task(self.teardown_combine_lobby(guild, lobby_id=event.match_id))
                     background_tasks.add(task)
                     task.add_done_callback(background_tasks.discard)
-                    return aiohttp.web.Response(status=200)  # 200 OK
+                    return web.Response(status=200)  # 200 OK
             case _:
-                return aiohttp.web.Response(status=501)  # 400 Not Implemented
+                return web.Response(status=501)  # 400 Not Implemented
 
-    async def start_combines_game(self, request: aiohttp.web.Request):
+    async def start_combines_game(self, request: web.Request):
         log.debug("Received request to create combine game")
 
         try:
             data = await request.json()
         except json.JSONDecodeError:
             log.warning("Received combines webhook with no JSON data")
-            return aiohttp.web.Response(status=400)  # 400 Bad Request
+            return web.Response(status=400)  # 400 Bad Request
 
         log.debug("Processing combine lobbies")
         lobby_list: list[models.CombinesLobby] = []
@@ -81,22 +81,22 @@ class CombineRunnerMixIn(RSCMixIn):
                 lobby_list.append(models.CombinesLobby(**v))
         except pydantic.ValidationError as exc:
             log.exception("Error deserializing combine game lobby", exc_info=exc)
-            return aiohttp.web.Response(status=400)  # 400 Bad Request
+            return web.Response(status=400)  # 400 Bad Request
 
         if not lobby_list:
             log.warning("Received combines HTTP request with no data")
-            return aiohttp.web.Response(status=400)  # 400 Bad Request
+            return web.Response(status=400)  # 400 Bad Request
 
         log.debug("Sending combine lobbies to creation")
         for lobby in lobby_list:
             try:
                 await self.create_combine_lobby_channel(lobby)
             except (NotInGuild, CombinesNotActive):
-                return aiohttp.web.Response(status=503)  # 503 Service Unavailable
+                return web.Response(status=503)  # 503 Service Unavailable
 
         # Send HTTP 200 OK
         log.debug("Sending HTTP response.")
-        return aiohttp.web.Response(status=200)
+        return web.Response(status=200)
 
     async def create_combine_lobby_channel(
         self,

@@ -55,11 +55,11 @@ class AdminFranchiseMixIn(AdminMixIn):
         default_permissions=discord.Permissions(manage_guild=True),
     )
 
-    @_franchise.command(name="addteam", description="Add a new team to a franchise")  # type: ignore[type-var]
+    @_franchise.command(name="addteam", description="Add a new team to a franchise")
     @app_commands.describe(franchise="Franchise name", tier="Team Tier", name="Team Name")
     @app_commands.autocomplete(
-        franchise=FranchiseMixIn.franchise_autocomplete,
-        tier=TierMixIn.tier_autocomplete,
+        franchise=FranchiseMixIn.franchise_autocomplete,  # ty:ignore[invalid-argument-type]
+        tier=TierMixIn.tier_autocomplete,  # ty:ignore[invalid-argument-type]
     )
     async def _franchise_addteam_cmd(self, interaction: discord.Interaction, franchise: str, tier: str, name: str):
         guild = interaction.guild
@@ -87,12 +87,12 @@ class AdminFranchiseMixIn(AdminMixIn):
             embed.add_field(name="Tier", value=result.tier.name, inline=True)
         await interaction.followup.send(embed=embed, ephemeral=True)
 
-    @_franchise.command(name="delteam", description="Remove a team from a franchise")  # type: ignore[type-var]
+    @_franchise.command(name="delteam", description="Remove a team from a franchise")
     @app_commands.describe(franchise="Franchise name", tier="Team Tier", team="Team to delete")
     @app_commands.autocomplete(
-        franchise=FranchiseMixIn.franchise_autocomplete,
-        tier=TierMixIn.tier_autocomplete,
-        team=TeamMixIn.teams_autocomplete,
+        franchise=FranchiseMixIn.franchise_autocomplete,  # ty:ignore[invalid-argument-type]
+        tier=TierMixIn.tier_autocomplete,  # ty:ignore[invalid-argument-type]
+        team=TeamMixIn.teams_autocomplete,  # ty:ignore[invalid-argument-type]
     )
     async def _franchise_rmteam_cmd(self, interaction: discord.Interaction, franchise: str, tier: str, team: str):
         guild = interaction.guild
@@ -139,9 +139,9 @@ class AdminFranchiseMixIn(AdminMixIn):
         embed.add_field(name="Tier", value=tier, inline=True)
         await interaction.followup.send(embed=embed, ephemeral=True)
 
-    @_franchise.command(name="logo", description="Upload a logo for the franchise")  # type: ignore[type-var]
+    @_franchise.command(name="logo", description="Upload a logo for the franchise")
     @app_commands.describe(franchise="Franchise name", logo="Franchise logo file (PNG)")
-    @app_commands.autocomplete(franchise=FranchiseMixIn.franchise_autocomplete)  # type: ignore[type-var]
+    @app_commands.autocomplete(franchise=FranchiseMixIn.franchise_autocomplete)
     async def _franchise_logo(self, interaction: discord.Interaction, franchise: str, logo: discord.Attachment):
         guild = interaction.guild
         if not guild:
@@ -305,8 +305,8 @@ class AdminFranchiseMixIn(AdminMixIn):
         embed.set_thumbnail(url=logo.url)
         await interaction.followup.send(embed=embed, view=logo_view, ephemeral=True)
 
-    @_franchise.command(name="rebrand", description="Rebrand a franchise")  # type: ignore[type-var]
-    @app_commands.autocomplete(franchise=FranchiseMixIn.franchise_autocomplete)  # type: ignore[type-var]
+    @_franchise.command(name="rebrand", description="Rebrand a franchise")
+    @app_commands.autocomplete(franchise=FranchiseMixIn.franchise_autocomplete)
     @app_commands.describe(franchise="Franchise to rebrand", override="Admin only override")
     async def _franchise_rebrand(
         self,
@@ -483,9 +483,9 @@ class AdminFranchiseMixIn(AdminMixIn):
         embed = SuccessEmbed(description=f"**{fdata.name}** has been rebranded to **{rebrand_modal.name}**")
         await rebrand_modal.interaction.edit_original_response(embed=embed, view=None)
 
-    @_franchise.command(name="delete", description="Delete a franchise")  # type: ignore[type-var]
+    @_franchise.command(name="delete", description="Delete a franchise")
     @app_commands.describe(franchise="Franchise name")
-    @app_commands.autocomplete(franchise=FranchiseMixIn.franchise_autocomplete)  # type: ignore[type-var]
+    @app_commands.autocomplete(franchise=FranchiseMixIn.franchise_autocomplete)
     async def _franchise_delete(
         self,
         interaction: discord.Interaction,
@@ -571,6 +571,10 @@ class AdminFranchiseMixIn(AdminMixIn):
         if fdata.teams:
             for t in fdata.teams:
                 tier = t.tier
+
+                if not tier:
+                    log.error(f"Team {t.name} in franchise {fdata.name} has no tier assigned. Skipping...", guild=guild)
+                    continue
                 tier_fa_role = await utils.get_tier_fa_role(guild, tier)
 
                 # Not sure why these types are `list[Player|None] | None`
@@ -608,9 +612,7 @@ class AdminFranchiseMixIn(AdminMixIn):
             view=None,
         )
 
-    @_franchise.command(  # type: ignore[type-var]
-        name="create", description="Create a new franchise in the league"
-    )
+    @_franchise.command(name="create", description="Create a new franchise in the league")
     @app_commands.describe(
         name="Franchise name",
         prefix='Franchise prefix (Ex: "TG")',
@@ -669,11 +671,9 @@ class AdminFranchiseMixIn(AdminMixIn):
         embed.add_field(name="GM", value=gm.mention, inline=True)
         await interaction.edit_original_response(embed=embed, view=None)
 
-    @_franchise.command(  # type: ignore[type-var]
-        name="transfer", description="Transfer ownership of a franchise"
-    )
+    @_franchise.command(name="transfer", description="Transfer ownership of a franchise")
     @app_commands.describe(franchise="Franchise name", gm="General Manager")
-    @app_commands.autocomplete(franchise=FranchiseMixIn.franchise_autocomplete)  # type: ignore[type-var]
+    @app_commands.autocomplete(franchise=FranchiseMixIn.franchise_autocomplete)
     async def _franchise_transfer(
         self,
         interaction: discord.Interaction,

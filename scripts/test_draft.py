@@ -26,6 +26,10 @@ from rscapi.models.tier import Tier
 API_KEY = os.environ.get("RSC_API_KEY")
 API_HOST = "https://staging-api.rscna.com/api/v1"
 
+if not API_KEY:
+    print("RSC API key not found in environment variable RSC_API_KEY")
+    sys.exit(1)
+
 CONF = Configuration(
     host=API_HOST,
     api_key={"Api-Key": API_KEY},

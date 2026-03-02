@@ -30,8 +30,6 @@ from rsc.utils import images, utils
 from rsc.views import CancelView
 
 if TYPE_CHECKING:
-    from collections.abc import MutableMapping
-
     from rscapi.models.league_player import LeaguePlayer
     from rscapi.models.member import Member as RSCMember
     from rscapi.models.tier import Tier
@@ -122,7 +120,7 @@ class AdminSyncMixIn(AdminMixIn):
         default_permissions=discord.Permissions(manage_guild=True),
     )
 
-    @_sync.command(  # type: ignore[type-var]
+    @_sync.command(
         name="requiredroles",
         description="Check if all base required roles exist. If not, create them.",
     )
@@ -149,26 +147,43 @@ class AdminSyncMixIn(AdminMixIn):
         # League
         r = discord.utils.get(guild.roles, name=const.LEAGUE_ROLE)
         if not r:
-            result = await guild.create_role(
-                name=const.LEAGUE_ROLE,
-                hoist=False,
-                display_icon=guild_icon if icons_allowed else None,  # type: ignore[arg-type]
-                permissions=const.GENERIC_ROLE_PERMS,
-                reason="Syncing required roles.",
-            )
+            if icons_allowed and guild_icon is not None:
+                result = await guild.create_role(
+                    name=const.LEAGUE_ROLE,
+                    hoist=False,
+                    display_icon=guild_icon,
+                    permissions=const.GENERIC_ROLE_PERMS,
+                    reason="Syncing required roles.",
+                )
+            else:
+                result = await guild.create_role(
+                    name=const.LEAGUE_ROLE,
+                    hoist=False,
+                    permissions=const.GENERIC_ROLE_PERMS,
+                    reason="Syncing required roles.",
+                )
             role_list.append(result)
 
         # General Manager
         r = discord.utils.get(guild.roles, name=const.GM_ROLE)
         if not r:
-            result = await guild.create_role(
-                name=const.GM_ROLE,
-                hoist=False,
-                display_icon=guild_icon if icons_allowed else None,  # type: ignore[arg-type]
-                permissions=const.GENERIC_ROLE_PERMS,
-                color=0x00D9FF,
-                reason="Syncing required roles.",
-            )
+            if icons_allowed and guild_icon is not None:
+                result = await guild.create_role(
+                    name=const.GM_ROLE,
+                    hoist=False,
+                    display_icon=guild_icon,
+                    permissions=const.GENERIC_ROLE_PERMS,
+                    color=0x00D9FF,
+                    reason="Syncing required roles.",
+                )
+            else:
+                result = await guild.create_role(
+                    name=const.GM_ROLE,
+                    hoist=False,
+                    permissions=const.GENERIC_ROLE_PERMS,
+                    color=0x00D9FF,
+                    reason="Syncing required roles.",
+                )
             role_list.append(result)
 
         # AGM
@@ -186,13 +201,21 @@ class AdminSyncMixIn(AdminMixIn):
         # Free Agent
         r = discord.utils.get(guild.roles, name=const.FREE_AGENT_ROLE)
         if not r:
-            result = await guild.create_role(
-                name=const.FREE_AGENT_ROLE,
-                hoist=False,
-                display_icon=guild_icon if icons_allowed else None,  # type: ignore[arg-type]
-                permissions=const.GENERIC_ROLE_PERMS,
-                reason="Syncing required roles.",
-            )
+            if icons_allowed and guild_icon is not None:
+                result = await guild.create_role(
+                    name=const.FREE_AGENT_ROLE,
+                    hoist=False,
+                    display_icon=guild_icon,
+                    permissions=const.GENERIC_ROLE_PERMS,
+                    reason="Syncing required roles.",
+                )
+            else:
+                result = await guild.create_role(
+                    name=const.FREE_AGENT_ROLE,
+                    hoist=False,
+                    permissions=const.GENERIC_ROLE_PERMS,
+                    reason="Syncing required roles.",
+                )
             role_list.append(result)
 
         # Captain
@@ -319,7 +342,7 @@ class AdminSyncMixIn(AdminMixIn):
         embed.add_field(name="Role", value="\n".join([r.mention for r in role_list]), inline=True)
         await interaction.followup.send(embed=embed, ephemeral=True)
 
-    @_sync.command(  # type: ignore[type-var]
+    @_sync.command(
         name="tiers",
         description="Check if all tier roles and channels exist. If not, create them.",
     )
@@ -405,7 +428,7 @@ class AdminSyncMixIn(AdminMixIn):
 
             if scorecategory:
                 # Score Reporting Permissions
-                s_overwrites: MutableMapping[discord.Member | discord.Role, discord.PermissionOverwrite] = {
+                s_overwrites: dict[discord.Role | discord.Member | discord.Object, discord.PermissionOverwrite] = {
                     guild.default_role: discord.PermissionOverwrite(view_channel=False, send_messages=False, add_reactions=False),
                     league_role: discord.PermissionOverwrite(
                         view_channel=True,
@@ -455,11 +478,11 @@ class AdminSyncMixIn(AdminMixIn):
                         reason="Syncing tier channels from API",
                     )
                 elif isinstance(schannel, discord.TextChannel):
-                    await schannel.edit(overwrites=s_overwrites)  # type: ignore[arg-type]
+                    await schannel.edit(overwrites=s_overwrites)
 
             if chatcategory:
                 # Tier Chat Permissions
-                t_overwrites: MutableMapping[discord.Member | discord.Role, discord.PermissionOverwrite] = {
+                t_overwrites: dict[discord.Role | discord.Member | discord.Object, discord.PermissionOverwrite] = {
                     guild.default_role: discord.PermissionOverwrite(view_channel=False, send_messages=False),
                     trole: discord.PermissionOverwrite(
                         view_channel=True,
@@ -495,7 +518,7 @@ class AdminSyncMixIn(AdminMixIn):
                         reason="Syncing tier channels from API",
                     )
                 elif isinstance(tchannel, discord.TextChannel):
-                    await tchannel.edit(overwrites=t_overwrites)  # type: ignore[arg-type]
+                    await tchannel.edit(overwrites=t_overwrites)
 
             # Store roles for response
             roles[t.name] = [trole, farole]
@@ -507,7 +530,7 @@ class AdminSyncMixIn(AdminMixIn):
         embed.add_field(
             name="Name",
             value="\n".join([t.name for t in tiers]),
-            inline=True,  # type: ignore[type-var]
+            inline=True,
         )
 
         role_fmt = []
@@ -518,7 +541,7 @@ class AdminSyncMixIn(AdminMixIn):
 
         await interaction.followup.send(embed=embed, ephemeral=True)
 
-    @_sync.command(  # type: ignore[type-var]
+    @_sync.command(
         name="transactionchannels",
         description="Check if all franchise transaction channels. If not, create them.",
     )
@@ -564,7 +587,7 @@ class AdminSyncMixIn(AdminMixIn):
                 gm = None
 
                 # Default Permissions
-                overwrites: dict[discord.Role | discord.Member, discord.PermissionOverwrite] = {
+                overwrites: dict[discord.Role | discord.Member | discord.Object, discord.PermissionOverwrite] = {
                     guild.default_role: discord.PermissionOverwrite(view_channel=False)
                 }
 
@@ -632,7 +655,7 @@ class AdminSyncMixIn(AdminMixIn):
 
         await interaction.edit_original_response(embed=embed)
 
-    @_sync.command(  # type: ignore[type-var]
+    @_sync.command(
         name="nonplaying",
         description="Sync all non playing discord members. (Long Execution Time)",
     )
@@ -696,7 +719,7 @@ class AdminSyncMixIn(AdminMixIn):
         embed.set_footer(text=f"Synced {synced}/{total} RSC member(s).")
         await interaction.edit_original_response(embed=embed)
 
-    @_sync.command(  # type: ignore[type-var]
+    @_sync.command(
         name="players",
         description="Sync all league players in discord members. (Long Execution Time)",
     )
@@ -781,7 +804,7 @@ class AdminSyncMixIn(AdminMixIn):
         embed.set_footer(text=f"Synced {synced}/{total} RSC players(s).")
         await interaction.edit_original_response(embed=embed)
 
-    @_sync.command(  # type: ignore[type-var]
+    @_sync.command(
         name="member",
         description="Sync an individual members from the API to discord",
     )
@@ -846,7 +869,7 @@ class AdminSyncMixIn(AdminMixIn):
             ephemeral=False,
         )
 
-    @_sync.command(  # type: ignore[type-var]
+    @_sync.command(
         name="freeagent",
         description="Sync all free agent players in discord",
     )
@@ -1054,7 +1077,7 @@ class AdminSyncMixIn(AdminMixIn):
         loading_embed.description = "Successfully synchronized all free agent players."
         await interaction.edit_original_response(embed=loading_embed, attachments=[dFile], view=None)
 
-    @_sync.command(  # type: ignore[type-var]
+    @_sync.command(
         name="drafteligible",
         description="Sync all draft eligibile players in discord",
     )
@@ -1170,7 +1193,7 @@ class AdminSyncMixIn(AdminMixIn):
         loading_embed.description = "Successfully synchronized all draft eligible players."
         await interaction.edit_original_response(embed=loading_embed, attachments=[dFile], view=None)
 
-    @_sync.command(  # type: ignore[type-var]
+    @_sync.command(
         name="franchiseroles",
         description="Check if all franchise roles exist. If not, create them.",
     )
@@ -1214,13 +1237,21 @@ class AdminSyncMixIn(AdminMixIn):
                     existing.append(frole)
             else:
                 log.info("Creating new franchise role: %s", fname, guild=guild)
-                nrole = await guild.create_role(
-                    name=fname,
-                    hoist=True,
-                    display_icon=f.logo if icons_allowed else None,  # type: ignore[arg-type]
-                    permissions=const.FRANCHISE_ROLE_PERMS,
-                    reason="Syncing franchise roles from API",
-                )
+                if icons_allowed and f.logo is not None:
+                    nrole = await guild.create_role(
+                        name=fname,
+                        hoist=True,
+                        display_icon=f.logo,
+                        permissions=const.FRANCHISE_ROLE_PERMS,
+                        reason="Syncing franchise roles from API",
+                    )
+                else:
+                    nrole = await guild.create_role(
+                        name=fname,
+                        hoist=True,
+                        permissions=const.FRANCHISE_ROLE_PERMS,
+                        reason="Syncing franchise roles from API",
+                    )
                 added.append(nrole)
 
         added.sort(key=lambda x: x.name)

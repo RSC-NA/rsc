@@ -82,7 +82,7 @@ class BallchasingMixIn(RSCMixIn):
 
     # Sub Commands
 
-    @_ballchasing.command(  # type: ignore[type-var]
+    @_ballchasing.command(
         name="settings",
         description="Display settings for ballchasing replay management",
     )
@@ -132,9 +132,7 @@ class BallchasingMixIn(RSCMixIn):
 
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-    @_ballchasing.command(  # type: ignore[type-var]
-        name="key", description="Configure the Ballchasing API key for the server"
-    )
+    @_ballchasing.command(name="key", description="Configure the Ballchasing API key for the server")
     @app_commands.checks.has_permissions(manage_guild=True)
     async def _bc_key(self, interaction: discord.Interaction, key: str):
         if not interaction.guild:
@@ -145,7 +143,7 @@ class BallchasingMixIn(RSCMixIn):
             ephemeral=True,
         )
 
-    @_ballchasing.command(  # type: ignore[type-var]
+    @_ballchasing.command(
         name="manager",
         description="Configure the ballchasing management role (Ex: @Stats Committee)",
     )
@@ -159,7 +157,7 @@ class BallchasingMixIn(RSCMixIn):
             ephemeral=True,
         )
 
-    @_ballchasing.command(  # type: ignore[type-var]
+    @_ballchasing.command(
         name="log",
         description="Configure the logging channel for Ballchasing commands (Ex: #stats-committee)",
     )
@@ -173,7 +171,7 @@ class BallchasingMixIn(RSCMixIn):
             ephemeral=True,
         )
 
-    @_ballchasing.command(  # type: ignore[type-var]
+    @_ballchasing.command(
         name="category",
         description="Configure the score reporting category for the server",
     )
@@ -188,7 +186,7 @@ class BallchasingMixIn(RSCMixIn):
             ephemeral=True,
         )
 
-    @_ballchasing.command(  # type: ignore[type-var]
+    @_ballchasing.command(
         name="toplevelgroup",
         description="Configure the top level ballchasing group for RSC",
     )
@@ -210,7 +208,7 @@ class BallchasingMixIn(RSCMixIn):
 
     # Commands
 
-    @_ballchasing.command(  # type: ignore[type-var]
+    @_ballchasing.command(
         name="scanmissing",
         description="Find missing matches in ballchasing",
     )
@@ -226,14 +224,14 @@ class BallchasingMixIn(RSCMixIn):
     ):
         await utils.not_implemented(interaction)
 
-    @app_commands.command(  # type: ignore[type-var]
+    @app_commands.command(
         name="reportmatch",
         description="Report the results of your RSC match",
     )
     @app_commands.autocomplete(
         home=TeamMixIn.teams_autocomplete,
         away=TeamMixIn.teams_autocomplete,
-    )  # type: ignore[type-var]
+    )
     @app_commands.describe(
         home="Home team name",
         away="Away team name",
@@ -342,6 +340,13 @@ class BallchasingMixIn(RSCMixIn):
                 embed=ErrorEmbed(description=f"Found match for **{home}** vs **{away}** but it has no match ID in the API."),
                 ephemeral=True,
             )
+
+        # Make sure we have a tier
+        if not match.home_team.tier:
+            return await interaction.followup.send(
+                embed=ErrorEmbed(description=f"Match **{home}** vs **{away}** is missing tier information in the API."),
+                ephemeral=True,
+            )
         log.debug(f"Found match: {match}", match=match)
 
         # Only GMs and team members can report a match by default
@@ -412,12 +417,12 @@ class BallchasingMixIn(RSCMixIn):
 
         # Try to get GMs
         gms: list[str] = []
-        if match.home_team.gm.discord_id:
+        if match.home_team.gm and match.home_team.gm.discord_id:
             home_gm = guild.get_member(match.home_team.gm.discord_id)
             if home_gm:
                 gms.append(home_gm.mention)
 
-        if match.away_team.gm.discord_id:
+        if match.away_team.gm and match.away_team.gm.discord_id:
             away_gm = guild.get_member(match.away_team.gm.discord_id)
             if away_gm:
                 gms.append(away_gm.mention)
@@ -551,7 +556,9 @@ class BallchasingMixIn(RSCMixIn):
         result: MatchResults,
         link: str | None = None,
     ) -> tuple[discord.Embed, discord.ui.View | None]:
-        tier_color = await utils.tier_color_by_name(guild, match.home_team.tier)
+        tier_color = discord.Color.default()
+        if match.home_team.tier:
+            tier_color = await utils.tier_color_by_name(guild, match.home_team.tier)
 
         embed = discord.Embed(
             description=(f"Match Summary:\n**{match.home_team.name}** {result.home_wins} - {result.away_wins} **{match.away_team.name}**"),

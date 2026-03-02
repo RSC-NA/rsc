@@ -334,9 +334,7 @@ class TransactionMixIn(RSCMixIn):
 
     # Settings
 
-    @_transactions.command(  # type: ignore[type-var]
-        name="settings", description="Display current transactions settings"
-    )
+    @_transactions.command(name="settings", description="Display current transactions settings")
     @app_commands.checks.has_permissions(manage_guild=True)
     async def _transactions_settings(self, interaction: discord.Interaction):
         """Show transactions settings"""
@@ -390,9 +388,7 @@ class TransactionMixIn(RSCMixIn):
             cut_embed = discord.Embed(title="Cut Message", description=cut_msg, color=discord.Color.blue())
             await interaction.response.send_message(embeds=[settings_embed, cut_embed], ephemeral=True)
 
-    @_transactions.command(  # type: ignore[type-var]
-        name="notifications", description="Toggle channel notifications on or off"
-    )
+    @_transactions.command(name="notifications", description="Toggle channel notifications on or off")
     @app_commands.checks.has_permissions(manage_guild=True)
     async def transactions_notifications(self, interaction: discord.Interaction):
         """Toggle channel notifications on or off"""
@@ -414,9 +410,7 @@ class TransactionMixIn(RSCMixIn):
             ephemeral=True,
         )
 
-    @_transactions.command(  # type: ignore[type-var]
-        name="gmnotifications", description="Toggle GM notifications on or off"
-    )
+    @_transactions.command(name="gmnotifications", description="Toggle GM notifications on or off")
     @app_commands.checks.has_permissions(manage_guild=True)
     async def transactions_gm_notifications_cmd(self, interaction: discord.Interaction):
         """Toggle GM notifications on or off"""
@@ -438,9 +432,7 @@ class TransactionMixIn(RSCMixIn):
             ephemeral=True,
         )
 
-    @_transactions.command(  # type: ignore[type-var]
-        name="toggledm", description="Toggle player direct messages on or off"
-    )
+    @_transactions.command(name="toggledm", description="Toggle player direct messages on or off")
     @app_commands.checks.has_permissions(manage_guild=True)
     async def transactions_dms_toggle(self, interaction: discord.Interaction):
         """Toggle channel notifications on or off"""
@@ -464,7 +456,7 @@ class TransactionMixIn(RSCMixIn):
             ephemeral=True,
         )
 
-    @_transactions.command(  # type: ignore[type-var]
+    @_transactions.command(
         name="transactionchannel",
         description="Configure the transaction announcement channel",
     )
@@ -484,9 +476,7 @@ class TransactionMixIn(RSCMixIn):
             ephemeral=True,
         )
 
-    @_transactions.command(  # type: ignore[type-var]
-        name="logchannel", description="Set the transactions committee log channel"
-    )
+    @_transactions.command(name="logchannel", description="Set the transactions committee log channel")
     @app_commands.describe(channel="Transaction committee log discord channel (Must be a text channel)")
     @app_commands.checks.has_permissions(manage_guild=True)
     async def _transactions_log(self, interaction: discord.Interaction, channel: discord.TextChannel):
@@ -503,9 +493,7 @@ class TransactionMixIn(RSCMixIn):
             ephemeral=True,
         )
 
-    @_transactions.command(  # type: ignore[type-var]
-        name="role", description="Configure the transaction committee role"
-    )
+    @_transactions.command(name="role", description="Configure the transaction committee role")
     @app_commands.describe(role="Transaction committee discord role")
     @app_commands.checks.has_permissions(manage_guild=True)
     async def _transactions_role(self, interaction: discord.Interaction, role: discord.Role):
@@ -521,9 +509,7 @@ class TransactionMixIn(RSCMixIn):
             ephemeral=True,
         )
 
-    @_transactions.command(  # type: ignore[type-var]
-        name="cutmsg", description="Configure the player cut message"
-    )
+    @_transactions.command(name="cutmsg", description="Configure the player cut message")
     @app_commands.checks.has_permissions(manage_guild=True)
     async def _transactions_cutmsg(self, interaction: discord.Interaction):
         """Set cut message (4096 characters max)"""
@@ -543,7 +529,7 @@ class TransactionMixIn(RSCMixIn):
 
     # Committee Commands
 
-    @_transactions.command(name="cut", description="Release a player from their team")  # type: ignore[type-var]
+    @_transactions.command(name="cut", description="Release a player from their team")
     @app_commands.describe(
         player="Player to cut",
         notes="Transaction notes (Optional)",
@@ -649,16 +635,14 @@ class TransactionMixIn(RSCMixIn):
             ephemeral=True,
         )
 
-    @_transactions.command(  # type: ignore[type-var]
-        name="sign", description="Sign a player to the specified team"
-    )
+    @_transactions.command(name="sign", description="Sign a player to the specified team")
     @app_commands.describe(
         player="Player to sign",
         team="Team the player is being sign on",
         notes="Transaction notes (Optional)",
         override="Admin only override",
     )
-    @app_commands.autocomplete(team=TeamMixIn.teams_autocomplete)  # type: ignore[type-var]
+    @app_commands.autocomplete(team=TeamMixIn.teams_autocomplete)
     async def _transactions_sign(
         self,
         interaction: discord.Interaction,
@@ -756,8 +740,8 @@ class TransactionMixIn(RSCMixIn):
                 ephemeral=True,
             )
 
-    @_transactions.command(name="resign", description="Re-sign a player to their team.")  # type: ignore[type-var]
-    @app_commands.autocomplete(team=TeamMixIn.teams_autocomplete)  # type: ignore[type-var]
+    @_transactions.command(name="resign", description="Re-sign a player to their team.")
+    @app_commands.autocomplete(team=TeamMixIn.teams_autocomplete)
     @app_commands.describe(
         player="RSC Discord Member",
         team="Name of team player resigning player",
@@ -847,7 +831,7 @@ class TransactionMixIn(RSCMixIn):
                 ephemeral=True,
             )
 
-    @_transactions.command(name="sub", description="Substitute a player on a team")  # type: ignore[type-var]
+    @_transactions.command(name="sub", description="Substitute a player on a team")
     @app_commands.describe(
         player_in="Player being subbed in on the team",
         player_out="Player being subbed out on the team",
@@ -977,7 +961,7 @@ class TransactionMixIn(RSCMixIn):
             embed.add_field(name="Notes", value=result.notes, inline=False)
         await interaction.followup.send(embed=embed, ephemeral=True)
 
-    @_transactions.command(  # type: ignore[type-var]
+    @_transactions.command(
         name="announce",
         description="Perform a generic announcement to the transactions channel.",
     )
@@ -997,7 +981,7 @@ class TransactionMixIn(RSCMixIn):
         await trans_channel.send(message, allowed_mentions=discord.AllowedMentions(users=True))
         await interaction.response.send_message(content="Done", ephemeral=True)
 
-    @_transactions.command(  # type: ignore[type-var]
+    @_transactions.command(
         name="announcetrade",
         description="Announce a trade between two franchises to the transaction chanenl",
     )
@@ -1032,7 +1016,7 @@ class TransactionMixIn(RSCMixIn):
         embed.add_field(name="Content", value=trade_modal.trade.value)
         await interaction.followup.send(embed=embed, ephemeral=True)
 
-    @_transactions.command(  # type: ignore[type-var]
+    @_transactions.command(
         name="trade",
         description="Process a trade between franchises",
     )
@@ -1148,7 +1132,7 @@ class TransactionMixIn(RSCMixIn):
 
         await interaction.followup.send(embed=embed, ephemeral=True)
 
-    @_transactions.command(  # type: ignore[type-var]
+    @_transactions.command(
         name="captain",
         description="Promote player(s) to captain of their team",
     )
@@ -1251,7 +1235,7 @@ class TransactionMixIn(RSCMixIn):
         embed.add_field(name="Players", value="\n".join([m.mention for m in results]), inline=False)
         await interaction.followup.send(embed=embed, ephemeral=True)
 
-    @_transactions.command(  # type: ignore[type-var]
+    @_transactions.command(
         name="expire",
         description="Manually expire a temporary FA contract",
     )
@@ -1329,7 +1313,7 @@ class TransactionMixIn(RSCMixIn):
             ephemeral=True,
         )
 
-    @_transactions.command(  # type: ignore[type-var]
+    @_transactions.command(
         name="sublist",
         description="Fetch a list of all players with a temporary FA contract",
     )
@@ -1348,7 +1332,7 @@ class TransactionMixIn(RSCMixIn):
         embed.add_field(name="Team", value="\n".join([x[2] for x in sub_fmt]), inline=True)
         await interaction.response.send_message(embed=embed)
 
-    @_transactions.command(  # type: ignore[type-var]
+    @_transactions.command(
         name="redshirt",
         description="Move an AGM to redshirt status",
     )
@@ -1407,7 +1391,7 @@ class TransactionMixIn(RSCMixIn):
             ephemeral=True,
         )
 
-    @_transactions.command(  # type: ignore[type-var]
+    @_transactions.command(
         name="ir",
         description="Modify inactive reserve status of a player",
     )
@@ -1500,7 +1484,7 @@ class TransactionMixIn(RSCMixIn):
             ephemeral=True,
         )
 
-    @_transactions.command(name="retire", description="Retire a player from the league")  # type: ignore[type-var]
+    @_transactions.command(name="retire", description="Retire a player from the league")
     @app_commands.describe(
         player="RSC discord member to retire",
         notes="Transaction notes (Optional)",
@@ -1573,9 +1557,7 @@ class TransactionMixIn(RSCMixIn):
             ephemeral=True,
         )
 
-    @_transactions.command(  # type: ignore[type-var]
-        name="clearsublist", description="Clear cached substitute list"
-    )
+    @_transactions.command(name="clearsublist", description="Clear cached substitute list")
     @app_commands.checks.has_permissions(manage_guild=True)
     async def _transactions_clear_sub_list(self, interaction: discord.Interaction):
         if not interaction.guild:
@@ -1584,7 +1566,7 @@ class TransactionMixIn(RSCMixIn):
         await self._set_substitutes(interaction.guild, subs=[])
         await interaction.response.send_message("Locally cached substitute list has been cleared.", ephemeral=True)
 
-    @_transactions.command(name="history", description="Fetch transaction history")  # type: ignore[type-var]
+    @_transactions.command(name="history", description="Fetch transaction history")
     @app_commands.describe(
         player="RSC Discord Member (Optional)",
         executor="Transaction Executor (Optional)",
@@ -1660,7 +1642,7 @@ class TransactionMixIn(RSCMixIn):
 
         await interaction.followup.send(embed=embed, ephemeral=True)
 
-    @_transactions.command(name="leaderboard", description="Display transaction committee leaderboard")  # type: ignore[type-var]
+    @_transactions.command(name="leaderboard", description="Display transaction committee leaderboard")
     @app_commands.describe(
         season='RSC Season Number. Example: "23" (Default: Current Season)',
         transaction_type="Transaction Type (Optional)",
@@ -1729,7 +1711,7 @@ class TransactionMixIn(RSCMixIn):
         embed.add_field(name="Total", value="\n".join(str(x[1]) for x in leader_fmt), inline=True)
         await interaction.followup.send(embed=embed)
 
-    @_transactions.command(name="draft", description="Process a draft pick and announce it")  # type: ignore[type-var]
+    @_transactions.command(name="draft", description="Process a draft pick and announce it")
     @app_commands.describe(
         player="RSC discord member being drafted",
         team="Team name",
@@ -1737,7 +1719,7 @@ class TransactionMixIn(RSCMixIn):
         pick="Pick number",
         override="Admin only override (Default: False)",
     )
-    @app_commands.autocomplete(team=TeamMixIn.teams_autocomplete)  # type: ignore[type-var]
+    @app_commands.autocomplete(team=TeamMixIn.teams_autocomplete)
     async def _transactions_draft_cmd(
         self,
         interaction: discord.Interaction,

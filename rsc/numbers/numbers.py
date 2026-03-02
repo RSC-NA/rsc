@@ -53,9 +53,7 @@ class NumberMixIn(RSCMixIn):
 
     # App Commands
 
-    @_numbers.command(  # type: ignore[type-var]
-        name="settings", description="Configure numbers module settings"
-    )
+    @_numbers.command(name="settings", description="Configure numbers module settings")
     @app_commands.checks.has_permissions(manage_guild=True)
     async def _numbers_settings_cmd(self, interaction: discord.Interaction):
         guild = interaction.guild
@@ -77,9 +75,7 @@ class NumberMixIn(RSCMixIn):
 
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-    @_numbers.command(  # type: ignore[type-var]
-        name="role", description="Configure the Number Committee role"
-    )
+    @_numbers.command(name="role", description="Configure the Number Committee role")
     @app_commands.checks.has_permissions(manage_guild=True)
     async def _set_numbers_role_cmd(self, interaction: discord.Interaction, role: discord.Role):
         guild = interaction.guild
@@ -94,9 +90,7 @@ class NumberMixIn(RSCMixIn):
         )
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-    @_numbers.command(  # type: ignore[type-var]
-        name="peaks", description="Display player MMR peaks for a psyonix season"
-    )
+    @_numbers.command(name="peaks", description="Display player MMR peaks for a psyonix season")
     @app_commands.describe(player="RSC Discord Member", psyonix_season="Pysonix season to display")
     async def _numbers_peaks_cmd(
         self,
@@ -151,7 +145,7 @@ class NumberMixIn(RSCMixIn):
         )
         await interaction.followup.send(embed=embed)
 
-    @_numbers.command(  # type: ignore[type-var]
+    @_numbers.command(
         name="gamesplayed",
         description="Display tracker games played for a pysonix season",
     )

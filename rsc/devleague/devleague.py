@@ -28,7 +28,7 @@ class DevLeagueMixIn(RSCMixIn):
 
     # Commands
 
-    @_dev_league.command(  # type: ignore[type-var]
+    @_dev_league.command(
         name="status",
         description="Check your status for Dev League",
     )
@@ -65,7 +65,7 @@ class DevLeagueMixIn(RSCMixIn):
 
         await interaction.followup.send(embed=embed)
 
-    @_dev_league.command(  # type: ignore[type-var]
+    @_dev_league.command(
         name="checkin",
         description="Check in for dev league",
     )
@@ -96,7 +96,7 @@ class DevLeagueMixIn(RSCMixIn):
         )
         await interaction.followup.send(embed=embed)
 
-    @_dev_league.command(  # type: ignore[type-var]
+    @_dev_league.command(
         name="checkout",
         description="Check out of dev league",
     )

@@ -27,9 +27,10 @@ class TestFranchisesApiCalls:
                 gm_name = f.gm.rsc_name if f.gm else "None"
                 print(f"  - ID: {f.id}, Name: {f.name}, GM: {gm_name}")
         except RscException as e:
-            pytest.fail(f"franchises() raised RscException: {e}")
+            # pytest.fail(f"franchises() raised RscException: {str(e)}")
+            pytest.fail(reason=str(e))
         except Exception as e:
-            pytest.fail(f"franchises() raised unexpected exception: {e}")
+            pytest.fail(f"franchises() raised unexpected exception: {str(e)}")
 
     @pytest.mark.asyncio
     async def test_franchise_logo_api_call(self, rsc_bot: RSC, mock_guild):
@@ -51,9 +52,9 @@ class TestFranchisesApiCalls:
                 print("✓ franchise_logo() returned None (no logo)")
 
         except RscException as e:
-            pytest.fail(f"franchise_logo() raised RscException: {e}")
+            pytest.fail(f"franchise_logo() raised RscException: {str(e)}")
         except Exception as e:
-            pytest.fail(f"franchise_logo() raised unexpected exception: {e}")
+            pytest.fail(f"franchise_logo() raised unexpected exception: {str(e)}")
 
 
 class TestFranchisesApiDataStructures:
@@ -76,7 +77,7 @@ class TestFranchisesApiDataStructures:
             assert hasattr(franchise, "gm"), "Franchise should have 'gm' attribute"
             print(f"✓ Franchise structure valid - ID: {franchise.id}, Name: {franchise.name}")
         except Exception as e:
-            pytest.fail(f"Franchise structure test failed: {e}")
+            pytest.fail(f"Franchise structure test failed: {str(e)}")
 
 
 class TestFranchisesApiHelperFunctions:
@@ -103,7 +104,7 @@ class TestFranchisesApiHelperFunctions:
         except ValueError as e:
             print(f"✓ franchise_gm_by_name() correctly handled multiple matches: {e}")
         except Exception as e:
-            pytest.fail(f"franchise_gm_by_name() failed: {e}")
+            pytest.fail(f"franchise_gm_by_name() failed: {str(e)}")
 
     @pytest.mark.asyncio
     async def test_fetch_franchise(self, rsc_bot: RSC, mock_guild):
@@ -126,7 +127,7 @@ class TestFranchisesApiHelperFunctions:
         except ValueError as e:
             print(f"✓ fetch_franchise() correctly handled multiple matches: {e}")
         except Exception as e:
-            pytest.fail(f"fetch_franchise() failed: {e}")
+            pytest.fail(f"fetch_franchise() failed: {str(e)}")
 
     @pytest.mark.asyncio
     async def test_franchise_name_to_id(self, rsc_bot: RSC, mock_guild):
@@ -146,9 +147,9 @@ class TestFranchisesApiHelperFunctions:
             print(f"✓ franchise_name_to_id() returned ID: {result}")
 
         except AttributeError as e:
-            pytest.fail(f"franchise_name_to_id() raised AttributeError: {e}")
+            pytest.fail(f"franchise_name_to_id() raised AttributeError: {str(e)}")
         except Exception as e:
-            pytest.fail(f"franchise_name_to_id() failed: {e}")
+            pytest.fail(f"franchise_name_to_id() failed: {str(e)}")
 
     @pytest.mark.asyncio
     async def test_full_logo_url(self, rsc_bot: RSC, mock_guild):
@@ -164,7 +165,7 @@ class TestFranchisesApiHelperFunctions:
             # Expected if API host not configured
             print(f"✓ full_logo_url() correctly handled missing host: {e}")
         except Exception as e:
-            pytest.fail(f"full_logo_url() failed: {e}")
+            pytest.fail(f"full_logo_url() failed: {str(e)}")
 
 
 if __name__ == "__main__":

@@ -34,7 +34,7 @@ class AdminIntentsMixIn(AdminMixIn):
         default_permissions=discord.Permissions(manage_guild=True),
     )
 
-    @_intents.command(name="set", description="Manually set intent for a player")  # type: ignore[type-var]
+    @_intents.command(name="set", description="Manually set intent for a player")
     @app_commands.describe(
         member="Discord member to declare intent on",
         returning="Returning status. (True for returning, False for not returning)",
@@ -79,7 +79,7 @@ class AdminIntentsMixIn(AdminMixIn):
             embed.description = f"{member.mention} intent to play has been set to **NOT RETURNING**"
         await interaction.edit_original_response(embed=embed, view=None)
 
-    @_intents.command(  # type: ignore[type-var]
+    @_intents.command(
         name="missingrole",
         description="Configure the Intent to Play missing discord role",
     )
@@ -97,7 +97,7 @@ class AdminIntentsMixIn(AdminMixIn):
             ephemeral=True,
         )
 
-    @_intents.command(  # type: ignore[type-var]
+    @_intents.command(
         name="missingchannel",
         description="Configure the Intent to Play missing channel",
     )
@@ -115,7 +115,7 @@ class AdminIntentsMixIn(AdminMixIn):
             ephemeral=True,
         )
 
-    @_intents.command(  # type: ignore[type-var]
+    @_intents.command(
         name="missingmsg",
         description="Configure the Intent to Play missing message on ping",
     )
@@ -130,7 +130,7 @@ class AdminIntentsMixIn(AdminMixIn):
 
         await self._set_intent_missing_message(guild, intent_modal.intent_msg.value)
 
-    @_intents.command(name="populate", description="Apply Intent Missing role to applicable players")  # type: ignore[type-var]
+    @_intents.command(name="populate", description="Apply Intent Missing role to applicable players")
     async def _intents_populate_role_cmd(self, interaction: discord.Interaction):
         guild = interaction.guild
         if not guild:
@@ -211,7 +211,7 @@ class AdminIntentsMixIn(AdminMixIn):
             )
         )
 
-    @_intents.command(name="ping", description="Send a ping to all players with missing intents")  # type: ignore[type-var]
+    @_intents.command(name="ping", description="Send a ping to all players with missing intents")
     async def _intents_missing_ping_cmd(self, interaction: discord.Interaction):
         guild = interaction.guild
         if not guild:

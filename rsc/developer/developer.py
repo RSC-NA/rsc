@@ -29,7 +29,7 @@ class DeveloperMixIn(RSCMixIn):
 
     # Commands
 
-    @_log_group.command(  # type: ignore[type-var]
+    @_log_group.command(
         name="tail",
         description=f"Tail the latest log file (Max {BUFMAX} bytes)",
     )

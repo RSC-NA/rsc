@@ -50,9 +50,7 @@ class FranchiseMixIn(RSCMixIn):
 
     # Commands
 
-    @app_commands.command(  # type: ignore[type-var]
-        name="franchises", description="Get a list of all RSC franchises"
-    )
+    @app_commands.command(name="franchises", description="Get a list of all RSC franchises")
     @app_commands.guild_only
     async def _franchises(self, interaction: discord.Interaction):
         """Get a list of all RSC franchises"""

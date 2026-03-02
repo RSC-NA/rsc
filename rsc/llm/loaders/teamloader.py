@@ -27,7 +27,8 @@ class TeamDocumentLoader(BaseLoader):
     def _process_teams(self) -> Iterator[Document]:
         """Process teams and yield Documents."""
         for idx, t in enumerate(self.teams):
-            if not (t.id and t.name and t.players):
+            if not (t.id and t.name and t.players and t.franchise and t.tier):
+                log.warning(f"Skipping team with missing information: {t}")
                 continue
 
             log.debug(f"Processing team: {t.name} ({t.id})")

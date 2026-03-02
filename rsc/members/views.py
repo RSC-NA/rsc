@@ -61,7 +61,7 @@ class ReferrerSelect(discord.ui.Select):
     async def callback(self, interaction: discord.Interaction):
         if self.view:
             self.view.referrer = Referrer(self.values[0])
-        await self.view.confirm(interaction)
+            await self.view.confirm(interaction)
 
 
 class PlatformSelect(discord.ui.Select):
@@ -73,7 +73,7 @@ class PlatformSelect(discord.ui.Select):
     async def callback(self, interaction: discord.Interaction):
         if self.view:
             self.view.platform = Platform(self.values[0])
-        await self.view.confirm(interaction)
+            await self.view.confirm(interaction)
 
 
 class RegionSelect(discord.ui.Select):
@@ -85,7 +85,7 @@ class RegionSelect(discord.ui.Select):
     async def callback(self, interaction: discord.Interaction):
         if self.view:
             self.view.region = RegionPreference(self.values[0])
-        await self.view.confirm(interaction)
+            await self.view.confirm(interaction)
 
 
 class PlayerTypeSelect(discord.ui.Select):
@@ -97,7 +97,7 @@ class PlayerTypeSelect(discord.ui.Select):
     async def callback(self, interaction: discord.Interaction):
         if self.view:
             self.view.player_type = PlayerType(self.values[0])
-        await self.view.confirm(interaction)
+            await self.view.confirm(interaction)
 
 
 class IntentSelect(discord.ui.Select):

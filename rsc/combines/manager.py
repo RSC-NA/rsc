@@ -52,7 +52,7 @@ class CombineManagerMixIn(RSCMixIn):
 
     # Privileged Commands
 
-    @_combine_manager.command(name="settings", description="Display combine settings")  # type: ignore[type-var]
+    @_combine_manager.command(name="settings", description="Display combine settings")
     async def _combines_settings_cmd(self, interaction: discord.Interaction):
         guild = interaction.guild
         if not guild:
@@ -75,7 +75,7 @@ class CombineManagerMixIn(RSCMixIn):
         )
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-    @_combine_manager.command(name="category", description="Configure the combines category channel")  # type: ignore[type-var]
+    @_combine_manager.command(name="category", description="Configure the combines category channel")
     @app_commands.describe(category="Combines Category Channel")
     async def _combines_category_cmd(self, interaction: discord.Interaction, category: discord.CategoryChannel):
         guild = interaction.guild
@@ -91,7 +91,7 @@ class CombineManagerMixIn(RSCMixIn):
             ephemeral=True,
         )
 
-    @_combine_manager.command(name="api", description="Configure the API url for combines")  # type: ignore[type-var]
+    @_combine_manager.command(name="api", description="Configure the API url for combines")
     @app_commands.describe(url="Combines API location (Ex: https://devleague.rscna.com/c-api/)")
     async def _combines_api_cmd(self, interaction: discord.Interaction, url: str):
         guild = interaction.guild
@@ -107,9 +107,7 @@ class CombineManagerMixIn(RSCMixIn):
             ephemeral=True,
         )
 
-    @_combine_manager.command(  # type: ignore[type-var]
-        name="start", description="Begin RSC combines and create channels"
-    )
+    @_combine_manager.command(name="start", description="Begin RSC combines and create channels")
     async def _combines_start(self, interaction: discord.Interaction):
         guild = interaction.guild
         if not guild:
@@ -259,7 +257,7 @@ class CombineManagerMixIn(RSCMixIn):
             )
         )
 
-    @_combine_manager.command(name="stop", description="End RSC combines and delete channels")  # type: ignore[type-var]
+    @_combine_manager.command(name="stop", description="End RSC combines and delete channels")
     async def _combines_stop(self, interaction: discord.Interaction):
         guild = interaction.guild
         if not guild:
@@ -293,7 +291,7 @@ class CombineManagerMixIn(RSCMixIn):
             )
         )
 
-    @_combine_manager.command(  # type: ignore[type-var]
+    @_combine_manager.command(
         name="delrooms",
         description="Delete all combine lobby channels. (Preserves general channels)",
     )

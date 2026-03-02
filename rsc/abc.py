@@ -5,7 +5,7 @@ from os import PathLike
 from typing import TYPE_CHECKING
 from zoneinfo import ZoneInfo
 
-import aiohttp
+from aiohttp import web
 import discord
 from aiohttp.web_runner import AppRunner, TCPSite
 from discord.ext.commands import CogMeta as DPYCogMeta
@@ -196,7 +196,7 @@ class RSCMixIn(ABC):
     ) -> LeaguePlayer: ...
 
     @abstractmethod
-    async def league_player_update_handler(self, request: aiohttp.web.Request): ...
+    async def league_player_update_handler(self, request: web.Request): ...
 
     @abstractmethod
     async def leagues(self, guild: discord.Guild) -> list[League]: ...
@@ -596,7 +596,7 @@ class RSCMixIn(ABC):
     async def tracker_stats(
         self,
         guild: discord.Guild,
-    ) -> TrackerLinkStats:
+    ) -> list[TrackerLinkStats]:
         """Fetch RSC Tracker Stats"""
         ...
 

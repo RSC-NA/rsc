@@ -43,6 +43,7 @@ class BallchasingProcessingView(AuthorOnlyView):
 
         for m in self.matches:
             tier = m.home_team.tier
+
             if not self.tier_groups.get(tier):
                 self.tier_groups[tier] = None
             if not self.status.get(tier):

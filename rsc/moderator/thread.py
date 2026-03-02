@@ -64,9 +64,7 @@ class ThreadMixIn(RSCMixIn):
 
     # Thread Group Commands
 
-    @_thread.command(  # type: ignore[type-var]
-        name="settings", description="Current configuration for ModMail thread handling"
-    )
+    @_thread.command(name="settings", description="Current configuration for ModMail thread handling")
     async def _thread_settings(self, interaction: discord.Interaction):
         if not interaction.guild:
             return
@@ -87,9 +85,7 @@ class ThreadMixIn(RSCMixIn):
         embed.add_field(name="Management Role", value=role.mention if role else "None", inline=False)
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-    @_thread_groups.command(  # type: ignore[type-var]
-        name="list", description="List of current configured ModMail groups"
-    )
+    @_thread_groups.command(name="list", description="List of current configured ModMail groups")
     async def _thread_groups_list(self, interaction: discord.Interaction):
         guild = interaction.guild
         if not guild:
@@ -115,9 +111,7 @@ class ThreadMixIn(RSCMixIn):
 
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-    @_thread_groups.command(  # type: ignore[type-var]
-        name="add", description="Add an assignable group for modmail threads"
-    )
+    @_thread_groups.command(name="add", description="Add an assignable group for modmail threads")
     @app_commands.describe(
         name="Assignable ModMail group name",
         category="ModMail group discord category",
@@ -144,11 +138,9 @@ class ThreadMixIn(RSCMixIn):
 
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-    @_thread_groups.command(  # type: ignore[type-var]
-        name="rm", description="Delete an assignable group for modmail threads"
-    )
+    @_thread_groups.command(name="rm", description="Delete an assignable group for modmail threads")
     @app_commands.describe(group="Assignable ModMail group name")
-    @app_commands.autocomplete(group=thread_autocomplete)  # type: ignore[type-var]
+    @app_commands.autocomplete(group=thread_autocomplete)
     async def _thread_groups_rm(self, interaction: discord.Interaction, group: str):
         if not interaction.guild:
             return
@@ -167,9 +159,7 @@ class ThreadMixIn(RSCMixIn):
         )
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-    @_thread.command(  # type: ignore[type-var]
-        name="category", description="Primary category for incoming modmails"
-    )
+    @_thread.command(name="category", description="Primary category for incoming modmails")
     @app_commands.describe(category="Primary ModMail category")
     async def _thread_category(self, interaction: discord.Interaction, category: discord.CategoryChannel):
         if not interaction.guild:
@@ -180,7 +170,7 @@ class ThreadMixIn(RSCMixIn):
             ephemeral=True,
         )
 
-    @_thread.command(name="role", description="Management role for ModMail threads")  # type: ignore[type-var]
+    @_thread.command(name="role", description="Management role for ModMail threads")
     @app_commands.describe(role="Management role for assigning ModMail threads")
     async def _thread_management_role(self, interaction: discord.Interaction, role: discord.Role):
         if not interaction.guild:
@@ -193,11 +183,9 @@ class ThreadMixIn(RSCMixIn):
 
     # Non-Group Commands
 
-    @app_commands.command(  # type: ignore[type-var]
-        name="assign", description="Assign the current modmail to a specific group"
-    )
+    @app_commands.command(name="assign", description="Assign the current modmail to a specific group")
     @app_commands.describe(group="Assignable ModMail group name")
-    @app_commands.autocomplete(group=thread_autocomplete)  # type: ignore[type-var]
+    @app_commands.autocomplete(group=thread_autocomplete)
     @app_commands.guild_only
     async def _thread_assign(self, interaction: discord.Interaction, group: str):
         channel = interaction.channel
@@ -232,9 +220,7 @@ class ThreadMixIn(RSCMixIn):
             ephemeral=True,
         )
 
-    @app_commands.command(  # type: ignore[type-var]
-        name="unassign", description="Move thread back to the primary ModMail category"
-    )
+    @app_commands.command(name="unassign", description="Move thread back to the primary ModMail category")
     @app_commands.guild_only
     async def _thread_unassign(self, interaction: discord.Interaction):
         channel = interaction.channel
@@ -275,9 +261,7 @@ class ThreadMixIn(RSCMixIn):
             ephemeral=True,
         )
 
-    @app_commands.command(  # type: ignore[type-var]
-        name="resolve", description="Send resolved message to a modmail thread"
-    )
+    @app_commands.command(name="resolve", description="Send resolved message to a modmail thread")
     @app_commands.guild_only
     async def _thread_resolve(self, interaction: discord.Interaction):
         guild = interaction.guild
@@ -299,7 +283,7 @@ class ThreadMixIn(RSCMixIn):
                 return
         await interaction.response.send_message("Must be used in a modmail thread.", ephemeral=True)
 
-    @app_commands.command(name="feet", description="Moar feet pics!!!")  # type: ignore[type-var]
+    @app_commands.command(name="feet", description="Moar feet pics!!!")
     @app_commands.checks.has_permissions(manage_guild=True)
     async def _this_is_a_secret(self, interaction: discord.Interaction):
         """This is a secret. Nobody say anything... :shh:"""

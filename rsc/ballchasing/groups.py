@@ -87,6 +87,9 @@ async def tier_bc_group(bapi: ballchasing.Api, guild: discord.Guild, tlg: str, m
     if not mtype_group:
         return None
 
+    if not match.home_team.tier:
+        raise ValueError("API match does not have tier information for home team")
+
     tname = match.home_team.tier
     tier_group = None
 

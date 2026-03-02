@@ -38,7 +38,7 @@ class TrackerMixIn(RSCMixIn):
 
     # App Commands
 
-    @_trackers.command(name="add", description="Add a new player tracker")  # type: ignore[type-var]
+    @_trackers.command(name="add", description="Add a new player tracker")
     @app_commands.describe(player="RSC Discord Member", tracker="Rocket League tracker link")
     @app_commands.checks.has_permissions(manage_guild=True)
     async def _trackers_add_cmd(self, interaction: discord.Interaction, player: discord.Member, tracker: str):
@@ -64,7 +64,7 @@ class TrackerMixIn(RSCMixIn):
         embed.add_field(name="Tracker", value=tracker, inline=False)
         await interaction.followup.send(embed=embed, view=tracker_view, ephemeral=False)
 
-    @_trackers.command(name="list", description="List the trackers")  # type: ignore[type-var]
+    @_trackers.command(name="list", description="List the trackers")
     @app_commands.describe(player="RSC Discord Member", ids="Show tracker ids")
     async def _trackers_list(self, interaction: discord.Interaction, player: discord.Member, ids: bool = False):
         guild = interaction.guild
@@ -101,7 +101,7 @@ class TrackerMixIn(RSCMixIn):
             )
         await interaction.followup.send(embed=embed, ephemeral=False)
 
-    @_trackers.command(name="link", description="Link a tracker from player")  # type: ignore[type-var]
+    @_trackers.command(name="link", description="Link a tracker from player")
     @app_commands.describe(tracker_id="Tracker API ID", player="RSC Discord Member")
     @app_commands.checks.has_permissions(manage_guild=True)
     async def _trackers_link_cmd(self, interaction: discord.Interaction, tracker_id: int, player: discord.Member):
@@ -127,7 +127,7 @@ class TrackerMixIn(RSCMixIn):
         embed = SuccessEmbed(title="Tracker Linked", description=f"Linked tracker {tracker_id} from {player.mention}")
         await interaction.followup.send(embed=embed, ephemeral=False)
 
-    @_trackers.command(name="unlink", description="Unlink a tracker from player")  # type: ignore[type-var]
+    @_trackers.command(name="unlink", description="Unlink a tracker from player")
     @app_commands.describe(tracker_id="Tracker API ID", player="RSC Discord Member")
     @app_commands.checks.has_permissions(manage_guild=True)
     async def _trackers_unlink_cmd(self, interaction: discord.Interaction, tracker_id: int, player: discord.Member):
@@ -153,7 +153,7 @@ class TrackerMixIn(RSCMixIn):
         embed = SuccessEmbed(title="Tracker Unlinked", description=f"Unlinked tracker {tracker_id} from {player.mention}")
         await interaction.followup.send(embed=embed, ephemeral=False)
 
-    @_trackers.command(name="delete", description="Delete a tracker (Must have zero MMR pulls)")  # type: ignore[type-var]
+    @_trackers.command(name="delete", description="Delete a tracker (Must have zero MMR pulls)")
     @app_commands.describe(tracker_id="Tracker API ID")
     @app_commands.checks.has_permissions(manage_guild=True)
     async def _trackers_delete_cmd(self, interaction: discord.Interaction, tracker_id: int):
@@ -186,7 +186,7 @@ class TrackerMixIn(RSCMixIn):
         embed = SuccessEmbed(title="Tracker Deleted", description=f"Deleted tracker ID {tracker_id}.")
         await interaction.followup.send(embed=embed, ephemeral=False)
 
-    @_trackers.command(name="recent", description="Show most recent RL tracker pulls")  # type: ignore[type-var]
+    @_trackers.command(name="recent", description="Show most recent RL tracker pulls")
     @app_commands.describe(status="Tracker status to query (Default: Pulled)")
     async def _trackers_recent_pull(
         self,
@@ -231,7 +231,7 @@ class TrackerMixIn(RSCMixIn):
         )
         await interaction.followup.send(embed=embed, ephemeral=False)
 
-    @_trackers.command(name="stats", description="Display RSC tracker link stats")  # type: ignore[type-var]
+    @_trackers.command(name="stats", description="Display RSC tracker link stats")
     async def _trackers_stats(
         self,
         interaction: discord.Interaction,
@@ -261,9 +261,7 @@ class TrackerMixIn(RSCMixIn):
         )
         await interaction.followup.send(embed=embed, ephemeral=False)
 
-    @_trackers.command(  # type: ignore[type-var]
-        name="old", description="Display number of outdated RSC tracker links"
-    )
+    @_trackers.command(name="old", description="Display number of outdated RSC tracker links")
     @app_commands.describe(
         status="Tracker status to query (Default: Pulled)",
         days="Number of days since last update (Default: 90)",
@@ -308,7 +306,7 @@ class TrackerMixIn(RSCMixIn):
         )
         await interaction.followup.send(embed=embed)
 
-    @_trackers.command(name="merge", description="Merge tracker pulls")  # type: ignore[type-var]
+    @_trackers.command(name="merge", description="Merge tracker pulls")
     @app_commands.describe(source="Source tracker ID", dest="Destination tracker ID")
     @app_commands.checks.has_permissions(manage_guild=True)
     async def _trackers_merge_cmd(
@@ -332,7 +330,7 @@ class TrackerMixIn(RSCMixIn):
 
     # Non-Group Commands
 
-    @app_commands.command(  # type: ignore[type-var]
+    @app_commands.command(
         name="accounts",
         description="Display rocket league accounts associated with a player",
     )
@@ -413,7 +411,7 @@ class TrackerMixIn(RSCMixIn):
     async def tracker_stats(
         self,
         guild: discord.Guild,
-    ) -> TrackerLinkStats:
+    ) -> list[TrackerLinkStats]:
         """Fetch RSC Tracker Stats"""
         async with ApiClient(self._api_conf[guild.id]) as client:
             api = TrackerLinksApi(client)

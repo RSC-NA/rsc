@@ -35,6 +35,10 @@ if __name__ == "__main__":
         print(f"Invalid directory: {replays}")
         sys.exit(1)
 
+    if not bckey:
+        print("Ballchasing API key not found in environment variable BALLCHASING_KEY")
+        sys.exit(1)
+
     bapi = ballchasing.Api(auth_key=bckey, patreon_type=ballchasing.PatreonType.ORG)
 
     for r in replays.glob(pattern="*.replay"):
