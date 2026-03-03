@@ -695,7 +695,6 @@ class MatchMixIn(RSCMixIn):
         match_format: MatchFormat | None = None,
         limit: int = 0,
         offset: int = 0,
-        preseason: int = 0,
     ) -> list[Match]:
         async with ApiClient(self._api_conf[guild.id]) as client:
             api = MatchesApi(client)
@@ -703,8 +702,8 @@ class MatchMixIn(RSCMixIn):
             try:
                 return await api.matches_find_match(
                     teams=teams_fmt,
-                    date__lt=date_lt.isoformat() if date_lt else None,
-                    date__gt=date_gt.isoformat() if date_gt else None,
+                    date__lt=date_lt,
+                    date__gt=date_gt,
                     season=season,
                     season_number=season_number,
                     day=day,
@@ -713,7 +712,6 @@ class MatchMixIn(RSCMixIn):
                     league=self._league[guild.id],
                     limit=limit,
                     offset=offset,
-                    preseason=preseason,
                 )
             except ApiException as exc:
                 raise RscException(response=exc)

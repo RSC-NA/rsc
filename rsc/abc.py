@@ -356,7 +356,6 @@ class RSCMixIn(ABC):
         match_format: MatchFormat | None = None,
         limit: int = 0,
         offset: int = 0,
-        preseason: int = 0,
     ) -> list[Match]: ...
 
     @abstractmethod
