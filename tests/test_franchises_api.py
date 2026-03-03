@@ -1,3 +1,4 @@
+from rscapi import RebrandAFranchise
 import os
 import sys
 from pathlib import Path
@@ -9,6 +10,7 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 from rsc.core import RSC
+from rscapi.models import Franchise
 from rsc.exceptions import RscException
 
 
@@ -56,6 +58,126 @@ class TestFranchisesApiCalls:
         except Exception as e:
             pytest.fail(f"franchise_logo() raised unexpected exception: {str(e)}")
 
+    @pytest.mark.asyncio
+    @pytest.mark.skip(reason="Test not correctly verified yet")
+    async def test_create_franchise(self, rsc_bot: RSC, mock_guild, mock_member):
+        """Test that create_franchise() API call raises NotImplementedError."""
+        try:
+            new_franchise = await rsc_bot.create_franchise(guild=mock_guild, name="Test Franchise", prefix="TF", gm=mock_member)
+            pytest.fail("create_franchise() should raise NotImplementedError")
+        except Exception as e:
+            pytest.fail(f"create_franchise() raised unexpected exception: {str(e)}")
+
+        assert new_franchise is None
+        assert isinstance(new_franchise, Franchise)
+        assert new_franchise.name == "Test Franchise"
+        assert new_franchise.prefix == "TF"
+        assert new_franchise.gm.discord_id == mock_member.id
+        print("✓ create_franchise() returned expected Franchise object")
+
+class TestFranchisesPrivilegedApiCalls:
+
+    @pytest.mark.asyncio
+    async def test_create_franchise_privileged_api_call(self, rsc_bot_no_key: RSC, rsc_bot_invalid_key: RSC, mock_guild, mock_member):
+        """Test that create_franchise() API call raises NotImplementedError."""
+        with pytest.raises(RscException) as exc:
+            await rsc_bot_no_key.create_franchise(guild=mock_guild, name="Test Franchise", prefix="TF", gm=mock_member)
+        assert exc.type == RscException
+        assert exc.value.type == "NotAuthenticated"
+        assert exc.value.response.reason == "Forbidden"
+        assert exc.value.status == 403
+        assert exc.value.response.status == 403
+
+        with pytest.raises(RscException) as exc:
+            await rsc_bot_invalid_key.create_franchise(guild=mock_guild, name="Test Franchise", prefix="TF", gm=mock_member)
+        assert exc.type == RscException
+        assert exc.value.type == "NotAuthenticated"
+        assert exc.value.response.reason == "Forbidden"
+        assert exc.value.status == 403
+        assert exc.value.response.status == 403
+
+    @pytest.mark.asyncio
+    async def test_rebrand_franchise_privileged_api_call(self, rsc_bot_no_key: RSC, rsc_bot_invalid_key: RSC, mock_guild, mock_member):
+        """Test that rebrand_franchise() API call raises NotImplementedError."""
+
+        flist = await rsc_bot_no_key.franchises(mock_guild)
+        if not flist:
+            pytest.fail("No franchises found to test rebrand_franchise()")
+        franchise = flist.pop(0)
+        print(f"Testing rebrand_franchise() on franchise ID {franchise.id}, Name: {franchise.name}")
+
+        rebrand = RebrandAFranchise(name="New Franchise Name", prefix="NF", teams=[])
+        with pytest.raises(RscException) as exc:
+            await rsc_bot_no_key.rebrand_franchise(guild=mock_guild, id=franchise.id, rebrand=rebrand)
+        assert exc.type == RscException
+        assert exc.value.type == "NotAuthenticated"
+        assert exc.value.response.reason == "Forbidden"
+        assert exc.value.status == 403
+        assert exc.value.response.status == 403
+
+        with pytest.raises(RscException) as exc:
+            await rsc_bot_invalid_key.rebrand_franchise(guild=mock_guild, id=franchise.id, rebrand=rebrand)
+        assert exc.type == RscException
+        assert exc.value.type == "NotAuthenticated"
+        assert exc.value.response.reason == "Forbidden"
+        assert exc.value.status == 403
+        assert exc.value.response.status == 403
+
+    @pytest.mark.asyncio
+    async def test_transfer_franchise_privileged_api_call(self, rsc_bot_no_key: RSC, rsc_bot_invalid_key: RSC, mock_guild, mock_member):
+        """Test that transfer_franchise() API call raises NotImplementedError."""
+
+        flist = await rsc_bot_no_key.franchises(mock_guild)
+        if not flist:
+            pytest.fail("No franchises found to test transfer_franchise()")
+        franchise = flist.pop(0)
+        print(f"Testing transfer_franchise() on franchise ID {franchise.id}, Name: {franchise.name}")
+
+        rebrand = RebrandAFranchise(name="New Franchise Name", prefix="NF", teams=[])
+        with pytest.raises(RscException) as exc:
+            await rsc_bot_no_key.transfer_franchise(guild=mock_guild, id=franchise.id, gm=mock_member)
+        assert exc.type == RscException
+        assert exc.value.type == "NotAuthenticated"
+        assert exc.value.response.reason == "Forbidden"
+        assert exc.value.status == 403
+        assert exc.value.response.status == 403
+
+        with pytest.raises(RscException) as exc:
+            await rsc_bot_invalid_key.transfer_franchise(guild=mock_guild, id=franchise.id, gm=mock_member)
+        assert exc.type == RscException
+        assert exc.value.type == "NotAuthenticated"
+        assert exc.value.response.reason == "Forbidden"
+        assert exc.value.status == 403
+        assert exc.value.response.status == 403
+
+    @pytest.mark.asyncio
+    async def test_upload_logo_privileged_api_call(self, rsc_bot_no_key: RSC, rsc_bot_invalid_key: RSC, mock_guild, mock_member):
+        """Test that upload_franchise_logo() API call raises NotImplementedError."""
+
+        flist = await rsc_bot_no_key.franchises(mock_guild)
+        if not flist:
+            pytest.fail("No franchises found to test upload_franchise_logo()")
+        franchise = flist.pop(0)
+        print(f"Testing upload_franchise_logo() on franchise ID {franchise.id}, Name: {franchise.name}")
+
+        logo = bytes("fake image data", "utf-8")
+
+        rebrand = RebrandAFranchise(name="New Franchise Name", prefix="NF", teams=[])
+        with pytest.raises(RscException) as exc:
+            await rsc_bot_no_key.upload_franchise_logo(guild=mock_guild, id=franchise.id, logo=logo)
+        assert exc.type == RscException
+        assert exc.value.type == "NotAuthenticated"
+        assert exc.value.response.reason == "Forbidden"
+        assert exc.value.status == 403
+        assert exc.value.response.status == 403
+
+        with pytest.raises(RscException) as exc:
+            await rsc_bot_invalid_key.upload_franchise_logo(guild=mock_guild, id=franchise.id, logo=logo)
+        assert exc.type == RscException
+        assert exc.value.type == "NotAuthenticated"
+        assert exc.value.response.reason == "Forbidden"
+        assert exc.value.status == 403
+        assert exc.value.response.status == 403
 
 class TestFranchisesApiDataStructures:
     """Test that API responses have expected structure."""

@@ -92,9 +92,21 @@ class MockBot(RSC):
 
 @pytest.fixture
 def rsc_bot(mock_guild, api_conf) -> RSC:
-    """Testable version of MemberMixIn with minimal dependencies."""
-
     return MockBot(mock_guild, api_conf)
+
+@pytest.fixture
+def rsc_bot_no_key(mock_guild) -> RSC:
+    """Testable version of MemberMixIn with minimal dependencies."""
+    api_conf_no_key = Configuration(host=STAGING_URL)  # Create a copy without the API key
+
+    return MockBot(mock_guild, api_conf_no_key)
+
+@pytest.fixture
+def rsc_bot_invalid_key(mock_guild) -> RSC:
+    """Testable version of MemberMixIn with minimal dependencies."""
+    api_conf_invalid_key = Configuration(host=STAGING_URL, api_key={"Api-Key": "invalid_key"}, api_key_prefix={"Api-Key": "Api-Key"})
+
+    return MockBot(mock_guild, api_conf_invalid_key)
 
 
 @pytest.fixture(scope="function")

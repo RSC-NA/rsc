@@ -98,6 +98,32 @@ class TestPlayersApiCalls:
         except Exception as e:
             pytest.fail(f"player_intents() raised unexpected exception: {e}")
 
+class TestPlayersPrivilegedApiCalls:
+
+    @pytest.mark.asyncio
+    async def test_patch_player_privileged_api_call(self, rsc_bot_no_key: RSC, rsc_bot_invalid_key: RSC, mock_guild, mock_member):
+        """Test that patch_player() API call raises NotImplementedError."""
+
+        plist = await rsc_bot_no_key.players(mock_guild, discord_id=mock_member.id, limit=1)
+        if not plist:
+            pytest.skip("No player found to test patch_player()")
+        player = plist.pop(0)
+
+        with pytest.raises(RscException) as exc:
+            await rsc_bot_no_key.update_league_player(guild=mock_guild, player_id=player.id, executor=mock_member, current_mmr=600)
+        assert exc.type == RscException
+        assert exc.value.type == "NotAuthenticated"
+        assert exc.value.response.reason == "Forbidden"
+        assert exc.value.status == 403
+        assert exc.value.response.status == 403
+
+        with pytest.raises(RscException) as exc:
+            await rsc_bot_invalid_key.update_league_player(guild=mock_guild, player_id=player.id, executor=mock_member, current_mmr=600)
+        assert exc.type == RscException
+        assert exc.value.type == "NotAuthenticated"
+        assert exc.value.response.reason == "Forbidden"
+        assert exc.value.status == 403
+        assert exc.value.response.status == 403
 
 class TestPlayersApiDataStructures:
     """Test that API responses have expected structure."""

@@ -287,6 +287,27 @@ class TestTransactionsApiCalls:
             pytest.fail(f"draft() raised unexpected exception: {e}")
 
 
+class TestTransactionsPrivilegedApiCalls:
+
+    @pytest.mark.asyncio
+    async def test_cut_privileged_api_call(self, rsc_bot_no_key: RSC, rsc_bot_invalid_key: RSC, mock_guild, mock_member):
+        """Test that cut() API call raises NotImplementedError."""
+        with pytest.raises(RscException) as exc:
+            await rsc_bot_no_key.cut(guild=mock_guild, player=mock_member, executor=mock_member, notes="Pytest cut", override=True)
+        assert exc.type == RscException
+        assert exc.value.type == "NotAuthenticated"
+        assert exc.value.response.reason == "Forbidden"
+        assert exc.value.status == 403
+        assert exc.value.response.status == 403
+
+        with pytest.raises(RscException) as exc:
+            await rsc_bot_invalid_key.cut(guild=mock_guild, player=mock_member, executor=mock_member, notes="Pytest cut", override=True)
+        assert exc.type == RscException
+        assert exc.value.type == "NotAuthenticated"
+        assert exc.value.response.reason == "Forbidden"
+        assert exc.value.status == 403
+        assert exc.value.response.status == 403
+
 class TestTransactionsApiDataStructures:
     """Test that API responses have expected structure."""
 
