@@ -700,7 +700,7 @@ class MatchMixIn(RSCMixIn):
             api = MatchesApi(client)
             teams_fmt = ",".join(teams)
             try:
-                return await api.matches_find_match(
+                resp = await api.matches_find_match(
                     teams=teams_fmt,
                     date__lt=date_lt,
                     date__gt=date_gt,
@@ -713,6 +713,7 @@ class MatchMixIn(RSCMixIn):
                     limit=limit,
                     offset=offset,
                 )
+                return resp.results
             except ApiException as exc:
                 raise RscException(response=exc)
 
