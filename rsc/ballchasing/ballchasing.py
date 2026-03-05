@@ -12,6 +12,7 @@ import discord
 from redbot.core import app_commands
 from rscapi.models.match import Match
 from rscapi.models.match_results import MatchResults
+from ballchasing.exceptions import DuplicateReplay
 
 from rsc.abc import RSCMixIn
 from rsc.ballchasing import groups, process, validation
@@ -551,6 +552,17 @@ class BallchasingMixIn(RSCMixIn):
                         log.debug("Patching replay under correct group", guild=guild, match=match)
                         await bapi.patch_replay(r_id, group=group)
                         replay_ids.append(r_id)
+            except DuplicateReplay as exc:
+                # duplicate replay. patch it under the BC group
+                log.debug(
+                    str(exc),
+                    guild=guild,
+                    match=match,
+                )
+                if exc.id:
+                    log.debug(f"Patching replay {exc.id} under correct group", guild=guild, match=match)
+                    await bapi.patch_replay(exc.id, group=group)
+                    replay_ids.append(exc.id)
         log.debug(f"Ballchasing IDs: {replay_ids}", guild=guild, match=match)
         return replay_ids
 
