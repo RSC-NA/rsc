@@ -16,6 +16,7 @@ from ballchasing.exceptions import DuplicateReplay
 
 from rsc.abc import RSCMixIn
 from rsc.ballchasing import groups, process, validation
+from rsc.ballchasing.modals import ReportMatchModal
 from rsc.embeds import (
     ApiExceptionErrorEmbed,
     ErrorEmbed,
@@ -236,31 +237,15 @@ class BallchasingMixIn(RSCMixIn):
     @app_commands.describe(
         home="Home team name",
         away="Away team name",
-        replay1="Rocket League replay file",
-        replay2="Rocket League replay file",
-        replay3="Rocket League replay file",
-        replay4="Rocket League replay file",
-        replay5="Rocket League replay file",
-        replay6="Rocket League replay file",
-        replay7="Rocket League replay file",
-        replay8="Rocket League replay file",
+        day="Match day (Optional)",
         override="Admin or stats only override",
     )
     async def _reportmatch_cmd(
         self,
         interaction: discord.Interaction,
         home: str,
-        home_wins: int,
         away: str,
-        away_wins: int,
-        replay1: discord.Attachment,
-        replay2: discord.Attachment | None = None,
-        replay3: discord.Attachment | None = None,
-        replay4: discord.Attachment | None = None,
-        replay5: discord.Attachment | None = None,
-        replay6: discord.Attachment | None = None,
-        replay7: discord.Attachment | None = None,
-        replay8: discord.Attachment | None = None,
+        day: int | None = None,
         override: bool = False,
     ):
         guild = interaction.guild
@@ -269,24 +254,47 @@ class BallchasingMixIn(RSCMixIn):
             return
 
         # Check if override is allowed
-        if override and not self.has_bc_permissions(member):
+        if override and not await self.has_bc_permissions(member):
             return await interaction.response.send_message(
                 embed=ErrorEmbed(description="You do not have permission to override a match result.")
             )
 
-        await interaction.response.defer(ephemeral=True)
+        report_modal = ReportMatchModal(home_team=home, away_team=away)
+        await interaction.response.send_modal(report_modal)
 
-        # Aggregate replays into list
-        argv = locals()
-        replay_files: list[discord.Attachment] = []
-        for k, v in argv.items():
-            if v and k.startswith("replay"):
-                if not await validation.is_replay_file(v):
-                    return await interaction.followup.send(
-                        embed=ErrorEmbed(description=f"`{v.filename}` is not a valid replay file."),
-                        ephemeral=True,
-                    )
-                replay_files.append(v)
+        modal_timed_out = await report_modal.wait()
+        if modal_timed_out:
+            return
+        log.debug("Report match modal finished...")
+
+        log.debug(f"Home Wins: {report_modal.home_wins}")
+        log.debug(f"Away Wins: {report_modal.away_wins}")
+        log.debug(f"Num Replays: {len(report_modal.replays)}")
+
+        home_wins = report_modal.home_wins
+        away_wins = report_modal.away_wins
+        replay_files: list[discord.Attachment] = report_modal.replays
+
+        if not replay_files:
+            return await interaction.followup.send(
+                embed=ErrorEmbed(description="No replays provided."),
+                ephemeral=True,
+            )
+
+        # Validate score input
+        if home_wins + away_wins <= 0:
+            return await interaction.followup.send(
+                embed=ErrorEmbed(description="Invalid score provided. At least one team must have a win."),
+                ephemeral=True,
+            )
+
+        # Validate replays
+        for replay in replay_files:
+            if not await validation.is_replay_file(replay):
+                return await interaction.followup.send(
+                    embed=ErrorEmbed(description=f"`{replay.filename}` is not a valid replay file."),
+                    ephemeral=True,
+                )
         log.debug(f"Replay Count: {len(replay_files)}")
 
         # Check for duplicates
@@ -313,6 +321,7 @@ class BallchasingMixIn(RSCMixIn):
             date_gt=start_date,
             date_lt=end_date,
             teams=[home, away],
+            day=day,
         )
 
         # No match found
@@ -350,11 +359,19 @@ class BallchasingMixIn(RSCMixIn):
             )
         log.debug(f"Found match: {match}", match=match)
 
+        # Check score against match format for validation
+        total_wins = home_wins + away_wins
+        if match.num_games and (total_wins < match.num_games or total_wins > match.num_games):
+            return await interaction.followup.send(
+                embed=ErrorEmbed(description=f"Invalid score for match format. Total wins must match number of games: {match.num_games}"),
+                ephemeral=True,
+            )
+
         # Only GMs and team members can report a match by default
         try:
             is_team_member = await self.discord_member_in_match(member, match)
             is_franchise_gm = await self.is_match_franchise_gm(member=member, match=match)
-            is_admin = self.has_bc_permissions(member)
+            is_admin = await self.has_bc_permissions(member)
         except AttributeError as exc:
             log.error(f"Match {match.id} is missing expected attributes: {exc}", match=match)
             return await interaction.followup.send(
@@ -447,7 +464,14 @@ class BallchasingMixIn(RSCMixIn):
         )
 
         # Send to user
-        await interaction.edit_original_response(embed=result_embed, view=result_view)
+        try:
+            await interaction.edit_original_response(embed=result_embed, view=result_view)
+        except discord.errors.NotFound:
+            # Original message not found, send a new one
+            if result_view:
+                await interaction.followup.send(embed=result_embed, view=result_view, ephemeral=True)
+            else:
+                await interaction.followup.send(embed=result_embed, ephemeral=True)
 
     # Functions
 
