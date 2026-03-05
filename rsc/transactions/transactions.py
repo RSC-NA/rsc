@@ -1589,6 +1589,20 @@ class TransactionMixIn(RSCMixIn):
 
         await interaction.response.defer(ephemeral=True)
         try:
+            # Always use a season to avoid excessive historical data
+            # Default to current season if not provided.
+            if not season:
+                season_obj = await self.current_season(guild)
+                if season_obj:
+                    season = season_obj.number
+                else:
+                    return await interaction.followup.send(
+                        embed=ErrorEmbed(
+                            description="Unable to determine current season for transaction history. Please specify season number."
+                        ),
+                        ephemeral=True,
+                    )
+
             result = await self.transaction_history(
                 guild,
                 player=player,
