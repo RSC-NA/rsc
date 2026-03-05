@@ -353,7 +353,7 @@ class BallchasingMixIn(RSCMixIn):
         try:
             is_team_member = await self.discord_member_in_match(member, match)
             is_franchise_gm = await self.is_match_franchise_gm(member=member, match=match)
-            is_admin = member.guild_permissions.manage_guild
+            is_admin = self.has_bc_permissions(member)
         except AttributeError as exc:
             log.error(f"Match {match.id} is missing expected attributes: {exc}", match=match)
             return await interaction.followup.send(
@@ -362,9 +362,14 @@ class BallchasingMixIn(RSCMixIn):
             )
 
         can_report = is_team_member or is_franchise_gm
-        if override and not is_admin:
+        if override and is_admin:
             # Admin can submit with override
-            can_report = can_report and await self.has_bc_permissions(member)
+            can_report = True
+        elif override and not is_admin:
+            return await interaction.followup.send(
+                embed=ErrorEmbed(description="You do not have permission to override a match result."),
+                ephemeral=True,
+            )
         elif not can_report:
             return await interaction.followup.send(
                 embed=ErrorEmbed(description="You are not on one of the teams in this match."),
