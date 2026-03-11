@@ -2264,7 +2264,9 @@ class TransactionMixIn(RSCMixIn):
                 log.debug(f"Destination Team Name: {dest_team}", guild=guild)
 
                 tvalue = TradeValue(player=Player1(id=player.id, team=dest_team))
-                log.debug(tvalue, guild=guild)
+                log.debug(
+                    f"Player Trade. Src Franchise: {sfranchise.name} Dest Franchise: {dest_franchise.name} Player: {player.id}", guild=guild
+                )
 
                 item = TradeItem(source=sfranchise, destination=dest_franchise, value=tvalue)
                 trade_list.append(item)
@@ -2292,7 +2294,18 @@ class TransactionMixIn(RSCMixIn):
                 sfranchise = FranchiseIdentifier(id=None, name=None, gm=source_gm.id)
 
                 tvalue = TradeValue(pick=DraftPick(tier=tier.capitalize(), round=round, number=0, future=True))
-                log.debug(tvalue, guild=guild)
+                log.debug(
+                    f"Future Trade. Src Franchise: {sfranchise.name} Dest Franchise: {dest_franchise.name}",
+                    guild=guild,
+                )
+                if tvalue.pick:
+                    log.debug(
+                        f"Trade Value: Tier={tvalue.pick.tier} Round={tvalue.pick.round} "
+                        f"Number={tvalue.pick.number} Future={tvalue.pick.future}",
+                        guild=guild,
+                    )
+                else:
+                    log.warning("Future trade value has no pick data.", guild=guild)
 
                 item = TradeItem(source=sfranchise, destination=dest_franchise, value=tvalue)
                 trade_list.append(item)
@@ -2344,11 +2357,23 @@ class TransactionMixIn(RSCMixIn):
                     sfranchise = FranchiseIdentifier(id=None, name=None, gm=source_gm.id)
 
                 tvalue = TradeValue(pick=DraftPick(tier=tier.capitalize(), round=round, number=pick, future=False))
-                log.debug(tvalue, guild=guild)
 
                 if not sfranchise:
                     raise TradeParserException(message="Unable to determine source franchise for pick trade.")
                 item = TradeItem(source=sfranchise, destination=dest_franchise, value=tvalue)
+
+                log.debug(
+                    f"Future Trade. Src Franchise: {sfranchise.name} Dest Franchise: {dest_franchise.name}",
+                    guild=guild,
+                )
+                if tvalue.pick:
+                    log.debug(
+                        f"Trade Value: Tier={tvalue.pick.tier} Round={tvalue.pick.round} "
+                        f"Number={tvalue.pick.number} Future={tvalue.pick.future}",
+                        guild=guild,
+                    )
+                else:
+                    log.warning("Future trade value has no pick data.", guild=guild)
                 trade_list.append(item)
 
             else:
