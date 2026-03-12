@@ -16,7 +16,10 @@ class GuildLogAdapter(logging.LoggerAdapter):
         if match and isinstance(match, Match):
             parts.append(f"[Match {match.id}]")
 
-        parts.append(msg)
-        msg = " ".join(parts)
+        if isinstance(msg, str) or hasattr(msg, "__str__"):
+            parts.append(msg)
+            msg = " ".join(parts)
+        else:
+            msg = f"Log message is not a string or does not have __str__ method. Type: {type(msg)}"
 
         return msg, kwargs
