@@ -28,23 +28,19 @@ from rsc.embeds import (
     ErrorEmbed,
     GreenEmbed,
     OrangeEmbed,
-    SuccessEmbed,
     YellowEmbed,
 )
 from rsc.enums import Platform, PlayerType, Referrer, RegionPreference, Status
 from rsc.exceptions import LeagueNotConfigured, RscException
 from rsc.franchises import FranchiseMixIn
 from rsc.logs import GuildLogAdapter
-from rsc.members.views import (
-    IntentState,
-    IntentToPlayView,
-    PlayerInfoView,
-    SignupState,
-    SignupView,
-)
+from rsc.members.views.intent import IntentState, IntentToPlayView
+from rsc.members.views.player_info import PlayerInfoView
+from rsc.members.views.signup import SignupState, SignupView
 from rsc.teams import TeamMixIn
 from rsc.tiers import TierMixIn
 from rsc.utils import utils
+from rsc.views import ResultView
 
 logger = logging.getLogger("red.rsc.members")
 log = GuildLogAdapter(logger)
@@ -388,63 +384,7 @@ class MemberMixIn(RSCMixIn):
         if not guild or not isinstance(interaction.user, discord.Member):
             return
 
-        log.debug(f"{interaction.user} is signing up for the league")
-        # User prompts
-        intent_view = IntentToPlayView(interaction)
-        await intent_view.prompt()
-        await intent_view.wait()
-
-        match intent_view.state:
-            case IntentState.CANCELLED:
-                return
-            case IntentState.FINISHED:
-                log.debug("Intent view is in finished state.")
-            case _:
-                await interaction.edit_original_response(
-                    embed=ErrorEmbed(
-                        description="Something went wrong declaring your intent to play. Please submit a modmail for assistance."
-                    ),
-                    view=None,
-                )
-                return
-
-        # Process intent if state is finished
-        try:
-            result = await self.declare_intent(
-                guild=guild,
-                member=interaction.user,
-                returning=intent_view.result,
-            )
-            log.debug(f"Intent Result: {result}")
-        except RscException as exc:
-            if exc.status == 409:
-                await interaction.edit_original_response(
-                    embed=YellowEmbed(title="Intent to Play", description=exc.reason),
-                    view=None,
-                )
-                return
-
-            await interaction.edit_original_response(
-                embed=ApiExceptionErrorEmbed(exc),
-                view=None,
-            )
-            return
-
-        if intent_view.result:
-            desc = (
-                "You have successfully declared your intent."
-                " We are excited to have you back next season!\n\n"
-                "If your situation changes before next season, please redeclare your intent."
-            )
-        else:
-            desc = (
-                "You have successfully declared your intent."
-                " We are sorry to see you go and hope you return to the league soon!\n\n"
-                "If you change your mind, please redeclare your intent."
-            )
-
-        embed: discord.Embed = SuccessEmbed(title="Intent to Play Declared", description=desc)
-        await interaction.edit_original_response(embed=embed, view=None)
+        await self._intent_to_play_flow(interaction, guild, interaction.user)
 
     @app_commands.command(name="signup", description="Sign up for the next RSC season")
     @app_commands.guild_only
@@ -452,6 +392,13 @@ class MemberMixIn(RSCMixIn):
         guild = interaction.guild
         if not guild or not isinstance(interaction.user, discord.Member):
             return
+
+        # A current player must declare intent, use that instead
+        log.debug("Checking if user is already signed up for the league")
+        plist = await self.players(guild, discord_id=interaction.user.id, limit=1)
+        if plist:
+            log.debug("User is already signed up for the league. Using intent declaration instead.")
+            return await self._intent_to_play_flow(interaction, guild, interaction.user)
 
         log.debug(f"{interaction.user} is signing up for the league")
 
@@ -469,19 +416,21 @@ class MemberMixIn(RSCMixIn):
         await signup_view.wait()
 
         if signup_view.state == SignupState.CANCELLED:
-            embed = ErrorEmbed(
-                title="Signup Cancelled",
-                description="You have cancelled signing up for RSC. Please try again if this was a mistake.",
+            return await interaction.edit_original_response(
+                view=ResultView(
+                    title="Signup Cancelled",
+                    description="You have cancelled signing up for RSC. Please try again if this was a mistake.",
+                    colour=discord.Colour.red(),
+                )
             )
-            await interaction.edit_original_response(embed=embed, view=None)
-            return
         if signup_view.state != SignupState.FINISHED:
-            embed = ErrorEmbed(
-                title="Signup Failed",
-                description=("Signup failed for an unknown reason. Please try again, if the issue persists contact a staff member."),
+            return await interaction.edit_original_response(
+                view=ResultView(
+                    title="Signup Failed",
+                    description="Signup failed for an unknown reason. Please try again, if the issue persists contact a staff member.",
+                    colour=discord.Colour.red(),
+                )
             )
-            await interaction.edit_original_response(embed=embed, view=None)
-            return
 
         # Filter empty new lines
         tracker_list = list(filter(None, signup_view.trackers))
@@ -505,33 +454,42 @@ class MemberMixIn(RSCMixIn):
             match exc.status:
                 case 409:
                     return await interaction.edit_original_response(
-                        embed=YellowEmbed(
+                        view=ResultView(
                             title="RSC Sign-up",
                             description=(
                                 "You are already signed up for the league. "
                                 "Please use `/intent declare` to declare your intent for next season."
                             ),
-                        ),
-                        view=None,
+                            colour=discord.Colour.yellow(),
+                        )
                     )
                 case 405:
                     return await interaction.edit_original_response(
-                        embed=YellowEmbed(title="RSC Sign-up", description=exc.reason),
-                        view=None,
+                        view=ResultView(
+                            title="RSC Sign-up",
+                            description=exc.reason or "Request not allowed.",
+                            colour=discord.Colour.yellow(),
+                        )
                     )
                 case _:
                     return await interaction.edit_original_response(
-                        embed=ApiExceptionErrorEmbed(exc),
-                        view=None,
+                        view=ResultView(
+                            title="API Error",
+                            description=exc.reason or "An unexpected error occurred.",
+                            colour=discord.Colour.red(),
+                        )
                     )
 
-        success_embed = SuccessEmbed(
-            description=(
-                "You have successfully signed up for the next season of RSC!\n\n"
-                "Please keep up to date with league notices for information on the upcoming Draft and Combines."
+        await interaction.edit_original_response(
+            view=ResultView(
+                title="Success",
+                description=(
+                    "You have successfully signed up for the next season of RSC!\n\n"
+                    "Please keep up to date with league notices for information on the upcoming Draft and Combines."
+                ),
+                colour=discord.Colour.green(),
             )
         )
-        await interaction.edit_original_response(embed=success_embed, view=None)
 
     @app_commands.command(name="permfa", description="Sign up as an permanent free agent")
     @app_commands.guild_only
@@ -556,17 +514,21 @@ class MemberMixIn(RSCMixIn):
         await signup_view.wait()
 
         if signup_view.state == SignupState.CANCELLED:
-            embed = ErrorEmbed(
-                title="Signup Cancelled",
-                description="You have cancelled signing up for RSC. Please try again if this was a mistake.",
+            return await interaction.edit_original_response(
+                view=ResultView(
+                    title="Signup Cancelled",
+                    description="You have cancelled signing up for RSC. Please try again if this was a mistake.",
+                    colour=discord.Colour.red(),
+                )
             )
-            return await interaction.edit_original_response(embed=embed, view=None)
         if signup_view.state != SignupState.FINISHED:
-            embed = ErrorEmbed(
-                title="Signup Failed",
-                description=("Signup failed for an unknown reason. Please try again, if the issue persists contact a staff member."),
+            return await interaction.edit_original_response(
+                view=ResultView(
+                    title="Signup Failed",
+                    description="Signup failed for an unknown reason. Please try again, if the issue persists contact a staff member.",
+                    colour=discord.Colour.red(),
+                )
             )
-            return await interaction.edit_original_response(embed=embed, view=None)
 
         # Filter empty new lines
         tracker_list = list(filter(None, signup_view.trackers))
@@ -590,29 +552,38 @@ class MemberMixIn(RSCMixIn):
             match exc.status:
                 case 409:
                     return await interaction.edit_original_response(
-                        embed=YellowEmbed(
+                        view=ResultView(
                             title="RSC PermFA Sign-up",
                             description="You are already signed up as a permanent free agent.",
-                        ),
-                        view=None,
+                            colour=discord.Colour.yellow(),
+                        )
                     )
                 case 405:
                     return await interaction.edit_original_response(
-                        embed=YellowEmbed(title="RSC PermFA Sign-up", description=exc.reason),
-                        view=None,
+                        view=ResultView(
+                            title="RSC PermFA Sign-up",
+                            description=exc.reason or "Request not allowed.",
+                            colour=discord.Colour.yellow(),
+                        )
                     )
                 case _:
                     return await interaction.edit_original_response(
-                        embed=ApiExceptionErrorEmbed(exc),
-                        view=None,
+                        view=ResultView(
+                            title="API Error",
+                            description=exc.reason or "An unexpected error occurred.",
+                            colour=discord.Colour.red(),
+                        )
                     )
 
-        success_embed = SuccessEmbed(
-            description=(
-                "You have successfully signed up as a permenent free agent in RSC!\n\nPlease be patient while we process your request."
+        await interaction.edit_original_response(
+            view=ResultView(
+                title="PermFA Sign-Up Success",
+                description=(
+                    "You have successfully signed up as a permenent free agent in RSC!\n\nPlease be patient while we process your request."
+                ),
+                colour=discord.Colour.green(),
             )
         )
-        await interaction.edit_original_response(embed=success_embed, view=None)
 
     @app_commands.command(name="playerinfo", description="Display league information about a player")
     @app_commands.describe(player="Player discord name to query")
@@ -734,6 +705,88 @@ class MemberMixIn(RSCMixIn):
         await utils.not_implemented(interaction)
 
     # Helper Functions
+
+    async def _intent_to_play_flow(self, interaction: discord.Interaction, guild: discord.Guild, user: discord.Member):
+        log.debug(f"{interaction.user} is declaring intent", guild=guild)
+
+        # User prompts
+        intent_view = IntentToPlayView(interaction)
+        await intent_view.prompt()
+        await intent_view.wait()
+
+        match intent_view.state:
+            case IntentState.CANCELLED:
+                await interaction.edit_original_response(
+                    view=ResultView(
+                        title="Intent Declaration Cancelled",
+                        description=(
+                            "You have cancelled declaring your intent to play for next season.\n\n"
+                            "If this was an error, please run the command again."
+                        ),
+                        colour=discord.Colour.red(),
+                    )
+                )
+                return
+            case IntentState.FINISHED:
+                log.debug("Intent view is in finished state.")
+            case _:
+                await interaction.edit_original_response(
+                    view=ResultView(
+                        title="Error",
+                        description="Something went wrong declaring your intent to play. Please submit a modmail for assistance.",
+                        colour=discord.Colour.red(),
+                    )
+                )
+                return
+
+        # Process intent if state is finished
+        try:
+            result = await self.declare_intent(
+                guild=guild,
+                member=user,
+                returning=intent_view.result,
+            )
+            log.debug(f"Intent Result: {result}")
+        except RscException as exc:
+            if exc.status == 409:
+                await interaction.edit_original_response(
+                    view=ResultView(
+                        title="Intent to Play",
+                        description=exc.reason or "Conflict error.",
+                        colour=discord.Colour.yellow(),
+                    )
+                )
+                return
+
+            await interaction.edit_original_response(
+                view=ResultView(
+                    title="API Error",
+                    description=exc.reason or "An unexpected error occurred.",
+                    colour=discord.Colour.red(),
+                )
+            )
+            return
+
+        if intent_view.result:
+            desc = (
+                "You have successfully declared your intent."
+                " We are excited to have you back next season!\n\n"
+                "If your situation changes before next season, please redeclare your intent."
+            )
+        else:
+            desc = (
+                "You have successfully declared your intent."
+                " We are sorry to see you go and hope you return to the league soon!\n\n"
+                "If you change your mind, please redeclare your intent."
+            )
+
+        await interaction.edit_original_response(
+            view=ResultView(
+                title="Intent to Play Declared",
+                description=desc,
+                colour=discord.Colour.green(),
+            )
+        )
 
     async def league_player_from_member(self, guild: discord.Guild, member: Member) -> LeaguePlayer | None:
         """Return `LeaguePlayer` object for the guilds league from `Member`"""
