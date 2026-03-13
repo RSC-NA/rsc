@@ -27,7 +27,17 @@ class DeveloperMixIn(RSCMixIn):
         default_permissions=discord.Permissions(manage_guild=True),
     )
 
-    # Commands
+    # Test Development Function
+    @app_commands.command(
+        name="devtest",
+        description="Test command for development purposes",
+    )
+    @app_commands.guild_only
+    @app_commands.checks.has_permissions(manage_guild=True)
+    async def _dev_test_cmd(self, interaction: discord.Interaction):
+        await interaction.response.send_message(content="Developer test successful!", ephemeral=True)
+
+    # Group Commands
 
     @_log_group.command(
         name="tail",

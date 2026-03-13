@@ -1,7 +1,7 @@
 import logging
 
 import discord
-from discord.ui import TextInput
+from discord.ui import Container, TextDisplay, TextInput
 from rscapi.models.league import League
 
 from rsc.const import DEFAULT_TIMEOUT
@@ -34,6 +34,43 @@ class AuthorOnlyView(discord.ui.View):
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         """Check if the interaction user is the author. Allow or deny callbacks"""
         return interaction.user == self.author
+
+
+class AuthorOnlyLayoutView(discord.ui.LayoutView):
+    """View class designed to only interact with the interaction author. Can subclass"""
+
+    def __init__(self, interaction: discord.Interaction, timeout: float = DEFAULT_TIMEOUT):
+        super().__init__(timeout=timeout)
+        self.interaction = interaction
+        self.author = interaction.user
+
+    async def on_timeout(self):
+        """Display time out message if we have reference to original"""
+        if self.interaction:
+            view = ResultView(
+                title="Time Out",
+                description="Sorry, you didn't respond quick enough. Please try again.",
+                colour=discord.Colour.orange(),
+            )
+            await self.interaction.edit_original_response(view=view)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        """Check if the interaction user is the author. Allow or deny callbacks"""
+        return interaction.user == self.author
+
+
+class ResultView(discord.ui.LayoutView):
+    """A simple LayoutView that displays a result message in a single Container."""
+
+    def __init__(self, *, title: str, description: str, colour: discord.Colour):
+        super().__init__(timeout=None)
+        self.add_item(
+            Container(
+                TextDisplay(f"## {title}"),
+                TextDisplay(description),
+                accent_colour=colour,
+            )
+        )
 
 
 # Generic Buttons
