@@ -25,7 +25,7 @@ from rsc.embeds import (
     SuccessEmbed,
     YellowEmbed,
 )
-from rsc.enums import MatchType, PostSeasonType
+from rsc.enums import MatchType, PostSeasonType, MatchFormat
 from rsc.exceptions import RscException
 from rsc.logs import GuildLogAdapter
 from rsc.teams import TeamMixIn
@@ -363,7 +363,7 @@ class BallchasingMixIn(RSCMixIn):
         # Check score against match format for validation
         total_wins = home_wins + away_wins
         match match.match_type:
-            case MatchType.POSTSEASON:
+            case MatchFormat.BEST_OF_THREE | MatchFormat.BEST_OF_FIVE | MatchFormat.BEST_OF_SEVEN:
                 if match.num_games and (total_wins < math.ceil(match.num_games / 2) or total_wins > match.num_games):
                     return await interaction.followup.send(
                         embed=ErrorEmbed(
@@ -371,7 +371,7 @@ class BallchasingMixIn(RSCMixIn):
                         ),
                         ephemeral=True,
                     )
-            case _:
+            case _:  # Default GMS and anything else to all games must be played
                 if match.num_games and (total_wins < match.num_games or total_wins > match.num_games):
                     return await interaction.followup.send(
                         embed=ErrorEmbed(
