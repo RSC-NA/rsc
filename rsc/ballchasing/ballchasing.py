@@ -362,7 +362,7 @@ class BallchasingMixIn(RSCMixIn):
 
         # Check score against match format for validation
         total_wins = home_wins + away_wins
-        match match.match_type:
+        match match.match_format:
             case MatchFormat.BEST_OF_THREE | MatchFormat.BEST_OF_FIVE | MatchFormat.BEST_OF_SEVEN:
                 if match.num_games and (total_wins < math.ceil(match.num_games / 2) or total_wins > match.num_games):
                     return await interaction.followup.send(
