@@ -1,5 +1,6 @@
 import logging
 import random
+import math
 
 # import statistics
 import string
@@ -361,11 +362,23 @@ class BallchasingMixIn(RSCMixIn):
 
         # Check score against match format for validation
         total_wins = home_wins + away_wins
-        if match.num_games and (total_wins < match.num_games or total_wins > match.num_games):
-            return await interaction.followup.send(
-                embed=ErrorEmbed(description=f"Invalid score for match format. Total wins must match number of games: {match.num_games}"),
-                ephemeral=True,
-            )
+        match match.match_type:
+            case MatchType.POSTSEASON:
+                if match.num_games and (total_wins < math.ceil(match.num_games / 2) or total_wins > match.num_games):
+                    return await interaction.followup.send(
+                        embed=ErrorEmbed(
+                            description=f"Invalid score for match format. Total wins must match number of games: {match.num_games}"
+                        ),
+                        ephemeral=True,
+                    )
+            case _:
+                if match.num_games and (total_wins < match.num_games or total_wins > match.num_games):
+                    return await interaction.followup.send(
+                        embed=ErrorEmbed(
+                            description=f"Invalid score for match format. Total wins must match number of games: {match.num_games}"
+                        ),
+                        ephemeral=True,
+                    )
 
         # Only GMs and team members can report a match by default
         try:
