@@ -50,8 +50,10 @@ class RscException(Exception):  # noqa: N818
     def __init__(self, *args, **kwargs):
         self.response = kwargs.pop("response", None)
         self.message = kwargs.pop("message", None)
+        self.reason = None
         self.status = None
         self.extra = None
+        self.type = None
         log.debug(f"ExceptionType: {type(self.response)}")
         if self.response is not None and isinstance(self.response, RscApiException):
             self.status = self.response.status

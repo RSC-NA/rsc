@@ -679,7 +679,7 @@ class MemberMixIn(RSCMixIn):
             await interaction.followup.send(embed=embed)
             return
 
-        players.sort(key=lambda x: cast(str, x.player.name), reverse=True)
+        players.sort(key=lambda x: cast("str", x.player.name), reverse=True)
 
         waiver_dates = []
         members = []

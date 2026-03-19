@@ -188,7 +188,13 @@ class ApiExceptionErrorEmbed(RedEmbed):
     def __init__(self, exc: RscException, **kwargs):
         title = kwargs.pop("title", "API Error")
         super().__init__(title=title, **kwargs)
-        self.description = exc.reason or "No reason provided."
+        if exc and exc.reason:
+            self.description = exc.reason or "No reason provided."
+        elif exc and exc.message:
+            self.description = exc.message
+        else:
+            self.description = "An unknown error occurred..."
+
         if exc.extra:
             self.description += "\n\n"
             for k, v in exc.extra.items():

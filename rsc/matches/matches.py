@@ -171,7 +171,9 @@ class MatchMixIn(RSCMixIn):
         name="match",
         description="Get information about your upcoming match",
     )
-    @app_commands.describe(team="Get match information for a specific team (General Manager Only)")
+    @app_commands.describe(
+        team="Get match information for a specific team (Franchise Management Only)", day="Get match information for a specific match day"
+    )
     @app_commands.autocomplete(team=TeamMixIn.teams_autocomplete)
     @app_commands.guild_only
     async def _match_cmd(self, interaction: discord.Interaction, team: str | None = None, day: int | None = None):

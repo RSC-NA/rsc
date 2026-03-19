@@ -4,7 +4,7 @@ from typing import cast
 import discord
 from redbot.core import app_commands
 from rscapi import ApiClient, TeamsApi
-from rscapi.exceptions import ApiException, BadRequestException
+from rscapi.exceptions import ApiException, BadRequestException, NotFoundException
 from rscapi.models.high_level_match import HighLevelMatch
 from rscapi.models.league_player import LeaguePlayer
 from rscapi.models.match import Match
@@ -661,11 +661,13 @@ class TeamMixIn(RSCMixIn):
         self,
         guild: discord.Guild,
         id: int,
-    ) -> Match:
+    ) -> Match | None:
         async with ApiClient(self._api_conf[guild.id]) as client:
             try:
                 api = TeamsApi(client)
                 return await api.teams_next_match(id)
+            except NotFoundException:
+                return None
             except ApiException as exc:
                 raise RscException(exc)
 

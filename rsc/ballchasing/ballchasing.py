@@ -5,11 +5,11 @@ import math
 # import statistics
 import string
 from datetime import datetime, timedelta
-from pathlib import Path
 from urllib.parse import urljoin
 
 import ballchasing
 import discord
+import trio
 from redbot.core import app_commands
 from rscapi.models.match import Match
 from rscapi.models.match_results import MatchResults
@@ -380,6 +380,14 @@ class BallchasingMixIn(RSCMixIn):
                         ephemeral=True,
                     )
 
+        # Reporter swapped home and away team names
+        # Swap the scores so they don't report it wrong
+        if home.lower().strip() == match.away_team.name.lower():
+            home_wins = away_wins
+
+        if away.lower().strip() == match.home_team.name.lower():
+            away_wins = home_wins
+
         # Only GMs and team members can report a match by default
         try:
             is_team_member = await self.discord_member_in_match(member, match)
@@ -561,7 +569,7 @@ class BallchasingMixIn(RSCMixIn):
                     rdata = replay
                 elif isinstance(replay, str):
                     # Read bytes from file
-                    fdata = Path(replay).read_bytes()
+                    fdata = await trio.Path(replay).read_bytes()
                     rdata = fdata
 
                 # Upload to ballchasing group
