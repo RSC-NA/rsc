@@ -194,15 +194,11 @@ class DevLeagueMixIn(RSCMixIn):
             await self._save_devleague_role_users(member.guild, value=users)
 
     async def remove_devleague_role(self, member: discord.Member):
+        """Remove Dev League role but keep in users list so they don't get it again automatically"""
         devleague_role = await utils.get_devleague_role(member.guild)
 
         if devleague_role in member.roles:
             await member.remove_roles(devleague_role, reason="Player opted out of Dev League")
-
-        users = await self._get_devleague_role_users(member.guild) or []
-        if member.id in users:
-            users.remove(member.id)
-            await self._save_devleague_role_users(member.guild, value=users)
 
     async def should_get_devleague_role(self, member: discord.Member) -> bool:
         users = await self._get_devleague_role_users(member.guild) or []
