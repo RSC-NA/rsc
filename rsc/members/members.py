@@ -39,6 +39,7 @@ from rsc.members.views.player_info import PlayerInfoView
 from rsc.members.views.signup import SignupState, SignupView
 from rsc.teams import TeamMixIn
 from rsc.tiers import TierMixIn
+from rsc.transactions.roles import update_league_player_discord
 from rsc.utils import utils
 from rsc.views import ResultView
 
@@ -480,6 +481,18 @@ class MemberMixIn(RSCMixIn):
                         )
                     )
 
+        # Check should get devleague role (only add to users one time in their career)
+        add_devleague_role = await self.should_get_devleague_role(interaction.user)
+        log.debug(f"Add Dev League Role: {add_devleague_role}")
+
+        # Sync roles and name in discord
+        await update_league_player_discord(
+            guild=guild,
+            player=interaction.user,
+            league_player=result,
+            devleague=add_devleague_role,
+        )
+
         await interaction.edit_original_response(
             view=ResultView(
                 title="Success",
@@ -574,6 +587,18 @@ class MemberMixIn(RSCMixIn):
                             colour=discord.Colour.red(),
                         )
                     )
+
+        # Check should get devleague role (only add to users one time in their career)
+        add_devleague_role = await self.should_get_devleague_role(interaction.user)
+        log.debug(f"Add Dev League Role: {add_devleague_role}")
+
+        # Sync roles and name in discord
+        await update_league_player_discord(
+            guild=guild,
+            player=interaction.user,
+            league_player=result,
+            devleague=add_devleague_role,
+        )
 
         await interaction.edit_original_response(
             view=ResultView(

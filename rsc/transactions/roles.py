@@ -122,6 +122,7 @@ async def update_cut_player_discord(
     player: discord.Member,
     response: TransactionResponse,
     ptu: PlayerTransactionUpdates,
+    devleague: bool = True,
 ):
     if not ptu.old_team:
         raise AttributeError(f"{player.display_name} ({player.id}) has no old team data.")
@@ -647,10 +648,7 @@ async def update_rostered_discord(
 
 
 async def update_free_agent_discord(
-    guild: discord.Guild,
-    player: discord.Member,
-    league_player: LeaguePlayer,
-    tiers: list[Tier],
+    guild: discord.Guild, player: discord.Member, league_player: LeaguePlayer, tiers: list[Tier], devleague: bool = False
 ):
     if league_player.status not in (Status.FREE_AGENT, Status.PERM_FA, Status.WAIVERS, Status.WAIVER_RELEASE, Status.WAIVER_CLAIM):
         raise ValueError(f"{player.display_name} ({player.id}) is not a free agent.")
@@ -725,9 +723,10 @@ async def update_free_agent_discord(
         roles_to_add.append(tier_fa_role)
 
     # Dev League
-    # dev_league_role = discord.utils.get(guild.roles, name=const.DEV_LEAGUE_ROLE)
-    # if dev_league_role and dev_league_role not in player.roles:
-    #     roles_to_add.append(dev_league_role)
+    if devleague:
+        dev_league_role = discord.utils.get(guild.roles, name=const.DEV_LEAGUE_ROLE)
+        if dev_league_role and dev_league_role not in player.roles:
+            roles_to_add.append(dev_league_role)
 
     # PermFA Waiting
     permfa_waiting_role = await utils.get_permfa_waiting_role(guild)
@@ -755,6 +754,7 @@ async def update_draft_eligible_discord(
     player: discord.Member,
     league_player: LeaguePlayer,
     tiers: list[Tier],
+    devleague: bool = False,
 ):
     if league_player.status != Status.DRAFT_ELIGIBLE:
         raise ValueError(f"{player.display_name} ({player.id}) is not draft eligible.")
@@ -828,6 +828,12 @@ async def update_draft_eligible_discord(
     de_role = await utils.get_draft_eligible_role(guild)
     if de_role not in player.roles:
         roles_to_add.append(de_role)
+
+    # Dev League
+    if devleague:
+        dev_league_role = discord.utils.get(guild.roles, name=const.DEV_LEAGUE_ROLE)
+        if dev_league_role and dev_league_role not in player.roles:
+            roles_to_add.append(dev_league_role)
 
     if roles_to_remove:
         log.debug(f"Removing roles: {roles_to_remove}", guild=guild)
@@ -934,6 +940,7 @@ async def update_league_player_discord(
     tiers: list[Tier] | None = None,
     franchise: Franchise | FranchiseList | None = None,
     default_roles: list[discord.Role] | None = None,
+    devleague: bool = False,
 ):
     if not tiers:
         tiers = []
@@ -948,9 +955,13 @@ async def update_league_player_discord(
         case Status.ROSTERED | Status.RENEWED | Status.AGMIR | Status.IR:
             return await update_rostered_discord(guild=guild, player=player, league_player=league_player, tiers=tiers)
         case Status.DRAFT_ELIGIBLE:
-            return await update_draft_eligible_discord(guild=guild, player=player, league_player=league_player, tiers=tiers)
+            return await update_draft_eligible_discord(
+                guild=guild, player=player, league_player=league_player, tiers=tiers, devleague=devleague
+            )
         case Status.FREE_AGENT | Status.PERM_FA | Status.WAIVERS | Status.WAIVER_RELEASE | Status.WAIVER_CLAIM:
-            return await update_free_agent_discord(guild=guild, player=player, league_player=league_player, tiers=tiers)
+            return await update_free_agent_discord(
+                guild=guild, player=player, league_player=league_player, tiers=tiers, devleague=devleague
+            )
         case Status.UNSIGNED_GM:
             if not franchise:
                 raise ValueError("Must provide franchise data to sync un-signed GM")

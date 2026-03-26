@@ -584,7 +584,11 @@ class TransactionMixIn(RSCMixIn):
             )
 
         try:
-            await update_cut_player_discord(guild=guild, player=player, response=result, ptu=ptu)
+            # Check should get devleague role (only add to users one time in their career)
+            add_devleague_role = await self.should_get_devleague_role(interaction.user)
+            log.debug(f"Add Dev League Role: {add_devleague_role}")
+            await update_cut_player_discord(guild=guild, player=player, response=result, ptu=ptu, devleague=add_devleague_role)
+
         except discord.Forbidden as exc:
             log.warning(f"Unable to update nickname for {player.id}: {exc}", guild=guild)
             await interaction.followup.send(content=f"Unable to update nickname for {player.mention}: `{exc}")

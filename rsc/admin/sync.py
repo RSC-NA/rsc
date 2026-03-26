@@ -97,10 +97,15 @@ class AdminSyncMixIn(AdminMixIn):
                         continue
                     franchise = flist.pop(0)
 
+                add_devleague_role = await self.should_get_devleague_role(m)
+                log.debug(f"Add Dev League Role: {add_devleague_role}")
+
                 log.debug("Syncing Player: %s (%d)", m.display_name, m.id, guild=guild)
                 synced += 1
                 try:
-                    await update_league_player_discord(guild=guild, player=m, league_player=api_player, franchise=franchise, tiers=tiers)
+                    await update_league_player_discord(
+                        guild=guild, player=m, league_player=api_player, franchise=franchise, tiers=tiers, devleague=add_devleague_role
+                    )
                 except (ValueError, AttributeError) as exc:
                     log.exception("Error syncing player: %s (%d)", m.display_name, m.id, guild=guild, exc=exc)
 
@@ -852,9 +857,20 @@ class AdminSyncMixIn(AdminMixIn):
                         ephemeral=False,
                     )
                 franchise = flist.pop(0)
+
+                # Devleague
+                add_devleague_role = await self.should_get_devleague_role(member)
+                log.debug(f"Add Dev League Role: {add_devleague_role}")
+
                 try:
                     await update_league_player_discord(
-                        guild=guild, player=member, league_player=lp, tiers=tiers, franchise=franchise, default_roles=default_roles
+                        guild=guild,
+                        player=member,
+                        league_player=lp,
+                        tiers=tiers,
+                        franchise=franchise,
+                        default_roles=default_roles,
+                        devleague=add_devleague_role,
                     )
                 except (ValueError, AttributeError) as exc:
                     return await interaction.followup.send(embed=ExceptionErrorEmbed(exc_message=str(exc)))

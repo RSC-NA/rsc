@@ -485,7 +485,7 @@ class AdminMembersMixIn(AdminMixIn):
         trackers = [tracker] if tracker else []
 
         try:
-            await self.signup(
+            lplayer = await self.signup(
                 interaction.guild,
                 member=member,
                 rsc_name=rsc_name or member.display_name,
@@ -501,9 +501,17 @@ class AdminMembersMixIn(AdminMixIn):
             await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc), ephemeral=True)
             return
 
-        # Change nickname if specified
-        if rsc_name:
-            await member.edit(nick=rsc_name)
+        # Check should get devleague role (only add to users one time in their career)
+        add_devleague_role = await self.should_get_devleague_role(member)
+        log.debug(f"Add Dev League Role: {add_devleague_role}")
+
+        # Sync roles and name in discord
+        await update_league_player_discord(
+            guild=interaction.guild,
+            player=member,
+            league_player=lplayer,
+            devleague=add_devleague_role,
+        )
 
         await interaction.followup.send(
             embed=SuccessEmbed(description=f"{member.mention} has been signed up for the latest season of RSC.")

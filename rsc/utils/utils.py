@@ -158,6 +158,14 @@ async def not_implemented(interaction: discord.Interaction, followup: bool = Fal
         await interaction.response.send_message(embed=NotImplementedEmbed(), ephemeral=True)
 
 
+async def get_devleague_role(guild: discord.Guild) -> discord.Role:
+    r = discord.utils.get(guild.roles, name=const.DEV_LEAGUE_ROLE)
+    if not r:
+        log.error(f"[{guild.name}] Expected role does not exist: {const.DEV_LEAGUE_ROLE}")
+        raise ValueError(f"[{guild.name}] Expected role does not exist: {const.DEV_LEAGUE_ROLE}")
+    return r
+
+
 async def get_draft_eligible_role(guild: discord.Guild) -> discord.Role:
     r = discord.utils.get(guild.roles, name=const.DRAFT_ELIGIBLE)
     if not r:
@@ -807,7 +815,7 @@ class UtilsMixIn(RSCMixIn):
                 "\N{LARGE GREEN CIRCLE}": lambda x: x.status is discord.Status.online,
                 "\N{LARGE ORANGE CIRCLE}": lambda x: x.status is discord.Status.idle,
                 "\N{LARGE RED CIRCLE}": lambda x: x.status is discord.Status.do_not_disturb,
-                "\N{MEDIUM WHITE CIRCLE}\N{VARIATION SELECTOR-16}": lambda x: (x.status is discord.Status.offline),
+                "\N{MEDIUM WHITE CIRCLE}\N{VARIATION SELECTOR-16}": lambda x: x.status is discord.Status.offline,
                 "\N{LARGE PURPLE CIRCLE}": lambda x: any(a.type is discord.ActivityType.streaming for a in x.activities),
                 "\N{MOBILE PHONE}": lambda x: x.is_on_mobile(),
             }
