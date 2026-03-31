@@ -183,12 +183,8 @@ class AdminIntentsMixIn(AdminMixIn):
                 )
             )
 
-        # Clear out original users in role so we don't ping them again
-        for rmember in intent_role.members:
-            await rmember.remove_roles(intent_role)
-
-        # Loop through intents and add roles
-        count = 0
+        # Build set of members who should have the role (missing intent)
+        missing_members: set[discord.Member] = set()
         for i in intents:
             if not (i.player and i.player.player):
                 continue
@@ -201,13 +197,28 @@ class AdminIntentsMixIn(AdminMixIn):
             if not m:
                 continue
 
+            missing_members.add(m)
+
+        # Members who currently have role but completed their intent
+        existing_members = set(intent_role.members)
+        to_remove = existing_members - missing_members
+        to_add = missing_members - existing_members
+
+        # Remove role from members who completed their intent
+        for m in to_remove:
+            await m.remove_roles(intent_role)
+
+        # Add role to newly missing members
+        for m in to_add:
             await m.add_roles(intent_role)
-            count += 1
 
         await interaction.edit_original_response(
             embed=BlueEmbed(
                 title="Intent Role Sync",
-                description=f"Added {intent_role.mention} to {count}/{len(intents)} players",
+                description=(
+                    f"Added {intent_role.mention} to {len(to_add)} player(s)\n"
+                    f"Removed from {len(to_remove)} player(s) who completed their intent"
+                ),
             )
         )
 
