@@ -132,6 +132,7 @@ class MemberMixIn(RSCMixIn):
         log.debug(f"Player Status: {lp.status}")
 
         if lp.status in (
+            Status.PERM_FA,
             Status.FREE_AGENT,
             Status.ROSTERED,
             Status.UNSIGNED_GM,
@@ -139,12 +140,30 @@ class MemberMixIn(RSCMixIn):
             Status.AGMIR,
             Status.RENEWED,
         ):
-            return await interaction.followup.send(
-                embed=YellowEmbed(
-                    title="Sign-up Status",
-                    description="You are already in the league. Please declare your intent to play instead.",
+            # Check intent instead
+
+            intent_list = await self.player_intents(guild, season_id=next_season.id, player=interaction.user)
+
+            if not intent_list:
+                return await interaction.followup.send(
+                    embed=OrangeEmbed(
+                        title="Sign-up Not Found",
+                        description=("You are not currently a league player or sign-up information was found. Please run `/signup`"),
+                    )
                 )
-            )
+
+            intent = intent_list.pop(0)
+
+            embed = BlueEmbed(title="Sign-up Status")
+            if intent.returning:
+                embed.description = "You are **returning** to the league next season"
+            elif not intent.returning and not intent.missing:
+                embed.description = "You are **not returning** to the league next season"
+            else:
+                embed.description = "You have **not submitted** your intent status for next season"
+                embed.colour = discord.Color.yellow()
+
+            return await interaction.followup.send(embed=embed)
 
         if lp.status != Status.DRAFT_ELIGIBLE:
             return await interaction.followup.send(
@@ -250,7 +269,8 @@ class MemberMixIn(RSCMixIn):
         if not isinstance(interaction.user, discord.Member):
             return
 
-        if not (player or missing is None or returning is None or franchise or team):
+        # Ensure at least one search criteria is provided
+        if not (player or missing is not None or returning is not None or franchise or team):
             return await interaction.response.send_message(
                 embed=ErrorEmbed(description="You must provide one search option."),
                 ephemeral=True,
@@ -375,6 +395,11 @@ class MemberMixIn(RSCMixIn):
         )
 
         embed.set_footer(text=f"Displaying {len(intents)}/{total_results} results")
+
+        if embed.exceeds_limits():
+            return await interaction.followup.send(
+                embed=ErrorEmbed(description="The embed exceeds Discord's field limits and cannot be sent."), ephemeral=True
+            )
 
         await interaction.followup.send(embed=embed)
 
