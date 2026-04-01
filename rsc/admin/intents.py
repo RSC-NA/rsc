@@ -244,3 +244,5 @@ class AdminIntentsMixIn(AdminMixIn):
             content=f"{intent_role.mention} {intent_msg}",
             allowed_mentions=discord.AllowedMentions(roles=True, users=True),
         )
+
+        await interaction.response.send_message(embed=SuccessEmbed(description=f"Pinged {intent_role.mention} in {intent_channel.mention}"))
