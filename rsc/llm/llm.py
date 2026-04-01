@@ -1,4 +1,5 @@
 import logging
+import base64
 from datetime import time, datetime
 from enum import Enum
 from pathlib import Path
@@ -70,6 +71,8 @@ LLM_SUMMARY_MAX_MESSAGES = 200
 LLM_SUMMARY_HARD_CHANNEL_CAP = 300
 LLM_SUMMARY_MAX_VIEWERS = 25
 LLM_SUMMARY_MAX_TRANSCRIPT_CHARS = 20000
+LLM_SUMMARY_MAX_IMAGES = 10
+LLM_SUMMARY_MAX_IMAGE_BYTES = 20 * 1024 * 1024
 
 
 class LLMMixIn(RSCMixIn):
@@ -512,12 +515,20 @@ class LLMMixIn(RSCMixIn):
                 ephemeral=True,
             )
 
+        image_data_urls, image_error = await self._collect_summary_images(summary_messages)
+        if image_error:
+            return await interaction.followup.send(
+                embed=ErrorEmbed(description=image_error),
+                ephemeral=True,
+            )
+
         try:
             summary = await summarize_ticket_messages(
                 guild=guild,
                 org_name=org,
                 api_key=key,
                 transcript=transcript,
+                image_data_urls=image_data_urls,
             )
         except RuntimeError as exc:
             return await interaction.followup.send(content=str(exc), ephemeral=True)
@@ -1143,8 +1154,19 @@ class LLMMixIn(RSCMixIn):
         """Build a compact transcript for LLM summarization."""
         rows: list[str] = []
         total = 0
+        image_index = 0
         for msg in messages:
             content = msg.clean_content.strip()
+            image_markers: list[str] = []
+            for attachment in msg.attachments:
+                if self._is_image_attachment(attachment):
+                    image_index += 1
+                    image_markers.append(f"image-{image_index}")
+
+            if image_markers:
+                marker_text = " ".join(f"[{marker}]" for marker in image_markers)
+                content = f"{content} {marker_text}".strip() if content else marker_text
+
             if not content and msg.attachments:
                 content = f"[{len(msg.attachments)} attachment(s)]"
             elif not content:
@@ -1161,6 +1183,63 @@ class LLMMixIn(RSCMixIn):
             total += line_len
 
         return "\n".join(rows)
+
+    async def _collect_summary_images(self, messages: list[discord.Message]) -> tuple[list[str], str | None]:
+        """Collect full image attachments as data URLs for multimodal moderation summary."""
+        data_urls: list[str] = []
+        total_bytes = 0
+
+        for msg in messages:
+            for attachment in msg.attachments:
+                if not self._is_image_attachment(attachment):
+                    continue
+
+                if len(data_urls) >= LLM_SUMMARY_MAX_IMAGES:
+                    return (
+                        [],
+                        f"Too many images to summarize safely. Limit is {LLM_SUMMARY_MAX_IMAGES} images; reduce message_limit.",
+                    )
+
+                raw = await attachment.read(use_cached=True)
+                total_bytes += len(raw)
+                if total_bytes > LLM_SUMMARY_MAX_IMAGE_BYTES:
+                    max_mb = LLM_SUMMARY_MAX_IMAGE_BYTES // (1024 * 1024)
+                    return (
+                        [],
+                        f"Image payload is too large to summarize safely (>{max_mb}MB total). Reduce message_limit.",
+                    )
+
+                mime = self._attachment_mime(attachment)
+                b64 = base64.b64encode(raw).decode("ascii")
+                data_urls.append(f"data:{mime};base64,{b64}")
+
+        return (data_urls, None)
+
+    def _is_image_attachment(self, attachment: discord.Attachment) -> bool:
+        content_type = (attachment.content_type or "").lower()
+        if content_type.startswith("image/"):
+            return True
+
+        filename = (attachment.filename or "").lower()
+        return filename.endswith((".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"))
+
+    def _attachment_mime(self, attachment: discord.Attachment) -> str:
+        content_type = (attachment.content_type or "").lower()
+        if content_type.startswith("image/"):
+            return content_type
+
+        filename = (attachment.filename or "").lower()
+        if filename.endswith(".png"):
+            return "image/png"
+        if filename.endswith((".jpg", ".jpeg")):
+            return "image/jpeg"
+        if filename.endswith(".webp"):
+            return "image/webp"
+        if filename.endswith(".gif"):
+            return "image/gif"
+        if filename.endswith(".bmp"):
+            return "image/bmp"
+        return "application/octet-stream"
 
     async def get_llm_credentials(self, guild: discord.Guild) -> tuple[str | None, str | None]:
         org = await self._get_openai_org(guild)

@@ -11,7 +11,7 @@ import re  # noqa: E402
 from dataclasses import dataclass  # noqa: E402
 from datetime import datetime  # noqa: E402
 from pathlib import Path  # noqa: E402
-from typing import TYPE_CHECKING  # noqa: E402
+from typing import TYPE_CHECKING, Any, cast  # noqa: E402
 
 import chromadb  # noqa: E402
 import discord  # noqa: E402
@@ -160,6 +160,8 @@ Given a ticket transcript, produce a concise, factual summary with these section
 Requirements:
 - Be neutral and avoid speculation.
 - If details are uncertain, explicitly say what is unclear.
+- Transcript markers like [image-1], [image-2], etc. map to the attached images in the same numeric order.
+- Analyze image contents to gain additional context relevant to the ticket.
 - Keep under 1500 characters.
 - Do not output any bot command prefixes.
 """
@@ -477,6 +479,7 @@ async def summarize_ticket_messages(
     org_name: str,
     api_key: str,
     transcript: str,
+    image_data_urls: list[str] | None = None,
     model: str = "gpt-5.2",
 ) -> str | None:
     """Summarize a ticket transcript for Discord output."""
@@ -492,13 +495,19 @@ async def summarize_ticket_messages(
             http_client=http_client,
         )
 
-        messages: list[ChatCompletionMessageParam] = [
+        user_content: list[dict[str, Any]] = [{"type": "text", "text": transcript}]
+        if image_data_urls:
+            user_content.extend(
+                [{"type": "image_url", "image_url": {"url": image_data_url, "detail": "high"}} for image_data_url in image_data_urls]
+            )
+
+        messages = [
             {"role": "system", "content": TICKET_SUMMARY_SYSTEM_PROMPT},
-            {"role": "user", "content": transcript},
+            {"role": "user", "content": user_content},
         ]
 
         response = await llm.chat.completions.create(
-            messages=messages,
+            messages=cast("Any", messages),
             model=model,
             temperature=OPENAI_TEMPERATURE,
         )
