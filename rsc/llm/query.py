@@ -147,6 +147,23 @@ Keep your response under 2000 characters for Discord compatibility.
 Do NOT respond with anything that could be considered a discord bot command (e.g., starting with a "!" or "?").
 """
 
+TICKET_SUMMARY_SYSTEM_PROMPT = """
+You summarize private Discord support tickets for league staff.
+
+Given a ticket transcript, produce a concise, factual summary with these sections:
+1) Issue
+2) Key Timeline
+3) Actions Taken
+4) Current Status
+5) Recommended Next Step
+
+Requirements:
+- Be neutral and avoid speculation.
+- If details are uncertain, explicitly say what is unclear.
+- Keep under 1500 characters.
+- Do not output any bot command prefixes.
+"""
+
 
 def normalize_distances(
     docs: list[tuple[Document, float]],
@@ -451,6 +468,51 @@ async def llm_query(
             return ("Sorry, that response is too long for me to put in Discord.", [])
 
         return (response_text, sources)
+    finally:
+        await http_client.aclose()
+
+
+async def summarize_ticket_messages(
+    guild: discord.Guild,
+    org_name: str,
+    api_key: str,
+    transcript: str,
+    model: str = "gpt-5.2",
+) -> str | None:
+    """Summarize a ticket transcript for Discord output."""
+    if not transcript.strip():
+        return None
+
+    http_client = httpx.AsyncClient()
+
+    try:
+        llm = AsyncOpenAI(
+            organization=org_name,
+            api_key=api_key,
+            http_client=http_client,
+        )
+
+        messages: list[ChatCompletionMessageParam] = [
+            {"role": "system", "content": TICKET_SUMMARY_SYSTEM_PROMPT},
+            {"role": "user", "content": transcript},
+        ]
+
+        response = await llm.chat.completions.create(
+            messages=messages,
+            model=model,
+            temperature=OPENAI_TEMPERATURE,
+        )
+
+        response_text = response.choices[0].message.content
+        if not response_text:
+            return None
+
+        response_text = response_text.strip()
+        if len(response_text) > 2000:
+            response_text = response_text[:1997].rstrip() + "..."
+
+        log.debug("Generated ticket summary output.", guild=guild)
+        return response_text
     finally:
         await http_client.aclose()
 

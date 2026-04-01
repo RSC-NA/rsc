@@ -26,7 +26,12 @@ from rsc.llm.create_db import (
     save_documents,
     string_to_doc,
 )
-from rsc.llm.query import llm_query, UserIdentity, clean_question as clean_question_impl
+from rsc.llm.query import (
+    llm_query,
+    summarize_ticket_messages,
+    UserIdentity,
+    clean_question as clean_question_impl,
+)
 from rsc.logs import GuildLogAdapter
 from rsc.types import LLMSettings
 from rsc.utils import utils
@@ -61,6 +66,10 @@ defaults_guild = LLMSettings(
 )
 
 LLM_DB_LOOP_TIME = time(hour=8)
+LLM_SUMMARY_MAX_MESSAGES = 200
+LLM_SUMMARY_HARD_CHANNEL_CAP = 300
+LLM_SUMMARY_MAX_VIEWERS = 25
+LLM_SUMMARY_MAX_TRANSCRIPT_CHARS = 20000
 
 
 class LLMMixIn(RSCMixIn):
@@ -407,6 +416,125 @@ class LLMMixIn(RSCMixIn):
             embed.set_thumbnail(url=guild.icon.url)
 
         await interaction.followup.send(embed=embed)
+
+    @_llm_group.command(name="summarize", description="Summarize a private ModMail ticket channel or thread")
+    @app_commands.describe(
+        channel="Ticket text channel or thread to summarize (defaults to current channel)",
+        message_limit="Number of recent messages to summarize (max 200)",
+    )
+    async def _llm_summarize_cmd(
+        self,
+        interaction: discord.Interaction,
+        channel: discord.TextChannel | discord.Thread | None = None,
+        message_limit: app_commands.Range[int, 25, LLM_SUMMARY_MAX_MESSAGES] = 120,
+    ):
+        """Summarize a private ModMail ticket text channel/thread."""
+        guild = interaction.guild
+        if not guild:
+            return
+
+        # Only allow TextChannels or Threads
+        target = channel or interaction.channel
+        if not isinstance(target, (discord.TextChannel | discord.Thread)):
+            return await interaction.response.send_message(
+                embed=ErrorEmbed(description="This command only supports text channels and threads."),
+                ephemeral=True,
+            )
+
+        # Must be discord.Member to check permissions
+        member = interaction.user
+        if not isinstance(member, discord.Member):
+            return await interaction.response.send_message(
+                embed=ErrorEmbed(description="Unable to resolve your member permissions in this server."),
+                ephemeral=True,
+            )
+
+        if not target.permissions_for(member).view_channel:
+            return await interaction.response.send_message(
+                embed=ErrorEmbed(description="You do not have permission to view that channel/thread."),
+                ephemeral=True,
+            )
+
+        # Settings
+        org, key = await self.get_llm_credentials(guild)
+        if not (org and key):
+            return await interaction.response.send_message(
+                embed=ErrorEmbed(description="OpenAI organization and or API key has not been configured."),
+                ephemeral=True,
+            )
+
+        # Check that this is a private discord channel (Don't allow summary of public channels)
+        privacy_ok, privacy_reason = self._is_private_ticket_channel(guild, target)
+        if not privacy_ok:
+            return await interaction.response.send_message(
+                embed=ErrorEmbed(description=privacy_reason),
+                ephemeral=True,
+            )
+
+        await interaction.response.defer(ephemeral=True)
+
+        # Pull at most hard cap + 1 to reject large channels quickly.
+        history = [m async for m in target.history(limit=LLM_SUMMARY_HARD_CHANNEL_CAP + 1)]
+        if len(history) > LLM_SUMMARY_HARD_CHANNEL_CAP:
+            return await interaction.followup.send(
+                embed=ErrorEmbed(
+                    description=(
+                        "This channel has too many recent messages for safe summarization. "
+                        f"Please use a smaller ticket thread or reduce recent activity (>{LLM_SUMMARY_HARD_CHANNEL_CAP} messages)."
+                    )
+                ),
+                ephemeral=True,
+            )
+
+        if not history:
+            return await interaction.followup.send(
+                embed=ErrorEmbed(description="No messages found in this channel/thread to summarize."),
+                ephemeral=True,
+            )
+
+        # Only allow modmails
+        # if not self._contains_modmail_messages(history):
+        #     return await interaction.followup.send(
+        #         embed=ErrorEmbed(
+        #             description=(
+        #                 "This does not look like a ModMail ticket thread. "
+        #                 "Expected at least one message from a bot with 'modmail' in its name."
+        #             )
+        #         ),
+        #         ephemeral=True,
+        #     )
+
+        summary_messages = list(reversed(history[:message_limit]))
+        transcript = self._build_summary_transcript(summary_messages, max_chars=LLM_SUMMARY_MAX_TRANSCRIPT_CHARS)
+        if not transcript:
+            return await interaction.followup.send(
+                embed=ErrorEmbed(description="Could not build transcript data from the selected messages."),
+                ephemeral=True,
+            )
+
+        try:
+            summary = await summarize_ticket_messages(
+                guild=guild,
+                org_name=org,
+                api_key=key,
+                transcript=transcript,
+            )
+        except RuntimeError as exc:
+            return await interaction.followup.send(content=str(exc), ephemeral=True)
+
+        if not summary:
+            return await interaction.followup.send(
+                embed=ErrorEmbed(description="I could not summarize that ticket right now."),
+                ephemeral=True,
+            )
+
+        embed = BlueEmbed(
+            title="Ticket Summary",
+            description=summary,
+        )
+        embed.add_field(name="Channel", value=target.mention, inline=True)
+        embed.add_field(name="Messages", value=str(len(summary_messages)), inline=True)
+        await interaction.followup.send(embed=embed, ephemeral=True)
 
     @_llm_group.command(name="createdb", description="Create the LLM Chroma DB")
     async def _llm_createdb_cmd(self, interaction: discord.Interaction):
@@ -973,6 +1101,66 @@ class LLMMixIn(RSCMixIn):
                 else:
                     results.append(f"- {source}")
         return "\n".join(results)
+
+    def _is_private_ticket_channel(self, guild: discord.Guild, channel: discord.TextChannel | discord.Thread) -> tuple[bool, str]:
+        """Validate channel privacy and audience size for ticket summarization."""
+        everyone_can_view = channel.permissions_for(guild.default_role).view_channel
+        if everyone_can_view:
+            return (
+                False,
+                "This command is restricted to private ticket channels/threads.",
+            )
+
+        if isinstance(channel, discord.Thread):
+            if hasattr(channel, "is_private") and callable(channel.is_private) and channel.is_private():
+                return (True, "")
+
+            parent = channel.parent
+            if isinstance(parent, discord.TextChannel):
+                private_parent = not parent.permissions_for(guild.default_role).view_channel
+                if private_parent:
+                    return (True, "")
+        # Keep this feature limited to smaller private channels used for tickets.
+        elif len(channel.members) > LLM_SUMMARY_MAX_VIEWERS:
+            return (
+                False,
+                f"This channel appears to be broadly visible ({len(channel.members)} viewers). "
+                f"Ticket summaries are limited to <= {LLM_SUMMARY_MAX_VIEWERS} viewers.",
+            )
+
+        return (True, "")
+
+    def _contains_modmail_messages(self, messages: list[discord.Message]) -> bool:
+        """Detect whether message history appears to come from ModMail bot activity."""
+        for msg in messages:
+            author_name = msg.author.name.lower()
+            display_name = msg.author.display_name.lower()
+            if msg.author.bot and ("modmail" in author_name or "modmail" in display_name):
+                return True
+        return False
+
+    def _build_summary_transcript(self, messages: list[discord.Message], max_chars: int = 20000) -> str:
+        """Build a compact transcript for LLM summarization."""
+        rows: list[str] = []
+        total = 0
+        for msg in messages:
+            content = msg.clean_content.strip()
+            if not content and msg.attachments:
+                content = f"[{len(msg.attachments)} attachment(s)]"
+            elif not content:
+                continue
+
+            content = " ".join(content.split())
+            line = f"[{msg.created_at.isoformat()}] {msg.author.display_name}: {content}"
+
+            line_len = len(line) + 1
+            if total + line_len > max_chars:
+                break
+
+            rows.append(line)
+            total += line_len
+
+        return "\n".join(rows)
 
     async def get_llm_credentials(self, guild: discord.Guild) -> tuple[str | None, str | None]:
         org = await self._get_openai_org(guild)
