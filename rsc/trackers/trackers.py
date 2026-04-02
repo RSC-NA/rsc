@@ -328,6 +328,45 @@ class TrackerMixIn(RSCMixIn):
         embed = SuccessEmbed(title="RSC Tracker Stats", description=f"Merged trackers pull from {source} into {dest}.")
         await interaction.followup.send(embed=embed, ephemeral=False)
 
+    @_trackers.command(name="byid", description="Get information on a tracker ID")
+    @app_commands.describe(tracker_id="Tracker ID to query")
+    @app_commands.checks.has_permissions(manage_guild=True)
+    async def _trackers_byid_cmd(
+        self,
+        interaction: discord.Interaction,
+        tracker_id: int,
+    ):
+        guild = interaction.guild
+        if not guild:
+            return
+
+        await interaction.response.defer(ephemeral=False)
+        try:
+            tracker = await self.fetch_tracker_by_id(guild, tracker_id)
+        except RscException as exc:
+            return await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc), ephemeral=False)
+
+        if not tracker:
+            return await interaction.followup.send(
+                embed=YellowEmbed(description=f"No tracker found with ID **{tracker_id}**"),
+                ephemeral=False,
+            )
+
+        description = (
+            f"**Player:** {tracker.member.rsc_name}\n"
+            f"**Discord ID:** {tracker.member.discord_id}\n\n"
+            f"- **Platform:** {tracker.platform}\n"
+            f"- **Platform ID:** {tracker.platform_id}\n"
+            f"- **Link:** [Tracker Link]({tracker.link})\n"
+            f"- **Status:** {TrackerLinksStatus(tracker.status).full_name}\n"
+            f"- **Last Updated:** {tracker.last_updated or 'Never'}"
+        )
+        embed = BlueEmbed(
+            title=f"RSC Tracker ID: {tracker_id}",
+            description=description,
+        )
+        await interaction.followup.send(embed=embed, ephemeral=False)
+
     # Non-Group Commands
 
     @app_commands.command(
