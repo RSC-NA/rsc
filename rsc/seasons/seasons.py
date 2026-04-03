@@ -42,7 +42,7 @@ class SeasonsMixIn(RSCMixIn):
 
     # API Commands
 
-    async def seasons(self, guild: discord.Guild, number: int | None = None, current: bool = False) -> list[Season]:
+    async def seasons(self, guild: discord.Guild, number: int | None = None, current: bool | None = None) -> list[Season]:
         async with ApiClient(self._api_conf[guild.id]) as client:
             api = SeasonsApi(client)
             league_id = self._league[guild.id]
