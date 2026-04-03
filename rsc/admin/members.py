@@ -535,7 +535,7 @@ class AdminMembersMixIn(AdminMixIn):
 
         player = interaction.user
 
-        await interaction.response.defer(ephemeral=True)
+        await interaction.response.defer(ephemeral=False)
 
         try:
             next_season = await self.next_season(guild)
