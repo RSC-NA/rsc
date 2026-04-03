@@ -71,6 +71,12 @@ async def validate_trackers():
             print(f"Count: {c}")
         if not t.link.strip().startswith("http"):
             print(f"Invalid URL: {t.id} - {t.link}")
+        if t.link.strip().count("http") != 1:
+            print(f"Invalid URL: {t.id} - {t.link}")
+        if "tracker.gg" not in t.link.strip().lower():
+            print(f"Invalid tracker.gg URL: {t.id} - {t.link}")
+
+
         c += 1
 
 if __name__ == "__main__":

@@ -12,9 +12,12 @@ from rsc.embeds import (
     ErrorEmbed,
     ExceptionErrorEmbed,
     SuccessEmbed,
+    YellowEmbed,
+    GreenEmbed,
+    OrangeEmbed,
 )
 from rsc.enums import Platform, PlayerType, Referrer, RegionPreference, Status
-from rsc.exceptions import RscException
+from rsc.exceptions import RscException, LeagueNotConfigured
 from rsc.logs import GuildLogAdapter
 from rsc.teams import TeamMixIn
 from rsc.tiers import TierMixIn
@@ -515,6 +518,111 @@ class AdminMembersMixIn(AdminMixIn):
 
         await interaction.followup.send(
             embed=SuccessEmbed(description=f"{member.mention} has been signed up for the latest season of RSC.")
+        )
+
+    @_members.command(name="signupstatus", description="Find the signup status for a member")
+    @app_commands.describe(
+        member="Discord member to check signup status for",
+        season="Season to check signup status for (defaults to next season)",
+    )
+    async def _admin_member_signupstatus_cmd(self, interaction: discord.Interaction, member: discord.Member, season: int | None = None):
+        guild = interaction.guild
+        if not guild:
+            return
+
+        if not isinstance(interaction.user, discord.Member):
+            return
+
+        player = interaction.user
+
+        await interaction.response.defer(ephemeral=True)
+
+        try:
+            next_season = await self.next_season(guild)
+        except LeagueNotConfigured:
+            return await interaction.followup.send(
+                embed=YellowEmbed(
+                    title="Not Configured",
+                    description="League ID has not been configured for this guild.",
+                )
+            )
+        except RscException as exc:
+            return await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc))
+
+        if not next_season:
+            return await interaction.followup.send(
+                embed=YellowEmbed(
+                    title="Signup Status",
+                    description="The next season of RSC has not started yet.",
+                )
+            )
+
+        if not next_season.id:
+            return await interaction.followup.send(
+                embed=ErrorEmbed(description="API returned a Season without an ID. Please open a modmail ticket.")
+            )
+
+        log.debug(f"Player: {player.display_name} Discord ID: {player.id}")
+        lp_list = await self.players(guild=guild, season=next_season.id, discord_id=player.id, limit=1)
+        if not lp_list:
+            return await interaction.followup.send(
+                embed=YellowEmbed(
+                    title=f"{player.display_name} Sign-up Status",
+                    description=f"{player.mention} is currently **not** signed up for the league.",
+                )
+            )
+
+        lp = lp_list.pop(0)
+
+        log.debug(f"Player Status: {lp.status}")
+
+        if lp.status in (
+            Status.PERM_FA,
+            Status.FREE_AGENT,
+            Status.ROSTERED,
+            Status.UNSIGNED_GM,
+            Status.IR,
+            Status.AGMIR,
+            Status.RENEWED,
+        ):
+            # Check intent instead
+
+            intent_list = await self.player_intents(guild, season_id=next_season.id, player=interaction.user)
+
+            if not intent_list:
+                return await interaction.followup.send(
+                    embed=OrangeEmbed(
+                        title=f"{player.display_name} Sign-up Not Found",
+                        description=f"{player.mention} is not currently a league player or sign-up information was found.",
+                    )
+                )
+
+            intent = intent_list.pop(0)
+
+            embed = BlueEmbed(title=f"{player.display_name} Sign-up Status")
+            if intent.returning:
+                embed.description = f"{player.mention} is **returning** to the league next season"
+            elif not intent.returning and not intent.missing:
+                embed.description = f"{player.mention} is **not returning** to the league next season"
+            else:
+                embed.description = f"{player.mention} has **not submitted** their intent status for next season"
+                embed.colour = discord.Color.yellow()
+
+            return await interaction.followup.send(embed=embed)
+
+        if lp.status != Status.DRAFT_ELIGIBLE:
+            return await interaction.followup.send(
+                embed=YellowEmbed(
+                    title=f"{player.display_name} Sign-up Status",
+                    description=f"{player.mention} is currently **not** signed up for the league.",
+                )
+            )
+
+        await interaction.followup.send(
+            embed=GreenEmbed(
+                title=f"{player.display_name} Sign-up Status",
+                description=f"{player.mention} is **signed up** for the next season of RSC.",
+            )
         )
 
     @_members.command(name="notinserver", description="Find API league players not in the server")

@@ -460,7 +460,6 @@ class MemberMixIn(RSCMixIn):
 
         # Filter empty new lines
         tracker_list = list(filter(None, signup_view.trackers))
-
         # Process signup if state is finished
         try:
             result = await self.signup(
