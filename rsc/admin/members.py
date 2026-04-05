@@ -533,7 +533,7 @@ class AdminMembersMixIn(AdminMixIn):
         if not isinstance(interaction.user, discord.Member):
             return
 
-        player = interaction.user
+        player = member
 
         await interaction.response.defer(ephemeral=False)
 
@@ -587,7 +587,7 @@ class AdminMembersMixIn(AdminMixIn):
         ):
             # Check intent instead
 
-            intent_list = await self.player_intents(guild, season_id=next_season.id, player=interaction.user)
+            intent_list = await self.player_intents(guild, season_id=next_season.id, player=member)
 
             if not intent_list:
                 return await interaction.followup.send(
