@@ -144,6 +144,7 @@ class CombineRunnerMixIn(RSCMixIn):
 
         # Check if category is full (Max: 50)
         log.debug("Finding valid combine category")
+        log.debug(f"Combine category has {len(combine_category.channels)} channels")
         if len(combine_category.channels) > 40:
             log.debug("Combine category is full, looking for next available category")
             for i in range(2, 5):
