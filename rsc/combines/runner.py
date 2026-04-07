@@ -144,7 +144,7 @@ class CombineRunnerMixIn(RSCMixIn):
 
         # Check if category is full (Max: 50)
         log.debug("Finding valid combine category")
-        if len(combine_category.channels) > 48:
+        if len(combine_category.channels) > 40:
             for i in range(2, 5):
                 next_category = discord.utils.get(guild.channels, name=f"{combine_category.name}-2")
 
@@ -160,7 +160,7 @@ class CombineRunnerMixIn(RSCMixIn):
                     log.warning(f"Combine category is already in use and not a category: {next_category}")
                     continue
 
-                if len(next_category.channels) <= 48:
+                if len(next_category.channels) <= 40:
                     combine_category = next_category
                     break
         log.debug(f"Combine Category: {combine_category.name}")
