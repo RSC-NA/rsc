@@ -124,6 +124,7 @@ class CombineRunnerMixIn(RSCMixIn):
         if not combine_category:
             log.error("Combine category not configured. Can't create game.")
             return []
+        log.debug(f"Combine category: {combine_category.name} {combine_category.id}")
 
         exists = discord.utils.get(guild.channels, name=f"{lobby.tier}-{lobby.id}-home")
         if exists:
