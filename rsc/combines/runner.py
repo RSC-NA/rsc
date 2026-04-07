@@ -145,10 +145,13 @@ class CombineRunnerMixIn(RSCMixIn):
         # Check if category is full (Max: 50)
         log.debug("Finding valid combine category")
         if len(combine_category.channels) > 40:
+            log.debug("Combine category is full, looking for next available category")
             for i in range(2, 5):
-                next_category = discord.utils.get(guild.channels, name=f"{combine_category.name}-2")
+                next_category = discord.utils.get(guild.channels, name=f"{combine_category.name}-{i}")
+                log.debug(f"Checking next combine category: {combine_category.name}-{i}")
 
                 if not next_category:
+                    log.debug(f"Next combine category does not exist, creating: {combine_category.name}-{i}")
                     next_category = await guild.create_category(
                         name=f"{combine_category.name}-{i}",
                         reason="Combines channels have maxed out.",
@@ -161,6 +164,7 @@ class CombineRunnerMixIn(RSCMixIn):
                     continue
 
                 if len(next_category.channels) <= 40:
+                    log.debug(f"Found next available combine category: {combine_category.name}-{i}")
                     combine_category = next_category
                     break
         log.debug(f"Combine Category: {combine_category.name}")
