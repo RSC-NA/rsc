@@ -44,7 +44,7 @@ class AdminIntentsMixIn(AdminMixIn):
     async def _admin_intents_set_cmd(
         self,
         interaction: discord.Interaction,
-        member: discord.Member | int,
+        member: discord.Member,
         returning: bool,
         override: bool = False,
     ):
