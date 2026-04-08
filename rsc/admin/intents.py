@@ -44,7 +44,7 @@ class AdminIntentsMixIn(AdminMixIn):
     async def _admin_intents_set_cmd(
         self,
         interaction: discord.Interaction,
-        member: discord.Member,
+        member: discord.Member | int,
         returning: bool,
         override: bool = False,
     ):
@@ -77,6 +77,51 @@ class AdminIntentsMixIn(AdminMixIn):
             embed.description = f"{member.mention} intent to play has been set to **RETURNING**"
         else:
             embed.description = f"{member.mention} intent to play has been set to **NOT RETURNING**"
+        await interaction.edit_original_response(embed=embed, view=None)
+
+    @_intents.command(name="setbyid", description="Manually set intent for a discord ID")
+    @app_commands.describe(
+        member="Discord ID to declare intent on",
+        returning="Returning status. (True for returning, False for not returning)",
+        override="Admin override",
+    )
+    @app_commands.guild_only
+    async def _admin_intents_setbyid_cmd(
+        self,
+        interaction: discord.Interaction,
+        member: int,
+        returning: bool,
+        override: bool = False,
+    ):
+        guild = interaction.guild
+        if not guild or not isinstance(interaction.user, discord.Member):
+            return
+
+        # Process intent
+        await interaction.response.defer()
+        try:
+            result = await self.declare_intent(
+                guild=guild,
+                member=member,
+                returning=returning,
+                executor=interaction.user,
+                admin_overrride=override,
+            )
+            log.debug(f"Intent Result: {result}")
+        except RscException as exc:
+            if exc.status == 409:
+                return await interaction.edit_original_response(
+                    embed=YellowEmbed(title="Intent to Play", description=exc.reason),
+                )
+            return await interaction.edit_original_response(
+                embed=ApiExceptionErrorEmbed(exc),
+            )
+
+        embed: discord.Embed = SuccessEmbed(title="Intent to Play Declared")
+        if returning:
+            embed.description = f"Discord ID {member} intent to play has been set to **RETURNING**"
+        else:
+            embed.description = f"Discord ID {member} intent to play has been set to **NOT RETURNING**"
         await interaction.edit_original_response(embed=embed, view=None)
 
     @_intents.command(

@@ -409,7 +409,7 @@ class RSCMixIn(ABC):
     async def declare_intent(
         self,
         guild: discord.Guild,
-        member: discord.Member,
+        member: discord.Member | int,
         returning: bool,
         executor: discord.Member | None = None,
         admin_overrride: bool = False,

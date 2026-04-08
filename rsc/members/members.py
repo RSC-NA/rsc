@@ -1011,7 +1011,7 @@ class MemberMixIn(RSCMixIn):
     async def declare_intent(
         self,
         guild: discord.Guild,
-        member: discord.Member,
+        member: discord.Member | int,
         returning: bool,
         executor: discord.Member | None = None,
         admin_overrride: bool = False,
@@ -1025,8 +1025,9 @@ class MemberMixIn(RSCMixIn):
                 admin_override=admin_overrride,
             )
             try:
-                log.debug(f"Intent Data: {data}")
-                return await api.members_intent_to_play(member.id, data)
+                member_id = member.id if isinstance(member, discord.Member) else member
+                log.debug(f"Intent Data ({member_id}): {data}")
+                return await api.members_intent_to_play(member_id, data)
             except ApiException as exc:
                 raise RscException(response=exc)
 
