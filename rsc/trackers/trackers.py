@@ -352,9 +352,11 @@ class TrackerMixIn(RSCMixIn):
                 ephemeral=False,
             )
 
+        player_name = tracker.member.rsc_name if tracker.member else "N/A"
+
         description = (
-            f"**Player:** {tracker.member.rsc_name}\n"
-            f"**Discord ID:** {tracker.member.discord_id}\n\n"
+            f"**Player:** {player_name}\n"
+            f"**Discord ID:** {tracker.member.discord_id if tracker.member else 'N/A'}\n\n"
             f"- **Platform:** {tracker.platform}\n"
             f"- **Platform ID:** {tracker.platform_id}\n"
             f"- **Link:** [Tracker Link]({tracker.link})\n"
