@@ -71,8 +71,9 @@ class BallchasingMixIn(RSCMixIn):
 
     async def prepare_ballchasing(self, guild: discord.Guild):
         token = await self._get_bc_auth_token(guild)
+        log.debug(f"Preparing ballchasing API for guild. Token: {token}", guild=guild)
         if token:
-            self._ballchasing_api[guild.id] = await ballchasing.Api.create(auth_key=token)
+            self._ballchasing_api[guild.id] = await ballchasing.Api.create(auth_key=token.strip())
 
     # Settings
 
@@ -140,11 +141,45 @@ class BallchasingMixIn(RSCMixIn):
     async def _bc_key(self, interaction: discord.Interaction, key: str):
         if not interaction.guild:
             return
-        await self._save_bc_auth_token(interaction.guild, key)
+        await self._save_bc_auth_token(interaction.guild, key.strip())
         await interaction.response.send_message(
             embed=SuccessEmbed(description="Ballchasing API key have been successfully configured"),
             ephemeral=True,
         )
+
+    @_ballchasing.command(name="ping", description="Test the Ballchasing API key connectivity")
+    @app_commands.checks.has_permissions(manage_guild=True)
+    async def _bc_ping(self, interaction: discord.Interaction):
+        guild = interaction.guild
+        if not guild:
+            return
+
+        bapi = self._ballchasing_api.get(guild.id)
+        if not bapi:
+            await interaction.response.send_message(
+                embed=ErrorEmbed(description="Ballchasing API is not configured."),
+                ephemeral=True,
+            )
+            return
+
+        try:
+            result = await bapi.ping()
+        except Exception as exc:
+            await interaction.response.send_message(
+                embed=ExceptionErrorEmbed(exc_message=f"Ballchasing API ping failed: {exc}"),
+                ephemeral=True,
+            )
+            return
+
+        embed = SuccessEmbed(
+            title="Ballchasing API Ping",
+            description="API key is valid and ballchasing is reachable.",
+        )
+        embed.add_field(name="Steam Name", value=result.name, inline=True)
+        embed.add_field(name="Steam ID", value=result.steam_id, inline=True)
+        embed.add_field(name="Patreon Type", value=result.type.value, inline=True)
+
+        await interaction.response.send_message(embed=embed, ephemeral=True)
 
     @_ballchasing.command(
         name="manager",
