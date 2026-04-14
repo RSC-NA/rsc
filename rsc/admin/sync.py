@@ -107,7 +107,7 @@ class AdminSyncMixIn(AdminMixIn):
                         guild=guild, player=m, league_player=api_player, franchise=franchise, tiers=tiers, devleague=add_devleague_role
                     )
                 except (ValueError, AttributeError) as exc:
-                    log.exception("Error syncing player: %s (%d)", m.display_name, m.id, guild=guild, exc=exc)
+                    log.exception("Error syncing player: %s (%d)", m.display_name, m.id, guild=guild, exc_info=exc)
 
             log.debug("Total Players: %d", total, guild=guild)
             log.debug("Total Synced: %d", synced, guild=guild)
