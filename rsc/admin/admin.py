@@ -5,7 +5,7 @@ from redbot.core import app_commands
 
 from rsc.abc import RSCMixIn
 from rsc.admin.modals import LeagueDatesModal
-from rsc.embeds import BlueEmbed, SuccessEmbed
+from rsc.embeds import BlueEmbed, GreenEmbed, SuccessEmbed, YellowEmbed
 from rsc.logs import GuildLogAdapter
 from rsc.types import AdminSettings
 
@@ -97,6 +97,54 @@ class AdminMixIn(RSCMixIn):
         await dates_modal.wait()
 
         await self._set_dates(interaction.guild, value=dates_modal.date_input.value)
+
+    @_admin.command(name="dmstatus", description="Check the status of the bot DM queue")
+    async def _admin_dmstatus_cmd(self, interaction: discord.Interaction):
+        guild = interaction.guild
+        if not guild:
+            return
+
+        helper = self._dm_helper
+        status = "Running" if helper.is_running else "Idle"
+        processed = helper.success + helper.failed
+        desc = (
+            f"**Status:** {status}\n"
+            f"**Progress:** {processed}/{helper.total}\n"
+            f"**Sent:** {helper.success}\n"
+            f"**Failed:** {helper.failed}\n"
+            f"**Pending:** {helper.pending}"
+        )
+
+        embed_cls = YellowEmbed if helper.pending > 0 else GreenEmbed
+        await interaction.response.send_message(
+            embed=embed_cls(title="DM Queue Status", description=desc),
+            ephemeral=True,
+        )
+
+    @_admin.command(name="directmessage", description="Send a direct message to a user")
+    @app_commands.describe(member="Discord member to DM", message="Message content to send")
+    async def _admin_dm_user_cmd(self, interaction: discord.Interaction, member: discord.Member, message: str):
+        guild = interaction.guild
+        if not guild:
+            return
+
+        try:
+            await member.send(content=message)
+        except discord.Forbidden:
+            return await interaction.response.send_message(
+                embed=YellowEmbed(description=f"Unable to DM {member.mention}. They may have DMs disabled."),
+                ephemeral=True,
+            )
+        except discord.HTTPException as exc:
+            return await interaction.response.send_message(
+                embed=YellowEmbed(description=f"Failed to DM {member.mention}: {exc}"),
+                ephemeral=True,
+            )
+
+        await interaction.response.send_message(
+            embed=GreenEmbed(description=f"DM sent to {member.mention}."),
+            ephemeral=True,
+        )
 
     @_admin.command(name="pfachnanel", description="Configure the PermFA announcement channel")
     @app_commands.describe(channel="Discord channel to announce PermFAs")

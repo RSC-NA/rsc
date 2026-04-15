@@ -29,7 +29,6 @@ log = GuildLogAdapter(logger)
 class AdminInactivityMixIn(AdminMixIn):
     def __init__(self):
         log.debug("Initializing AdminMixIn:Inactivity")
-
         super().__init__()
 
     # Groups
@@ -455,5 +454,91 @@ class AdminInactivityMixIn(AdminMixIn):
 
         await interaction.followup.send(
             embed=GreenEmbed(title="Activity Check Ping", description=desc),
+            ephemeral=True,
+        )
+
+    @_inactive.command(name="dm", description="DM players who have not completed the activity check")
+    @app_commands.describe(message="Custom message to include in the DM (optional)")
+    async def _admin_inactive_check_dm_cmd(
+        self,
+        interaction: discord.Interaction,
+        message: str | None = None,
+    ):
+        guild = interaction.guild
+        if not guild:
+            return
+
+        # Verify activity check is running
+        msg_id = await self._get_activity_check_msg_id(guild)
+        if not msg_id:
+            return await interaction.response.send_message(
+                embed=ErrorEmbed(description="The activity check has not been started."),
+                ephemeral=True,
+            )
+
+        await interaction.response.defer(ephemeral=True)
+
+        # Get current season
+        season = await self.current_season(guild)
+        if not (season and season.id):
+            return await interaction.followup.send(
+                embed=ErrorEmbed(description="Unable to determine the current season."),
+                ephemeral=True,
+            )
+
+        # Build jump URL to the persistent activity check message
+        inactive_channel = discord.utils.get(guild.channels, name="inactivity-check")
+        jump_url = None
+        if inactive_channel:
+            jump_url = f"https://discord.com/channels/{guild.id}/{inactive_channel.id}/{msg_id}"
+
+        # Fetch missing activity checks
+        try:
+            missing_checks = await self.season_activity_checks(
+                guild,
+                season_id=season.id,
+                missing=True,
+                limit=10000,
+            )
+        except RscException as exc:
+            return await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc), ephemeral=True)
+
+        if not missing_checks:
+            return await interaction.followup.send(
+                embed=GreenEmbed(
+                    title="Activity Check",
+                    description="All players have completed the activity check!",
+                ),
+                ephemeral=True,
+            )
+
+        # Build embed for the DM
+        default_msg = "You have **not** completed your activity check. Please do so as soon as possible."
+        if jump_url:
+            default_msg += f"\n\n**[Click here to complete your activity check]({jump_url})**"
+
+        dm_embed = YellowEmbed(
+            title="Activity Check Reminder",
+            description=message or default_msg,
+        )
+        if guild.icon:
+            dm_embed.set_thumbnail(url=guild.icon.url)
+        dm_embed.set_footer(text=guild.name)
+
+        # Queue DMs via the shared rate-limited helper
+        queued = 0
+        for check in missing_checks:
+            if not check.discord_id:
+                continue
+            member = guild.get_member(check.discord_id)
+            if not member:
+                continue
+            await self._dm_helper.enqueue(member, embed=dm_embed)
+            queued += 1
+
+        desc = f"**{queued}** DMs queued. Use `/admin dmstatus` to track progress."
+
+        await interaction.followup.send(
+            embed=GreenEmbed(title="Activity Check DMs Queued", description=desc),
             ephemeral=True,
         )

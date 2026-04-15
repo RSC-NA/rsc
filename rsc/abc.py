@@ -54,6 +54,7 @@ from rsc.enums import (
 
 if TYPE_CHECKING:
     from rsc.combines.models import CombinesLobby
+    from rsc.utils.dm import DMHelper
 
 
 class RSCMixIn(ABC):
@@ -70,6 +71,8 @@ class RSCMixIn(ABC):
     _web_site: TCPSite
 
     _team_cache: dict[int, list[str]]
+
+    _dm_helper: "DMHelper"
 
     # Core
 

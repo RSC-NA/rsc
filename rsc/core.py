@@ -48,6 +48,7 @@ from rsc.tiers import TierMixIn
 from rsc.trackers import TrackerMixIn
 from rsc.transactions import TransactionMixIn
 from rsc.utils import UtilsMixIn
+from rsc.utils.dm import DMHelper
 from rsc.utils.trophy import TrophyMixIn
 from rsc.views import LeagueSelectView, RSCSetupModal
 from rsc.welcome import WelcomeMixIn
@@ -113,6 +114,10 @@ class RSC(
         # Cache the league associated with each guild
         self._league: dict[int, int] = {}
 
+        # Shared rate-limited DM queue
+        self._dm_helper = DMHelper()
+        self._dm_helper.start()
+
         super().__init__()
         log.info("RSC Bot has been started.")
 
@@ -134,6 +139,7 @@ class RSC(
         self.expire_free_agent_checkins_loop.cancel()
         self.sync_discord_roles.cancel()
         self.weekly_llm_db_refresh.cancel()
+        await self._dm_helper.stop()
         await self.close_ballchasing_sessions()
         await self._web_runner.cleanup()
 
