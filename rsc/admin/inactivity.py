@@ -11,6 +11,7 @@ from rsc.embeds import (
     BlueEmbed,
     ErrorEmbed,
     GreenEmbed,
+    SuccessEmbed,
     YellowEmbed,
 )
 from rsc.enums import ActivityCheckStatus
@@ -272,4 +273,187 @@ class AdminInactivityMixIn(AdminMixIn):
                 title="Active Status Updated",
                 description=f"{player.mention} has been marked as {status_fmt}",
             )
+        )
+
+    @_inactive.command(name="role", description="Set the role to assign to players missing their activity check")
+    @app_commands.describe(role="Role to assign to players who have not completed the activity check")
+    async def _admin_inactive_check_role_cmd(self, interaction: discord.Interaction, role: discord.Role):
+        guild = interaction.guild
+        if not guild:
+            return
+
+        await self._set_activity_check_missing_role(guild, role.id)
+        await interaction.response.send_message(
+            embed=SuccessEmbed(description=f"Activity check missing role set to {role.mention}"),
+            ephemeral=True,
+        )
+
+    async def _populate_activity_check_role(
+        self, guild: discord.Guild, missing_role: discord.Role
+    ) -> tuple[list[discord.Member], list[discord.Member], int]:
+        """Sync the missing role to match players who haven't completed the activity check.
+
+        Only adds/removes where needed to minimize API calls.
+        Returns a tuple of (assigned, failed, total_missing).
+        """
+        # Get current season
+        season = await self.current_season(guild)
+        if not (season and season.id):
+            return [], [], 0
+
+        # Fetch all missing activity checks for the current season
+        missing_checks = await self.season_activity_checks(
+            guild,
+            season_id=season.id,
+            missing=True,
+            limit=0,
+        )
+
+        # Build set of discord IDs that should have the role
+        should_have: set[int] = set()
+        for check in missing_checks:
+            if check.discord_id:
+                should_have.add(check.discord_id)
+
+        # Members who currently have the role but shouldn't
+        currently_have = {m.id for m in missing_role.members}
+        to_remove = currently_have - should_have
+        for member_id in to_remove:
+            member = guild.get_member(member_id)
+            if member:
+                try:
+                    await member.remove_roles(missing_role, reason="Completed activity check")
+                except discord.HTTPException:
+                    pass
+
+        # Members who should have the role but don't
+        to_add = should_have - currently_have
+        assigned: list[discord.Member] = []
+        failed: list[discord.Member] = []
+        for member_id in to_add:
+            member = guild.get_member(member_id)
+            if not member:
+                continue
+            try:
+                await member.add_roles(missing_role, reason="Missing activity check")
+                assigned.append(member)
+            except discord.HTTPException:
+                failed.append(member)
+
+        # Total with role = already had + newly assigned
+        log.debug(
+            f"Activity check role sync: +{len(assigned)} added, -{len(to_remove)} removed, {len(failed)} failed",
+            guild=guild,
+        )
+        return assigned, failed, len(missing_checks)
+
+    @_inactive.command(name="populate", description="Populate the missing activity check role on players who haven't completed it")
+    async def _admin_inactive_check_populate_cmd(self, interaction: discord.Interaction):
+        guild = interaction.guild
+        if not guild:
+            return
+
+        # Verify activity check is running
+        msg_id = await self._get_activity_check_msg_id(guild)
+        if not msg_id:
+            return await interaction.response.send_message(
+                embed=ErrorEmbed(description="The activity check has not been started."),
+                ephemeral=True,
+            )
+
+        # Get configured role
+        missing_role = await self._get_activity_check_missing_role(guild)
+        if not missing_role:
+            return await interaction.response.send_message(
+                embed=ErrorEmbed(description="No activity check missing role configured. Use `/admin inactivecheck role` to set one."),
+                ephemeral=True,
+            )
+
+        await interaction.response.defer(ephemeral=True)
+
+        try:
+            assigned, failed, total_missing = await self._populate_activity_check_role(guild, missing_role)
+        except RscException as exc:
+            return await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc), ephemeral=True)
+
+        if total_missing == 0:
+            return await interaction.followup.send(
+                embed=GreenEmbed(
+                    title="Activity Check",
+                    description="All players have completed the activity check!",
+                ),
+                ephemeral=True,
+            )
+
+        desc = f"**{len(assigned)}** players assigned {missing_role.mention}, **{total_missing}** total missing."
+        if failed:
+            desc += f"\n**{len(failed)}** players could not be assigned the role."
+
+        await interaction.followup.send(
+            embed=GreenEmbed(title="Activity Check Populated", description=desc),
+            ephemeral=True,
+        )
+
+    @_inactive.command(name="ping", description="Ping players who have not completed the activity check")
+    async def _admin_inactive_check_ping_cmd(self, interaction: discord.Interaction):
+        guild = interaction.guild
+        if not guild:
+            return
+
+        # Verify activity check is running
+        msg_id = await self._get_activity_check_msg_id(guild)
+        if not msg_id:
+            return await interaction.response.send_message(
+                embed=ErrorEmbed(description="The activity check has not been started."),
+                ephemeral=True,
+            )
+
+        # Verify channel exists
+        inactive_channel = discord.utils.get(guild.channels, name="inactivity-check")
+        if not inactive_channel or not isinstance(inactive_channel, discord.TextChannel):
+            return await interaction.response.send_message(
+                embed=ErrorEmbed(description="The inactivity-check channel does not exist."),
+                ephemeral=True,
+            )
+
+        # Get configured role
+        missing_role = await self._get_activity_check_missing_role(guild)
+        if not missing_role:
+            return await interaction.response.send_message(
+                embed=ErrorEmbed(description="No activity check missing role configured. Use `/admin inactivecheck role` to set one."),
+                ephemeral=True,
+            )
+
+        await interaction.response.defer(ephemeral=True)
+
+        try:
+            assigned, failed, total_missing = await self._populate_activity_check_role(guild, missing_role)
+        except RscException as exc:
+            return await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc), ephemeral=True)
+
+        if total_missing == 0:
+            return await interaction.followup.send(
+                embed=GreenEmbed(
+                    title="Activity Check",
+                    description="All players have completed the activity check!",
+                ),
+                ephemeral=True,
+            )
+
+        # Ping in the inactive check channel
+        await inactive_channel.send(
+            content=f"{missing_role.mention} - You have **not** completed your activity check. Please do so as soon as possible.",
+            allowed_mentions=discord.AllowedMentions(roles=True),
+        )
+
+        desc = (
+            f"Pinged {missing_role.mention} in {inactive_channel.mention}.\n\n"
+            f"**{len(assigned)}** players tagged with role, **{total_missing}** total missing."
+        )
+        if failed:
+            desc += f"\n**{len(failed)}** players could not be assigned the role."
+
+        await interaction.followup.send(
+            embed=GreenEmbed(title="Activity Check Ping", description=desc),
+            ephemeral=True,
         )

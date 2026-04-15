@@ -13,6 +13,7 @@ logger = logging.getLogger("red.rsc.admin")
 log = GuildLogAdapter(logger)
 
 defaults_guild = AdminSettings(
+    ActivityCheckMissingRole=None,
     ActivityCheckMsgId=None,
     AgmMessage=None,
     Dates=None,
@@ -147,6 +148,15 @@ class AdminMixIn(RSCMixIn):
 
     async def _get_intent_missing_message(self, guild: discord.Guild) -> str | None:
         return await self.config.custom("Admin", str(guild.id)).IntentMissingMsg()
+
+    async def _set_activity_check_missing_role(self, guild: discord.Guild, role_id: int | None):
+        await self.config.custom("Admin", str(guild.id)).ActivityCheckMissingRole.set(role_id)
+
+    async def _get_activity_check_missing_role(self, guild: discord.Guild) -> discord.Role | None:
+        role_id = await self.config.custom("Admin", str(guild.id)).ActivityCheckMissingRole()
+        if not role_id:
+            return None
+        return guild.get_role(role_id)
 
     async def _set_actvity_check_msg_id(self, guild: discord.Guild, msg_id: int | None):
         await self.config.custom("Admin", str(guild.id)).ActivityCheckMsgId.set(msg_id)

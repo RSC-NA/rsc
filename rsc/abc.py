@@ -211,6 +211,20 @@ class RSCMixIn(ABC):
     async def current_season(self, guild: discord.Guild) -> Season | None: ...
 
     @abstractmethod
+    async def season_activity_checks(
+        self,
+        guild: discord.Guild,
+        season_id: int | None = None,
+        season_number: int | None = None,
+        discord_id: int | None = None,
+        completed: bool | None = None,
+        returning: bool | None = None,
+        missing: bool | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[ActivityCheck]: ...
+
+    @abstractmethod
     async def players(
         self,
         guild: discord.Guild,

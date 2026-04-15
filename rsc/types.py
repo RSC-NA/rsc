@@ -109,6 +109,7 @@ class Accolades:
 
 
 class AdminSettings(TypedDict):
+    ActivityCheckMissingRole: discord.Role | None
     ActivityCheckMsgId: int | None
     AgmMessage: str | None
     Dates: str | None

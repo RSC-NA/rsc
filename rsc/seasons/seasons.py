@@ -4,6 +4,7 @@ from operator import attrgetter
 import discord
 from rscapi import ApiClient, SeasonsApi
 from rscapi.exceptions import ApiException
+from rscapi.models import ActivityCheck
 from rscapi.models.franchise_standings import FranchiseStandings
 from rscapi.models.intent_to_play import IntentToPlay
 from rscapi.models.season import Season
@@ -87,5 +88,34 @@ class SeasonsMixIn(RSCMixIn):
             api = SeasonsApi(client)
             try:
                 return await api.seasons_franchise_standings(season_id)
+            except ApiException as exc:
+                raise RscException(response=exc)
+
+    async def season_activity_checks(
+        self,
+        guild: discord.Guild,
+        season_id: int | None = None,
+        season_number: int | None = None,
+        discord_id: int | None = None,
+        completed: bool | None = None,
+        returning: bool | None = None,
+        missing: bool | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[ActivityCheck]:
+        async with ApiClient(self._api_conf[guild.id]) as client:
+            api = SeasonsApi(client)
+            try:
+                resp = await api.seasons_activity_check_list(
+                    season=season_id,
+                    season_number=season_number,
+                    discord_id=discord_id,
+                    completed=completed,
+                    returning_status=returning,
+                    missing=missing,
+                    limit=limit,
+                    offset=offset,
+                )
+                return resp.results
             except ApiException as exc:
                 raise RscException(response=exc)
