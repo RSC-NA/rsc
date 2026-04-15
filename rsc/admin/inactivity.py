@@ -306,7 +306,7 @@ class AdminInactivityMixIn(AdminMixIn):
             guild,
             season_id=season.id,
             missing=True,
-            limit=0,
+            limit=10000,
         )
 
         # Build set of discord IDs that should have the role
