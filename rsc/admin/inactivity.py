@@ -457,6 +457,67 @@ class AdminInactivityMixIn(AdminMixIn):
             ephemeral=True,
         )
 
+    def _build_activity_check_dm_embed(
+        self,
+        guild: discord.Guild,
+        msg_id: int,
+        custom_message: str | None = None,
+    ) -> discord.Embed:
+        """Build the DM embed for the activity check reminder."""
+        inactive_channel = discord.utils.get(guild.channels, name="inactivity-check")
+        jump_url = None
+        if inactive_channel:
+            jump_url = f"https://discord.com/channels/{guild.id}/{inactive_channel.id}/{msg_id}"
+
+        default_msg = (
+            "You have **not** completed your activity check. Please do this as soon as possible "
+            "or you will be **unable to play** in the upcoming season."
+        )
+        if jump_url:
+            default_msg += f"\n\n**[Click here to complete your activity check]({jump_url})**"
+
+        embed = YellowEmbed(
+            title="Activity Check Reminder",
+            description=custom_message or default_msg,
+        )
+        if guild.icon:
+            embed.set_thumbnail(url=guild.icon.url)
+        embed.set_footer(text=guild.name)
+        return embed
+
+    @_inactive.command(name="testmsg", description="Preview the activity check DM by sending it to yourself")
+    @app_commands.describe(message="Custom message to include in the DM (optional)")
+    async def _admin_inactive_check_testmsg_cmd(
+        self,
+        interaction: discord.Interaction,
+        message: str | None = None,
+    ):
+        guild = interaction.guild
+        if not guild or not isinstance(interaction.user, discord.Member):
+            return
+
+        msg_id = await self._get_activity_check_msg_id(guild)
+        if not msg_id:
+            return await interaction.response.send_message(
+                embed=ErrorEmbed(description="The activity check has not been started."),
+                ephemeral=True,
+            )
+
+        embed = self._build_activity_check_dm_embed(guild, msg_id, custom_message=message)
+
+        try:
+            await interaction.user.send(embed=embed)
+        except discord.Forbidden:
+            return await interaction.response.send_message(
+                embed=ErrorEmbed(description="Unable to DM you. Check your DM settings."),
+                ephemeral=True,
+            )
+
+        await interaction.response.send_message(
+            embed=GreenEmbed(description="Test DM sent. Check your direct messages."),
+            ephemeral=True,
+        )
+
     @_inactive.command(name="dm", description="DM players who have not completed the activity check")
     @app_commands.describe(message="Custom message to include in the DM (optional)")
     async def _admin_inactive_check_dm_cmd(
@@ -486,12 +547,6 @@ class AdminInactivityMixIn(AdminMixIn):
                 ephemeral=True,
             )
 
-        # Build jump URL to the persistent activity check message
-        inactive_channel = discord.utils.get(guild.channels, name="inactivity-check")
-        jump_url = None
-        if inactive_channel:
-            jump_url = f"https://discord.com/channels/{guild.id}/{inactive_channel.id}/{msg_id}"
-
         # Fetch missing activity checks
         try:
             missing_checks = await self.season_activity_checks(
@@ -513,17 +568,7 @@ class AdminInactivityMixIn(AdminMixIn):
             )
 
         # Build embed for the DM
-        default_msg = "You have **not** completed your activity check. Please do so as soon as possible."
-        if jump_url:
-            default_msg += f"\n\n**[Click here to complete your activity check]({jump_url})**"
-
-        dm_embed = YellowEmbed(
-            title="Activity Check Reminder",
-            description=message or default_msg,
-        )
-        if guild.icon:
-            dm_embed.set_thumbnail(url=guild.icon.url)
-        dm_embed.set_footer(text=guild.name)
+        dm_embed = self._build_activity_check_dm_embed(guild, msg_id, custom_message=message)
 
         # Queue DMs via the shared rate-limited helper
         queued = 0
