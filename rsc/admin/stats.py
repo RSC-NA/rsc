@@ -300,11 +300,10 @@ class AdminStatsMixIn(AdminMixIn):
                 embed=ErrorEmbed(description="API returned a Season without an ID. Please open a modmail ticket.")
             )
 
-        lplayers = await self.players(guild, season=next_season.id)
+        de_count = await self.player_count(guild, season=next_season.id, status=Status.DRAFT_ELIGIBLE)
 
-        total_des = len(lplayers)
-        log.debug(f"DE Player Length: {total_des}")
-        if not lplayers:
+        log.debug(f"DE Player Count: {de_count}")
+        if not de_count:
             return await interaction.followup.send(
                 embed=YellowEmbed(
                     title="RSC Sign-up Stats",
@@ -312,20 +311,10 @@ class AdminStatsMixIn(AdminMixIn):
                 )
             )
 
-        status_dict = {}
-        for s in Status:
-            status_dict[s.full_name] = sum(1 for p in lplayers if p.status == s)
-
-        from pprint import pformat
-
-        log.debug(f"Final Results:\n\n{pformat(status_dict)}")
-
         embed = BlueEmbed(title="Sign-up Stats", description="RSC stats for next season sign-ups")
-        embed.add_field(name="Status", value="\n".join(status_dict.keys()), inline=True)
         embed.add_field(
-            name="Count",
-            value="\n".join([str(v) for v in status_dict.values()]),
+            name="DE Count",
+            value=str(de_count),
             inline=True,
         )
-
         await interaction.followup.send(embed=embed)
