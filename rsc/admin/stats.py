@@ -38,7 +38,7 @@ class AdminStatsMixIn(AdminMixIn):
         await interaction.response.defer(ephemeral=True)
 
         try:
-            next_season = await self.next_season(guild)
+            next_season = await self.next_signup_season(guild)
         except LeagueNotConfigured:
             return await interaction.followup.send(
                 embed=YellowEmbed(
@@ -47,7 +47,11 @@ class AdminStatsMixIn(AdminMixIn):
                 )
             )
         except RscException as exc:
-            return await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc))
+            if exc.type == "SignupsClosedException":
+                log.debug("No signup season currently open. Defaulting to current season.")
+                next_season = await self.current_season(guild)
+            else:
+                return await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc))
 
         if not next_season:
             return await interaction.followup.send(
@@ -113,7 +117,7 @@ class AdminStatsMixIn(AdminMixIn):
         await interaction.response.defer(ephemeral=True)
 
         try:
-            next_season = await self.next_season(guild)
+            next_season = await self.next_signup_season(guild)
         except LeagueNotConfigured:
             return await interaction.followup.send(
                 embed=YellowEmbed(
@@ -122,7 +126,11 @@ class AdminStatsMixIn(AdminMixIn):
                 )
             )
         except RscException as exc:
-            return await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc))
+            if exc.type == "SignupsClosedException":
+                log.debug("No signup season currently open. Defaulting to current season.")
+                next_season = await self.current_season(guild)
+            else:
+                return await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc))
 
         if not next_season:
             return await interaction.followup.send(
@@ -264,7 +272,7 @@ class AdminStatsMixIn(AdminMixIn):
         await interaction.response.defer(ephemeral=True)
 
         try:
-            next_season = await self.next_season(guild)
+            next_season = await self.next_signup_season(guild)
         except LeagueNotConfigured:
             return await interaction.followup.send(
                 embed=YellowEmbed(
@@ -273,9 +281,11 @@ class AdminStatsMixIn(AdminMixIn):
                 )
             )
         except RscException as exc:
-            return await interaction.followup.send(
-                embed=ApiExceptionErrorEmbed(exc),
-            )
+            if exc.type == "SignupsClosedException":
+                log.debug("No signup season currently open. Defaulting to current season.")
+                next_season = await self.current_season(guild)
+            else:
+                return await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc))
 
         if not next_season:
             return await interaction.followup.send(

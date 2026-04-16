@@ -61,6 +61,18 @@ class SeasonsMixIn(RSCMixIn):
             except ApiException as exc:
                 raise RscException(response=exc)
 
+    async def next_signup_season(self, guild: discord.Guild) -> Season | None:
+        """Query to API to find out if signups are open for any season"""
+        async with ApiClient(self._api_conf[guild.id]) as client:
+            api = SeasonsApi(client)
+            league_id = self._league[guild.id]
+            try:
+                signup_season = await api.seasons_signup_season(league=league_id)
+                log.debug("Signup Season Number: %d", signup_season.number if signup_season else None)
+                return signup_season
+            except ApiException as exc:
+                raise RscException(response=exc)
+
     async def player_intents(
         self,
         guild: discord.Guild,

@@ -507,6 +507,9 @@ class RSCMixIn(ABC):
     @abstractmethod
     async def next_season(self, guild: discord.Guild) -> Season | None: ...
 
+    @abstractmethod
+    async def next_signup_season(self, guild: discord.Guild) -> Season | None: ...
+
     # Teams
 
     @abstractmethod

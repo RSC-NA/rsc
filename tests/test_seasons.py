@@ -94,6 +94,57 @@ class TestNextSeason:
             await mixin.next_season(mock_guild)
 
 
+# --- next_signup_season ---
+
+
+class TestNextSignupSeason:
+    async def test_returns_signup_season(self, mock_guild):
+        s = _make_season(id=10, number=26)
+        mixin = _create_mixin(
+            _api_conf={mock_guild.id: MagicMock()},
+            _league={mock_guild.id: 1},
+        )
+        with patch("rsc.seasons.seasons.ApiClient") as mock_client:
+            mock_api = AsyncMock()
+            mock_api.seasons_signup_season.return_value = s
+            mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
+            mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
+            with patch("rsc.seasons.seasons.SeasonsApi", return_value=mock_api):
+                result = await mixin.next_signup_season(mock_guild)
+
+        assert result is s
+        mock_api.seasons_signup_season.assert_awaited_once_with(league=1)
+
+    async def test_returns_none_when_no_signup_season(self, mock_guild):
+        mixin = _create_mixin(
+            _api_conf={mock_guild.id: MagicMock()},
+            _league={mock_guild.id: 1},
+        )
+        with patch("rsc.seasons.seasons.ApiClient") as mock_client:
+            mock_api = AsyncMock()
+            mock_api.seasons_signup_season.return_value = None
+            mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
+            mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
+            with patch("rsc.seasons.seasons.SeasonsApi", return_value=mock_api):
+                result = await mixin.next_signup_season(mock_guild)
+
+        assert result is None
+
+    async def test_raises_rsc_exception_on_api_error(self, mock_guild):
+        mixin = _create_mixin(
+            _api_conf={mock_guild.id: MagicMock()},
+            _league={mock_guild.id: 1},
+        )
+        with patch("rsc.seasons.seasons.ApiClient") as mock_client:
+            mock_api = AsyncMock()
+            mock_api.seasons_signup_season.side_effect = ApiException(status=500, reason="Error")
+            mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
+            mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
+            with patch("rsc.seasons.seasons.SeasonsApi", return_value=mock_api):
+                with pytest.raises(RscException):
+                    await mixin.next_signup_season(mock_guild)
+
+
 # --- seasons API ---
 
 

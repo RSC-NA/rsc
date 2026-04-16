@@ -65,6 +65,24 @@ class TestSeasonsApiCalls:
             pytest.fail(f"next_season() raised unexpected exception: {e}")
 
     @pytest.mark.asyncio
+    async def test_next_signup_season_api_call(self, rsc_bot: RSC, mock_guild):
+        """Test that next_signup_season() API call doesn't raise exceptions."""
+        try:
+            result = await rsc_bot.next_signup_season(mock_guild)
+            if result:
+                print(f"✓ next_signup_season() returned season: {result.number}")
+                print(f"  - ID: {result.id}, Number: {result.number}")
+            else:
+                print("✓ next_signup_season() returned None (no signup season)")
+        except RscException as e:
+            if e.status == 404:
+                print("✓ next_signup_season() correctly handled no signup season (404)")
+            else:
+                pytest.fail(f"next_signup_season() raised unexpected RscException: {e}")
+        except Exception as e:
+            pytest.fail(f"next_signup_season() raised unexpected exception: {e}")
+
+    @pytest.mark.asyncio
     async def test_season_by_number_api_call(self, rsc_bot: RSC, mock_guild):
         """Test that season_by_number() API call doesn't raise exceptions."""
         try:
