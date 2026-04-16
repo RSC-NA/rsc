@@ -12,6 +12,8 @@ from rsc.exceptions import RscException
 from rsc.enums import TransactionType
 from rscapi.models.franchise_identifier import FranchiseIdentifier
 
+pytestmark = pytest.mark.integration
+
 
 class TestTransactionsApiCalls:
     """Test RSC API calls for transaction functions without exceptions."""

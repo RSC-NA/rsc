@@ -2,6 +2,7 @@ import asyncio
 import logging
 import random
 from dataclasses import dataclass
+from datetime import UTC, datetime
 
 import discord
 
@@ -9,6 +10,7 @@ logger = logging.getLogger("red.rsc.utils.dm")
 
 DEFAULT_RATE = 1.5  # base seconds between DMs
 MAX_RETRIES = 5  # max retry attempts on rate limit
+SCHEDULE_POLL_INTERVAL = 30.0  # seconds between checks for scheduled messages
 
 
 @dataclass
@@ -18,6 +20,7 @@ class DMTask:
     member: discord.Member
     content: str | None = None
     embed: discord.Embed | None = None
+    send_at: datetime | None = None
 
 
 class DMHelper:
@@ -38,13 +41,18 @@ class DMHelper:
         self._rate = rate
         self._queue: asyncio.Queue[DMTask | None] = asyncio.Queue()
         self._task: asyncio.Task | None = None
+        self._scheduler_task: asyncio.Task | None = None
+        self._scheduled: list[DMTask] = []
+        self._scheduled_lock: asyncio.Lock = asyncio.Lock()
         self._success: int = 0
         self._failed: int = 0
         self._total: int = 0
 
     @property
     def is_running(self) -> bool:
-        return self._task is not None and not self._task.done()
+        consumer_running = self._task is not None and not self._task.done()
+        scheduler_running = self._scheduler_task is not None and not self._scheduler_task.done()
+        return consumer_running or scheduler_running
 
     @property
     def total(self) -> int:
@@ -53,6 +61,10 @@ class DMHelper:
     @property
     def pending(self) -> int:
         return self._queue.qsize()
+
+    @property
+    def scheduled(self) -> int:
+        return len(self._scheduled)
 
     @property
     def success(self) -> int:
@@ -67,16 +79,26 @@ class DMHelper:
         return self._rate * random.uniform(0.5, 1.5)  # noqa: S311
 
     def start(self) -> None:
-        """Start the background consumer loop."""
+        """Start the background consumer loop and scheduler."""
         if self._task is None or self._task.done():
             self._success = 0
             self._failed = 0
             self._total = 0
             self._task = asyncio.create_task(self._consumer())
+        if self._scheduler_task is None or self._scheduler_task.done():
+            self._scheduler_task = asyncio.create_task(self._schedule_loop())
 
     async def stop(self) -> None:
         """Signal the consumer to drain remaining items and stop."""
-        # Sentinel to signal shutdown
+        # Stop scheduler
+        if self._scheduler_task:
+            self._scheduler_task.cancel()
+            try:
+                await self._scheduler_task
+            except asyncio.CancelledError:
+                pass
+            self._scheduler_task = None
+        # Sentinel to signal consumer shutdown
         await self._queue.put(None)
         if self._task:
             await self._task
@@ -87,10 +109,21 @@ class DMHelper:
         member: discord.Member,
         content: str | None = None,
         embed: discord.Embed | None = None,
+        send_at: datetime | None = None,
     ) -> None:
-        """Add a DM to the send queue."""
+        """Add a DM to the send queue.
+
+        If ``send_at`` is provided (timezone-aware UTC datetime), the message
+        is held until that time before entering the send queue.
+        """
         self._total += 1
-        await self._queue.put(DMTask(member=member, content=content, embed=embed))
+        task = DMTask(member=member, content=content, embed=embed, send_at=send_at)
+        if send_at and send_at > datetime.now(UTC):
+            async with self._scheduled_lock:
+                self._scheduled.append(task)
+            logger.debug(f"Scheduled DM to {member} ({member.id}) at {send_at.isoformat()}")
+        else:
+            await self._queue.put(task)
 
     async def _consumer(self) -> None:
         """Process queued DMs one at a time with rate limiting."""
@@ -110,6 +143,27 @@ class DMHelper:
             # Rate limit after each message
             await asyncio.sleep(self._jittered_rate())
         logger.debug(f"DM consumer finished. Sent: {self._success}, Failed: {self._failed}")
+
+    async def _schedule_loop(self) -> None:
+        """Periodically move scheduled tasks that are due into the send queue."""
+        logger.debug("DM scheduler started")
+        while True:
+            now = datetime.now(UTC)
+            ready: list[DMTask] = []
+            async with self._scheduled_lock:
+                remaining: list[DMTask] = []
+                for task in self._scheduled:
+                    if task.send_at and task.send_at <= now:
+                        ready.append(task)
+                    else:
+                        remaining.append(task)
+                self._scheduled = remaining
+
+            for task in ready:
+                logger.debug(f"Releasing scheduled DM to {task.member} ({task.member.id})")
+                await self._queue.put(task)
+
+            await asyncio.sleep(SCHEDULE_POLL_INTERVAL)
 
     async def _send(self, task: DMTask) -> None:
         """Send a single DM with exponential backoff on rate limits."""

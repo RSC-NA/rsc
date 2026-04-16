@@ -1,12 +1,15 @@
 import logging
+from datetime import UTC, datetime
 
 import discord
 from redbot.core import app_commands
+from redbot.core.app_commands import Transform
 
 from rsc.abc import RSCMixIn
 from rsc.admin.modals import LeagueDatesModal
 from rsc.embeds import BlueEmbed, GreenEmbed, SuccessEmbed, YellowEmbed
 from rsc.logs import GuildLogAdapter
+from rsc.transformers import DateTransformer
 from rsc.types import AdminSettings
 
 logger = logging.getLogger("red.rsc.admin")
@@ -112,7 +115,8 @@ class AdminMixIn(RSCMixIn):
             f"**Progress:** {processed}/{helper.total}\n"
             f"**Sent:** {helper.success}\n"
             f"**Failed:** {helper.failed}\n"
-            f"**Pending:** {helper.pending}"
+            f"**Pending:** {helper.pending}\n"
+            f"**Scheduled:** {helper.scheduled}"
         )
 
         embed_cls = YellowEmbed if helper.pending > 0 else GreenEmbed
@@ -122,29 +126,60 @@ class AdminMixIn(RSCMixIn):
         )
 
     @_admin.command(name="directmessage", description="Send a direct message to a user")
-    @app_commands.describe(member="Discord member to DM", message="Message content to send")
-    async def _admin_dm_user_cmd(self, interaction: discord.Interaction, member: discord.Member, message: str):
+    @app_commands.describe(
+        member="Discord member to DM",
+        message="Message content to send",
+        send_at="Schedule the DM for a future date/time (ISO 8601, e.g. 2025-04-20T18:00)",
+    )
+    async def _admin_dm_user_cmd(
+        self,
+        interaction: discord.Interaction,
+        member: discord.Member,
+        message: str,
+        send_at: Transform[datetime, DateTransformer] | None = None,
+    ):
         guild = interaction.guild
         if not guild:
             return
 
-        try:
-            await member.send(content=message)
-        except discord.Forbidden:
-            return await interaction.response.send_message(
-                embed=YellowEmbed(description=f"Unable to DM {member.mention}. They may have DMs disabled."),
-                ephemeral=True,
-            )
-        except discord.HTTPException as exc:
-            return await interaction.response.send_message(
-                embed=YellowEmbed(description=f"Failed to DM {member.mention}: {exc}"),
-                ephemeral=True,
-            )
+        # If scheduling, convert naive input to guild timezone then to UTC
+        utc_send_at: datetime | None = None
+        if send_at is not None:
+            guild_tz = await self.timezone(guild)
+            if send_at.tzinfo is None:
+                send_at = send_at.replace(tzinfo=guild_tz)
+            utc_send_at = send_at.astimezone(UTC)
+            if utc_send_at <= datetime.now(UTC):
+                return await interaction.response.send_message(
+                    embed=YellowEmbed(description="Scheduled time must be in the future."),
+                    ephemeral=True,
+                )
 
-        await interaction.response.send_message(
-            embed=GreenEmbed(description=f"DM sent to {member.mention}."),
-            ephemeral=True,
-        )
+        if utc_send_at:
+            await self._dm_helper.enqueue(member, content=message, send_at=utc_send_at)
+            local_fmt = discord.utils.format_dt(utc_send_at, style="F")
+            await interaction.response.send_message(
+                embed=GreenEmbed(description=f"DM to {member.mention} scheduled for {local_fmt}."),
+                ephemeral=True,
+            )
+        else:
+            try:
+                await member.send(content=message)
+            except discord.Forbidden:
+                return await interaction.response.send_message(
+                    embed=YellowEmbed(description=f"Unable to DM {member.mention}. They may have DMs disabled."),
+                    ephemeral=True,
+                )
+            except discord.HTTPException as exc:
+                return await interaction.response.send_message(
+                    embed=YellowEmbed(description=f"Failed to DM {member.mention}: {exc}"),
+                    ephemeral=True,
+                )
+
+            await interaction.response.send_message(
+                embed=GreenEmbed(description=f"DM sent to {member.mention}."),
+                ephemeral=True,
+            )
 
     @_admin.command(name="pfachnanel", description="Configure the PermFA announcement channel")
     @app_commands.describe(channel="Discord channel to announce PermFAs")

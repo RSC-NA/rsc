@@ -10,6 +10,8 @@ sys.path.insert(0, str(project_root))
 from rsc.core import RSC
 from rsc.exceptions import RscException
 
+pytestmark = pytest.mark.integration
+
 
 class TestTeamsApiCalls:
     """Test RSC API calls for team functions without exceptions."""

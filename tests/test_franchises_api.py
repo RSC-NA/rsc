@@ -13,6 +13,8 @@ from rsc.core import RSC
 from rscapi.models import Franchise
 from rsc.exceptions import RscException
 
+pytestmark = pytest.mark.integration
+
 
 class TestFranchisesApiCalls:
     """Test RSC API calls for franchise functions without exceptions."""

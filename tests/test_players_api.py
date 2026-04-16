@@ -11,6 +11,8 @@ from rsc.core import RSC
 from rsc.exceptions import RscException
 from rsc.enums import Status
 
+pytestmark = pytest.mark.integration
+
 
 class TestPlayersApiCalls:
     """Test RSC API calls for player functions without exceptions."""

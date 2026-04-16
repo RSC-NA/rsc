@@ -17,6 +17,8 @@ from rsc.enums import Platform, PlayerType, Referrer, RegionPreference
 
 from .utils import random_string
 
+pytestmark = pytest.mark.integration
+
 
 class TestMembersApiCalls:
     """Test RSC API calls for member functions without exceptions."""

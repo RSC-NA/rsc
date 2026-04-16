@@ -13,6 +13,8 @@ from rscapi.models import MatchResults
 
 from .utils import random_string
 
+pytestmark = pytest.mark.integration
+
 
 class TestMatchesApiCalls:
     """Test RSC API calls for match functions without exceptions."""

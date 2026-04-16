@@ -109,18 +109,21 @@ line-ending = "auto"
 
 [tool.codespell]
 skip = ["*.json"]
-ignore-words-list = "ptd,oce,nd,cros,recuse,checkin"
+ignore-words-list = "ptd,oce,nd,cros,recuse,checkin,alph"
 
 [tool.pytest.ini_options]
 minversion = "7.0"
 asyncio_mode = "auto"
 testpaths = ["tests"]
 python_files = ["test_*.py"]
+timeout = 10
 filterwarnings = [
     "ignore::DeprecationWarning:aiohttp_json_rpc",
     "ignore::DeprecationWarning:aiohttp",
 ]
-env_files = [".env"]
+markers = [
+    "integration: marks tests that make real API calls to the staging server",
+]
 
 [tool.ty.src]
 exclude = ["scripts", "tests"]
@@ -132,3 +135,6 @@ extra-paths = ["/home/xentrick/dev/python-replay-parser"]
 replay-parser = { git = "https://github.com/xentrick/python-replay-parser.git" }
 python-ballchasing = { git = "https://github.com/xentrick/python-ballchasing.git" }
 rscapi = { git = "https://github.com/RSC-NA/rsc-api-client.git" }
+
+[dependency-groups]
+dev = ["pytest>=9.0.3", "pytest-timeout>=2.4.0"]

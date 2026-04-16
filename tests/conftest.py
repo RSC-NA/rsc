@@ -35,6 +35,13 @@ def mock_guild():
     guild = MagicMock(spec=discord.Guild)
     guild.id = GUILD_ID
     guild.name = "RSC 3v3"
+    guild.icon = MagicMock()
+    guild.icon.url = "https://example.com/icon.png"
+    guild.text_channels = []
+    guild.roles = []
+    guild.get_channel = MagicMock(return_value=None)
+    guild.get_role = MagicMock(return_value=None)
+    guild.get_member = MagicMock(return_value=None)
     return guild
 
 
@@ -46,6 +53,32 @@ def mock_member():
     member.name = "nickm"
     member.display_name = "nickm"
     member.mention = f"<@{NICKM_ID}>"
+    member.display_avatar = "https://example.com/avatar.png"
+    member.guild = MagicMock(spec=discord.Guild)
+    member.guild.id = GUILD_ID
+    member.roles = []
+    return member
+
+
+@pytest.fixture
+def mock_executor():
+    """Create a mock Discord member to act as a transaction executor."""
+    member = MagicMock(spec=discord.Member)
+    member.id = 222222222
+    member.name = "Executor"
+    member.display_name = "Executor"
+    member.mention = "<@222222222>"
+    return member
+
+
+@pytest.fixture
+def mock_player_out():
+    """Create a mock Discord member to act as a subbed-out player."""
+    member = MagicMock(spec=discord.Member)
+    member.id = 333333333
+    member.name = "PlayerOut"
+    member.display_name = "PlayerOut"
+    member.mention = "<@333333333>"
     return member
 
 
