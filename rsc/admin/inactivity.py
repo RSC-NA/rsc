@@ -304,9 +304,11 @@ class AdminInactivityMixIn(AdminMixIn):
         missing_checks = await self.season_activity_checks(
             guild,
             season_id=season.id,
+            completed=False,
             missing=True,
             limit=10000,
         )
+        log.debug("Found %d missing activity checks for season %s", len(missing_checks), season.number)
 
         # Build set of discord IDs that should have the role
         should_have: set[int] = set()
