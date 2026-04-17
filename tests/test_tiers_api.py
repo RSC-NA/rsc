@@ -9,8 +9,27 @@ sys.path.insert(0, str(project_root))
 
 from rsc.core import RSC
 from rsc.exceptions import RscException
+from rscapi import TiersApi
 
 pytestmark = pytest.mark.integration
+
+
+class TestTiersApiContract:
+    """Verify all expected rscapi TiersApi methods exist without calling them."""
+
+    EXPECTED_METHODS = [
+        "tiers_list",
+        "tiers_read",
+        "tiers_standings",
+        "tiers_create",
+        "tiers_delete",
+    ]
+
+    @pytest.mark.parametrize("method_name", EXPECTED_METHODS)
+    def test_method_exists(self, method_name: str):
+        """Ensure TiersApi has the expected method."""
+        assert hasattr(TiersApi, method_name), f"TiersApi missing expected method: {method_name}"
+        assert callable(getattr(TiersApi, method_name)), f"TiersApi.{method_name} is not callable"
 
 
 class TestTiersApiCalls:

@@ -9,8 +9,28 @@ sys.path.insert(0, str(project_root))
 
 from rsc.core import RSC
 from rsc.exceptions import RscException
+from rscapi import SeasonsApi
 
 pytestmark = pytest.mark.integration
+
+
+class TestSeasonsApiContract:
+    """Verify all expected rscapi SeasonsApi methods exist without calling them."""
+
+    EXPECTED_METHODS = [
+        "seasons_list",
+        "seasons_read",
+        "seasons_signup_season",
+        "seasons_player_intents",
+        "seasons_franchise_standings",
+        "seasons_activity_check_list",
+    ]
+
+    @pytest.mark.parametrize("method_name", EXPECTED_METHODS)
+    def test_method_exists(self, method_name: str):
+        """Ensure SeasonsApi has the expected method."""
+        assert hasattr(SeasonsApi, method_name), f"SeasonsApi missing expected method: {method_name}"
+        assert callable(getattr(SeasonsApi, method_name)), f"SeasonsApi.{method_name} is not callable"
 
 
 class TestSeasonsApiCalls:

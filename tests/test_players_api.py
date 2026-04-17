@@ -8,10 +8,43 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 from rsc.core import RSC
-from rsc.exceptions import RscException
 from rsc.enums import Status
+from rsc.exceptions import RscException
+from rscapi import LeaguePlayersApi, LeaguesApi
 
 pytestmark = pytest.mark.integration
+
+
+class TestLeaguesApiContract:
+    """Verify all expected rscapi LeaguesApi methods exist without calling them."""
+
+    EXPECTED_METHODS = [
+        "leagues_list",
+        "leagues_read",
+        "leagues_current_season",
+        "leagues_seasons",
+    ]
+
+    @pytest.mark.parametrize("method_name", EXPECTED_METHODS)
+    def test_method_exists(self, method_name: str):
+        """Ensure LeaguesApi has the expected method."""
+        assert hasattr(LeaguesApi, method_name), f"LeaguesApi missing expected method: {method_name}"
+        assert callable(getattr(LeaguesApi, method_name)), f"LeaguesApi.{method_name} is not callable"
+
+
+class TestLeaguePlayersApiContract:
+    """Verify all expected rscapi LeaguePlayersApi methods exist without calling them."""
+
+    EXPECTED_METHODS = [
+        "league_players_list",
+        "league_players_partial_update",
+    ]
+
+    @pytest.mark.parametrize("method_name", EXPECTED_METHODS)
+    def test_method_exists(self, method_name: str):
+        """Ensure LeaguePlayersApi has the expected method."""
+        assert hasattr(LeaguePlayersApi, method_name), f"LeaguePlayersApi missing expected method: {method_name}"
+        assert callable(getattr(LeaguePlayersApi, method_name)), f"LeaguePlayersApi.{method_name} is not callable"
 
 
 class TestPlayersApiCalls:

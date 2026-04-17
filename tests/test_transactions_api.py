@@ -8,11 +8,50 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 from rsc.core import RSC
-from rsc.exceptions import RscException
 from rsc.enums import TransactionType
+from rsc.exceptions import RscException
+from rscapi import LeaguePlayersApi, TransactionsApi
 from rscapi.models.franchise_identifier import FranchiseIdentifier
 
 pytestmark = pytest.mark.integration
+
+
+class TestTransactionsApiContract:
+    """Verify all expected rscapi TransactionsApi methods exist without calling them."""
+
+    EXPECTED_METHODS = [
+        "transactions_sign_create",
+        "transactions_cut_create",
+        "transactions_resign_create",
+        "transactions_substitution_create",
+        "transactions_expire_create",
+        "transactions_retire_create",
+        "transactions_inactive_reserve_create",
+        "transactions_history_list",
+        "transactions_history_read",
+        "transactions_trade_create",
+        "transactions_draft_create",
+    ]
+
+    @pytest.mark.parametrize("method_name", EXPECTED_METHODS)
+    def test_method_exists(self, method_name: str):
+        """Ensure TransactionsApi has the expected method."""
+        assert hasattr(TransactionsApi, method_name), f"TransactionsApi missing expected method: {method_name}"
+        assert callable(getattr(TransactionsApi, method_name)), f"TransactionsApi.{method_name} is not callable"
+
+
+class TestTransactionsLeaguePlayersApiContract:
+    """Verify LeaguePlayersApi methods used by the transactions module exist."""
+
+    EXPECTED_METHODS = [
+        "league_players_set_captain",
+    ]
+
+    @pytest.mark.parametrize("method_name", EXPECTED_METHODS)
+    def test_method_exists(self, method_name: str):
+        """Ensure LeaguePlayersApi has the expected method used by transactions."""
+        assert hasattr(LeaguePlayersApi, method_name), f"LeaguePlayersApi missing expected method: {method_name}"
+        assert callable(getattr(LeaguePlayersApi, method_name)), f"LeaguePlayersApi.{method_name} is not callable"
 
 
 class TestTransactionsApiCalls:

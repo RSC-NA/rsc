@@ -479,7 +479,7 @@ class TrackerMixIn(RSCMixIn):
         guild: discord.Guild,
         player: discord.Member,
         tracker: str,
-    ):
+    ) -> TrackerLink:
         """Add a tracker to a user"""
         async with ApiClient(self._api_conf[guild.id]) as client:
             api = TrackerLinksApi(client)

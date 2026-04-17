@@ -9,8 +9,30 @@ sys.path.insert(0, str(project_root))
 
 from rsc.core import RSC
 from rsc.exceptions import RscException
+from rscapi import TeamsApi
 
 pytestmark = pytest.mark.integration
+
+
+class TestTeamsApiContract:
+    """Verify all expected rscapi TeamsApi methods exist without calling them."""
+
+    EXPECTED_METHODS = [
+        "teams_list",
+        "teams_read",
+        "teams_players",
+        "teams_next_match",
+        "teams_season_matches",
+        "teams_stats",
+        "teams_create",
+        "teams_delete",
+    ]
+
+    @pytest.mark.parametrize("method_name", EXPECTED_METHODS)
+    def test_method_exists(self, method_name: str):
+        """Ensure TeamsApi has the expected method."""
+        assert hasattr(TeamsApi, method_name), f"TeamsApi missing expected method: {method_name}"
+        assert callable(getattr(TeamsApi, method_name)), f"TeamsApi.{method_name} is not callable"
 
 
 class TestTeamsApiCalls:

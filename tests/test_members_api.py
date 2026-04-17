@@ -12,12 +12,40 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 from rsc.core import RSC
-from rsc.exceptions import RscException
 from rsc.enums import Platform, PlayerType, Referrer, RegionPreference
+from rsc.exceptions import RscException
+from rscapi import MembersApi
 
 from .utils import random_string
 
 pytestmark = pytest.mark.integration
+
+
+class TestMembersApiContract:
+    """Verify all expected rscapi MembersApi methods exist without calling them."""
+
+    EXPECTED_METHODS = [
+        "members_list",
+        "members_signup",
+        "members_create",
+        "members_delete",
+        "members_name_change",
+        "members_postseason_stats",
+        "members_stats",
+        "members_intent_to_play",
+        "members_permfa_signup",
+        "members_activity_check",
+        "members_transfer_account",
+        "members_name_changes",
+        "members_make_player",
+        "members_member_league_drop",
+    ]
+
+    @pytest.mark.parametrize("method_name", EXPECTED_METHODS)
+    def test_method_exists(self, method_name: str):
+        """Ensure MembersApi has the expected method."""
+        assert hasattr(MembersApi, method_name), f"MembersApi missing expected method: {method_name}"
+        assert callable(getattr(MembersApi, method_name)), f"MembersApi.{method_name} is not callable"
 
 
 class TestMembersApiCalls:

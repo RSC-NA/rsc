@@ -10,10 +10,32 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 from rsc.core import RSC
+from rscapi import FranchisesApi
 from rscapi.models import Franchise
 from rsc.exceptions import RscException
 
 pytestmark = pytest.mark.integration
+
+
+class TestFranchisesApiContract:
+    """Verify all expected rscapi FranchisesApi methods exist without calling them."""
+
+    EXPECTED_METHODS = [
+        "franchises_list",
+        "franchises_read",
+        "franchises_upload_logo",
+        "franchises_create",
+        "franchises_delete",
+        "franchises_rebrand",
+        "franchises_transfer_franchise",
+        "franchises_logo",
+    ]
+
+    @pytest.mark.parametrize("method_name", EXPECTED_METHODS)
+    def test_method_exists(self, method_name: str):
+        """Ensure FranchisesApi has the expected method."""
+        assert hasattr(FranchisesApi, method_name), f"FranchisesApi missing expected method: {method_name}"
+        assert callable(getattr(FranchisesApi, method_name)), f"FranchisesApi.{method_name} is not callable"
 
 
 class TestFranchisesApiCalls:

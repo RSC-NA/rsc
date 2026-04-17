@@ -9,11 +9,45 @@ sys.path.insert(0, str(project_root))
 
 from rsc.core import RSC
 from rsc.exceptions import RscException
+from rscapi import MatchesApi, TeamsApi
 from rscapi.models import MatchResults
 
 from .utils import random_string
 
 pytestmark = pytest.mark.integration
+
+
+class TestMatchesApiContract:
+    """Verify all expected rscapi MatchesApi methods exist without calling them."""
+
+    EXPECTED_METHODS = [
+        "matches_list",
+        "matches_find_match",
+        "matches_read",
+        "matches_score_report",
+        "matches_create",
+        "matches_results",
+    ]
+
+    @pytest.mark.parametrize("method_name", EXPECTED_METHODS)
+    def test_method_exists(self, method_name: str):
+        """Ensure MatchesApi has the expected method."""
+        assert hasattr(MatchesApi, method_name), f"MatchesApi missing expected method: {method_name}"
+        assert callable(getattr(MatchesApi, method_name)), f"MatchesApi.{method_name} is not callable"
+
+
+class TestMatchesTeamsApiContract:
+    """Verify TeamsApi methods used by the matches module exist."""
+
+    EXPECTED_METHODS = [
+        "teams_match",
+    ]
+
+    @pytest.mark.parametrize("method_name", EXPECTED_METHODS)
+    def test_method_exists(self, method_name: str):
+        """Ensure TeamsApi has the expected method used by matches."""
+        assert hasattr(TeamsApi, method_name), f"TeamsApi missing expected method: {method_name}"
+        assert callable(getattr(TeamsApi, method_name)), f"TeamsApi.{method_name} is not callable"
 
 
 class TestMatchesApiCalls:
