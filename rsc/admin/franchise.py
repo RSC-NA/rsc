@@ -177,6 +177,14 @@ class AdminFranchiseMixIn(AdminMixIn):
             return
 
         logo_bytes = await logo.read()
+        max_size = 1024 * 200  # 200 KB
+        if len(logo_bytes) > max_size:
+            await interaction.followup.send(
+                embed=ErrorEmbed(description=f"Logo file is too large. Maximum allowed size is {max_size / 1024} KB."),
+                ephemeral=True,
+            )
+            return
+
         # have to do this because monty sux
         try:
             with tempfile.NamedTemporaryFile() as fp:
