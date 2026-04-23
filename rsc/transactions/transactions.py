@@ -2243,6 +2243,7 @@ class TransactionMixIn(RSCMixIn):
 
                 if not player:
                     raise TradeParserException(message=f"Unable to parse player from: `{m_str}`")
+                log.debug(f"Trade Player: {player.display_name}", guild=guild)
 
                 # Get source franchise
                 plist = await self.players(guild=guild, discord_id=player.id)
