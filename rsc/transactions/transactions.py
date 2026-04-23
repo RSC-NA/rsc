@@ -49,7 +49,7 @@ from rsc.exceptions import (
 )
 from rsc.logs import GuildLogAdapter
 from rsc.teams import TeamMixIn
-from rsc.transactions.modals import CutMsgModal
+from rsc.transactions.modals import CutMsgModal, TransactionAnnouncementModal
 from rsc.transactions.roles import (
     update_cut_player_discord,
     update_nonplaying_discord,
@@ -969,8 +969,7 @@ class TransactionMixIn(RSCMixIn):
         name="announce",
         description="Perform a generic announcement to the transactions channel.",
     )
-    @app_commands.describe(message="Desired message to announce. Accepts discord member mentions.")
-    async def _transactions_announce(self, interaction: discord.Interaction, message: str):
+    async def _transactions_announce(self, interaction: discord.Interaction):
         if not interaction.guild:
             return
 
@@ -982,8 +981,24 @@ class TransactionMixIn(RSCMixIn):
             )
             return
 
-        await trans_channel.send(message, allowed_mentions=discord.AllowedMentions(users=True))
-        await interaction.response.send_message(content="Done", ephemeral=True)
+        announce_modal = TransactionAnnouncementModal()
+        await interaction.response.send_modal(announce_modal)
+        await announce_modal.wait()
+
+        if not announce_modal.message.value:
+            await interaction.followup.send(content="No announcement content provided... Try again.", ephemeral=True)
+            return
+
+        announcement = announce_modal.message.value.strip()
+        if not announcement:
+            await interaction.followup.send(content="No announcement content provided... Try again.", ephemeral=True)
+            return
+
+        msg = await trans_channel.send(
+            announcement,
+            allowed_mentions=discord.AllowedMentions(users=True),
+        )
+        await interaction.followup.send(content=f"Done: {msg.jump_url}", ephemeral=True)
 
     @_transactions.command(
         name="announcetrade",
