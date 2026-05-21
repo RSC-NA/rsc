@@ -37,6 +37,7 @@ class TestMembersApiContract:
         "members_activity_check_create",
         "members_transfer_account_create",
         "members_name_changes_list",
+        "members_name_changes_list_without_preload_content",
         "members_make_player_create",
         "members_member_league_drop_create",
     ]

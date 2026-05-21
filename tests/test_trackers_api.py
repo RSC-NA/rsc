@@ -21,6 +21,7 @@ class TestTrackerLinksApiContract:
 
     EXPECTED_METHODS = [
         "tracker_links_list",
+        "tracker_links_list_without_preload_content",
         "tracker_links_links_stats_list",
         "tracker_links_next_list",
         "tracker_links_create",

@@ -28,6 +28,7 @@ class TestTransactionsApiContract:
         "transactions_retire_create",
         "transactions_inactive_reserve_create",
         "transactions_history_list",
+        "transactions_history_list_without_preload_content",
         "transactions_history_retrieve",
         "transactions_trade_create",
         "transactions_draft_create",
