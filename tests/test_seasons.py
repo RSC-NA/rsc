@@ -1,6 +1,5 @@
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import discord
 import pytest
 from rscapi.exceptions import ApiException
 from rscapi.models.season import Season
@@ -106,14 +105,14 @@ class TestNextSignupSeason:
         )
         with patch("rsc.seasons.seasons.ApiClient") as mock_client:
             mock_api = AsyncMock()
-            mock_api.seasons_signup_season.return_value = s
+            mock_api.seasons_signup_season_retrieve.return_value = s
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
             with patch("rsc.seasons.seasons.SeasonsApi", return_value=mock_api):
                 result = await mixin.next_signup_season(mock_guild)
 
         assert result is s
-        mock_api.seasons_signup_season.assert_awaited_once_with(league=1)
+        mock_api.seasons_signup_season_retrieve.assert_awaited_once_with(league=1)
 
     async def test_returns_none_when_no_signup_season(self, mock_guild):
         mixin = _create_mixin(
@@ -122,7 +121,7 @@ class TestNextSignupSeason:
         )
         with patch("rsc.seasons.seasons.ApiClient") as mock_client:
             mock_api = AsyncMock()
-            mock_api.seasons_signup_season.return_value = None
+            mock_api.seasons_signup_season_retrieve.return_value = None
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
             with patch("rsc.seasons.seasons.SeasonsApi", return_value=mock_api):
@@ -137,7 +136,7 @@ class TestNextSignupSeason:
         )
         with patch("rsc.seasons.seasons.ApiClient") as mock_client:
             mock_api = AsyncMock()
-            mock_api.seasons_signup_season.side_effect = ApiException(status=500, reason="Error")
+            mock_api.seasons_signup_season_retrieve.side_effect = ApiException(status=500, reason="Error")
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
             with patch("rsc.seasons.seasons.SeasonsApi", return_value=mock_api):
@@ -203,21 +202,21 @@ class TestSeasonByIdApi:
 
         with patch("rsc.seasons.seasons.ApiClient") as mock_client:
             mock_api = AsyncMock()
-            mock_api.seasons_read.return_value = s
+            mock_api.seasons_retrieve.return_value = s
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
             with patch("rsc.seasons.seasons.SeasonsApi", return_value=mock_api):
                 result = await mixin.season_by_id(mock_guild, 5)
 
         assert result is s
-        mock_api.seasons_read.assert_awaited_once_with(5)
+        mock_api.seasons_retrieve.assert_awaited_once_with(5)
 
     async def test_raises_rsc_exception_on_api_error(self, mock_guild):
         mixin = _create_mixin(_api_conf={mock_guild.id: MagicMock()})
 
         with patch("rsc.seasons.seasons.ApiClient") as mock_client:
             mock_api = AsyncMock()
-            mock_api.seasons_read.side_effect = ApiException(status=404, reason="Not Found")
+            mock_api.seasons_retrieve.side_effect = ApiException(status=404, reason="Not Found")
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
             with patch("rsc.seasons.seasons.SeasonsApi", return_value=mock_api):
@@ -232,7 +231,7 @@ class TestPlayerIntentsApi:
 
         with patch("rsc.seasons.seasons.ApiClient") as mock_client:
             mock_api = AsyncMock()
-            mock_api.seasons_player_intents.return_value = [intent]
+            mock_api.seasons_player_intents_list.return_value = [intent]
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
             with patch("rsc.seasons.seasons.SeasonsApi", return_value=mock_api):
@@ -245,13 +244,13 @@ class TestPlayerIntentsApi:
 
         with patch("rsc.seasons.seasons.ApiClient") as mock_client:
             mock_api = AsyncMock()
-            mock_api.seasons_player_intents.return_value = []
+            mock_api.seasons_player_intents_list.return_value = []
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
             with patch("rsc.seasons.seasons.SeasonsApi", return_value=mock_api):
                 await mixin.player_intents(mock_guild, season_id=1, player=mock_member, returning=True, missing=False)
 
-        mock_api.seasons_player_intents.assert_awaited_once_with(
+        mock_api.seasons_player_intents_list.assert_awaited_once_with(
             1,
             discord_id=mock_member.id,
             returning=True,
@@ -263,13 +262,13 @@ class TestPlayerIntentsApi:
 
         with patch("rsc.seasons.seasons.ApiClient") as mock_client:
             mock_api = AsyncMock()
-            mock_api.seasons_player_intents.return_value = []
+            mock_api.seasons_player_intents_list.return_value = []
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
             with patch("rsc.seasons.seasons.SeasonsApi", return_value=mock_api):
                 await mixin.player_intents(mock_guild, season_id=1)
 
-        mock_api.seasons_player_intents.assert_awaited_once_with(
+        mock_api.seasons_player_intents_list.assert_awaited_once_with(
             1,
             discord_id=None,
             returning=None,
@@ -281,7 +280,7 @@ class TestPlayerIntentsApi:
 
         with patch("rsc.seasons.seasons.ApiClient") as mock_client:
             mock_api = AsyncMock()
-            mock_api.seasons_player_intents.side_effect = ApiException(status=500, reason="Error")
+            mock_api.seasons_player_intents_list.side_effect = ApiException(status=500, reason="Error")
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
             with patch("rsc.seasons.seasons.SeasonsApi", return_value=mock_api):
@@ -296,7 +295,7 @@ class TestFranchiseStandingsApi:
 
         with patch("rsc.seasons.seasons.ApiClient") as mock_client:
             mock_api = AsyncMock()
-            mock_api.seasons_franchise_standings.return_value = [standing]
+            mock_api.seasons_franchise_standings_list.return_value = [standing]
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
             with patch("rsc.seasons.seasons.SeasonsApi", return_value=mock_api):
@@ -309,7 +308,7 @@ class TestFranchiseStandingsApi:
 
         with patch("rsc.seasons.seasons.ApiClient") as mock_client:
             mock_api = AsyncMock()
-            mock_api.seasons_franchise_standings.side_effect = ApiException(status=404, reason="Not Found")
+            mock_api.seasons_franchise_standings_list.side_effect = ApiException(status=404, reason="Not Found")
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
             with patch("rsc.seasons.seasons.SeasonsApi", return_value=mock_api):

@@ -8,13 +8,11 @@ from rscapi.exceptions import ApiException, BadRequestException, NotFoundExcepti
 from rscapi.models.high_level_match import HighLevelMatch
 from rscapi.models.league_player import LeaguePlayer
 from rscapi.models.match import Match
-from rscapi.models.player import Player
 from rscapi.models.team import Team
 from rscapi.models.team_create import TeamCreate
-from rscapi.models.team_franchise import TeamFranchise
 from rscapi.models.team_list import TeamList
+from rscapi.models.team_player import TeamPlayer
 from rscapi.models.team_season_stats import TeamSeasonStats
-from rscapi.models.tier import Tier
 
 from rsc.abc import RSCMixIn
 from rsc.embeds import (
@@ -138,7 +136,7 @@ class TeamMixIn(RSCMixIn):
                 )
 
         # Sort by Team Name
-        teams.sort(key=lambda x: cast(str, x.name))
+        teams.sort(key=lambda x: cast("str", x.name))
 
         embed = BlueEmbed()
         embed.title = f"{tier} Teams"
@@ -260,7 +258,7 @@ class TeamMixIn(RSCMixIn):
         captains = await self.tier_captains(guild, tier)
 
         fteams = await self.teams(guild, tier=tier)
-        fteams.sort(key=lambda x: cast(str, x.name))
+        fteams.sort(key=lambda x: cast("str", x.name))
 
         if not fteams:
             await interaction.followup.send(
@@ -334,7 +332,7 @@ class TeamMixIn(RSCMixIn):
         fteams = await self.teams(guild, franchise=captains[0].team.franchise.name)
 
         # This is validated in franchise_captains()
-        fteams.sort(key=lambda t: cast(int, t.tier.position), reverse=True)
+        fteams.sort(key=lambda t: cast("int", t.tier.position), reverse=True)
 
         cpt_fmt: list[tuple[str, str, str]] = []
         for t in fteams:
@@ -437,7 +435,7 @@ class TeamMixIn(RSCMixIn):
             if not (c.team and c.team.name):
                 raise AttributeError(f"LeaguePlayer {c.id} captain is missing team data.")
 
-        captains.sort(key=lambda c: cast(str, c.team.name))
+        captains.sort(key=lambda c: cast("str", c.team.name))
         return captains
 
     async def franchise_captains(self, guild: discord.Guild, franchise_name: str) -> list[LeaguePlayer]:
@@ -451,7 +449,7 @@ class TeamMixIn(RSCMixIn):
             if not (c.tier and c.tier.position):
                 raise AttributeError(f"LeaguePlayer {c.id} captain is missing tier data.")
 
-        captains.sort(key=lambda c: cast(int, c.tier.position), reverse=True)
+        captains.sort(key=lambda c: cast("int", c.tier.position), reverse=True)
         return captains
 
     async def build_franchise_teams_embed(self, guild: discord.Guild, teams: list[TeamList]) -> discord.Embed:
@@ -474,7 +472,7 @@ class TeamMixIn(RSCMixIn):
         if teams[0].franchise and teams[0].franchise.gm:
             gm_id = teams[0].franchise.gm.discord_id
 
-        teams.sort(key=lambda t: cast(str, t.tier.position), reverse=True)
+        teams.sort(key=lambda t: cast("str", t.tier.position), reverse=True)
 
         embed = BlueEmbed(description=f"GM: <@!{gm_id}>")
         embed.title = f"{teams[0].franchise.name}"
@@ -601,11 +599,12 @@ class TeamMixIn(RSCMixIn):
         tier: str | None = None,
     ) -> list[TeamList]:
         """Fetch teams from API"""
+        season_numbers = [int(seasons)] if seasons else None
         async with ApiClient(self._api_conf[guild.id]) as client:
             try:
                 api = TeamsApi(client)
                 teams = await api.teams_list(
-                    seasons=seasons,
+                    seasons=season_numbers,
                     franchise=franchise,
                     name=name,
                     tier=tier,
@@ -640,7 +639,7 @@ class TeamMixIn(RSCMixIn):
         async with ApiClient(self._api_conf[guild.id]) as client:
             try:
                 api = TeamsApi(client)
-                return await api.teams_read(id)
+                return await api.teams_retrieve(id)
             except ApiException as exc:
                 raise RscException(exc)
 
@@ -648,12 +647,12 @@ class TeamMixIn(RSCMixIn):
         self,
         guild: discord.Guild,
         id: int,
-    ) -> list[Player]:
+    ) -> list[TeamPlayer]:
         """Fetch team data by id"""
         async with ApiClient(self._api_conf[guild.id]) as client:
             try:
                 api = TeamsApi(client)
-                return await api.teams_players(id)
+                return await api.teams_players_list(id)
             except ApiException as exc:
                 raise RscException(exc)
 
@@ -665,7 +664,7 @@ class TeamMixIn(RSCMixIn):
         async with ApiClient(self._api_conf[guild.id]) as client:
             try:
                 api = TeamsApi(client)
-                return await api.teams_next_match(id)
+                return await api.teams_next_match_retrieve(id)
             except NotFoundException:
                 return None
             except ApiException as exc:
@@ -681,8 +680,8 @@ class TeamMixIn(RSCMixIn):
         async with ApiClient(self._api_conf[guild.id]) as client:
             try:
                 api = TeamsApi(client)
-                matches = await api.teams_season_matches(id, preseason=preseason, season=season)
-                matches.sort(key=lambda x: cast(int, x.day))
+                matches = await api.teams_season_matches_list(id, preseason=preseason, season=season)
+                matches.sort(key=lambda x: cast("int", x.day))
                 return matches
             except ApiException as exc:
                 raise RscException(exc)
@@ -696,7 +695,7 @@ class TeamMixIn(RSCMixIn):
         try:
             async with ApiClient(self._api_conf[guild.id]) as client:
                 api = TeamsApi(client)
-                stats = await api.teams_stats(team_id, season=season)
+                stats = await api.teams_stats_retrieve(team_id, season_id=season)
                 return stats
         except ApiException as exc:
             raise RscException(exc)
@@ -711,11 +710,14 @@ class TeamMixIn(RSCMixIn):
         try:
             async with ApiClient(self._api_conf[guild.id]) as client:
                 api = TeamsApi(client)
-                data = TeamCreate(
-                    name=name,
-                    franchise=TeamFranchise(name=franchise),
-                    tier=Tier(name=tier),
-                    league=self._league[guild.id],
+                data = cast(
+                    "TeamCreate",
+                    {
+                        "name": name,
+                        "franchise": {"name": franchise},
+                        "tier": {"name": tier},
+                        "league": self._league[guild.id],
+                    },
                 )
                 result = await api.teams_create(data)
                 return result
@@ -727,6 +729,6 @@ class TeamMixIn(RSCMixIn):
         try:
             async with ApiClient(self._api_conf[guild.id]) as client:
                 api = TeamsApi(client)
-                await api.teams_delete(team_id)
+                await api.teams_destroy(team_id)
         except (ApiException, BadRequestException) as exc:
             raise RscException(exc)

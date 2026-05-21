@@ -108,7 +108,7 @@ class TierMixIn(RSCMixIn):
     async def tier_by_id(self, guild: discord.Guild, id: int) -> Tier:
         async with ApiClient(self._api_conf[guild.id]) as client:
             api = TiersApi(client)
-            tier = await api.tiers_read(id)
+            tier = await api.tiers_retrieve(id)
             return tier
 
     async def tiers(self, guild: discord.Guild, name: str | None = None) -> list[Tier]:
@@ -137,7 +137,7 @@ class TierMixIn(RSCMixIn):
         async with ApiClient(self._api_conf[guild.id]) as client:
             api = TiersApi(client)
             try:
-                standings: list[TeamStandings] = await api.tiers_standings(id=tier_id, season=season)
+                standings: list[TeamStandings] = await api.tiers_standings_list(id=tier_id, season=season)
                 standings.sort(key=lambda t: (t.rank, t.team))
                 return standings
             except ApiException as exc:
@@ -146,7 +146,7 @@ class TierMixIn(RSCMixIn):
     async def create_tier(self, guild: discord.Guild, name: str, color: int, position: int) -> Tier:
         async with ApiClient(self._api_conf[guild.id]) as client:
             api = TiersApi(client)
-            data = Tier(name=name, color=color, position=position)
+            data = cast("Tier", {"name": name, "color": color, "position": position})
             log.debug(f"Create Tier Data: {data}")
             try:
                 return await api.tiers_create(data)
@@ -157,6 +157,6 @@ class TierMixIn(RSCMixIn):
         async with ApiClient(self._api_conf[guild.id]) as client:
             api = TiersApi(client)
             try:
-                return await api.tiers_delete(id)
+                return await api.tiers_destroy(id)
             except ApiException as exc:
                 raise RscException(response=exc)

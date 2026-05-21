@@ -14,7 +14,7 @@ from redbot.core.bot import Red
 from rscapi import Configuration as ApiConfig
 from rscapi.models.activity_check import ActivityCheck
 from rscapi.models.deleted import Deleted
-from rscapi.models.franchise import Franchise
+from rscapi.models import Franchise
 from rscapi.models.franchise_gm import FranchiseGM
 from rscapi.models.franchise_list import FranchiseList
 from rscapi.models.franchise_standings import FranchiseStandings
@@ -27,13 +27,13 @@ from rscapi.models.match_list import MatchList
 from rscapi.models.match_results import MatchResults
 from rscapi.models.member import Member as RSCMember
 from rscapi.models.name_change_history import NameChangeHistory
-from rscapi.models.player import Player
 from rscapi.models.player_season_stats import PlayerSeasonStats
-from rscapi.models.rebrand_a_franchise import RebrandAFranchise
+from rscapi.models.franchise_rebrand import FranchiseRebrand
 from rscapi.models.season import Season
 from rscapi.models.team import Team
 from rscapi.models.team_create import TeamCreate
 from rscapi.models.team_list import TeamList
+from rscapi.models.team_player import TeamPlayer
 from rscapi.models.team_season_stats import TeamSeasonStats
 from rscapi.models.team_standings import TeamStandings
 from rscapi.models.tier import Tier
@@ -161,7 +161,7 @@ class RSCMixIn(ABC):
     async def full_logo_url(self, guild: discord.Guild, logo_url: str) -> str: ...
 
     @abstractmethod
-    async def rebrand_franchise(self, guild: discord.Guild, id: int, rebrand: RebrandAFranchise) -> Franchise: ...
+    async def rebrand_franchise(self, guild: discord.Guild, id: int, rebrand: FranchiseRebrand) -> Franchise: ...
 
     @abstractmethod
     async def delete_franchise(self, guild: discord.Guild, id: int) -> None: ...
@@ -580,7 +580,7 @@ class RSCMixIn(ABC):
         self,
         guild: discord.Guild,
         id: int,
-    ) -> list[Player]: ...
+    ) -> list[TeamPlayer]: ...
 
     @abstractmethod
     async def team_stats(

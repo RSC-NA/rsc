@@ -11,24 +11,19 @@ from discord.ext import tasks
 from redbot.core import app_commands, commands
 from rscapi import ApiClient, LeaguePlayersApi, TransactionsApi
 from rscapi.exceptions import ApiException
-from rscapi.models.cut_a_player_from_a_league import CutAPlayerFromALeague
-from rscapi.models.draft_a_player_to_a_team import DraftAPlayerToATeam
-from rscapi.models.draft_pick import DraftPick
-from rscapi.models.expire_a_player_sub import ExpireAPlayerSub
-from rscapi.models.franchise_identifier import FranchiseIdentifier
-from rscapi.models.inactive_reserve import InactiveReserve
+from rscapi.models.draft_input import DraftInput
+from rscapi.models.draft_pick_trade import DraftPickTrade
+from rscapi.models.ir_input import IRInput
 from rscapi.models.league_player import LeaguePlayer
-from rscapi.models.player1 import Player1
+from rscapi.models.player_input import PlayerInput
+from rscapi.models.player_team_input import PlayerTeamInput
 from rscapi.models.player_transaction_updates import PlayerTransactionUpdates
-from rscapi.models.re_sign_player import ReSignPlayer
-from rscapi.models.retire_a_player import RetireAPlayer
-from rscapi.models.sign_a_player_to_a_team_in_a_league import (
-    SignAPlayerToATeamInALeague,
-)
-from rscapi.models.temporary_fa_sub import TemporaryFASub
+from rscapi.models.sub_input import SubInput
+from rscapi.models.trade_franchise import TradeFranchise
 from rscapi.models.trade_item import TradeItem
-from rscapi.models.trade_schema import TradeSchema
-from rscapi.models.trade_value import TradeValue
+from rscapi.models.trade_object import TradeObject
+from rscapi.models.trade_player import TradePlayer
+from rscapi.models.trade_transaction import TradeTransaction
 from rscapi.models.transaction_response import TransactionResponse
 
 from rsc.abc import RSCMixIn
@@ -2129,7 +2124,7 @@ class TransactionMixIn(RSCMixIn):
             **kwargs,
         )
 
-    async def parse_trade_text(self, guild: discord.Guild, data: str) -> list[TradeItem]:
+    async def parse_trade_text(self, guild: discord.Guild, data: str) -> list[TradeObject]:
         if not data:
             raise TradeParserException(message="No trade data provided...")
 
@@ -2141,7 +2136,7 @@ class TransactionMixIn(RSCMixIn):
 
         # Iterate once to get all franchises involved
         log.debug("Finding all franchises in trade.", guild=guild)
-        franchises: list[FranchiseIdentifier] = []
+        franchises: list[TradeFranchise] = []
         for line in data.splitlines():
             line = line.strip()
             log.debug(f"Line: {line}", guild=guild)
@@ -2175,7 +2170,7 @@ class TransactionMixIn(RSCMixIn):
                 fname = fdata[0].name
                 fid = fdata[0].id
                 log.debug(f"Franchise ID: {fid} Name: {fname} GM: {gm.id}", guild=guild)
-                f_object = FranchiseIdentifier(gm=gm.id, name=fname, id=fid)
+                f_object = TradeFranchise(gm=gm.id, name=fname, id=fid)
                 franchises.append(f_object)
 
         # Initial validation on franchises
@@ -2262,7 +2257,7 @@ class TransactionMixIn(RSCMixIn):
                 sf_id = pdata.team.franchise.id
                 sf_name = pdata.team.franchise.name
                 log.debug(f"Source. ID={sf_id} NAME={sf_name}", guild=guild)
-                sfranchise = FranchiseIdentifier(id=sf_id, name=sf_name, gm=None)
+                sfranchise = TradeFranchise(id=sf_id, name=sf_name, gm=None)
 
                 # Get destination team name (find by current tier)
                 dest_team = None
@@ -2283,12 +2278,12 @@ class TransactionMixIn(RSCMixIn):
 
                 log.debug(f"Destination Team Name: {dest_team}", guild=guild)
 
-                tvalue = TradeValue(player=Player1(id=player.id, team=dest_team))
+                tvalue = TradeItem(player=TradePlayer(id=player.id, team=dest_team))
                 log.debug(
                     f"Player Trade. Src Franchise: {sfranchise.name} Dest Franchise: {dest_franchise.name} Player: {player.id}", guild=guild
                 )
 
-                item = TradeItem(source=sfranchise, destination=dest_franchise, value=tvalue)
+                item = TradeObject(source=sfranchise, destination=dest_franchise, value=tvalue)
                 trade_list.append(item)
             elif match := FUTURE_TRADE_REGEX.match(line):
                 if not match:
@@ -2311,9 +2306,9 @@ class TransactionMixIn(RSCMixIn):
                 if not source_gm:
                     raise TradeParserException(message=f"Error finding discord member for future source GM: `{gm_str}`")
 
-                sfranchise = FranchiseIdentifier(id=None, name=None, gm=source_gm.id)
+                sfranchise = TradeFranchise(id=None, name=None, gm=source_gm.id)
 
-                tvalue = TradeValue(pick=DraftPick(tier=tier.capitalize(), round=round, number=0, future=True))
+                tvalue = TradeItem(pick=DraftPickTrade(tier=tier.capitalize(), round=round, number=0, future=True))
                 log.debug(
                     f"Future Trade. Src Franchise: {sfranchise.name} Dest Franchise: {dest_franchise.name}",
                     guild=guild,
@@ -2327,7 +2322,7 @@ class TransactionMixIn(RSCMixIn):
                 else:
                     log.warning("Future trade value has no pick data.", guild=guild)
 
-                item = TradeItem(source=sfranchise, destination=dest_franchise, value=tvalue)
+                item = TradeObject(source=sfranchise, destination=dest_franchise, value=tvalue)
                 trade_list.append(item)
 
             elif match := PICK_TRADE_REGEX.match(line):
@@ -2374,13 +2369,13 @@ class TransactionMixIn(RSCMixIn):
                     guild=guild,
                 )
                 if not sfranchise and source_gm:
-                    sfranchise = FranchiseIdentifier(id=None, name=None, gm=source_gm.id)
+                    sfranchise = TradeFranchise(id=None, name=None, gm=source_gm.id)
 
-                tvalue = TradeValue(pick=DraftPick(tier=tier.capitalize(), round=round, number=pick, future=False))
+                tvalue = TradeItem(pick=DraftPickTrade(tier=tier.capitalize(), round=round, number=pick, future=False))
 
                 if not sfranchise:
                     raise TradeParserException(message="Unable to determine source franchise for pick trade.")
-                item = TradeItem(source=sfranchise, destination=dest_franchise, value=tvalue)
+                item = TradeObject(source=sfranchise, destination=dest_franchise, value=tvalue)
 
                 log.debug(
                     f"Future Trade. Src Franchise: {sfranchise.name} Dest Franchise: {dest_franchise.name}",
@@ -2401,7 +2396,7 @@ class TransactionMixIn(RSCMixIn):
 
         return trade_list
 
-    async def build_trade_embed(self, guild: discord.Guild, trades: list[TradeItem]) -> tuple[list[int], discord.Embed]:
+    async def build_trade_embed(self, guild: discord.Guild, trades: list[TradeObject]) -> tuple[list[int], discord.Embed]:
         trade_groups = [list(t) for _, t in itertools.groupby(trades, lambda t: t.destination)]
         embed = BlueEmbed(title="Trade Confirmed")
 
@@ -2513,7 +2508,7 @@ class TransactionMixIn(RSCMixIn):
         """Sign player to a team"""
         async with ApiClient(self._api_conf[guild.id]) as client:
             api = TransactionsApi(client)
-            data = SignAPlayerToATeamInALeague(
+            data = PlayerTeamInput(
                 player=player.id,
                 league=self._league[guild.id],
                 team=team,
@@ -2538,7 +2533,7 @@ class TransactionMixIn(RSCMixIn):
         """Cut a player from their team"""
         async with ApiClient(self._api_conf[guild.id]) as client:
             api = TransactionsApi(client)
-            data = CutAPlayerFromALeague(
+            data = PlayerInput(
                 player=player.id,
                 league=self._league[guild.id],
                 executor=executor.id,
@@ -2563,7 +2558,7 @@ class TransactionMixIn(RSCMixIn):
         """Resign player to a team"""
         async with ApiClient(self._api_conf[guild.id]) as client:
             api = TransactionsApi(client)
-            data = ReSignPlayer(
+            data = PlayerTeamInput(
                 player=player.id,
                 league=self._league[guild.id],
                 team=team,
@@ -2581,7 +2576,7 @@ class TransactionMixIn(RSCMixIn):
         """Set a player as captain using their discord ID"""
         async with ApiClient(self._api_conf[guild.id]) as client:
             api = LeaguePlayersApi(client)
-            return await api.league_players_set_captain(id)
+            return await api.league_players_set_captain_create(id)
 
     async def substitution(
         self,
@@ -2595,7 +2590,7 @@ class TransactionMixIn(RSCMixIn):
         """Sub a player in for another player"""
         async with ApiClient(self._api_conf[guild.id]) as client:
             api = TransactionsApi(client)
-            data = TemporaryFASub(
+            data = SubInput(
                 league=self._league[guild.id],
                 player_in=player_in.id,
                 player_out=player_out.id,
@@ -2618,7 +2613,7 @@ class TransactionMixIn(RSCMixIn):
         """Sub a player in for another player"""
         async with ApiClient(self._api_conf[guild.id]) as client:
             api = TransactionsApi(client)
-            data = ExpireAPlayerSub(league=self._league[guild.id], player=player.id, executor=executor.id)
+            data = PlayerInput(league=self._league[guild.id], player=player.id, executor=executor.id)
             log.debug(f"Expire Sub Data: {data}", guild=guild)
             try:
                 return await api.transactions_expire_create(data)
@@ -2636,7 +2631,7 @@ class TransactionMixIn(RSCMixIn):
         """Retire a player from the league"""
         async with ApiClient(self._api_conf[guild.id]) as client:
             api = TransactionsApi(client)
-            data = RetireAPlayer(
+            data = PlayerInput(
                 league=self._league[guild.id],
                 player=player.id,
                 executor=executor.id,
@@ -2662,7 +2657,7 @@ class TransactionMixIn(RSCMixIn):
         """Move a player or AGM to inactive reserve"""
         async with ApiClient(self._api_conf[guild.id]) as client:
             api = TransactionsApi(client)
-            data = InactiveReserve(
+            data = IRInput(
                 league=self._league[guild.id],
                 player=player.id,
                 executor=executor.id,
@@ -2766,14 +2761,14 @@ class TransactionMixIn(RSCMixIn):
         async with ApiClient(self._api_conf[guild.id]) as client:
             api = TransactionsApi(client)
             try:
-                return await api.transactions_history_read(id=transaction_id)
+                return await api.transactions_history_retrieve(id=transaction_id)
             except ApiException as exc:
                 raise RscException(response=exc)
 
     async def trade(
         self,
         guild: discord.Guild,
-        trades: list[TradeItem],
+        trades: list[TradeObject],
         executor: discord.Member,
         notes: str | None = None,
         override: bool = False,
@@ -2782,11 +2777,11 @@ class TransactionMixIn(RSCMixIn):
         async with ApiClient(self._api_conf[guild.id]) as client:
             api = TransactionsApi(client)
             try:
-                schema = TradeSchema(
+                schema = TradeTransaction(
                     league=self._league[guild.id],
                     trades=trades,
                     executor=executor.id,
-                    notes=notes,
+                    notes=notes or "",
                     admin_override=override,
                 )
                 log.debug(f"Schema: {pformat(schema)}", guild=guild)
@@ -2808,7 +2803,7 @@ class TransactionMixIn(RSCMixIn):
         async with ApiClient(self._api_conf[guild.id]) as client:
             api = TransactionsApi(client)
             try:
-                draft_pick = DraftAPlayerToATeam(
+                draft_pick = DraftInput(
                     league=self._league[guild.id],
                     player=player.id,
                     executor=executor.id,

@@ -1,4 +1,5 @@
 import logging
+from logging import handlers
 import os
 
 import aiofiles
@@ -67,7 +68,7 @@ class DeveloperMixIn(RSCMixIn):
         latest_log_path = None
         root_logger = logging.getLogger()
         for fh in root_logger.handlers:
-            if not isinstance(fh, logging.handlers.RotatingFileHandler):  # type: ignore[attr-defined]
+            if not isinstance(fh, handlers.RotatingFileHandler):  # type: ignore[attr-defined]
                 log.debug("Not a file handler...")
                 continue
             if fh.baseStem == "latest":

@@ -10,7 +10,7 @@ from rscapi.exceptions import ApiException
 from rscapi.models.match import Match
 from rscapi.models.match_list import MatchList
 from rscapi.models.match_results import MatchResults
-from rscapi.models.match_score_report import MatchScoreReport
+from rscapi.models.match_score_report_request import MatchScoreReportRequest
 from rscapi.models.match_submission import MatchSubmission
 
 from rsc.abc import RSCMixIn
@@ -30,7 +30,10 @@ from rsc.utils import utils
 from rsc.utils.utils import tier_color_by_name
 
 if TYPE_CHECKING:
-    from rscapi.models.matches_list200_response import MatchesList200Response
+    from rscapi.models.paginated_match_list_list import PaginatedMatchListList
+
+from rscapi.models.match_format_enum import MatchFormatEnum
+from rscapi.models.match_type_enum import MatchTypeEnum
 
 logger = logging.getLogger("red.rsc.matches")
 log = GuildLogAdapter(logger)
@@ -602,7 +605,7 @@ class MatchMixIn(RSCMixIn):
         async with ApiClient(self._api_conf[guild.id]) as client:
             api = MatchesApi(client)
             try:
-                matches: MatchesList200Response = await api.matches_list(
+                matches: PaginatedMatchListList = await api.matches_list(
                     date__lt=date__lt.isoformat() if date__lt else None,
                     date__gt=date__gt.isoformat() if date__gt else None,
                     season=season,
@@ -642,7 +645,7 @@ class MatchMixIn(RSCMixIn):
             async with ApiClient(self._api_conf[guild.id]) as client:
                 api = MatchesApi(client)
                 try:
-                    matches: MatchesList200Response = await api.matches_list(
+                    matches: PaginatedMatchListList = await api.matches_list(
                         date__lt=date__lt.isoformat() if date__lt else None,
                         date__gt=date__gt.isoformat() if date__gt else None,
                         season=season,
@@ -675,7 +678,7 @@ class MatchMixIn(RSCMixIn):
             api = TeamsApi(client)
             try:
                 log.debug(f"Fetching match for team ID: {team_id} on day: {day} (preseason={preseason})", guild=guild)
-                match: Match = await api.teams_match(
+                match: Match = await api.teams_match_retrieve(
                     id=team_id,
                     day=day,
                     preseason=preseason,
@@ -702,7 +705,7 @@ class MatchMixIn(RSCMixIn):
             api = MatchesApi(client)
             teams_fmt = ",".join(teams)
             try:
-                resp = await api.matches_find_match(
+                resp = await api.matches_find_match_retrieve(
                     teams=teams_fmt,
                     date__lt=date_lt,
                     date__gt=date_gt,
@@ -712,8 +715,6 @@ class MatchMixIn(RSCMixIn):
                     match_type=str(match_type) if match_type else None,
                     match_format=str(match_format) if match_format else None,
                     league=self._league[guild.id],
-                    limit=limit,
-                    offset=offset,
                 )
                 return resp.results
             except ApiException as exc:
@@ -722,7 +723,7 @@ class MatchMixIn(RSCMixIn):
     async def match_by_id(self, guild: discord.Guild, id: int) -> Match:
         async with ApiClient(self._api_conf[guild.id]) as client:
             api = MatchesApi(client)
-            return await api.matches_read(id)
+            return await api.matches_retrieve(id)
 
     async def report_match(
         self,
@@ -737,7 +738,7 @@ class MatchMixIn(RSCMixIn):
         async with ApiClient(self._api_conf[guild.id]) as client:
             api = MatchesApi(client)
             try:
-                data = MatchScoreReport(
+                data = MatchScoreReportRequest(
                     ballchasing_group=ballchasing_group,
                     home_score=home_score,
                     away_score=away_score,
@@ -745,7 +746,7 @@ class MatchMixIn(RSCMixIn):
                     override=override,
                 )
                 log.debug(f"Match Score Report ({match_id}): {data}")
-                return await api.matches_score_report(match_id, data)
+                return await api.matches_score_report_create(match_id, data)
             except ApiException as exc:
                 raise RscException(response=exc)
 
@@ -764,8 +765,8 @@ class MatchMixIn(RSCMixIn):
                 data = MatchSubmission(
                     home_team=home_team_id,
                     away_team=away_team_id,
-                    match_format=match_format,
-                    match_type=match_type,
+                    match_format=MatchFormatEnum(match_format.value),
+                    match_type=MatchTypeEnum(match_type.value),
                     day=day,
                 )
                 log.debug(f"Match Create: {data}")
@@ -778,6 +779,6 @@ class MatchMixIn(RSCMixIn):
         async with ApiClient(self._api_conf[guild.id]) as client:
             api = MatchesApi(client)
             try:
-                return await api.matches_results(id)
+                return await api.matches_results_retrieve(id)
             except ApiException as exc:
                 raise RscException(response=exc)

@@ -9,7 +9,8 @@ from rscapi import ApiClient, LeaguePlayersApi, LeaguesApi
 from rscapi.exceptions import ApiException
 from rscapi.models.league import League
 from rscapi.models.league_player import LeaguePlayer
-from rscapi.models.league_player_patch import LeaguePlayerPatch
+from rscapi.models.league_player_status_enum import LeaguePlayerStatusEnum
+from rscapi.models.patched_league_player_patch import PatchedLeaguePlayerPatch
 from rscapi.models.season import Season
 
 from rsc.abc import RSCMixIn
@@ -218,7 +219,7 @@ class LeagueMixIn(RSCMixIn):
         try:
             async with ApiClient(self._api_conf[guild.id]) as client:
                 api = LeaguesApi(client)
-                return await api.leagues_read(self._league[guild.id])
+                return await api.leagues_retrieve(self._league[guild.id])
         except ApiException as exc:
             raise RscException(exc)
 
@@ -227,7 +228,7 @@ class LeagueMixIn(RSCMixIn):
         try:
             async with ApiClient(self._api_conf[guild.id]) as client:
                 api = LeaguesApi(client)
-                return await api.leagues_read(id)
+                return await api.leagues_retrieve(id)
         except ApiException as exc:
             raise RscException(exc)
 
@@ -236,7 +237,7 @@ class LeagueMixIn(RSCMixIn):
         try:
             async with ApiClient(self._api_conf[guild.id]) as client:
                 api = LeaguesApi(client)
-                return await api.leagues_current_season(self._league[guild.id])
+                return await api.leagues_current_season_retrieve(self._league[guild.id])
         except ApiException as exc:
             raise RscException(exc)
 
@@ -245,7 +246,7 @@ class LeagueMixIn(RSCMixIn):
         try:
             async with ApiClient(self._api_conf[guild.id]) as client:
                 api = LeaguesApi(client)
-                return await api.leagues_seasons(self._league[guild.id])
+                return await api.leagues_seasons_list(self._league[guild.id])
         except ApiException as exc:
             raise RscException(exc)
 
@@ -415,7 +416,7 @@ class LeagueMixIn(RSCMixIn):
         contract_length: int | None = None,
         waiver_period: datetime | None = None,
     ) -> LeaguePlayer:
-        data = LeaguePlayerPatch(executor=executor.id)
+        data = PatchedLeaguePlayerPatch(executor=executor.id)
         if base_mmr:
             data.base_mmr = base_mmr
         if current_mmr:
@@ -426,7 +427,7 @@ class LeagueMixIn(RSCMixIn):
         if team:
             data.team_name = team
         if status:
-            data.status = status.value
+            data.status = LeaguePlayerStatusEnum(status.value)
         if contract_length is not None:
             if contract_length < 0 or contract_length > 2:
                 raise ValueError("Contract Length must be between 0 and 2.")
@@ -444,8 +445,8 @@ class LeagueMixIn(RSCMixIn):
             try:
                 result = await api.league_players_partial_update(
                     id=player_id,
-                    data=data,
                     league=self._league[guild.id],
+                    patched_league_player_patch=data,
                 )
                 log.debug(f"Patch Result: {result}")
                 return result

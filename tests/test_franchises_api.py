@@ -1,4 +1,3 @@
-from rscapi import RebrandAFranchise
 import os
 import sys
 from pathlib import Path
@@ -12,6 +11,7 @@ sys.path.insert(0, str(project_root))
 from rsc.core import RSC
 from rscapi import FranchisesApi
 from rscapi.models import Franchise
+from rscapi.models.franchise_rebrand import FranchiseRebrand
 from rsc.exceptions import RscException
 
 pytestmark = pytest.mark.integration
@@ -22,13 +22,13 @@ class TestFranchisesApiContract:
 
     EXPECTED_METHODS = [
         "franchises_list",
-        "franchises_read",
-        "franchises_upload_logo",
+        "franchises_retrieve",
+        "franchises_upload_logo_update",
         "franchises_create",
-        "franchises_delete",
-        "franchises_rebrand",
-        "franchises_transfer_franchise",
-        "franchises_logo",
+        "franchises_destroy",
+        "franchises_rebrand_update",
+        "franchises_transfer_franchise_update",
+        "franchises_logo_retrieve",
     ]
 
     @pytest.mark.parametrize("method_name", EXPECTED_METHODS)
@@ -130,7 +130,7 @@ class TestFranchisesPrivilegedApiCalls:
         franchise = flist.pop(0)
         print(f"Testing rebrand_franchise() on franchise ID {franchise.id}, Name: {franchise.name}")
 
-        rebrand = RebrandAFranchise(name="New Franchise Name", prefix="NF", teams=[])
+        rebrand = FranchiseRebrand.model_construct(name="New Franchise Name", prefix="NF", teams=[])
         with pytest.raises(RscException) as exc:
             await rsc_bot_no_key.rebrand_franchise(guild=mock_guild, id=franchise.id, rebrand=rebrand)
         assert exc.type == RscException
@@ -157,7 +157,6 @@ class TestFranchisesPrivilegedApiCalls:
         franchise = flist.pop(0)
         print(f"Testing transfer_franchise() on franchise ID {franchise.id}, Name: {franchise.name}")
 
-        rebrand = RebrandAFranchise(name="New Franchise Name", prefix="NF", teams=[])
         with pytest.raises(RscException) as exc:
             await rsc_bot_no_key.transfer_franchise(guild=mock_guild, id=franchise.id, gm=mock_member)
         assert exc.type == RscException
@@ -186,7 +185,6 @@ class TestFranchisesPrivilegedApiCalls:
 
         logo = bytes("fake image data", "utf-8")
 
-        rebrand = RebrandAFranchise(name="New Franchise Name", prefix="NF", teams=[])
         with pytest.raises(RscException) as exc:
             await rsc_bot_no_key.upload_franchise_logo(guild=mock_guild, id=franchise.id, logo=logo)
         assert exc.type == RscException

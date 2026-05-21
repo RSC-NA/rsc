@@ -28,7 +28,7 @@ class TestTransactionsApiContract:
         "transactions_retire_create",
         "transactions_inactive_reserve_create",
         "transactions_history_list",
-        "transactions_history_read",
+        "transactions_history_retrieve",
         "transactions_trade_create",
         "transactions_draft_create",
     ]
@@ -44,7 +44,7 @@ class TestTransactionsLeaguePlayersApiContract:
     """Verify LeaguePlayersApi methods used by the transactions module exist."""
 
     EXPECTED_METHODS = [
-        "league_players_set_captain",
+        "league_players_set_captain_create",
     ]
 
     @pytest.mark.parametrize("method_name", EXPECTED_METHODS)

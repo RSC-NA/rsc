@@ -26,19 +26,19 @@ class TestMembersApiContract:
 
     EXPECTED_METHODS = [
         "members_list",
-        "members_signup",
+        "members_signup_create",
         "members_create",
-        "members_delete",
-        "members_name_change",
-        "members_postseason_stats",
-        "members_stats",
-        "members_intent_to_play",
-        "members_permfa_signup",
-        "members_activity_check",
-        "members_transfer_account",
-        "members_name_changes",
-        "members_make_player",
-        "members_member_league_drop",
+        "members_destroy",
+        "members_name_change_partial_update",
+        "members_postseason_stats_retrieve",
+        "members_stats_retrieve",
+        "members_intent_to_play_create",
+        "members_permfa_signup_create",
+        "members_activity_check_create",
+        "members_transfer_account_create",
+        "members_name_changes_list",
+        "members_make_player_create",
+        "members_member_league_drop_create",
     ]
 
     @pytest.mark.parametrize("method_name", EXPECTED_METHODS)

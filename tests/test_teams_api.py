@@ -19,13 +19,13 @@ class TestTeamsApiContract:
 
     EXPECTED_METHODS = [
         "teams_list",
-        "teams_read",
-        "teams_players",
-        "teams_next_match",
-        "teams_season_matches",
-        "teams_stats",
+        "teams_retrieve",
+        "teams_players_list",
+        "teams_next_match_retrieve",
+        "teams_season_matches_list",
+        "teams_stats_retrieve",
         "teams_create",
-        "teams_delete",
+        "teams_destroy",
     ]
 
     @pytest.mark.parametrize("method_name", EXPECTED_METHODS)

@@ -2,11 +2,11 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import discord
 import pytest
-from rscapi.exceptions import ApiException, BadRequestException, NotFoundException
+from rscapi.exceptions import ApiException, NotFoundException
 from rscapi.models.team import Team
 from rscapi.models.team_list import TeamList
 
-from rsc.enums import Status, SubStatus
+from rsc.enums import Status
 from rsc.exceptions import RscException
 from rsc.teams.teams import TeamMixIn
 
@@ -432,7 +432,7 @@ class TestTeamByIdApi:
 
         with patch("rsc.teams.teams.ApiClient") as mock_client:
             mock_api = AsyncMock()
-            mock_api.teams_read.return_value = t
+            mock_api.teams_retrieve.return_value = t
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
             with patch("rsc.teams.teams.TeamsApi", return_value=mock_api):
@@ -445,7 +445,7 @@ class TestTeamByIdApi:
 
         with patch("rsc.teams.teams.ApiClient") as mock_client:
             mock_api = AsyncMock()
-            mock_api.teams_read.side_effect = ApiException(status=404, reason="Not Found")
+            mock_api.teams_retrieve.side_effect = ApiException(status=404, reason="Not Found")
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
             with patch("rsc.teams.teams.TeamsApi", return_value=mock_api):
@@ -460,7 +460,7 @@ class TestNextMatchApi:
 
         with patch("rsc.teams.teams.ApiClient") as mock_client:
             mock_api = AsyncMock()
-            mock_api.teams_next_match.return_value = match
+            mock_api.teams_next_match_retrieve.return_value = match
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
             with patch("rsc.teams.teams.TeamsApi", return_value=mock_api):
@@ -473,7 +473,7 @@ class TestNextMatchApi:
 
         with patch("rsc.teams.teams.ApiClient") as mock_client:
             mock_api = AsyncMock()
-            mock_api.teams_next_match.side_effect = NotFoundException(status=404, reason="Not Found")
+            mock_api.teams_next_match_retrieve.side_effect = NotFoundException(status=404, reason="Not Found")
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
             with patch("rsc.teams.teams.TeamsApi", return_value=mock_api):
@@ -486,7 +486,7 @@ class TestNextMatchApi:
 
         with patch("rsc.teams.teams.ApiClient") as mock_client:
             mock_api = AsyncMock()
-            mock_api.teams_next_match.side_effect = ApiException(status=500, reason="Error")
+            mock_api.teams_next_match_retrieve.side_effect = ApiException(status=500, reason="Error")
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
             with patch("rsc.teams.teams.TeamsApi", return_value=mock_api):
@@ -504,7 +504,7 @@ class TestSeasonMatchesApi:
 
         with patch("rsc.teams.teams.ApiClient") as mock_client:
             mock_api = AsyncMock()
-            mock_api.teams_season_matches.return_value = [m1, m2]
+            mock_api.teams_season_matches_list.return_value = [m1, m2]
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
             with patch("rsc.teams.teams.TeamsApi", return_value=mock_api):
@@ -554,20 +554,20 @@ class TestDeleteTeamApi:
 
         with patch("rsc.teams.teams.ApiClient") as mock_client:
             mock_api = AsyncMock()
-            mock_api.teams_delete.return_value = None
+            mock_api.teams_destroy.return_value = None
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
             with patch("rsc.teams.teams.TeamsApi", return_value=mock_api):
                 await mixin.delete_team(mock_guild, team_id=5)
 
-        mock_api.teams_delete.assert_awaited_once_with(5)
+        mock_api.teams_destroy.assert_awaited_once_with(5)
 
     async def test_raises_rsc_exception_on_api_error(self, mock_guild):
         mixin = _create_mixin(_api_conf={mock_guild.id: MagicMock()})
 
         with patch("rsc.teams.teams.ApiClient") as mock_client:
             mock_api = AsyncMock()
-            mock_api.teams_delete.side_effect = ApiException(status=404, reason="Not Found")
+            mock_api.teams_destroy.side_effect = ApiException(status=404, reason="Not Found")
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
             with patch("rsc.teams.teams.TeamsApi", return_value=mock_api):

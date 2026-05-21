@@ -173,7 +173,7 @@ class NumberMixIn(RSCMixIn):
 
         pulls_fmt = await self.filter_no_games_played_mmr_pulls(pulls)
         log.debug(f"Total Filtered MMR pulls: {len(pulls)}")
-        pulls_fmt.sort(key=lambda x: cast(int, x.threes_games_played), reverse=True)
+        pulls_fmt.sort(key=lambda x: cast("int", x.threes_games_played), reverse=True)
 
         embed = YellowEmbed(
             title="Player Games Played",
@@ -258,7 +258,7 @@ class NumberMixIn(RSCMixIn):
             api = NumbersApi(client)
             try:
                 data = await api.numbers_mmr_list(
-                    pulled=pulled.isoformat() if pulled else None,
+                    pulled=pulled,
                     pulled_before=pulled_before.isoformat() if pulled_before else None,
                     pulled_after=pulled_after.isoformat() if pulled_after else None,
                     discord_id=player.id if player else None,

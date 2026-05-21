@@ -1,7 +1,5 @@
-from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import discord
 import pytest
 from rscapi.exceptions import ApiException
 
@@ -68,7 +66,7 @@ class TestLeagueApi:
 
         with patch("rsc.leagues.leagues.ApiClient") as mock_client:
             mock_api = AsyncMock()
-            mock_api.leagues_read.return_value = league
+            mock_api.leagues_retrieve.return_value = league
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
             with patch("rsc.leagues.leagues.LeaguesApi", return_value=mock_api):
@@ -87,7 +85,7 @@ class TestLeagueByIdApi:
 
         with patch("rsc.leagues.leagues.ApiClient") as mock_client:
             mock_api = AsyncMock()
-            mock_api.leagues_read.return_value = league
+            mock_api.leagues_retrieve.return_value = league
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
             with patch("rsc.leagues.leagues.LeaguesApi", return_value=mock_api):
@@ -109,7 +107,7 @@ class TestCurrentSeasonApi:
 
         with patch("rsc.leagues.leagues.ApiClient") as mock_client:
             mock_api = AsyncMock()
-            mock_api.leagues_current_season.return_value = season
+            mock_api.leagues_current_season_retrieve.return_value = season
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
             with patch("rsc.leagues.leagues.LeaguesApi", return_value=mock_api):
@@ -131,7 +129,7 @@ class TestLeagueSeasonsApi:
 
         with patch("rsc.leagues.leagues.ApiClient") as mock_client:
             mock_api = AsyncMock()
-            mock_api.leagues_seasons.return_value = seasons
+            mock_api.leagues_seasons_list.return_value = seasons
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
             with patch("rsc.leagues.leagues.LeaguesApi", return_value=mock_api):

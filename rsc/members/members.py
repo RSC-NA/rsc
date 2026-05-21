@@ -5,21 +5,23 @@ import discord
 from redbot.core import app_commands, commands
 from rscapi import ApiClient, MembersApi
 from rscapi.exceptions import ApiException
+from rscapi.models.activity_request import ActivityRequest
 from rscapi.models.activity_check import ActivityCheck
+from rscapi.models.create_member_input import CreateMemberInput
 from rscapi.models.deleted import Deleted
-from rscapi.models.intent_to_play_schema import IntentToPlaySchema
+from rscapi.models.drop_a_player_from_a_league import DropAPlayerFromALeague
+from rscapi.models.intent_to_play_request import IntentToPlayRequest
 from rscapi.models.league_player import LeaguePlayer
 from rscapi.models.league_player_patch import LeaguePlayerPatch
+from rscapi.models.league_player_status_enum import LeaguePlayerStatusEnum
 from rscapi.models.league_player_signup import LeaguePlayerSignup
 from rscapi.models.member import Member
-from rscapi.models.create_member_input import CreateMemberInput
-from rscapi.models.member_transfer_schema import MemberTransferSchema
+from rscapi.models.member_transfer_request import MemberTransferRequest
 from rscapi.models.name_change_history import NameChangeHistory
-from rscapi.models.player_activity_check_schema import PlayerActivityCheckSchema
+from rscapi.models.patched_member_name_change_request import PatchedMemberNameChangeRequest
+from rscapi.models.perm_fa_signup_details import PermFASignupDetails
 from rscapi.models.player_season_stats import PlayerSeasonStats
-from rscapi.models.player_signup_schema import PlayerSignupSchema
-from rscapi.models.update_member_rsc_name import UpdateMemberRSCName
-from rscapi.models.drop_a_player_from_a_league import DropAPlayerFromALeague
+from rscapi.models.signup_details_request import SignupDetailsRequest
 
 from rsc.abc import RSCMixIn
 from rsc.embeds import (
@@ -938,7 +940,7 @@ class MemberMixIn(RSCMixIn):
     ) -> LeaguePlayer:
         async with ApiClient(self._api_conf[guild.id]) as client:
             api = MembersApi(client)
-            data = PlayerSignupSchema(
+            data = SignupDetailsRequest.model_construct(
                 league=self._league[guild.id],
                 rsc_name=rsc_name,
                 tracker_links=trackers,
@@ -953,7 +955,7 @@ class MemberMixIn(RSCMixIn):
             )
             try:
                 log.debug(f"Signup Data: {data}")
-                return await api.members_signup(member.id, data)
+                return await api.members_signup_create(member.id, data)
             except ApiException as exc:
                 raise RscException(response=exc)
 
@@ -984,7 +986,7 @@ class MemberMixIn(RSCMixIn):
         async with ApiClient(self._api_conf[guild.id]) as client:
             api = MembersApi(client)
             try:
-                await api.members_delete(member.id)
+                await api.members_destroy(member.id)
             except ApiException as exc:
                 raise RscException(response=exc)
 
@@ -998,9 +1000,9 @@ class MemberMixIn(RSCMixIn):
         async with ApiClient(self._api_conf[guild.id]) as client:
             api = MembersApi(client)
             try:
-                data = UpdateMemberRSCName(name=name, admin_override=override)
+                data = PatchedMemberNameChangeRequest(name=name, admin_override=override)
                 log.debug(f"NameChange Data. Name: {data.name} Override: {data.admin_override}")
-                return await api.members_name_change(id, data)
+                return await api.members_name_change_partial_update(id, data)
             except ApiException as exc:
                 raise RscException(response=exc)
 
@@ -1015,9 +1017,9 @@ class MemberMixIn(RSCMixIn):
             api = MembersApi(client)
             try:
                 if postseason:
-                    return await api.members_postseason_stats(player.id, self._league[guild.id], season=season)
+                    return await api.members_postseason_stats_retrieve(player.id, self._league[guild.id], season=season)
                 else:
-                    return await api.members_stats(player.id, self._league[guild.id], season=season)
+                    return await api.members_stats_retrieve(player.id, self._league[guild.id], season=season)
             except ApiException as exc:
                 raise RscException(response=exc)
 
@@ -1031,7 +1033,7 @@ class MemberMixIn(RSCMixIn):
     ) -> Deleted:
         async with ApiClient(self._api_conf[guild.id]) as client:
             api = MembersApi(client)
-            data = IntentToPlaySchema(
+            data = IntentToPlayRequest(
                 league=self._league[guild.id],
                 returning=returning,
                 executor=executor.id if executor else None,
@@ -1040,7 +1042,7 @@ class MemberMixIn(RSCMixIn):
             try:
                 member_id = member.id if isinstance(member, discord.Member) else member
                 log.debug(f"Intent Data ({member_id}): {data}")
-                return await api.members_intent_to_play(member_id, data)
+                return await api.members_intent_to_play_create(member_id, data)
             except ApiException as exc:
                 raise RscException(response=exc)
 
@@ -1061,7 +1063,7 @@ class MemberMixIn(RSCMixIn):
     ) -> LeaguePlayer:
         async with ApiClient(self._api_conf[guild.id]) as client:
             api = MembersApi(client)
-            data = PlayerSignupSchema(
+            data = PermFASignupDetails.model_construct(
                 league=self._league[guild.id],
                 rsc_name=rsc_name,
                 tracker_links=trackers,
@@ -1076,7 +1078,7 @@ class MemberMixIn(RSCMixIn):
             )
             try:
                 log.debug(f"PermFA Signup Data: {data}")
-                return await api.members_permfa_signup(member.id, data)
+                return await api.members_permfa_signup_create(member.id, data)
             except ApiException as exc:
                 raise RscException(response=exc)
 
@@ -1090,7 +1092,7 @@ class MemberMixIn(RSCMixIn):
     ) -> ActivityCheck:
         async with ApiClient(self._api_conf[guild.id]) as client:
             api = MembersApi(client)
-            data = PlayerActivityCheckSchema(
+            data = ActivityRequest(
                 league=self._league[guild.id],
                 returning_status=returning_status,
                 executor=executor.id,
@@ -1098,17 +1100,17 @@ class MemberMixIn(RSCMixIn):
             )
             try:
                 log.debug(f"[{player.id}] Activity Check: {data}")
-                return await api.members_activity_check(player.id, data)
+                return await api.members_activity_check_create(player.id, data)
             except ApiException as exc:
                 raise RscException(response=exc)
 
     async def transfer_membership(self, guild: discord.Guild, old: int, new: discord.Member) -> Member:
         async with ApiClient(self._api_conf[guild.id]) as client:
             api = MembersApi(client)
-            data = MemberTransferSchema(new_account=new.id)
+            data = MemberTransferRequest(new_account=new.id)
             try:
                 log.debug(f"Transferring {old} membership to {new.id}", guild=guild)
-                return await api.members_transfer_account(id=old, data=data)
+                return await api.members_transfer_account_create(id=old, member_transfer_request=data)
             except ApiException as exc:
                 raise RscException(response=exc)
 
@@ -1117,7 +1119,8 @@ class MemberMixIn(RSCMixIn):
             api = MembersApi(client)
             try:
                 log.debug(f"Fetching name history for {member.id}", guild=guild)
-                return await api.members_name_changes(member.id)
+                history = await api.members_name_changes_list(member.id)
+                return history.results
             except ApiException as exc:
                 raise RscException(response=exc)
 
@@ -1134,12 +1137,12 @@ class MemberMixIn(RSCMixIn):
     ) -> LeaguePlayerPatch:
         async with ApiClient(self._api_conf[guild.id]) as client:
             api = MembersApi(client)
-            data = LeaguePlayerSignup(
+            data = LeaguePlayerSignup.model_construct(
                 league=self._league[guild.id],
                 base_mmr=base_mmr,
                 current_mmr=current_mmr,
                 tier=tier,
-                status=status,
+                status=LeaguePlayerStatusEnum(status.value) if status else None,
                 team_name=team_name,
                 contract_length=contract_length,
             )
@@ -1148,7 +1151,7 @@ class MemberMixIn(RSCMixIn):
                     f"Converting {member.display_name} ({member.id}) to league player.",
                     guild=guild,
                 )
-                return await api.members_make_player(id=member.id, data=data)
+                return await api.members_make_player_create(id=member.id, league_player_signup=data)
             except ApiException as exc:
                 raise RscException(response=exc)
 
@@ -1167,6 +1170,6 @@ class MemberMixIn(RSCMixIn):
                     f"Droppping {member.display_name} ({member.id}) from league {data}",
                     guild=guild,
                 )
-                return await api.members_member_league_drop(id=member.id, data=data)
+                return await api.members_member_league_drop_create(id=member.id, league_player_signup=cast("LeaguePlayerSignup", data))
             except ApiException as exc:
                 raise RscException(response=exc)

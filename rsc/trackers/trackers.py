@@ -88,7 +88,7 @@ class TrackerMixIn(RSCMixIn):
                 if t.status:
                     status = TrackerLinksStatus(t.status).full_name
                 tdata.append((t.name or t.platform_id, status, date, t.id))
-            tdata.sort(key=lambda x: cast(int, x[1]))
+            tdata.sort(key=lambda x: cast("int", x[1]))
             embed.description = "List of associated RSC trackers. Account is tracker name or platform id."
             if ids:
                 embed.add_field(name="ID", value="\n".join([str(x[3]) for x in tdata]), inline=True)
@@ -203,7 +203,7 @@ class TrackerMixIn(RSCMixIn):
         except RscException as exc:
             return await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc), ephemeral=False)
 
-        trackers.sort(key=lambda x: cast(datetime, x.last_updated), reverse=True)
+        trackers.sort(key=lambda x: cast("datetime", x.last_updated), reverse=True)
 
         dates = []
         for x in trackers:
@@ -457,7 +457,7 @@ class TrackerMixIn(RSCMixIn):
         async with ApiClient(self._api_conf[guild.id]) as client:
             api = TrackerLinksApi(client)
             try:
-                return await api.tracker_links_links_stats()
+                return await api.tracker_links_links_stats_list()
             except ApiException as exc:
                 raise RscException(response=exc)
 
@@ -470,7 +470,7 @@ class TrackerMixIn(RSCMixIn):
         async with ApiClient(self._api_conf[guild.id]) as client:
             api = TrackerLinksApi(client)
             try:
-                return await api.tracker_links_next(limit=limit)
+                return await api.tracker_links_next_list(limit=limit)
             except ApiException as exc:
                 raise RscException(response=exc)
 
@@ -483,7 +483,7 @@ class TrackerMixIn(RSCMixIn):
         """Add a tracker to a user"""
         async with ApiClient(self._api_conf[guild.id]) as client:
             api = TrackerLinksApi(client)
-            data = TrackerLink(link=tracker, discord_id=player.id)
+            data = cast("TrackerLink", {"link": tracker, "discord_id": player.id})
             log.debug(
                 "add_tracker request params guild_id=%s player_id=%s tracker=%s",
                 guild.id,
@@ -512,7 +512,7 @@ class TrackerMixIn(RSCMixIn):
             api = TrackerLinksApi(client)
             log.debug(f"Tracker Delete: {tracker_id}")
             try:
-                return await api.tracker_links_delete(tracker_id)
+                return await api.tracker_links_destroy(str(tracker_id))
             except ApiException as exc:
                 raise RscException(response=exc)
 
@@ -529,7 +529,7 @@ class TrackerMixIn(RSCMixIn):
             data = TrackerLinkLinking(member=player.id, executor=executor.id)
             log.debug(f"Tracker Unlink: {tracker_id} (Member: {player})")
             try:
-                return await api.tracker_links_unlink(tracker_id, data)
+                return await api.tracker_links_unlink_create(tracker_id, data)
             except ApiException as exc:
                 raise RscException(response=exc)
 
@@ -546,7 +546,7 @@ class TrackerMixIn(RSCMixIn):
             data = TrackerLinkLinking(member=player.id, executor=executor.id)
             log.debug(f"Tracker Link: {tracker_id} (Member: {player})")
             try:
-                return await api.tracker_links_link(tracker_id, data)
+                return await api.tracker_links_link_create(tracker_id, data)
             except ApiException as exc:
                 raise RscException(response=exc)
 
@@ -560,7 +560,7 @@ class TrackerMixIn(RSCMixIn):
             api = TrackerLinksApi(client)
             log.debug(f"Fetch Tracker ID: {tracker_id}")
             try:
-                return await api.tracker_links_read(tracker_id)
+                return await api.tracker_links_retrieve(str(tracker_id))
             except ApiException as exc:
                 raise RscException(response=exc)
 
@@ -576,6 +576,6 @@ class TrackerMixIn(RSCMixIn):
             log.debug(f"Merging {source} pulls into {dest}")
             try:
                 data = TrackerIDInput(tracker_id=source)
-                return await api.tracker_links_migrate_pulls(id=dest, data=data)
+                return await api.tracker_links_migrate_pulls_create(id=dest, tracker_id_input=data)
             except ApiException as exc:
                 raise RscException(response=exc)

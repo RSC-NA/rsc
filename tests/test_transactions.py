@@ -1,6 +1,4 @@
 import json
-import sys
-from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import discord
@@ -10,12 +8,12 @@ from rscapi.models.player import Player
 from rscapi.models.player_transaction_updates import PlayerTransactionUpdates
 from rscapi.models.transaction_response import TransactionResponse
 from rscapi.models.franchise_identifier import FranchiseIdentifier
+from rscapi.models.draft_pick_trade import DraftPickTrade
+from rscapi.models.trade_franchise import TradeFranchise
 from rscapi.models.trade_item import TradeItem
-from rscapi.models.trade_value import TradeValue
-from rscapi.models.draft_pick import DraftPick
-from rscapi.models.player1 import Player1
+from rscapi.models.trade_object import TradeObject
+from rscapi.models.trade_player import TradePlayer
 from rscapi.models.league_player import LeaguePlayer
-from rscapi.models.tier import Tier
 
 from rsc.enums import TransactionType
 from rsc.exceptions import (
@@ -31,7 +29,7 @@ from rsc.transactions.transactions import (
     TransactionMixIn,
     defaults,
 )
-from rsc.types import Substitute, TransactionSettings
+from rsc.types import Substitute
 
 
 def _create_mixin(**attrs):
@@ -703,10 +701,10 @@ class TestBuildTradeEmbed:
         assert isinstance(embed, discord.Embed)
 
     async def test_player_trade_embed(self, mixin, mock_guild):
-        src = FranchiseIdentifier(id=1, name="Source FC", gm=111)
-        dest = FranchiseIdentifier(id=2, name="Dest FC", gm=222)
-        value = TradeValue(player=Player1(id=333, team="Team A"), pick=None)
-        trade = TradeItem(source=src, destination=dest, value=value)
+        src = TradeFranchise(id=1, name="Source FC", gm=111)
+        dest = TradeFranchise(id=2, name="Dest FC", gm=222)
+        value = TradeItem(player=TradePlayer(id=333, team="Team A"), pick=None)
+        trade = TradeObject(source=src, destination=dest, value=value)
 
         mock_guild.get_member = MagicMock(return_value=None)
         gms, embed = await mixin.build_trade_embed(mock_guild, [trade])
@@ -714,20 +712,20 @@ class TestBuildTradeEmbed:
         assert 333 in gms
 
     async def test_pick_trade_embed(self, mixin, mock_guild):
-        src = FranchiseIdentifier(id=1, name="Source FC", gm=111)
-        dest = FranchiseIdentifier(id=2, name="Dest FC", gm=222)
-        value = TradeValue(player=None, pick=DraftPick(tier="Elite", round=1, number=5, future=False))
-        trade = TradeItem(source=src, destination=dest, value=value)
+        src = TradeFranchise(id=1, name="Source FC", gm=111)
+        dest = TradeFranchise(id=2, name="Dest FC", gm=222)
+        value = TradeItem(player=None, pick=DraftPickTrade(tier="Elite", round=1, number=5, future=False))
+        trade = TradeObject(source=src, destination=dest, value=value)
 
         mock_guild.get_member = MagicMock(return_value=None)
         gms, embed = await mixin.build_trade_embed(mock_guild, [trade])
         assert 222 in gms
 
     async def test_future_pick_trade_embed(self, mixin, mock_guild):
-        src = FranchiseIdentifier(id=1, name="Source FC", gm=111)
-        dest = FranchiseIdentifier(id=2, name="Dest FC", gm=222)
-        value = TradeValue(player=None, pick=DraftPick(tier="Elite", round=2, number=0, future=True))
-        trade = TradeItem(source=src, destination=dest, value=value)
+        src = TradeFranchise(id=1, name="Source FC", gm=111)
+        dest = TradeFranchise(id=2, name="Dest FC", gm=222)
+        value = TradeItem(player=None, pick=DraftPickTrade(tier="Elite", round=2, number=0, future=True))
+        trade = TradeObject(source=src, destination=dest, value=value)
 
         mock_guild.get_member = MagicMock(return_value=None)
         gms, embed = await mixin.build_trade_embed(mock_guild, [trade])
@@ -1127,7 +1125,7 @@ class TestTransactionHistoryByIdApi:
     async def test_history_by_id_success(self, mock_client_cls, mock_api_cls, mixin, mock_guild):
         mock_api = AsyncMock()
         expected = _make_transaction_response(type=TransactionType.CUT, id=42)
-        mock_api.transactions_history_read.return_value = expected
+        mock_api.transactions_history_retrieve.return_value = expected
         mock_api_cls.return_value = mock_api
 
         mock_ctx = AsyncMock()

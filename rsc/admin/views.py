@@ -4,9 +4,9 @@ from enum import IntEnum
 import discord
 from rscapi import ApiClient, Configuration, MembersApi
 from rscapi.exceptions import ApiException
+from rscapi.models.activity_request import ActivityRequest
 from rscapi.models.activity_check import ActivityCheck
 from rscapi.models.league_player import LeaguePlayer
-from rscapi.models.player_activity_check_schema import PlayerActivityCheckSchema
 
 from rsc.const import DEFAULT_TIMEOUT
 from rsc.embeds import (
@@ -106,7 +106,7 @@ class InactiveCheckView(discord.ui.View):
     async def call_api(self, player: discord.Member, returning_status: bool) -> ActivityCheck:
         async with ApiClient(self._api_conf) as client:
             api = MembersApi(client)
-            data = PlayerActivityCheckSchema(
+            data = ActivityRequest(
                 league=self._league_id,
                 admin_override=False,
                 executor=0,
@@ -114,7 +114,7 @@ class InactiveCheckView(discord.ui.View):
             )
             try:
                 log.debug(f"[{player.id}] Activity Check: {data}")
-                return await api.members_activity_check(player.id, data)
+                return await api.members_activity_check_create(player.id, data)
             except ApiException as exc:
                 raise RscException(response=exc)
 

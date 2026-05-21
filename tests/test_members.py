@@ -1,11 +1,10 @@
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import discord
 import pytest
 from rscapi.exceptions import ApiException
 from rscapi.models.member import Member
 
-from rsc.enums import Platform, PlayerType, Referrer, RegionPreference, Status
+from rsc.enums import Platform, PlayerType, Referrer, RegionPreference
 from rsc.exceptions import RscException
 from rsc.members.members import MemberMixIn
 
@@ -112,7 +111,7 @@ class TestSignupApi:
 
         with patch("rsc.members.members.ApiClient") as mock_client:
             mock_api = AsyncMock()
-            mock_api.members_signup.return_value = lp
+            mock_api.members_signup_create.return_value = lp
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
             with patch("rsc.members.members.MembersApi", return_value=mock_api):
@@ -137,7 +136,7 @@ class TestSignupApi:
 
         with patch("rsc.members.members.ApiClient") as mock_client:
             mock_api = AsyncMock()
-            mock_api.members_signup.side_effect = ApiException(status=400, reason="Bad")
+            mock_api.members_signup_create.side_effect = ApiException(status=400, reason="Bad")
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
             with patch("rsc.members.members.MembersApi", return_value=mock_api):
@@ -194,20 +193,20 @@ class TestDeleteMemberApi:
 
         with patch("rsc.members.members.ApiClient") as mock_client:
             mock_api = AsyncMock()
-            mock_api.members_delete.return_value = None
+            mock_api.members_destroy.return_value = None
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
             with patch("rsc.members.members.MembersApi", return_value=mock_api):
                 await mixin.delete_member(mock_guild, member=mock_member)
 
-        mock_api.members_delete.assert_awaited_once_with(mock_member.id)
+        mock_api.members_destroy.assert_awaited_once_with(mock_member.id)
 
     async def test_raises_rsc_exception(self, mock_guild, mock_member):
         mixin = _create_mixin(_api_conf={mock_guild.id: MagicMock()})
 
         with patch("rsc.members.members.ApiClient") as mock_client:
             mock_api = AsyncMock()
-            mock_api.members_delete.side_effect = ApiException(status=404, reason="Not Found")
+            mock_api.members_destroy.side_effect = ApiException(status=404, reason="Not Found")
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
             with patch("rsc.members.members.MembersApi", return_value=mock_api):
@@ -225,7 +224,7 @@ class TestChangeMemberNameApi:
 
         with patch("rsc.members.members.ApiClient") as mock_client:
             mock_api = AsyncMock()
-            mock_api.members_name_change.return_value = updated
+            mock_api.members_name_change_partial_update.return_value = updated
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
             with patch("rsc.members.members.MembersApi", return_value=mock_api):
@@ -238,7 +237,7 @@ class TestChangeMemberNameApi:
 
         with patch("rsc.members.members.ApiClient") as mock_client:
             mock_api = AsyncMock()
-            mock_api.members_name_change.side_effect = ApiException(status=400, reason="Bad")
+            mock_api.members_name_change_partial_update.side_effect = ApiException(status=400, reason="Bad")
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
             with patch("rsc.members.members.MembersApi", return_value=mock_api):
@@ -259,7 +258,7 @@ class TestPlayerStatsApi:
 
         with patch("rsc.members.members.ApiClient") as mock_client:
             mock_api = AsyncMock()
-            mock_api.members_stats.return_value = stats
+            mock_api.members_stats_retrieve.return_value = stats
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
             with patch("rsc.members.members.MembersApi", return_value=mock_api):
@@ -276,7 +275,7 @@ class TestPlayerStatsApi:
 
         with patch("rsc.members.members.ApiClient") as mock_client:
             mock_api = AsyncMock()
-            mock_api.members_postseason_stats.return_value = stats
+            mock_api.members_postseason_stats_retrieve.return_value = stats
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
             with patch("rsc.members.members.MembersApi", return_value=mock_api):
@@ -298,7 +297,7 @@ class TestDeclareIntentApi:
 
         with patch("rsc.members.members.ApiClient") as mock_client:
             mock_api = AsyncMock()
-            mock_api.members_intent_to_play.return_value = deleted
+            mock_api.members_intent_to_play_create.return_value = deleted
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
             with patch("rsc.members.members.MembersApi", return_value=mock_api):
@@ -315,15 +314,15 @@ class TestDeclareIntentApi:
 
         with patch("rsc.members.members.ApiClient") as mock_client:
             mock_api = AsyncMock()
-            mock_api.members_intent_to_play.return_value = deleted
+            mock_api.members_intent_to_play_create.return_value = deleted
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
             with patch("rsc.members.members.MembersApi", return_value=mock_api):
                 result = await mixin.declare_intent(mock_guild, member=12345, returning=False)
 
         assert result is deleted
-        mock_api.members_intent_to_play.assert_awaited_once()
-        call_args = mock_api.members_intent_to_play.call_args
+        mock_api.members_intent_to_play_create.assert_awaited_once()
+        call_args = mock_api.members_intent_to_play_create.call_args
         assert call_args[0][0] == 12345
 
 
@@ -340,7 +339,7 @@ class TestActivityCheckApi:
 
         with patch("rsc.members.members.ApiClient") as mock_client:
             mock_api = AsyncMock()
-            mock_api.members_activity_check.return_value = check
+            mock_api.members_activity_check_create.return_value = check
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
             with patch("rsc.members.members.MembersApi", return_value=mock_api):
@@ -364,7 +363,7 @@ class TestTransferMembershipApi:
 
         with patch("rsc.members.members.ApiClient") as mock_client:
             mock_api = AsyncMock()
-            mock_api.members_transfer_account.return_value = transferred
+            mock_api.members_transfer_account_create.return_value = transferred
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
             with patch("rsc.members.members.MembersApi", return_value=mock_api):
@@ -383,7 +382,9 @@ class TestNameHistoryApi:
 
         with patch("rsc.members.members.ApiClient") as mock_client:
             mock_api = AsyncMock()
-            mock_api.members_name_changes.return_value = history
+            resp = MagicMock()
+            resp.results = history
+            mock_api.members_name_changes_list.return_value = resp
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
             with patch("rsc.members.members.MembersApi", return_value=mock_api):
@@ -405,7 +406,7 @@ class TestMakeLeaguePlayerApi:
 
         with patch("rsc.members.members.ApiClient") as mock_client:
             mock_api = AsyncMock()
-            mock_api.members_make_player.return_value = lp
+            mock_api.members_make_player_create.return_value = lp
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
             with patch("rsc.members.members.MembersApi", return_value=mock_api):
@@ -427,7 +428,7 @@ class TestMakeLeaguePlayerApi:
 
         with patch("rsc.members.members.ApiClient") as mock_client:
             mock_api = AsyncMock()
-            mock_api.members_make_player.side_effect = ApiException(status=400, reason="Bad")
+            mock_api.members_make_player_create.side_effect = ApiException(status=400, reason="Bad")
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
             with patch("rsc.members.members.MembersApi", return_value=mock_api):
@@ -454,7 +455,7 @@ class TestDropPlayerFromLeagueApi:
 
         with patch("rsc.members.members.ApiClient") as mock_client:
             mock_api = AsyncMock()
-            mock_api.members_member_league_drop.return_value = dropped
+            mock_api.members_member_league_drop_create.return_value = dropped
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
             with patch("rsc.members.members.MembersApi", return_value=mock_api):
@@ -470,7 +471,7 @@ class TestDropPlayerFromLeagueApi:
 
         with patch("rsc.members.members.ApiClient") as mock_client:
             mock_api = AsyncMock()
-            mock_api.members_member_league_drop.side_effect = ApiException(status=400, reason="Bad")
+            mock_api.members_member_league_drop_create.side_effect = ApiException(status=400, reason="Bad")
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
             with patch("rsc.members.members.MembersApi", return_value=mock_api):

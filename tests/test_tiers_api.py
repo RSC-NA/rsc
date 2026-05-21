@@ -19,10 +19,10 @@ class TestTiersApiContract:
 
     EXPECTED_METHODS = [
         "tiers_list",
-        "tiers_read",
-        "tiers_standings",
+        "tiers_retrieve",
+        "tiers_standings_list",
         "tiers_create",
-        "tiers_delete",
+        "tiers_destroy",
     ]
 
     @pytest.mark.parametrize("method_name", EXPECTED_METHODS)

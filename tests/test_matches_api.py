@@ -22,11 +22,11 @@ class TestMatchesApiContract:
 
     EXPECTED_METHODS = [
         "matches_list",
-        "matches_find_match",
-        "matches_read",
-        "matches_score_report",
+        "matches_find_match_retrieve",
+        "matches_retrieve",
+        "matches_score_report_create",
         "matches_create",
-        "matches_results",
+        "matches_results_retrieve",
     ]
 
     @pytest.mark.parametrize("method_name", EXPECTED_METHODS)
@@ -40,7 +40,7 @@ class TestMatchesTeamsApiContract:
     """Verify TeamsApi methods used by the matches module exist."""
 
     EXPECTED_METHODS = [
-        "teams_match",
+        "teams_match_retrieve",
     ]
 
     @pytest.mark.parametrize("method_name", EXPECTED_METHODS)

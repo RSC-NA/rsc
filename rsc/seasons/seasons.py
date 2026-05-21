@@ -57,7 +57,7 @@ class SeasonsMixIn(RSCMixIn):
         async with ApiClient(self._api_conf[guild.id]) as client:
             api = SeasonsApi(client)
             try:
-                return await api.seasons_read(season_id)
+                return await api.seasons_retrieve(season_id)
             except ApiException as exc:
                 raise RscException(response=exc)
 
@@ -67,7 +67,7 @@ class SeasonsMixIn(RSCMixIn):
             api = SeasonsApi(client)
             league_id = self._league[guild.id]
             try:
-                signup_season = await api.seasons_signup_season(league=league_id)
+                signup_season = await api.seasons_signup_season_retrieve(league=league_id)
                 log.debug("Signup Season Number: %d", signup_season.number if signup_season else None)
                 return signup_season
             except ApiException as exc:
@@ -86,7 +86,7 @@ class SeasonsMixIn(RSCMixIn):
             try:
                 discord_id = player.id if player else None
                 log.debug(f"Season Intent Data. Season: {season_id} Discord: {discord_id} Returning: {returning} Missing: {missing}")
-                return await api.seasons_player_intents(
+                return await api.seasons_player_intents_list(
                     season_id,
                     discord_id=discord_id,
                     returning=returning,
@@ -99,7 +99,7 @@ class SeasonsMixIn(RSCMixIn):
         async with ApiClient(self._api_conf[guild.id]) as client:
             api = SeasonsApi(client)
             try:
-                return await api.seasons_franchise_standings(season_id)
+                return await api.seasons_franchise_standings_list(season_id)
             except ApiException as exc:
                 raise RscException(response=exc)
 

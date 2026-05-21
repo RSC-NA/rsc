@@ -16,7 +16,6 @@ dependencies = [
     "red-discordbot==3.5.24",
     "replay-parser",
     "rich>=14.2.0",
-    "rscapi",
     "trio>=0.33.0",
     "unstructured>=0.18.32",
     "validators>=0.35.0",
@@ -32,7 +31,11 @@ dev = [
 
 [tool.mypy]
 check_untyped_defs = true
-mypy_path = ["/home/xentrick/dev/python-replay-parser"]
+mypy_path = [
+    "/home/xentrick/dev/python-replay-parser",
+    "/home/xentrick/dev/rsc-api-client",
+    "/home/xentrick/dev/python-ballchasing",
+]
 
 [tool.isort]
 profile = "black"
@@ -139,9 +142,12 @@ markers = [
 exclude = ["scripts", "tests"]
 
 [tool.ty.environment]
-extra-paths = ["/home/xentrick/dev/python-replay-parser"]
+extra-paths = [
+    "/home/xentrick/dev/python-replay-parser",
+    "/home/xentrick/dev/rsc-api-client",
+]
 
 [tool.uv.sources]
 replay-parser = { git = "https://github.com/xentrick/python-replay-parser.git" }
 python-ballchasing = { git = "https://github.com/xentrick/python-ballchasing.git" }
-rscapi = { git = "https://github.com/RSC-NA/rsc-api-client.git" }
+rsc-api-client = { git = "https://github.com/RSC-NA/rsc-api-client.git" }

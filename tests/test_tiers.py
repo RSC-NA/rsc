@@ -26,7 +26,7 @@ def _create_mixin(**attrs):
 
 
 def _make_tier(id=1, name="Premier", color=0xFF0000, position=1):
-    return Tier(id=id, name=name, color=color, position=position)
+    return Tier.model_construct(id=id, name=name, color=color, position=position)
 
 
 def _make_standings(franchise="Eagles", team="Eagles Blue", tier="Premier", rank=1, gp=10, gw=7, gl=3):
@@ -212,7 +212,7 @@ class TestTierByIdApi:
 
         with patch("rsc.tiers.tiers.ApiClient") as mock_client:
             mock_api = AsyncMock()
-            mock_api.tiers_read.return_value = tier
+            mock_api.tiers_retrieve.return_value = tier
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
             with patch("rsc.tiers.tiers.TiersApi", return_value=mock_api):
@@ -220,7 +220,7 @@ class TestTierByIdApi:
 
         assert result.id == 5
         assert result.name == "Master"
-        mock_api.tiers_read.assert_awaited_once_with(5)
+        mock_api.tiers_retrieve.assert_awaited_once_with(5)
 
 
 class TestTiersApi:
@@ -365,7 +365,7 @@ class TestTierStandings:
 
         with patch("rsc.tiers.tiers.ApiClient") as mock_client:
             mock_api = AsyncMock()
-            mock_api.tiers_standings.return_value = [s1, s2]
+            mock_api.tiers_standings_list.return_value = [s1, s2]
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
             with patch("rsc.tiers.tiers.TiersApi", return_value=mock_api):
@@ -373,7 +373,7 @@ class TestTierStandings:
 
         assert result[0].rank == 1
         assert result[1].rank == 2
-        mock_api.tiers_standings.assert_awaited_once_with(id=1, season=5)
+        mock_api.tiers_standings_list.assert_awaited_once_with(id=1, season=5)
 
     async def test_raises_rsc_exception_on_api_error(self, mock_guild):
         exc = ApiException(status=404, reason="Not Found")
@@ -381,7 +381,7 @@ class TestTierStandings:
 
         with patch("rsc.tiers.tiers.ApiClient") as mock_client:
             mock_api = AsyncMock()
-            mock_api.tiers_standings.side_effect = exc
+            mock_api.tiers_standings_list.side_effect = exc
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
             with patch("rsc.tiers.tiers.TiersApi", return_value=mock_api):
@@ -393,7 +393,7 @@ class TestTierStandings:
 
         with patch("rsc.tiers.tiers.ApiClient") as mock_client:
             mock_api = AsyncMock()
-            mock_api.tiers_standings.return_value = []
+            mock_api.tiers_standings_list.return_value = []
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
             with patch("rsc.tiers.tiers.TiersApi", return_value=mock_api):
@@ -438,14 +438,14 @@ class TestDeleteTier:
 
         with patch("rsc.tiers.tiers.ApiClient") as mock_client:
             mock_api = AsyncMock()
-            mock_api.tiers_delete.return_value = None
+            mock_api.tiers_destroy.return_value = None
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
             with patch("rsc.tiers.tiers.TiersApi", return_value=mock_api):
                 result = await mixin.delete_tier(mock_guild, id=5)
 
         assert result is None
-        mock_api.tiers_delete.assert_awaited_once_with(5)
+        mock_api.tiers_destroy.assert_awaited_once_with(5)
 
     async def test_raises_rsc_exception_on_api_error(self, mock_guild):
         exc = ApiException(status=404, reason="Not Found")
@@ -453,7 +453,7 @@ class TestDeleteTier:
 
         with patch("rsc.tiers.tiers.ApiClient") as mock_client:
             mock_api = AsyncMock()
-            mock_api.tiers_delete.side_effect = exc
+            mock_api.tiers_destroy.side_effect = exc
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
             with patch("rsc.tiers.tiers.TiersApi", return_value=mock_api):

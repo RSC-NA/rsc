@@ -20,9 +20,9 @@ class TestLeaguesApiContract:
 
     EXPECTED_METHODS = [
         "leagues_list",
-        "leagues_read",
-        "leagues_current_season",
-        "leagues_seasons",
+        "leagues_retrieve",
+        "leagues_current_season_retrieve",
+        "leagues_seasons_list",
     ]
 
     @pytest.mark.parametrize("method_name", EXPECTED_METHODS)

@@ -6,6 +6,7 @@ from rscapi.models.franchise_list import FranchiseList
 from rscapi.models.league_player import LeaguePlayer
 from rscapi.models.player import Player
 from rscapi.models.player_transaction_updates import PlayerTransactionUpdates
+from rscapi.models.team_player import TeamPlayer
 from rscapi.models.tier import Tier
 from rscapi.models.transaction_response import TransactionResponse
 
@@ -215,7 +216,7 @@ async def update_cut_player_discord(
 
 async def update_team_captain_discord(
     guild: discord.Guild,
-    players: list[Player],
+    players: list[Player] | list[TeamPlayer],
 ):
     cpt_role = await utils.get_captain_role(guild)
 

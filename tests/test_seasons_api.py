@@ -19,10 +19,10 @@ class TestSeasonsApiContract:
 
     EXPECTED_METHODS = [
         "seasons_list",
-        "seasons_read",
-        "seasons_signup_season",
-        "seasons_player_intents",
-        "seasons_franchise_standings",
+        "seasons_retrieve",
+        "seasons_signup_season_retrieve",
+        "seasons_player_intents_list",
+        "seasons_franchise_standings_list",
         "seasons_activity_check_list",
     ]
 

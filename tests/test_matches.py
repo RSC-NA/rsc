@@ -5,7 +5,7 @@ import discord
 import pytest
 from rscapi.exceptions import ApiException
 
-from rsc.enums import MatchFormat, MatchTeamEnum, MatchType, Status, SubStatus
+from rsc.enums import MatchFormat, MatchTeamEnum, MatchType, Status
 from rsc.exceptions import RscException
 from rsc.matches.matches import MatchMixIn
 
@@ -336,7 +336,7 @@ class TestMatchByDayApi:
 
         with patch("rsc.matches.matches.ApiClient") as mock_client:
             mock_api = AsyncMock()
-            mock_api.teams_match.return_value = match
+            mock_api.teams_match_retrieve.return_value = match
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
             with patch("rsc.matches.matches.TeamsApi", return_value=mock_api):
@@ -349,7 +349,7 @@ class TestMatchByDayApi:
 
         with patch("rsc.matches.matches.ApiClient") as mock_client:
             mock_api = AsyncMock()
-            mock_api.teams_match.side_effect = ApiException(status=404, reason="Not Found")
+            mock_api.teams_match_retrieve.side_effect = ApiException(status=404, reason="Not Found")
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
             with patch("rsc.matches.matches.TeamsApi", return_value=mock_api):
@@ -368,7 +368,7 @@ class TestFindMatchApi:
 
         with patch("rsc.matches.matches.ApiClient") as mock_client:
             mock_api = AsyncMock()
-            mock_api.matches_find_match.return_value = resp
+            mock_api.matches_find_match_retrieve.return_value = resp
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
             with patch("rsc.matches.matches.MatchesApi", return_value=mock_api):
@@ -385,7 +385,7 @@ class TestMatchByIdApi:
 
         with patch("rsc.matches.matches.ApiClient") as mock_client:
             mock_api = AsyncMock()
-            mock_api.matches_read.return_value = match
+            mock_api.matches_retrieve.return_value = match
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
             with patch("rsc.matches.matches.MatchesApi", return_value=mock_api):
@@ -401,7 +401,7 @@ class TestReportMatchApi:
 
         with patch("rsc.matches.matches.ApiClient") as mock_client:
             mock_api = AsyncMock()
-            mock_api.matches_score_report.return_value = result_mock
+            mock_api.matches_score_report_create.return_value = result_mock
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
             with patch("rsc.matches.matches.MatchesApi", return_value=mock_api):
@@ -421,7 +421,7 @@ class TestReportMatchApi:
 
         with patch("rsc.matches.matches.ApiClient") as mock_client:
             mock_api = AsyncMock()
-            mock_api.matches_score_report.side_effect = ApiException(status=400, reason="Bad")
+            mock_api.matches_score_report_create.side_effect = ApiException(status=400, reason="Bad")
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
             with patch("rsc.matches.matches.MatchesApi", return_value=mock_api):
@@ -466,7 +466,7 @@ class TestMatchResultsApi:
 
         with patch("rsc.matches.matches.ApiClient") as mock_client:
             mock_api = AsyncMock()
-            mock_api.matches_results.return_value = results
+            mock_api.matches_results_retrieve.return_value = results
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
             with patch("rsc.matches.matches.MatchesApi", return_value=mock_api):
@@ -479,7 +479,7 @@ class TestMatchResultsApi:
 
         with patch("rsc.matches.matches.ApiClient") as mock_client:
             mock_api = AsyncMock()
-            mock_api.matches_results.side_effect = ApiException(status=500, reason="Error")
+            mock_api.matches_results_retrieve.side_effect = ApiException(status=500, reason="Error")
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
             with patch("rsc.matches.matches.MatchesApi", return_value=mock_api):

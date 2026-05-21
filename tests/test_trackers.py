@@ -1,6 +1,5 @@
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import discord
 import pytest
 from rscapi.exceptions import ApiException
 
@@ -90,7 +89,7 @@ class TestTrackerStatsApi:
 
         with patch("rsc.trackers.trackers.ApiClient") as mock_client:
             mock_api = AsyncMock()
-            mock_api.tracker_links_links_stats.return_value = stats
+            mock_api.tracker_links_links_stats_list.return_value = stats
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
             with patch("rsc.trackers.trackers.TrackerLinksApi", return_value=mock_api):
@@ -106,7 +105,7 @@ class TestNextTrackerApi:
 
         with patch("rsc.trackers.trackers.ApiClient") as mock_client:
             mock_api = AsyncMock()
-            mock_api.tracker_links_next.return_value = trackers
+            mock_api.tracker_links_next_list.return_value = trackers
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
             with patch("rsc.trackers.trackers.TrackerLinksApi", return_value=mock_api):
@@ -137,13 +136,13 @@ class TestRmTrackerApi:
 
         with patch("rsc.trackers.trackers.ApiClient") as mock_client:
             mock_api = AsyncMock()
-            mock_api.tracker_links_delete.return_value = None
+            mock_api.tracker_links_destroy.return_value = None
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
             with patch("rsc.trackers.trackers.TrackerLinksApi", return_value=mock_api):
                 await mixin.rm_tracker(mock_guild, tracker_id=5)
 
-        mock_api.tracker_links_delete.assert_awaited_once_with(5)
+        mock_api.tracker_links_destroy.assert_awaited_once_with("5")
 
 
 class TestUnlinkTrackerApi:
@@ -153,7 +152,7 @@ class TestUnlinkTrackerApi:
 
         with patch("rsc.trackers.trackers.ApiClient") as mock_client:
             mock_api = AsyncMock()
-            mock_api.tracker_links_unlink.return_value = unlinked
+            mock_api.tracker_links_unlink_create.return_value = unlinked
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
             with patch("rsc.trackers.trackers.TrackerLinksApi", return_value=mock_api):
@@ -169,7 +168,7 @@ class TestLinkTrackerApi:
 
         with patch("rsc.trackers.trackers.ApiClient") as mock_client:
             mock_api = AsyncMock()
-            mock_api.tracker_links_link.return_value = linked
+            mock_api.tracker_links_link_create.return_value = linked
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
             with patch("rsc.trackers.trackers.TrackerLinksApi", return_value=mock_api):
@@ -186,7 +185,7 @@ class TestFetchTrackerByIdApi:
 
         with patch("rsc.trackers.trackers.ApiClient") as mock_client:
             mock_api = AsyncMock()
-            mock_api.tracker_links_read.return_value = tracker
+            mock_api.tracker_links_retrieve.return_value = tracker
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
             with patch("rsc.trackers.trackers.TrackerLinksApi", return_value=mock_api):
@@ -202,7 +201,7 @@ class TestMigrateTrackerPullsApi:
 
         with patch("rsc.trackers.trackers.ApiClient") as mock_client:
             mock_api = AsyncMock()
-            mock_api.tracker_links_migrate_pulls.return_value = migrated
+            mock_api.tracker_links_migrate_pulls_create.return_value = migrated
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
             with patch("rsc.trackers.trackers.TrackerLinksApi", return_value=mock_api):

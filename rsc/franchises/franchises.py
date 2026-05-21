@@ -9,10 +9,9 @@ from rscapi import ApiClient, FranchisesApi
 from rscapi.exceptions import ApiException, NotFoundException
 from rscapi.models.franchise import Franchise
 from rscapi.models.franchise_gm import FranchiseGM
-from rscapi.models.franchise_league import FranchiseLeague
 from rscapi.models.franchise_list import FranchiseList
-from rscapi.models.rebrand_a_franchise import RebrandAFranchise
-from rscapi.models.transfer_franchise import TransferFranchise
+from rscapi.models.franchise_rebrand import FranchiseRebrand
+from rscapi.models.franchise_transfer_request import FranchiseTransferRequest
 
 from rsc.abc import RSCMixIn
 from rsc.embeds import BlueEmbed
@@ -160,8 +159,10 @@ class FranchiseMixIn(RSCMixIn):
         gm_discord_id: int | None = None,
         name: str | None = None,
         tier: int | None = None,
-        tier_name: str | None = None,
+        tier_name: str | list[str] | None = None,
     ) -> list[FranchiseList]:
+        tier_names = [tier_name] if isinstance(tier_name, str) else tier_name
+
         async with ApiClient(self._api_conf[guild.id]) as client:
             api = FranchisesApi(client)
             flist = await api.franchises_list(
@@ -171,7 +172,7 @@ class FranchiseMixIn(RSCMixIn):
                 gm_discord_id=gm_discord_id,
                 name=name,
                 tier=tier,
-                tier_name=tier_name,
+                tier_name=tier_names,
             )
 
             # Populate cache
@@ -179,7 +180,7 @@ class FranchiseMixIn(RSCMixIn):
                 if not all(f.name for f in flist):
                     raise AttributeError("API returned a franchise with no name.")
 
-                flist.sort(key=lambda f: cast(str, f.name))
+                flist.sort(key=lambda f: cast("str", f.name))
                 if self._franchise_cache.get(guild.id):
                     cached = set(self._franchise_cache[guild.id])
                     different = {f.name for f in flist if f.name} - cached
@@ -195,7 +196,7 @@ class FranchiseMixIn(RSCMixIn):
     async def franchise_by_id(self, guild: discord.Guild, id: int) -> Franchise | None:
         async with ApiClient(self._api_conf[guild.id]) as client:
             api = FranchisesApi(client)
-            return await api.franchises_read(id)
+            return await api.franchises_retrieve(id)
 
     async def upload_franchise_logo(
         self,
@@ -206,7 +207,8 @@ class FranchiseMixIn(RSCMixIn):
         async with ApiClient(self._api_conf[guild.id]) as client:
             api = FranchisesApi(client)
             try:
-                return await api.franchises_upload_logo(id=id, logo=logo)  # type: ignore[arg-type]
+                logo_param = str(logo) if isinstance(logo, PathLike) else logo
+                return await api.franchises_upload_logo_update(id=id, logo=logo_param)
             except ApiException as exc:
                 raise RscException(response=exc)
 
@@ -220,12 +222,14 @@ class FranchiseMixIn(RSCMixIn):
         async with ApiClient(self._api_conf[guild.id]) as client:
             api = FranchisesApi(client)
 
-            fleague = FranchiseLeague(id=self._league[guild.id], guild_id=guild.id)
-            data = Franchise(
-                name=name,
-                league=fleague,
-                prefix=prefix,
-                gm=FranchiseGM(discord_id=gm.id),
+            data = cast(
+                "Franchise",
+                {
+                    "name": name,
+                    "league": {"id": self._league[guild.id], "guild_id": guild.id},
+                    "prefix": prefix,
+                    "gm": {"discord_id": gm.id, "rsc_name": gm.display_name},
+                },
             )
             log.debug(f"Create Franchise Data: {data}")
             try:
@@ -239,22 +243,22 @@ class FranchiseMixIn(RSCMixIn):
                 self._franchise_cache[guild.id].append(result.name)
                 self._franchise_cache[guild.id].sort()
 
-            return await api.franchises_create(data)
+            return result
 
     async def delete_franchise(self, guild: discord.Guild, id: int) -> None:
         async with ApiClient(self._api_conf[guild.id]) as client:
             api = FranchisesApi(client)
             try:
-                await api.franchises_delete(id)
+                await api.franchises_destroy(id)
             except ApiException as exc:
                 raise RscException(response=exc)
 
-    async def rebrand_franchise(self, guild: discord.Guild, id: int, rebrand: RebrandAFranchise) -> Franchise:
+    async def rebrand_franchise(self, guild: discord.Guild, id: int, rebrand: FranchiseRebrand) -> Franchise:
         async with ApiClient(self._api_conf[guild.id]) as client:
             api = FranchisesApi(client)
             try:
                 log.debug(f"Rebrand Params: {rebrand}")
-                return await api.franchises_rebrand(id, rebrand)
+                return await api.franchises_rebrand_update(id, rebrand)
             except ApiException as exc:
                 raise RscException(response=exc)
 
@@ -262,9 +266,9 @@ class FranchiseMixIn(RSCMixIn):
         async with ApiClient(self._api_conf[guild.id]) as client:
             api = FranchisesApi(client)
             try:
-                data = TransferFranchise(general_manager=gm.id, league=self._league[guild.id])
+                data = FranchiseTransferRequest(general_manager=gm.id, league=self._league[guild.id])
                 log.debug(f"Transfer Params: {data}")
-                return await api.franchises_transfer_franchise(id, data)
+                return await api.franchises_transfer_franchise_update(id, data)
             except ApiException as exc:
                 raise RscException(response=exc)
 
@@ -276,7 +280,7 @@ class FranchiseMixIn(RSCMixIn):
         async with ApiClient(self._api_conf[guild.id]) as client:
             api = FranchisesApi(client)
             try:
-                logo = await api.franchises_logo(id)
+                logo = await api.franchises_logo_retrieve(id)
                 if not (logo and logo.logo):
                     return None
                 full_url = urljoin(host, logo.logo)

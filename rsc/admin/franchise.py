@@ -4,8 +4,8 @@ from typing import TYPE_CHECKING, cast
 
 import discord
 from redbot.core import app_commands
-from rscapi.models.rebrand_a_franchise import RebrandAFranchise
-from rscapi.models.team_details import TeamDetails
+from rscapi.models.franchise_rebrand import FranchiseRebrand
+from rscapi.models.team_rebrand import TeamRebrand
 
 from rsc import const
 from rsc.admin import AdminMixIn
@@ -382,7 +382,7 @@ class AdminFranchiseMixIn(AdminMixIn):
 
         # Match teams to tiers
         rebrands = []
-        fdata.tiers.sort(key=lambda x: cast(int, x.id))
+        fdata.tiers.sort(key=lambda x: cast("int", x.id))
         for t in fdata.tiers:
             if t.name and t.id:
                 rebrands.append(RebrandTeamDict(name=rebrand_modal.teams.pop(0), tier=t.name, tier_id=t.id))
@@ -412,14 +412,14 @@ class AdminFranchiseMixIn(AdminMixIn):
                 embed=ErrorEmbed(description="Franchise was rebranded but franchise role was not found.")
             )
 
-        # Populate TeamDetails list with new names and team IDs
-        tdetails: list[TeamDetails] = []
+        # Populate TeamRebrand list with new names and team IDs
+        tdetails: list[TeamRebrand] = []
         for r in rebrands:
-            tdetails.append(TeamDetails(tier=r["tier_id"], name=r["name"]))  # noqa: PERF401
+            tdetails.append(TeamRebrand(tier=r["tier_id"], name=r["name"]))  # noqa: PERF401
 
         # Rebrand Franchise
         log.debug(f"Rebranding {franchise} to {rebrand_modal.name}")
-        rebrand = RebrandAFranchise(
+        rebrand = FranchiseRebrand(
             name=rebrand_modal.name,
             prefix=rebrand_modal.prefix,
             teams=tdetails,

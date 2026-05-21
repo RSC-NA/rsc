@@ -21,14 +21,14 @@ class TestTrackerLinksApiContract:
 
     EXPECTED_METHODS = [
         "tracker_links_list",
-        "tracker_links_links_stats",
-        "tracker_links_next",
+        "tracker_links_links_stats_list",
+        "tracker_links_next_list",
         "tracker_links_create",
-        "tracker_links_delete",
-        "tracker_links_unlink",
-        "tracker_links_link",
-        "tracker_links_read",
-        "tracker_links_migrate_pulls",
+        "tracker_links_destroy",
+        "tracker_links_unlink_create",
+        "tracker_links_link_create",
+        "tracker_links_retrieve",
+        "tracker_links_migrate_pulls_create",
     ]
 
     @pytest.mark.parametrize("method_name", EXPECTED_METHODS)
