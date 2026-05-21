@@ -484,10 +484,22 @@ class TrackerMixIn(RSCMixIn):
         async with ApiClient(self._api_conf[guild.id]) as client:
             api = TrackerLinksApi(client)
             data = TrackerLink(link=tracker, discord_id=player.id)
-            log.debug(f"Tracker Create: {data}")
+            log.debug(
+                "add_tracker request params guild_id=%s player_id=%s tracker=%s",
+                guild.id,
+                player.id,
+                tracker,
+            )
+            log.debug("add_tracker payload=%s", data)
             try:
                 return await api.tracker_links_create(data)
             except ApiException as exc:
+                log.debug(
+                    "add_tracker api exception status=%s reason=%s body=%s",
+                    getattr(exc, "status", None),
+                    getattr(exc, "reason", None),
+                    getattr(exc, "body", None),
+                )
                 raise RscException(response=exc)
 
     async def rm_tracker(
