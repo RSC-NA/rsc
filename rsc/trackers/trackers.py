@@ -1,8 +1,10 @@
+import json
 import logging
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import cast
 
 import discord
+from pydantic import ValidationError
 from redbot.core import app_commands
 from rscapi import ApiClient, TrackerIDInput, TrackerLinksApi
 from rscapi.exceptions import ApiException
@@ -438,14 +440,25 @@ class TrackerMixIn(RSCMixIn):
         async with ApiClient(self._api_conf[guild.id]) as client:
             api = TrackerLinksApi(client)
             try:
+                status_filter = str(status) if status else None
                 trackers = await api.tracker_links_list(
-                    status=str(status) if status else None,
+                    status=status_filter,
                     discord_id=player_id,
                     member_name=name,
                     limit=limit,
                     offset=offset,
                 )
                 return trackers.results
+            except ValidationError:
+                response = await api.tracker_links_list_without_preload_content(
+                    status=status_filter,
+                    discord_id=player_id,
+                    member_name=name,
+                    limit=limit,
+                    offset=offset,
+                )
+                payload = json.loads(await response.read())
+                return [TrackerLink.model_construct(**item) for item in payload.get("results", [])]
             except ApiException as exc:
                 raise RscException(response=exc)
 
@@ -483,7 +496,21 @@ class TrackerMixIn(RSCMixIn):
         """Add a tracker to a user"""
         async with ApiClient(self._api_conf[guild.id]) as client:
             api = TrackerLinksApi(client)
-            data = cast("TrackerLink", {"link": tracker, "discord_id": player.id})
+            data = TrackerLink.model_construct(
+                link=tracker,
+                discord_id=player.id,
+                member=None,
+                id=0,
+                name="",
+                pulls=0,
+                platform="",
+                status="",
+                last_updated=datetime.now(tz=UTC),
+                member_name="",
+                platform_id="",
+                rscid="",
+                _fields_set={"link", "discord_id"},
+            )
             log.debug(
                 "add_tracker request params guild_id=%s player_id=%s tracker=%s",
                 guild.id,

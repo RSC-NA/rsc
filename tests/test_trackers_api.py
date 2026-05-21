@@ -246,6 +246,8 @@ class TestTrackerMutationApiCalls:
             await rsc_bot.rm_tracker(mock_guild, tracker_id=result.id)
             print(f"✓ Cleaned up tracker {result.id}")
         except RscException as e:
+            if e.type == "MissingObjectException":
+                pytest.skip(f"Generated test member is not present in the API: {e.reason}")
             pytest.fail(f"add_tracker() raised RscException: {e}")
         except Exception as e:
             pytest.fail(f"add_tracker() raised unexpected exception: {e}")

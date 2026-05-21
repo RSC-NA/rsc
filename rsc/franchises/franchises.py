@@ -9,6 +9,7 @@ from rscapi import ApiClient, FranchisesApi
 from rscapi.exceptions import ApiException, NotFoundException
 from rscapi.models.franchise import Franchise
 from rscapi.models.franchise_gm import FranchiseGM
+from rscapi.models.franchise_league import FranchiseLeague
 from rscapi.models.franchise_list import FranchiseList
 from rscapi.models.franchise_rebrand import FranchiseRebrand
 from rscapi.models.franchise_transfer_request import FranchiseTransferRequest
@@ -222,14 +223,18 @@ class FranchiseMixIn(RSCMixIn):
         async with ApiClient(self._api_conf[guild.id]) as client:
             api = FranchisesApi(client)
 
-            data = cast(
-                "Franchise",
-                {
-                    "name": name,
-                    "league": {"id": self._league[guild.id], "guild_id": guild.id},
-                    "prefix": prefix,
-                    "gm": {"discord_id": gm.id, "rsc_name": gm.display_name},
-                },
+            data = Franchise.model_construct(
+                name=name,
+                prefix=prefix,
+                id=0,
+                league=FranchiseLeague.model_construct(id=self._league[guild.id], name="", guild_id=guild.id, _fields_set={"id"}),
+                tiers=[],
+                active=True,
+                teams=[],
+                logo="",
+                gm=FranchiseGM.model_construct(discord_id=gm.id, rsc_name=gm.display_name, _fields_set={"discord_id"}),
+                agms=[],
+                _fields_set={"name", "prefix", "league", "gm"},
             )
             log.debug(f"Create Franchise Data: {data}")
             try:

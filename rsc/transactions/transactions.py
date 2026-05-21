@@ -1,4 +1,5 @@
 import itertools
+import json
 import logging
 import re
 from collections.abc import AsyncIterator
@@ -8,6 +9,7 @@ from pprint import pformat
 
 import discord
 from discord.ext import tasks
+from pydantic import ValidationError
 from redbot.core import app_commands, commands
 from rscapi import ApiClient, LeaguePlayersApi, TransactionsApi
 from rscapi.exceptions import ApiException
@@ -2693,8 +2695,9 @@ class TransactionMixIn(RSCMixIn):
                 guild=guild,
             )
             try:
+                league_id = self._league[guild.id]
                 trans_list = await api.transactions_history_list(
-                    league=self._league[guild.id],
+                    league=league_id,
                     player=player_id,
                     executor=executor_id,
                     transaction_type=t_type,
@@ -2703,6 +2706,18 @@ class TransactionMixIn(RSCMixIn):
                     offset=offset,
                 )
                 return trans_list.results
+            except ValidationError:
+                response = await api.transactions_history_list_without_preload_content(
+                    league=league_id,
+                    player=player_id,
+                    executor=executor_id,
+                    transaction_type=t_type,
+                    season_number=season,
+                    limit=limit,
+                    offset=offset,
+                )
+                payload = json.loads(await response.read())
+                return [TransactionResponse.model_construct(**item) for item in payload.get("results", [])]
             except ApiException as exc:
                 raise RscException(response=exc)
 
@@ -2730,26 +2745,40 @@ class TransactionMixIn(RSCMixIn):
             while True:
                 log.debug(f"Offset: {offset}")
                 try:
-                    trans_list = await api.transactions_history_list(
-                        league=self._league[guild.id],
-                        player=player_id,
-                        executor=executor_id,
-                        transaction_type=t_type,
-                        season_number=season,
-                        limit=per_page,
-                        offset=offset,
-                    )
+                    league_id = self._league[guild.id]
+                    try:
+                        trans_list = await api.transactions_history_list(
+                            league=league_id,
+                            player=player_id,
+                            executor=executor_id,
+                            transaction_type=t_type,
+                            season_number=season,
+                            limit=per_page,
+                            offset=offset,
+                        )
+                        results = trans_list.results
+                        has_next = bool(trans_list.next)
+                    except ValidationError:
+                        response = await api.transactions_history_list_without_preload_content(
+                            league=league_id,
+                            player=player_id,
+                            executor=executor_id,
+                            transaction_type=t_type,
+                            season_number=season,
+                            limit=per_page,
+                            offset=offset,
+                        )
+                        payload = json.loads(await response.read())
+                        results = [TransactionResponse.model_construct(**item) for item in payload.get("results", [])]
+                        has_next = bool(payload.get("next"))
 
-                    if not trans_list.results:
+                    if not results:
                         break
 
-                    for transaction in trans_list.results:
+                    for transaction in results:
                         yield transaction
 
-                    if not trans_list:
-                        break
-
-                    if not trans_list.next:
+                    if not has_next:
                         break
 
                     offset += per_page
