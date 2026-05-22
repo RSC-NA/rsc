@@ -1,16 +1,22 @@
 import logging
 from datetime import UTC, datetime
+from typing import TYPE_CHECKING, cast
 
 import discord
 from redbot.core import app_commands
 from redbot.core.app_commands import Transform
 
 from rsc.abc import RSCMixIn
-from rsc.admin.modals import LeagueDatesModal
-from rsc.embeds import BlueEmbed, GreenEmbed, SuccessEmbed, YellowEmbed
+from rsc.admin.modals import BulkRetireModal, LeagueDatesModal
+from rsc.embeds import ApiExceptionErrorEmbed, BlueEmbed, ErrorEmbed, GreenEmbed, SuccessEmbed, YellowEmbed
+from rsc.exceptions import MalformedTransactionResponse, RscException
 from rsc.logs import GuildLogAdapter
+from rsc.transactions.roles import update_nonplaying_discord
 from rsc.transformers import DateTransformer
 from rsc.types import AdminSettings
+
+if TYPE_CHECKING:
+    from rsc.transactions import TransactionMixIn
 
 logger = logging.getLogger("red.rsc.admin")
 log = GuildLogAdapter(logger)
@@ -124,6 +130,104 @@ class AdminMixIn(RSCMixIn):
             embed=embed_cls(title="DM Queue Status", description=desc),
             ephemeral=True,
         )
+
+    @_admin.command(name="bulkretire", description="Bulk retire players by Discord ID")
+    async def _admin_bulk_retire_cmd(self, interaction: discord.Interaction):
+        guild = interaction.guild
+        if not guild or not isinstance(interaction.user, discord.Member):
+            return
+
+        bulk_modal = BulkRetireModal()
+        await interaction.response.send_modal(bulk_modal)
+        timed_out = await bulk_modal.wait()
+        if timed_out or not bulk_modal.interaction:
+            return
+
+        modal_interaction = bulk_modal.interaction
+        await modal_interaction.response.defer(ephemeral=True, thinking=True)
+
+        discord_ids, invalid_ids = bulk_modal.parse_discord_ids()
+        if not discord_ids:
+            return await modal_interaction.followup.send(
+                embed=ErrorEmbed(description="No valid Discord IDs were provided."),
+                ephemeral=True,
+            )
+
+        try:
+            tiers = await self.tiers(guild=guild)
+            default_roles = await self._get_welcome_roles(guild)
+        except RscException as exc:
+            return await modal_interaction.followup.send(embed=ApiExceptionErrorEmbed(exc), ephemeral=True)
+
+        transactions = cast("TransactionMixIn", self)
+        retired_players: list[str] = []
+        skipped_players = [f"`{discord_id}` invalid ID" for discord_id in invalid_ids]
+        failed_players: list[str] = []
+
+        for discord_id in discord_ids:
+            member = guild.get_member(discord_id)
+            player: discord.Member | discord.User
+
+            if member:
+                player = member
+            else:
+                try:
+                    player = await self.bot.fetch_user(discord_id)
+                except discord.NotFound:
+                    skipped_players.append(f"`{discord_id}` user not found")
+                    continue
+                except discord.HTTPException as exc:
+                    failed_players.append(f"`{discord_id}` lookup failed: {exc}")
+                    continue
+
+            try:
+                result = await transactions.retire(
+                    guild,
+                    player=player,
+                    executor=interaction.user,
+                    notes="Bulk retire",
+                    override=True,
+                )
+                log.debug(f"Bulk Retire Result: {result}", guild=guild)
+
+                if member:
+                    await update_nonplaying_discord(
+                        guild=guild,
+                        member=member,
+                        tiers=tiers,
+                        default_roles=default_roles,
+                    )
+
+                embed, files = await transactions.build_transaction_embed(
+                    guild=guild,
+                    response=result,
+                    player_in=cast("discord.Member", player),
+                )
+                await transactions.announce_transaction(guild=guild, embed=embed, files=files, player=player.id)
+            except RscException as exc:
+                failed_players.append(f"{player.mention}: {exc}")
+                continue
+            except MalformedTransactionResponse as exc:
+                failed_players.append(f"{player.mention}: retired, announcement failed: {exc}")
+                continue
+            except (discord.HTTPException, AttributeError, ValueError) as exc:
+                failed_players.append(f"{player.mention}: retired, Discord update failed: {exc}")
+                continue
+
+            retired_players.append(player.mention)
+
+        description = f"**Retired:** {len(retired_players)}\n**Skipped:** {len(skipped_players)}\n**Failed:** {len(failed_players)}"
+        embed_cls = SuccessEmbed if retired_players and not skipped_players and not failed_players else YellowEmbed
+        embed = embed_cls(title="Bulk Retire Complete", description=description)
+
+        if retired_players:
+            embed.add_field(name="Retired", value=self._format_bulk_retire_results(retired_players), inline=False)
+        if skipped_players:
+            embed.add_field(name="Skipped", value=self._format_bulk_retire_results(skipped_players), inline=False)
+        if failed_players:
+            embed.add_field(name="Failed", value=self._format_bulk_retire_results(failed_players), inline=False)
+
+        await modal_interaction.followup.send(embed=embed, ephemeral=True)
 
     @_admin.command(name="directmessage", description="Send a direct message to a user")
     @app_commands.describe(
@@ -258,6 +362,27 @@ class AdminMixIn(RSCMixIn):
         if not isinstance(c, discord.TextChannel):
             return None
         return c
+
+    @staticmethod
+    def _format_bulk_retire_results(lines: list[str]) -> str:
+        if not lines:
+            return "None"
+
+        value = "\n".join(lines)
+        if len(value) <= 1024:
+            return value
+
+        visible_lines: list[str] = []
+        remaining_count = len(lines)
+        for line in lines:
+            suffix = f"\n...and {remaining_count - 1} more"
+            candidate = "\n".join([*visible_lines, line])
+            if len(candidate) + len(suffix) > 1024:
+                break
+            visible_lines.append(line)
+            remaining_count -= 1
+
+        return "\n".join(visible_lines) + f"\n...and {remaining_count} more"
 
     async def _set_permfa_msg_ids(self, guild: discord.Guild, msg_ids: list[int]):
         await self.config.custom("Admin", str(guild.id)).PermFAMsgIds.set(msg_ids)

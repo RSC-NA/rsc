@@ -28,6 +28,47 @@ class BulkMatchModal(discord.ui.Modal, title="Import RSC matches into API"):
         return adapter.validate_python(matches)
 
 
+class BulkRetireModal(discord.ui.Modal, title="Bulk Retire Players"):
+    discord_ids: TextInput = TextInput(
+        label="Discord IDs (one per line)",
+        style=discord.TextStyle.paragraph,
+        placeholder="123456789012345678\n234567890123456789",
+        required=True,
+        max_length=4000,
+    )
+
+    def __init__(self):
+        super().__init__()
+        self.interaction: discord.Interaction | None = None
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        self.interaction = interaction
+
+    def parse_discord_ids(self) -> tuple[list[int], list[str]]:
+        discord_ids: list[int] = []
+        invalid_ids: list[str] = []
+        seen_ids: set[int] = set()
+
+        for raw_value in self.discord_ids.value.splitlines():
+            value = raw_value.strip()
+            if not value:
+                continue
+
+            if value.startswith("<@") and value.endswith(">"):
+                value = value[2:-1].removeprefix("!")
+
+            if not value.isdecimal():
+                invalid_ids.append(raw_value.strip())
+                continue
+
+            discord_id = int(value)
+            if discord_id not in seen_ids:
+                discord_ids.append(discord_id)
+                seen_ids.add(discord_id)
+
+        return discord_ids, invalid_ids
+
+
 class AgmMessageModal(discord.ui.Modal, title="AGM Promotion Message"):
     agm_msg: TextInput = TextInput(
         label="Message to send",
