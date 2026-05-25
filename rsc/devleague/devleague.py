@@ -200,6 +200,11 @@ class DevLeagueMixIn(RSCMixIn):
         if devleague_role in member.roles:
             await member.remove_roles(devleague_role, reason="Player opted out of Dev League")
 
+        users = await self._get_devleague_role_users(member.guild) or []
+        if member.id not in users:
+            users.append(member.id)
+            await self._save_devleague_role_users(member.guild, value=users)
+
     async def should_get_devleague_role(self, member: discord.Member) -> bool:
         users = await self._get_devleague_role_users(member.guild) or []
         return member.id not in users
