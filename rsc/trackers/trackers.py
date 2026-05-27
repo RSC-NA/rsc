@@ -400,9 +400,9 @@ class TrackerMixIn(RSCMixIn):
         for t in trackers:
             url = await utils.fix_tracker_url(t.link)
             if t.platform == "STEAM":
-                desc += f"- [{t.platform} - {t.platform_id}]({url})\n"
+                desc += f"- [{t.platform.value} - {t.platform_id}]({url})\n"
             else:
-                desc += f"- [{t.platform} - {t.name}]({url})\n"
+                desc += f"- [{t.platform.value} - {t.name}]({url})\n"
 
         embed = BlueEmbed(title=f"{player.display_name} Accounts", description=desc)
 
