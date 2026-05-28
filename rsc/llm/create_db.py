@@ -27,12 +27,26 @@ from pydantic.types import SecretStr  # noqa: E402
 from rscapi import MatchList  # noqa: E402
 from rscapi.models.franchise_list import FranchiseList  # noqa: E402
 from rscapi.models.league_player import LeaguePlayer  # noqa: E402
+from rscapi.models.player_season_stats import PlayerSeasonStats  # noqa: E402
 from rscapi.models.team import Team  # noqa: E402
+from rscapi.models.team_season_stats import TeamSeasonStats  # noqa: E402
+from rscapi.models.team_standings import TeamStandings  # noqa: E402
 from rscapi.models.franchise_standings import FranchiseStandings  # noqa: E402
 from rscapi.models.season import Season  # noqa: E402
 
-from rsc.llm.loaders import FranchiseDocumentLoader, PlayerDocumentLoader, RuleDocumentLoader, TeamDocumentLoader, MatchDocumentLoader  # noqa: E402
+from rsc.llm.config import CHROMA_PATH, OPENAI_EMBEDDING_MODEL  # noqa: E402
+from rsc.llm.loaders import (  # noqa: E402
+    FranchiseDocumentLoader,
+    MatchDocumentLoader,
+    PlayerDocumentLoader,
+    PlayerStatsDocumentLoader,
+    RuleDocumentLoader,
+    StandingsDocumentLoader,
+    TeamDocumentLoader,
+    TeamStatsDocumentLoader,
+)
 from rsc.llm.loaders.matchloader import MatchFetcher  # noqa: E402
+from rsc.llm.sources import DocumentSource, SOURCE_TYPE_METADATA_KEY  # noqa: E402
 from rsc.logs import GuildLogAdapter  # noqa: E402
 
 logger = logging.getLogger("red.rsc.llm.create")
@@ -47,10 +61,6 @@ logging.getLogger("MARKDOWN").setLevel(logging.ERROR)
 logging.getLogger("openai").setLevel(logging.ERROR)
 logging.getLogger("unstructured").setLevel(logging.ERROR)
 logging.getLogger("urllib3").setLevel(logging.ERROR)
-
-# Paths
-
-CHROMA_PATH = Path(__file__).parent / "db"
 
 
 async def load_funny_docs() -> list[Document]:
@@ -69,7 +79,7 @@ async def string_to_doc(text: str) -> Document:
 
 async def load_current_season_doc(season: Season) -> Document:
     content = f"The current season is Season {season.number} for League {season.league.name}."
-    metadata = {"source": "API", "type": "current_season", "id": season.id}
+    metadata = {"source": "API", "id": season.id}
     return Document(page_content=content, metadata=metadata)
 
 
@@ -81,6 +91,7 @@ async def load_help_docs() -> list[Document]:
     for d in documents:
         src = Path(d.metadata["source"])
         d.metadata["source"] = src.stem.capitalize()
+        d.metadata["title"] = src.stem
     return documents
 
 
@@ -90,6 +101,16 @@ async def load_rule_style_docs(file: str | Path) -> list[Document]:
     async for doc in loader.alazy_load():
         log.debug(f"Document: {doc.page_content}")
         log.debug(f"Document Metadata: {doc.metadata}")
+        documents.append(doc)
+    return documents
+
+
+async def load_rule_glossary_docs(file: str | Path) -> list[Document]:
+    documents = []
+    loader = RuleDocumentLoader(str(file))
+    async for doc in loader.alazy_load_glossary():
+        log.debug(f"Glossary Document: {doc.page_content}")
+        log.debug(f"Glossary Document Metadata: {doc.metadata}")
         documents.append(doc)
     return documents
 
@@ -134,9 +155,19 @@ async def load_franchise_docs(franchises: list[FranchiseList], standings: list[F
     return documents
 
 
-async def load_player_docs(players: list[LeaguePlayer], chunk_index: int = 0):
+async def load_player_docs(players: list[LeaguePlayer], chunk_index: int = 0, season_number: int | None = None):
     documents = []
-    loader = PlayerDocumentLoader(players, chunk_index=chunk_index)
+    loader = PlayerDocumentLoader(players, chunk_index=chunk_index, season_number=season_number)
+    async for doc in loader.alazy_load():
+        log.debug(f"Document: {doc.page_content}")
+        log.debug(f"Document Metadata: {doc.metadata}")
+        documents.append(doc)
+    return documents
+
+
+async def load_player_stats_docs(stats: list[PlayerSeasonStats]):
+    documents = []
+    loader = PlayerStatsDocumentLoader(stats)
     async for doc in loader.alazy_load():
         log.debug(f"Document: {doc.page_content}")
         log.debug(f"Document Metadata: {doc.metadata}")
@@ -158,9 +189,37 @@ async def load_match_docs(
     return documents
 
 
-async def load_team_docs(teams: list[Team]):
+async def load_team_docs(teams: list[Team], season_number: int | None = None):
     documents = []
-    loader = TeamDocumentLoader(teams)
+    loader = TeamDocumentLoader(teams, season_number=season_number)
+    async for doc in loader.alazy_load():
+        log.debug(f"Document: {doc.page_content}")
+        log.debug(f"Document Metadata: {doc.metadata}")
+        documents.append(doc)
+    return documents
+
+
+async def load_team_stats_docs(stats: list[TeamSeasonStats], season_number: int | None = None):
+    documents = []
+    loader = TeamStatsDocumentLoader(stats, season_number=season_number)
+    async for doc in loader.alazy_load():
+        log.debug(f"Document: {doc.page_content}")
+        log.debug(f"Document Metadata: {doc.metadata}")
+        documents.append(doc)
+    return documents
+
+
+async def load_standings_docs(
+    franchise_standings: list[FranchiseStandings] | None = None,
+    team_standings: list[TeamStandings] | None = None,
+    season_number: int | None = None,
+):
+    documents = []
+    loader = StandingsDocumentLoader(
+        franchise_standings=franchise_standings,
+        team_standings=team_standings,
+        season_number=season_number,
+    )
     async for doc in loader.alazy_load():
         log.debug(f"Document: {doc.page_content}")
         log.debug(f"Document Metadata: {doc.metadata}")
@@ -233,13 +292,13 @@ async def reset_collection(guild: discord.Guild):
         log.debug(f"Collection {collection_name} does not exist, nothing to delete", guild=guild)
 
 
-async def delete_documents_by_type(guild: discord.Guild, doc_type: str) -> int:
+async def delete_documents_by_source(guild: discord.Guild, source: DocumentSource) -> int:
     """
-    Delete documents from the collection matching a specific type.
+    Delete documents from the collection matching a document source.
 
     Args:
         guild: Discord guild
-        doc_type: Document type to delete (matches 'type' metadata field)
+        source: Document source to delete
 
     Returns:
         Number of documents deleted
@@ -264,21 +323,19 @@ async def delete_documents_by_type(guild: discord.Guild, doc_type: str) -> int:
 
         collection = chroma_client.get_collection(name=collection_name)
 
-        # Get documents matching the type
-        results = collection.get(where={"type": doc_type})
+        results = collection.get(where={SOURCE_TYPE_METADATA_KEY: source.value})
         doc_ids = results.get("ids", [])
 
         if not doc_ids:
-            log.debug(f"No documents found with type '{doc_type}'", guild=guild)
+            log.debug(f"No documents found with {SOURCE_TYPE_METADATA_KEY}='{source.value}'", guild=guild)
             return 0
 
-        # Delete the matching documents
         collection.delete(ids=doc_ids)
-        log.info(f"Deleted {len(doc_ids)} documents with type '{doc_type}'", guild=guild)
+        log.info(f"Deleted {len(doc_ids)} documents with {SOURCE_TYPE_METADATA_KEY}='{source.value}'", guild=guild)
         return len(doc_ids)
 
     except Exception as e:
-        log.error(f"Error deleting documents by type: {e}", guild=guild)
+        log.error(f"Error deleting documents by source: {e}", guild=guild)
         return 0
 
 
@@ -313,15 +370,15 @@ async def save_documents(guild: discord.Guild, org_name: str, api_key: str, docs
 
         collection_name = str(guild.id)
 
-        Chroma.from_documents(
+        await Chroma.afrom_documents(
             documents=docs,
             collection_name=collection_name,
             client=chroma_client,
             embedding=OpenAIEmbeddings(
-                model="text-embedding-3-small",
-                openai_organization=org_name,
-                openai_api_key=SecretStr(api_key),
-                async_client=http_client,
+                model=OPENAI_EMBEDDING_MODEL,
+                organization=org_name,
+                api_key=SecretStr(api_key),
+                http_async_client=http_client,
             ),
             collection_metadata={"hnsw:space": "cosine"},
         )

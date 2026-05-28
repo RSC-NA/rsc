@@ -10,7 +10,7 @@ import logging  # noqa: E402
 import re  # noqa: E402
 from dataclasses import dataclass  # noqa: E402
 from datetime import datetime  # noqa: E402
-from pathlib import Path  # noqa: E402
+from enum import Enum  # noqa: E402
 from typing import TYPE_CHECKING, Any, cast  # noqa: E402
 
 import chromadb  # noqa: E402
@@ -23,6 +23,13 @@ from langchain_openai.embeddings import OpenAIEmbeddings  # noqa: E402
 from langchain_core.documents import Document  # noqa: E402
 from pydantic.types import SecretStr  # noqa: E402
 
+from rsc.llm.config import (  # noqa: E402
+    CHROMA_PATH,
+    OPENAI_CHAT_MODEL,
+    OPENAI_EMBEDDING_MODEL,
+    openai_chat_completion_options,
+)
+from rsc.llm.sources import DocumentSource, SOURCE_TYPE_METADATA_KEY, document_source  # noqa: E402
 from rsc.logs import GuildLogAdapter  # noqa: E402
 
 
@@ -40,15 +47,260 @@ logging.getLogger("httpx").setLevel(logging.ERROR)
 logging.getLogger("openai").setLevel(logging.ERROR)
 logging.getLogger("urllib3").setLevel(logging.ERROR)
 
-# Prepare the DB.
-CHROMA_PATH = Path(__file__).parent / "db"
 CHROMA_PATH_ABS = CHROMA_PATH.absolute()
 
 # Constants
 ANCHOR_SCORE_THRESHOLD = 0.95
 ANCHOR_EXPANSION_MIN_SCORE = 0.5  # Minimum score for expanded context
-OPENAI_TEMPERATURE = 0.3
 DYNAMIC_CUTOFF = 0.65
+DEFAULT_DOCUMENT_SOURCES = (
+    DocumentSource.RULEBOOK,
+    DocumentSource.GLOSSARY,
+    DocumentSource.DATES,
+    DocumentSource.HELP,
+    DocumentSource.SEASON,
+    DocumentSource.PLAYERS,
+    DocumentSource.PLAYER_STATS,
+    DocumentSource.TEAMS,
+    DocumentSource.TEAM_STATS,
+    DocumentSource.STANDINGS,
+    DocumentSource.FRANCHISES,
+    DocumentSource.MATCHES,
+)
+
+
+class QueryIntent(Enum):
+    """High-level intent used to route retrieval."""
+
+    RULES = "rules"
+    PLAYER = "player"
+    TEAM = "team"
+    FRANCHISE = "franchise"
+    MATCH = "match"
+    SEASON = "season"
+    MIXED = "mixed"
+    GENERAL = "general"
+
+
+@dataclass(frozen=True)
+class RetrievalPlan:
+    """Document retrieval plan for one user question."""
+
+    intent: QueryIntent
+    target_sources: tuple[DocumentSource, ...]
+    source_priority: tuple[DocumentSource, ...]
+    query_rewrites: tuple[str, ...] = ()
+    required_sources: tuple[DocumentSource, ...] = ()
+    include_user_context: bool = False
+    include_current_date: bool = False
+
+
+@dataclass(frozen=True)
+class PromptContextPolicy:
+    """Controls which user context is allowed into the final LLM prompt."""
+
+    include_player_identity: bool = False
+    include_current_datetime: bool = False
+
+
+RULE_NUMBER_PATTERN = re.compile(r"\b(?:rule|section)?\s*(\d+(?:\.\d+)+)\b", re.IGNORECASE)
+RULE_KEYWORDS = (
+    "rule",
+    "rules",
+    "rulebook",
+    "allowed",
+    "eligible",
+    "eligibility",
+    "forbidden",
+    "violation",
+    "penalty",
+    "appeal",
+    "behavior",
+    "conduct",
+    "waiver",
+    "waivers",
+    "draft",
+    "drafted",
+    "sign",
+    "signed",
+    "signing",
+    "cut",
+    "trade",
+    "sub",
+    "subs",
+    "subbed",
+    "subbing",
+    "substitute",
+    "substitution",
+    "contract",
+    "roster",
+    "free agent",
+    "permfa",
+    "permanent free agent",
+)
+RULE_KEYWORD_WEIGHTS = {
+    "rule": 4,
+    "rules": 4,
+    "rulebook": 5,
+    "allowed": 2,
+    "eligible": 2,
+    "eligibility": 2,
+    "forbidden": 3,
+    "violation": 3,
+    "penalty": 3,
+    "appeal": 3,
+    "behavior": 2,
+    "conduct": 2,
+    "waiver": 2,
+    "waivers": 2,
+    "draft": 2,
+    "drafted": 2,
+    "sign": 2,
+    "signed": 2,
+    "signing": 2,
+    "cut": 2,
+    "trade": 2,
+    "sub": 5,
+    "subs": 5,
+    "subbed": 5,
+    "subbing": 5,
+    "substitute": 5,
+    "substitution": 5,
+    "sub in": 6,
+    "sub out": 6,
+    "subbed out": 6,
+    "substituted off": 6,
+    "substituted out": 6,
+    "in a row": 5,
+    "consecutive": 5,
+    "match day": 3,
+    "match days": 3,
+    "same franchise": 4,
+    "same team": 4,
+    "twice": 3,
+    "two times": 3,
+    "limit": 3,
+    "maximum": 3,
+    "minimum": 2,
+    "how many": 1,
+    "contract": 2,
+    "roster": 2,
+    "free agent": 2,
+    "fa": 2,
+    "pfa": 2,
+    "permfa": 2,
+    "permanent free agent": 2,
+}
+PLAYER_KEYWORD_WEIGHTS = {
+    "player": 2,
+    "status": 2,
+    "mmr": 3,
+    "tier": 2,
+    "captain": 2,
+    "gm": 2,
+    "general manager": 2,
+    "my team": 3,
+    "my franchise": 3,
+    "stats": 2,
+    "stat": 2,
+    "goals": 2,
+    "saves": 2,
+    "assists": 2,
+    "shots": 2,
+    "mvps": 2,
+    "points": 2,
+}
+TEAM_KEYWORD_WEIGHTS = {
+    "team": 2,
+    "roster": 2,
+    "captain": 2,
+    "lineup": 3,
+    "record": 2,
+    "standings": 2,
+}
+FRANCHISE_KEYWORD_WEIGHTS = {"franchise": 2, "gm": 2, "general manager": 2, "prefix": 3, "record": 2, "standings": 3}
+MATCH_KEYWORD_WEIGHTS = {
+    "match": 3,
+    "matches": 3,
+    "schedule": 3,
+    "game": 2,
+    "games": 2,
+    "play": 2,
+    "played": 2,
+    "next": 2,
+    "last": 2,
+    "today": 3,
+    "tomorrow": 3,
+    "yesterday": 3,
+}
+SEASON_KEYWORD_WEIGHTS = {"season": 3, "deadline": 3, "date": 2, "dates": 2, "week": 2, "current season": 4}
+PLAYER_KEYWORDS = (
+    "player",
+    "status",
+    "mmr",
+    "tier",
+    "captain",
+    "gm",
+    "general manager",
+    "my team",
+    "my franchise",
+    "stats",
+    "stat",
+    "goals",
+    "saves",
+    "assists",
+    "shots",
+    "mvps",
+    "points",
+)
+TEAM_KEYWORDS = ("team", "roster", "captain", "lineup", "record", "standings")
+FRANCHISE_KEYWORDS = ("franchise", "gm", "general manager", "prefix", "record", "standings")
+MATCH_KEYWORDS = ("match", "matches", "schedule", "game", "games", "play", "played", "next", "last", "today", "tomorrow", "yesterday")
+SEASON_KEYWORDS = ("season", "deadline", "date", "dates", "week", "current season")
+PERSONAL_KEYWORDS = (" i ", " me ", " my ", " mine ", " myself ", " i'm ", " ive ", " i've ")
+STATS_KEYWORDS = (
+    "stats",
+    "stat",
+    "goals",
+    "goal",
+    "saves",
+    "save",
+    "assists",
+    "assist",
+    "shots",
+    "shot",
+    "mvps",
+    "mvp",
+    "points",
+    "point",
+    "shooting percentage",
+    "win percentage",
+    "goals per game",
+    "points per game",
+    "gpg",
+    "ppg",
+    "bpm",
+    "bcpm",
+    "boost per minute",
+    "average speed",
+    "avg speed",
+    "demos",
+)
+TEAM_CONTEXT_KEYWORDS = ("team", "roster", "captain", "lineup", "record", "standings", "my team")
+SUBSTITUTION_TERMS = ("sub", "subs", "subbed", "subbing", "substitute", "substitution", "substituted")
+SUBSTITUTION_LIMIT_TERMS = (
+    "in a row",
+    "consecutive",
+    "same franchise",
+    "same team",
+    "twice",
+    "two times",
+    "how many",
+    "limit",
+    "maximum",
+    "match day",
+    "match days",
+)
 
 
 # User Identity
@@ -64,23 +316,398 @@ class UserIdentity:
     current_datetime: datetime | None = None
 
 
-def format_user_context(identity: UserIdentity | None) -> str:
-    """Format user identity for inclusion in the system prompt."""
+def _contains_keyword(question: str, keywords: tuple[str, ...]) -> bool:
+    question_l = f" {question.lower()} "
+    return any(_contains_weighted_keyword(question_l, keyword) for keyword in keywords)
+
+
+def _contains_weighted_keyword(question_l: str, keyword: str) -> bool:
+    if " " in keyword.strip():
+        return keyword in question_l
+    return bool(re.search(rf"\b{re.escape(keyword)}\b", question_l))
+
+
+def _score_keywords(question_l: str, keyword_weights: dict[str, int]) -> int:
+    return sum(weight for keyword, weight in keyword_weights.items() if _contains_weighted_keyword(question_l, keyword))
+
+
+def _has_keyword(question_l: str, keywords: tuple[str, ...]) -> bool:
+    return any(_contains_weighted_keyword(question_l, keyword) for keyword in keywords)
+
+
+def _build_rule_query_rewrites(question: str) -> tuple[str, ...]:
+    question_l = f" {question.lower()} "
+    rewrites: list[str] = []
+
+    if _has_keyword(question_l, SUBSTITUTION_TERMS):
+        substitution_context = [
+            "substitute substitution consecutive match days same franchise same team",
+            "FA permFA permanent free agent substitute same franchise two times in a row",
+        ]
+        if _has_keyword(question_l, ("same franchise", "franchise", "twice", "two times")):
+            substitution_context.append("free agent permFA cannot substitute same franchise two times in a row")
+        if _has_keyword(question_l, ("same team", "team", "highest tier")):
+            substitution_context.append("highest tier substitute same team up to two match days in a row")
+        if _has_keyword(question_l, ("subbed out", "sub out", "substituted off", "out", "consecutive")):
+            substitution_context.append("player being substituted off cannot be out more than two consecutive match days")
+        rewrites.extend(substitution_context)
+
+    return tuple(dict.fromkeys(rewrites))
+
+
+def _rule_score(question: str) -> int:
+    question_l = f" {question.lower()} "
+    score = _score_keywords(question_l, RULE_KEYWORD_WEIGHTS)
+    if RULE_NUMBER_PATTERN.search(question):
+        score += 8
+    if _has_keyword(question_l, SUBSTITUTION_TERMS) and _has_keyword(question_l, SUBSTITUTION_LIMIT_TERMS):
+        score += 6
+    return score
+
+
+def _build_player_stats_query_rewrites(identity: UserIdentity | None) -> tuple[str, ...]:
+    player_prefix = f"{identity.name} " if identity else ""
+    return (f"{player_prefix}player stats goals assists saves shots points MVPs shooting percentage boost per minute average speed",)
+
+
+def _contains_personal_reference(question: str, identity: UserIdentity | None) -> bool:
+    question_l = f" {question.lower()} "
+    if any(keyword in question_l for keyword in PERSONAL_KEYWORDS):
+        return True
+    if not identity:
+        return False
+    identity_terms = [identity.name, identity.team, identity.franchise, identity.tier]
+    return any(term and term.lower() in question_l for term in identity_terms)
+
+
+def build_retrieval_plan(question: str, user_identity: UserIdentity | None = None) -> RetrievalPlan:
+    """Classify a question and decide which document sources should be searched."""
+    question_l = f" {question.lower()} "
+    rule_score = _rule_score(question)
+    match_score = _score_keywords(question_l, MATCH_KEYWORD_WEIGHTS)
+    season_score = _score_keywords(question_l, SEASON_KEYWORD_WEIGHTS)
+    player_score = _score_keywords(question_l, PLAYER_KEYWORD_WEIGHTS)
+    team_score = _score_keywords(question_l, TEAM_KEYWORD_WEIGHTS)
+    franchise_score = _score_keywords(question_l, FRANCHISE_KEYWORD_WEIGHTS)
+    asks_about_rules = bool(RULE_NUMBER_PATTERN.search(question)) or rule_score >= 4 or _contains_keyword(question, RULE_KEYWORDS)
+    asks_about_matches = match_score >= 3 or _contains_keyword(question, MATCH_KEYWORDS)
+    asks_about_season = season_score >= 3 or _contains_keyword(question, SEASON_KEYWORDS)
+    asks_about_player = player_score >= 2 or _contains_keyword(question, PLAYER_KEYWORDS)
+    asks_about_team = team_score >= 2 or _contains_keyword(question, TEAM_KEYWORDS)
+    asks_about_franchise = franchise_score >= 2 or _contains_keyword(question, FRANCHISE_KEYWORDS)
+    asks_about_stats = _has_keyword(question_l, STATS_KEYWORDS)
+    asks_about_team_context = _has_keyword(question_l, TEAM_CONTEXT_KEYWORDS)
+    is_personal = _contains_personal_reference(question, user_identity)
+    uses_personal_pronoun = any(keyword in question_l for keyword in PERSONAL_KEYWORDS)
+
+    if asks_about_rules:
+        return RetrievalPlan(
+            intent=QueryIntent.RULES,
+            target_sources=(
+                DocumentSource.RULEBOOK,
+                DocumentSource.GLOSSARY,
+                DocumentSource.HELP,
+                DocumentSource.DATES,
+                DocumentSource.SEASON,
+            ),
+            source_priority=(
+                DocumentSource.RULEBOOK,
+                DocumentSource.GLOSSARY,
+                DocumentSource.HELP,
+                DocumentSource.DATES,
+                DocumentSource.SEASON,
+            ),
+            query_rewrites=_build_rule_query_rewrites(question),
+            required_sources=(DocumentSource.RULEBOOK,),
+            include_user_context=False,
+            include_current_date=asks_about_season,
+        )
+    if asks_about_matches:
+        return RetrievalPlan(
+            intent=QueryIntent.MATCH,
+            target_sources=(
+                DocumentSource.MATCHES,
+                DocumentSource.TEAMS,
+                DocumentSource.SEASON,
+                DocumentSource.DATES,
+                DocumentSource.GLOSSARY,
+            ),
+            source_priority=(
+                DocumentSource.MATCHES,
+                DocumentSource.SEASON,
+                DocumentSource.DATES,
+                DocumentSource.TEAMS,
+                DocumentSource.GLOSSARY,
+            ),
+            include_user_context=is_personal,
+            include_current_date=True,
+        )
+    if asks_about_team and team_score >= player_score and not uses_personal_pronoun:
+        target_sources = (
+            (
+                DocumentSource.TEAM_STATS,
+                DocumentSource.STANDINGS,
+                DocumentSource.TEAMS,
+                DocumentSource.PLAYERS,
+                DocumentSource.FRANCHISES,
+                DocumentSource.GLOSSARY,
+                DocumentSource.SEASON,
+            )
+            if asks_about_stats
+            else (
+                DocumentSource.TEAMS,
+                DocumentSource.TEAM_STATS,
+                DocumentSource.STANDINGS,
+                DocumentSource.PLAYERS,
+                DocumentSource.FRANCHISES,
+                DocumentSource.GLOSSARY,
+                DocumentSource.SEASON,
+            )
+        )
+        return RetrievalPlan(
+            intent=QueryIntent.TEAM,
+            target_sources=target_sources,
+            source_priority=target_sources,
+            required_sources=(DocumentSource.TEAM_STATS,) if asks_about_stats else (),
+        )
+    if asks_about_player or is_personal:
+        target_sources = [DocumentSource.PLAYER_STATS, DocumentSource.PLAYERS, DocumentSource.TEAMS]
+        if not asks_about_stats:
+            target_sources = [DocumentSource.PLAYERS, DocumentSource.PLAYER_STATS, DocumentSource.TEAMS]
+        if asks_about_team_context:
+            target_sources.extend((DocumentSource.TEAM_STATS, DocumentSource.STANDINGS))
+        target_sources.extend((DocumentSource.FRANCHISES, DocumentSource.GLOSSARY, DocumentSource.SEASON))
+        return RetrievalPlan(
+            intent=QueryIntent.PLAYER,
+            target_sources=tuple(target_sources),
+            source_priority=tuple(target_sources),
+            query_rewrites=_build_player_stats_query_rewrites(user_identity) if asks_about_stats else (),
+            required_sources=(DocumentSource.PLAYER_STATS,) if asks_about_stats else (),
+            include_user_context=True,
+            include_current_date=asks_about_season,
+        )
+    if asks_about_team:
+        target_sources = (
+            (
+                DocumentSource.TEAM_STATS,
+                DocumentSource.STANDINGS,
+                DocumentSource.TEAMS,
+                DocumentSource.PLAYERS,
+                DocumentSource.FRANCHISES,
+                DocumentSource.GLOSSARY,
+                DocumentSource.SEASON,
+            )
+            if asks_about_stats
+            else (
+                DocumentSource.TEAMS,
+                DocumentSource.TEAM_STATS,
+                DocumentSource.STANDINGS,
+                DocumentSource.PLAYERS,
+                DocumentSource.FRANCHISES,
+                DocumentSource.GLOSSARY,
+                DocumentSource.SEASON,
+            )
+        )
+        return RetrievalPlan(
+            intent=QueryIntent.TEAM,
+            target_sources=target_sources,
+            source_priority=target_sources,
+            required_sources=(DocumentSource.TEAM_STATS,) if asks_about_stats else (),
+        )
+    if asks_about_franchise:
+        return RetrievalPlan(
+            intent=QueryIntent.FRANCHISE,
+            target_sources=(
+                DocumentSource.FRANCHISES,
+                DocumentSource.STANDINGS,
+                DocumentSource.TEAMS,
+                DocumentSource.GLOSSARY,
+                DocumentSource.SEASON,
+            ),
+            source_priority=(
+                DocumentSource.FRANCHISES,
+                DocumentSource.STANDINGS,
+                DocumentSource.TEAMS,
+                DocumentSource.GLOSSARY,
+                DocumentSource.SEASON,
+            ),
+        )
+    if asks_about_season:
+        return RetrievalPlan(
+            intent=QueryIntent.SEASON,
+            target_sources=(
+                DocumentSource.SEASON,
+                DocumentSource.DATES,
+                DocumentSource.RULEBOOK,
+                DocumentSource.GLOSSARY,
+                DocumentSource.MATCHES,
+                DocumentSource.STANDINGS,
+            ),
+            source_priority=(
+                DocumentSource.SEASON,
+                DocumentSource.DATES,
+                DocumentSource.RULEBOOK,
+                DocumentSource.GLOSSARY,
+                DocumentSource.MATCHES,
+                DocumentSource.STANDINGS,
+            ),
+            include_current_date=True,
+        )
+    return RetrievalPlan(
+        intent=QueryIntent.GENERAL,
+        target_sources=DEFAULT_DOCUMENT_SOURCES,
+        source_priority=DEFAULT_DOCUMENT_SOURCES,
+        include_user_context=False,
+        include_current_date=False,
+    )
+
+
+def build_search_query(question: str, user_identity: UserIdentity | None, plan: RetrievalPlan) -> str:
+    """Build the semantic search query without leaking irrelevant user context into retrieval."""
+    retrieval_question = question
+    query_context_parts: list[str] = []
+
+    if user_identity and plan.include_user_context:
+        retrieval_question = clean_question(question, user_identity.name)
+        if user_identity.team:
+            query_context_parts.append(f"Team: {user_identity.team}")
+        if user_identity.franchise:
+            query_context_parts.append(f"Franchise: {user_identity.franchise}")
+        if user_identity.tier:
+            query_context_parts.append(f"Tier: {user_identity.tier}")
+        query_context_parts.append(f"Player: {user_identity.name}")
+
+    if user_identity and plan.include_current_date and user_identity.current_datetime:
+        date_str = user_identity.current_datetime.strftime("%m-%d-%Y")
+        query_context_parts.append(f"Current Date: {date_str}")
+
+    if not query_context_parts:
+        return retrieval_question
+    return f"{retrieval_question}\n" + "\n".join(query_context_parts)
+
+
+def build_search_queries(question: str, user_identity: UserIdentity | None, plan: RetrievalPlan) -> tuple[str, ...]:
+    """Build the primary semantic query plus deterministic rewrite variants."""
+    queries = [build_search_query(question, user_identity, plan)]
+    queries.extend(build_search_query(rewrite, user_identity, plan) for rewrite in plan.query_rewrites)
+    return tuple(dict.fromkeys(queries))
+
+
+def build_prompt_context_policy(plan: RetrievalPlan) -> PromptContextPolicy:
+    """Build the final prompt context policy from the retrieval plan."""
+    return PromptContextPolicy(
+        include_player_identity=plan.include_user_context,
+        include_current_datetime=plan.include_current_date,
+    )
+
+
+def _source_priority_boost(doc: Document, plan: RetrievalPlan) -> float:
+    doc_source = document_source(doc)
+    if not doc_source:
+        return 0.0
+    source_values = [source.value for source in plan.source_priority]
+    if doc_source not in source_values:
+        return 0.0
+    priority_index = source_values.index(doc_source)
+    return max(0.0, 0.25 - (priority_index * 0.12))
+
+
+def prioritize_documents(
+    docs: list[tuple[Document, float, float]],
+    plan: RetrievalPlan,
+) -> list[tuple[Document, float, float]]:
+    """Sort documents using relevance with a small source-priority boost."""
+    return sorted(
+        docs,
+        key=lambda item: (item[2] + _source_priority_boost(item[0], plan), item[2]),
+        reverse=True,
+    )
+
+
+def ensure_source_coverage(
+    selected: list[tuple[Document, float, float]],
+    candidates: list[tuple[Document, float, float]],
+    plan: RetrievalPlan,
+    count: int,
+) -> list[tuple[Document, float, float]]:
+    """Keep required source families represented in the final context when possible."""
+    required_sources = plan.required_sources
+
+    if not required_sources:
+        return selected[:count]
+
+    result = list(selected)
+    required_values = {source.value for source in required_sources}
+    for source in required_sources:
+        if any(document_source(doc) == source.value for doc, _distance, _score in result):
+            continue
+        candidate = next((item for item in candidates if document_source(item[0]) == source.value), None)
+        if candidate:
+            result.append(candidate)
+
+    if len(result) <= count:
+        return result
+
+    protected = [item for item in result if document_source(item[0]) in required_values]
+    others = [item for item in result if document_source(item[0]) not in required_values]
+    return [*protected, *others[: max(0, count - len(protected))]]
+
+
+async def _similarity_search_with_source(
+    llm_db: Chroma,
+    query: str,
+    count: int,
+    source: DocumentSource | None = None,
+) -> list[tuple[Document, float]]:
+    if not source:
+        return await llm_db.asimilarity_search_with_score(query, k=count)
+    return await llm_db.asimilarity_search_with_score(query, k=count, filter={SOURCE_TYPE_METADATA_KEY: source.value})
+
+
+async def retrieve_documents(
+    llm_db: Chroma,
+    query: str,
+    plan: RetrievalPlan,
+    count: int,
+) -> list[tuple[Document, float]]:
+    """Run source-aware Chroma searches for the planned document sources."""
+    results: list[tuple[Document, float]] = []
+    per_source_count = max(2, count)
+    query_variants = tuple(dict.fromkeys((query, *plan.query_rewrites)))
+    for source in plan.target_sources:
+        source_results: list[tuple[Document, float]] = []
+        for query_variant in query_variants:
+            source_results.extend(await _similarity_search_with_source(llm_db, query_variant, per_source_count, source=source))
+        log.debug("Retrieved %d candidate documents from %s", len(source_results), source.value)
+        results.extend(source_results)
+
+    if results:
+        return results
+
+    log.debug("Filtered retrieval returned no results; falling back to unfiltered search.")
+    return await _similarity_search_with_source(llm_db, query, count)
+
+
+def format_time_context(identity: UserIdentity | None) -> str:
+    """Format current date/time context for time-aware prompts."""
+    if not (identity and identity.current_datetime):
+        return ""
+
+    dt_str = identity.current_datetime.strftime("%A, %B %d, %Y at %I:%M %p %Z")
+    return (
+        f"Current Date and Time: {dt_str}\n"
+        "Use the current date above to determine relative time references "
+        '(e.g., "today", "tomorrow", "yesterday", "this week", "last week") '
+        "when answering questions about dates or match schedules."
+    )
+
+
+def format_player_context(identity: UserIdentity | None) -> str:
+    """Format player identity for prompts that explicitly need personal context."""
     if not identity:
         return ""
 
     context_parts = []
-
-    # Add current datetime context first
-    if identity.current_datetime:
-        dt_str = identity.current_datetime.strftime("%A, %B %d, %Y at %I:%M %p %Z")
-        context_parts.append(f"Current Date and Time: {dt_str}\n")
-        context_parts.append(
-            "Use the current date above to determine relative time references "
-            '(e.g., "today", "tomorrow", "yesterday", "this week", "last week") '
-            "when answering questions about match schedules.\n\n"
-        )
-
     context_parts.append(f"The user asking this question is {identity.name}")
 
     if identity.status in ("RO", "IR", "AR", "RN"):  # Rostered statuses
@@ -94,6 +721,41 @@ def format_user_context(identity: UserIdentity | None) -> str:
 
     context_parts.append(".")
     return "".join(context_parts)
+
+
+def format_user_context(identity: UserIdentity | None, plan: RetrievalPlan) -> str:
+    """Format only the user context allowed by the retrieval plan."""
+    policy = build_prompt_context_policy(plan)
+    context_parts = []
+
+    if policy.include_current_datetime:
+        context_parts.append(format_time_context(identity))
+
+    if policy.include_player_identity:
+        context_parts.append(format_player_context(identity))
+
+    return "\n\n".join(part for part in context_parts if part)
+
+
+def build_prompt_guidance(plan: RetrievalPlan) -> str:
+    """Return intent-specific guidance for the final answer prompt."""
+    if plan.intent is QueryIntent.RULES:
+        return (
+            "This is a rules-oriented question. Use rulebook, help, dates, and season context as the authority. "
+            "Do not personalize the answer or infer facts about the asking player unless the question explicitly asks you "
+            "to apply the rule to them."
+        )
+
+    if plan.include_user_context:
+        return (
+            "Use the user identity context only to resolve personal references such as I, me, my, my team, or my franchise. "
+            "Do not let identity context override retrieved RSC source context."
+        )
+
+    if plan.include_current_date:
+        return "Use date/time context only for relative date references. Do not personalize the answer."
+
+    return "Do not personalize the answer unless the retrieved context and the question require it."
 
 
 def clean_question(text: str, user_name: str, bot_name: str | None = None) -> str:
@@ -135,13 +797,17 @@ You are a discord bot that runs a gaming league called RSC. The league is for th
 
 {user_context}
 
-You have access to the following context from the RSC rulebooks, team information, and player information:
+{context_guidance}
+
+You have access to the following retrieved context from RSC sources:
 
 {context}
 
+Use rulebook context as the authority for rules, eligibility, roster moves, conduct, and enforcement questions.
+Use API context as the authority for live league state such as players, teams, franchises, matches, and season data.
 Answer the question using the context provided above. If you can provide rule number references, do so.
 Do not create your own acronyms.
-If you cannot answer the question based on the context provided, say so clearly. Do not try to make assumptions"
+If you cannot answer the question based on the context provided, say so clearly. Do not try to make assumptions.
 Keep your response under 2000 characters for Discord compatibility.
 
 Do NOT respond with anything that could be considered a discord bot command (e.g., starting with a "!" or "?").
@@ -197,7 +863,8 @@ def deduplicate_documents(
     for doc, distance, score in sorted(scored, key=lambda x: x[2], reverse=True):
         key = (
             doc.metadata.get("source"),
-            doc.id,
+            doc.metadata.get("id") or doc.id,
+            doc.metadata.get("chunk_index"),
         )
         log.debug("Inspecting document chunk for deduplication: %s", key)
         if key in seen:
@@ -231,20 +898,23 @@ def apply_dynamic_cutoff(
 
 def build_context(
     docs: list[tuple[Document, float, float]],
-) -> tuple[str, list[dict[str, str | None]]]:
+) -> tuple[str, list[dict[str, str | int | None]]]:
     """
     Assemble final prompt context and source list with full metadata.
 
     Returns:
         Tuple of (context_string, list of metadata dicts with source, id, etc.)
     """
-    context = "\n\n---\n\n".join(f"[Relevance {score:.2f}]\n{doc.page_content}" for doc, _distance, score in docs)
+    context = "\n\n---\n\n".join(
+        f"[Source Type: {document_source(doc) or 'unknown'} | Relevance {score:.2f}]\n{doc.page_content}" for doc, _distance, score in docs
+    )
 
     sources = [
         {
             "source": doc.metadata.get("source"),
             "id": doc.metadata.get("id"),
             "chunk_index": doc.metadata.get("chunk_index"),
+            "source_type": document_source(doc),
         }
         for doc, _distance, _score in docs
     ]
@@ -256,6 +926,7 @@ async def expand_context_from_anchors(
     anchors: list[Document],
     llm_db: Chroma,
     question: str,
+    plan: RetrievalPlan,
     top_n: int = 3,
     min_score: float = ANCHOR_EXPANSION_MIN_SCORE,
 ) -> list[tuple[Document, float, float]]:
@@ -292,10 +963,9 @@ async def expand_context_from_anchors(
         log.debug(f"Expanding context from anchor. source={source} ID={anchor.id}")
 
         # Search with the combined query for better relevance
-        similar = await llm_db.asimilarity_search_with_score(
-            anchor.page_content,
-            k=top_n,
-        )
+        similar: list[tuple[Document, float]] = []
+        for source in plan.target_sources:
+            similar.extend(await _similarity_search_with_source(llm_db, anchor.page_content, top_n, source=source))
 
         for doc, distance in similar:
             # Skip if we've already seen this document
@@ -326,9 +996,9 @@ async def llm_query(
     question: str,
     threshold: float = 0.4,
     count: int = 5,
-    model: str = "gpt-5.2",
+    model: str = OPENAI_CHAT_MODEL,
     user_identity: UserIdentity | None = None,
-) -> tuple[str | None, list[dict[str, str | None]]]:
+) -> tuple[str | None, list[dict[str, str | int | None]]]:
     """
     Query the LLM with context from ChromaDB.
 
@@ -339,7 +1009,7 @@ async def llm_query(
         question: User's question
         threshold: Minimum similarity score (0-1)
         count: Maximum number of documents to retrieve
-        model: OpenAI model to use (default: gpt-4o)
+        model: OpenAI model to use
         user_identity: Optional identity of the user asking the question
 
     Returns:
@@ -361,37 +1031,21 @@ async def llm_query(
             collection_name=str(guild.id),
             client=chroma_client,
             embedding_function=OpenAIEmbeddings(
-                model="text-embedding-3-small", openai_organization=org_name, openai_api_key=secret_key, http_async_client=http_client
+                model=OPENAI_EMBEDDING_MODEL, organization=org_name, api_key=secret_key, http_async_client=http_client
             ),
         )
 
-        # Build enriched search query with user context for better ChromaDB retrieval
-        # Always include available context - embeddings handle extra context gracefully
-        search_query = question
-        query_context_parts: list[str] = []
-
-        if user_identity:
-            # Always include user/team context for personalized retrieval
-            if user_identity.team:
-                query_context_parts.append(f"Team: {user_identity.team}")
-            if user_identity.franchise:
-                query_context_parts.append(f"Franchise: {user_identity.franchise}")
-            if user_identity.tier:
-                query_context_parts.append(f"Tier: {user_identity.tier}")
-            query_context_parts.append(f"Player: {user_identity.name}")
-
-            # Always include current date for temporal awareness
-            if user_identity.current_datetime:
-                date_str = user_identity.current_datetime.strftime("%m-%d-%Y")
-                query_context_parts.append(f"Current Date: {date_str}")
-
-        if query_context_parts:
-            search_query = f"{question}\n" + "\n".join(query_context_parts)
-            log.debug(f"Enriched query context: {query_context_parts}", guild=guild)
+        retrieval_plan = build_retrieval_plan(question, user_identity)
+        search_queries = build_search_queries(question, user_identity, retrieval_plan)
+        search_query = search_queries[0]
 
         # Search the DB with distance scores (lower is better)
+        log.debug(f"Retrieval intent: {retrieval_plan.intent.value}", guild=guild)
+        log.debug(f"Retrieval document sources: {[source.value for source in retrieval_plan.target_sources]}", guild=guild)
         log.debug(f"Search Query: {search_query}", guild=guild)
-        similar = await llm_db.asimilarity_search_with_score(search_query, k=count)
+        if len(search_queries) > 1:
+            log.debug(f"Search Query Rewrites: {search_queries[1:]}", guild=guild)
+        similar = await retrieve_documents(llm_db, search_query, retrieval_plan, count)
 
         if not similar:
             log.debug("Unable to find matching results.", guild=guild)
@@ -411,7 +1065,7 @@ async def llm_query(
 
         # Identify high-confidence anchors (>= 0.95 Default)
         anchors = [doc for doc, _, score in scored if score >= ANCHOR_SCORE_THRESHOLD]
-        extra_context_docs = await expand_context_from_anchors(anchors, llm_db, question=question, top_n=3)
+        extra_context_docs = await expand_context_from_anchors(anchors, llm_db, question=question, plan=retrieval_plan, top_n=3)
         log.debug(f"Expanded {len(extra_context_docs)} extra context documents from anchors.", guild=guild)
         if extra_context_docs:
             for extra_doc, distance, score in extra_context_docs:
@@ -424,7 +1078,10 @@ async def llm_query(
 
         # Continue pipeline
         deduped = deduplicate_documents(scored)
-        final_docs = apply_dynamic_cutoff(deduped)
+        prioritized = prioritize_documents(deduped, retrieval_plan)
+        thresholded = [doc for doc in prioritized if doc[2] >= threshold]
+        final_docs = apply_dynamic_cutoff(thresholded or prioritized[:count])[:count]
+        final_docs = ensure_source_coverage(final_docs, prioritized, retrieval_plan, count)
 
         for doc, distance, score in final_docs:
             log.debug(
@@ -435,11 +1092,18 @@ async def llm_query(
         context_text, sources = build_context(final_docs)
         log.debug(f"Context: {context_text}", guild=guild)
 
-        # Prompt with user context (includes datetime if provided)
-        user_context = format_user_context(user_identity)
+        user_context = format_user_context(user_identity, retrieval_plan)
+        context_guidance = build_prompt_guidance(retrieval_plan)
+        log.debug(
+            "Prompt context policy: include_player_identity=%s include_current_datetime=%s",
+            retrieval_plan.include_user_context,
+            retrieval_plan.include_current_date,
+            guild=guild,
+        )
         prompt = PROMPT_TEMPLATE.format(
             context=context_text,
             user_context=user_context,
+            context_guidance=context_guidance,
         )
 
         messages: list[ChatCompletionMessageParam] = [
@@ -455,8 +1119,7 @@ async def llm_query(
 
         response = await llm.chat.completions.create(
             messages=messages,
-            model=model,
-            temperature=0.3,
+            **openai_chat_completion_options(model),
         )
 
         response_text = response.choices[0].message.content
@@ -480,7 +1143,7 @@ async def summarize_ticket_messages(
     api_key: str,
     transcript: str,
     image_data_urls: list[str] | None = None,
-    model: str = "gpt-5.2",
+    model: str = OPENAI_CHAT_MODEL,
 ) -> str | None:
     """Summarize a ticket transcript for Discord output."""
     if not transcript.strip():
@@ -508,8 +1171,7 @@ async def summarize_ticket_messages(
 
         response = await llm.chat.completions.create(
             messages=cast("Any", messages),
-            model=model,
-            temperature=OPENAI_TEMPERATURE,
+            **openai_chat_completion_options(model),
         )
 
         response_text = response.choices[0].message.content

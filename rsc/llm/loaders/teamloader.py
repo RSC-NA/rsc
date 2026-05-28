@@ -10,6 +10,7 @@ log = logging.getLogger("red.rsc.llm.loaders.teamloader")
 
 TEAM_INPUT = """
 {name} is a team in the {tier} tier. {name} is a team within the franchise "{franchise}"
+{season_context}
 
 {name} has the following players on their roster:
 {players}
@@ -21,8 +22,15 @@ TEAM_INPUT = """
 class TeamDocumentLoader(BaseLoader):
     """RSC Rule Document style loader"""
 
-    def __init__(self, teams: list[Team]) -> None:
+    def __init__(self, teams: list[Team], season_number: int | None = None) -> None:
         self.teams: list[Team] = teams
+        self.season_number = season_number
+
+    @property
+    def season_context(self) -> str:
+        if not self.season_number:
+            return ""
+        return f"This team record is for current Season {self.season_number}."
 
     def _process_teams(self) -> Iterator[Document]:
         """Process teams and yield Documents."""
@@ -58,8 +66,18 @@ class TeamDocumentLoader(BaseLoader):
                     tier=tier,
                     players=players_fmt,
                     captain=captain,
+                    season_context=self.season_context,
                 ),
-                metadata={"source": "Teams API", "id": str(t.id), "chunk_index": idx},
+                metadata={
+                    "source": "Teams API",
+                    "id": str(t.id),
+                    "chunk_index": idx,
+                    "entity_name": team_name,
+                    "team": team_name,
+                    "franchise": franchise,
+                    "tier": tier,
+                    "season_number": self.season_number,
+                },
             )
 
     def lazy_load(self) -> Iterator[Document]:

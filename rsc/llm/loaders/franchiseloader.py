@@ -69,7 +69,14 @@ class FranchiseDocumentLoader(BaseLoader):
 
             yield Document(
                 page_content=content,
-                metadata={"source": "Franchises API", "id": str(f.id), "chunk_index": idx},
+                metadata={
+                    "source": "Franchises API",
+                    "id": str(f.id),
+                    "chunk_index": idx,
+                    "entity_name": f.name,
+                    "franchise": f.name,
+                    "gm": f.gm.rsc_name,
+                },
             )
 
     def lazy_load(self) -> Iterator[Document]:

@@ -217,17 +217,38 @@ class TransactionMixIn(RSCMixIn):
             )
             return
 
-        # Retire player (retire everyone just in case)
-        try:
-            await self.retire(
-                guild,
-                player=member,
-                executor=guild.me,
-                notes="Player left the RSC discord server",
-                override=True,
+        player_before_retire = players[0]
+
+        retire_verified = False
+        for attempt in range(1, 3):
+            try:
+                result = await self.retire(
+                    guild,
+                    player=member,
+                    executor=guild.me,
+                    notes="Player left the RSC discord server",
+                    override=True,
+                )
+            except RscException as exc:
+                log.error(f"Error retiring player that left guild: {exc.reason}", guild=guild)
+                return
+
+            verification_error = await self._retire_response_error(result, player=member)
+            if verification_error is None:
+                retire_verified = True
+                break
+
+            log.error(
+                f"Retire transaction for member {member.id} did not verify on attempt {attempt}/2: {verification_error}",
+                guild=guild,
             )
-        except RscException as exc:
-            log.error(f"Error retiring player that left guild: {exc.reason}", guild=guild)
+
+        if not retire_verified:
+            member_fmt = f"{member.display_name} ({member.id})"
+            log.error(
+                f"Unable to verify retirement for member {member_fmt} after retry. Player may still be active in API.",
+                guild=guild,
+            )
             return
 
         # Check if user was forcibly removed from server
@@ -236,11 +257,10 @@ class TransactionMixIn(RSCMixIn):
         if isinstance(member, discord.Member):
             perp, reason = await utils.get_audit_log_reason(guild, member, discord.AuditLogAction.kick)
 
-            p = players.pop(0)
-            log.info(
-                f"{member.display_name} ({member.id}) has left the server. Player is being retired. Reason: {reason}",
-                guild=guild,
-            )
+        log.info(
+            f"{member.display_name} ({member.id}) has left the server. Player retirement verified. Reason: {reason}",
+            guild=guild,
+        )
 
         # Check if notifications are enabled
         tm_notify = await self._notifications_enabled(guild)
@@ -251,17 +271,17 @@ class TransactionMixIn(RSCMixIn):
         tz = await self.timezone(guild)
         now = datetime.now(tz=tz)
 
-        if not (p.team and p.team.franchise):
+        if not (player_before_retire.team and player_before_retire.team.franchise):
             log.info(
                 f"{member.display_name} has no team. Skipping notifications...",
                 guild=guild,
             )
             return
 
-        fname = p.team.franchise.name or "**Unknown Franchise**"
-        gm_id = p.team.franchise.gm.discord_id or 0  # Has to be a better solution
+        fname = player_before_retire.team.franchise.name or "**Unknown Franchise**"
+        gm_id = player_before_retire.team.franchise.gm.discord_id or 0  # Has to be a better solution
 
-        match p.status:
+        match player_before_retire.status:
             case Status.ROSTERED | Status.IR | Status.AGMIR | Status.RENEWED:
                 desc = f"Player left server while rostered on **{fname}**"
             case Status.UNSIGNED_GM:
@@ -269,7 +289,7 @@ class TransactionMixIn(RSCMixIn):
             case _:
                 # We only notify for specific statuses
                 log.debug(
-                    f"Not sending transaction notification. Player Status: {p.status}",
+                    f"Not sending transaction notification. Player Status: {player_before_retire.status}",
                     guild=guild,
                 )
                 return
@@ -308,7 +328,7 @@ class TransactionMixIn(RSCMixIn):
             )
 
         # Ping GM and AGM in franchise transaction channel.
-        if not p.team:
+        if not player_before_retire.team:
             # Handle GM case
             return
 
@@ -2062,7 +2082,7 @@ class TransactionMixIn(RSCMixIn):
         return await player.send(embed=embed)
 
     async def league_player_from_transaction(
-        self, transaction: TransactionResponse, player: discord.Member
+        self, transaction: TransactionResponse, player: discord.Member | discord.User
     ) -> PlayerTransactionUpdates | None:
         if not transaction.player_updates:
             raise ValueError("Transaction response contains no Player Updates.")
@@ -2072,6 +2092,23 @@ class TransactionMixIn(RSCMixIn):
                 continue
             if x.player.player.discord_id == player.id:
                 return x
+        return None
+
+    async def _retire_response_error(self, transaction: TransactionResponse, player: discord.Member | discord.User) -> str | None:
+        transaction_id = getattr(transaction, "id", None)
+        try:
+            player_update = await self.league_player_from_transaction(transaction, player=player)
+        except (AttributeError, ValueError) as exc:
+            return f"transaction_id={transaction_id} validation_error={exc}"
+
+        if not player_update:
+            return f"transaction_id={transaction_id} validation_error=missing player update for discord_id={player.id}"
+
+        returned_status = getattr(player_update.player, "status", None)
+        returned_status_value = getattr(returned_status, "value", returned_status)
+        if returned_status_value != Status.FORMER.value:
+            return f"transaction_id={transaction_id} returned_status={returned_status!r} expected_status={Status.FORMER.value}"
+
         return None
 
     async def get_sub(self, member: discord.Member) -> Substitute | None:

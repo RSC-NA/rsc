@@ -12,6 +12,7 @@ log = logging.getLogger("red.rsc.llm.loaders.playerloader")
 
 PLAYER_INPUT = """
 {name} is a player in RSC (Rocket Soccar Confederation) and plays for the team "{team}".
+{season_context}
 
 {team} is part of the franchise "{franchise}" and the general manager, also known as GM, of {franchise} is {gm}.
 
@@ -20,6 +21,7 @@ PLAYER_INPUT = """
 
 IR_INPUT = """
 {name} is a player in RSC (Rocket Soccar Confederation) and is currently on Inactive Reserve for the team "{team}".
+{season_context}
 
 {team} is part of the franchise "{franchise}" and the general manager, also known as GM, of {franchise} is {gm}.
 
@@ -28,12 +30,14 @@ IR_INPUT = """
 
 FA_INPUT = """
 {name} is a player in RSC (Rocket Soccar Confederation) and is currently a Free Agent. Free Agent means he is not currently rostered on a team. However, {name} is available to be signed by a team!
+{season_context}
 
 {name} is currently in the {tier} tier.
 """  # noqa: E501
 
 PERMFA_INPUT = """
 {name} is a player in RSC (Rocket Soccar Confederation) and is currently a Permanent Free Agent (PermFA).
+{season_context}
 
 Permanent Free Agent means that {name} can not be rostered on a team but is available to sub in on match nights.
 
@@ -42,6 +46,7 @@ Permanent Free Agent means that {name} can not be rostered on a team but is avai
 
 DE_INPUT = """
 {name} is a player in RSC (Rocket Soccar Confederation) and is currently Draft Eligible.
+{season_context}
 
 Draft Eligible means he is able to be drafted in the RSC Draft.
 
@@ -52,10 +57,17 @@ Draft Eligible means he is able to be drafted in the RSC Draft.
 class PlayerDocumentLoader(BaseLoader):
     """RSC Player Document loader"""
 
-    def __init__(self, players: list[LeaguePlayer], chunk_index: int = 0) -> None:
+    def __init__(self, players: list[LeaguePlayer], chunk_index: int = 0, season_number: int | None = None) -> None:
         self.players: list[LeaguePlayer] = players
         self.chunk_index = chunk_index
+        self.season_number = season_number
         log.debug("Initialized PlayerDocumentLoader with %d players", len(players))
+
+    @property
+    def season_context(self) -> str:
+        if not self.season_number:
+            return ""
+        return f"This player record is for current Season {self.season_number}."
 
     def _has_roster_info(self, p: LeaguePlayer) -> bool:
         """Check if player has full roster information."""
@@ -104,14 +116,31 @@ class PlayerDocumentLoader(BaseLoader):
 
     def _process_player(self, p: LeaguePlayer) -> Document | None:
         """Process a single player and return a Document or None."""
+        player_name = p.player.name if p.player else None
+        team_name = p.team.name if p.team else None
+        franchise_name = p.team.franchise.name if p.team and p.team.franchise else None
+        tier_name = p.tier.name if p.tier else None
+        base_metadata = {
+            "id": str(p.id),
+            "chunk_index": self.chunk_index,
+            "entity_name": player_name,
+            "player": player_name,
+            "team": team_name,
+            "franchise": franchise_name,
+            "tier": tier_name,
+            "status": str(p.status) if p.status else None,
+        }
+        if self.season_number:
+            base_metadata["season_number"] = self.season_number
+
         match p.status:
             case Status.ROSTERED | Status.RENEWED:
                 if not self._has_roster_info(p):
                     log.warning(f"Skipping player {p.id}. Missing required data for LLM input.")
                     return None
                 return Document(
-                    page_content=PLAYER_INPUT.format(**self._get_roster_data(p)),
-                    metadata={"source": "Rostered Player API", "id": str(p.id), "chunk_index": self.chunk_index},
+                    page_content=PLAYER_INPUT.format(**self._get_roster_data(p), season_context=self.season_context),
+                    metadata={**base_metadata, "source": "Rostered Player API"},
                 )
 
             case Status.AGMIR | Status.IR:
@@ -119,8 +148,8 @@ class PlayerDocumentLoader(BaseLoader):
                     log.warning(f"Skipping player {p.id}. Missing required data for LLM input.")
                     return None
                 return Document(
-                    page_content=IR_INPUT.format(**self._get_roster_data(p)),
-                    metadata={"source": "IR Player API", "id": str(p.id), "chunk_index": self.chunk_index},
+                    page_content=IR_INPUT.format(**self._get_roster_data(p), season_context=self.season_context),
+                    metadata={**base_metadata, "source": "IR Player API"},
                 )
 
             case Status.FREE_AGENT:
@@ -128,8 +157,8 @@ class PlayerDocumentLoader(BaseLoader):
                     log.warning(f"Skipping player {p.id}. Missing required data for LLM input.")
                     return None
                 return Document(
-                    page_content=FA_INPUT.format(name=p.player.name, tier=p.tier.name),
-                    metadata={"source": "Free Agent API", "id": str(p.id), "chunk_index": self.chunk_index},
+                    page_content=FA_INPUT.format(name=p.player.name, tier=p.tier.name, season_context=self.season_context),
+                    metadata={**base_metadata, "source": "Free Agent API"},
                 )
 
             case Status.PERM_FA:
@@ -137,8 +166,8 @@ class PlayerDocumentLoader(BaseLoader):
                     log.warning(f"Skipping player {p.id}. Missing required data for LLM input.")
                     return None
                 return Document(
-                    page_content=PERMFA_INPUT.format(name=p.player.name, tier=p.tier.name),
-                    metadata={"source": "PermFA API", "id": str(p.id), "chunk_index": self.chunk_index},
+                    page_content=PERMFA_INPUT.format(name=p.player.name, tier=p.tier.name, season_context=self.season_context),
+                    metadata={**base_metadata, "source": "PermFA API"},
                 )
 
             case Status.DRAFT_ELIGIBLE:
@@ -151,8 +180,8 @@ class PlayerDocumentLoader(BaseLoader):
                     else f"{p.player.name} has not been assigned a tier yet."
                 )
                 return Document(
-                    page_content=DE_INPUT.format(name=p.player.name, tier=tier_fmt),
-                    metadata={"source": "Draft Eligible API", "id": str(p.id), "chunk_index": self.chunk_index},
+                    page_content=DE_INPUT.format(name=p.player.name, tier=tier_fmt, season_context=self.season_context),
+                    metadata={**base_metadata, "source": "Draft Eligible API"},
                 )
 
         return None

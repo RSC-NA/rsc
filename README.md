@@ -36,3 +36,19 @@ There are a variety of settings available in a large number of modules for the b
 - `/combines` - Combine Settings
 - `/moderation` - Mod Settings
 - `/transactions` - Transactions Settings
+
+## Development
+
+### Rule File Management
+
+The maintained Markdown versions of the RSC rules documents live in `rsc/resources/rules/`. These files are used by the bot's rulebook/LLM document loader, so review generated Markdown before committing updates.
+
+To generate a Markdown version of the RSC rules document from a source PDF, place the PDF in `./inputpdf` and run:
+
+```sh
+marker_single ./inputpdf --output_dir ./converted/ --output_format markdown --force_ocr
+```
+
+After conversion, review the generated Markdown in `./converted/`, then update the appropriate file in `rsc/resources/rules/`, such as `RSC Rules.md`. Pay special attention to OCR formatting, table-of-contents artifacts, and numbered rule headings.
+
+Numbered rule sections should remain Markdown headings with the rule number in the heading text, such as `## 1.1` or `### 2.3.1`, so the rule loader can split the rulebook into searchable documents reliably.

@@ -1,9 +1,11 @@
-import logging
+from __future__ import annotations
+
 import base64
+import asyncio
+import logging
 from datetime import time, datetime
-from enum import Enum
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import discord
 from discord.ext import tasks
@@ -12,47 +14,47 @@ from redbot.core import app_commands, commands
 from rsc.abc import RSCMixIn
 from rsc.embeds import BlueEmbed, ErrorEmbed, GreenEmbed, YellowEmbed
 from rsc.llm.create_db import (
-    delete_documents_by_type,
+    delete_documents_by_source,
     get_db_stats,
     load_current_season_doc,
     load_franchise_docs,
     load_funny_docs,
     load_help_docs,
     load_player_docs,
+    load_player_stats_docs,
+    load_rule_glossary_docs,
     load_rule_style_docs,
     load_match_docs,
+    load_standings_docs,
     load_team_docs,
+    load_team_stats_docs,
     markdown_to_documents,
     reset_collection,
     save_documents,
     string_to_doc,
 )
+from rsc.llm.sources import DocumentSource, STATIC_DOCUMENT_SOURCES, set_document_source
 from rsc.llm.query import (
     llm_query,
     summarize_ticket_messages,
     UserIdentity,
-    clean_question as clean_question_impl,
 )
 from rsc.logs import GuildLogAdapter
 from rsc.types import LLMSettings
 from rsc.utils import utils
 
 
-class DocumentType(Enum):
-    """Enum for LLM document types"""
-
-    RULES = "rules"
-    FRANCHISES = "franchises"
-    PLAYERS = "players"
-    MATCHES = "matches"
-    TEAMS = "teams"
-    SEASON = "season"
-
-
 if TYPE_CHECKING:
+    from collections.abc import Awaitable
+
     from langchain_core.documents import Document
     from rscapi.models.franchise_list import FranchiseList
+    from rscapi.models.league_player import LeaguePlayer
+    from rscapi.models.player_season_stats import PlayerSeasonStats
+    from rscapi.models.season import Season
     from rscapi.models.team import Team
+    from rscapi.models.team_season_stats import TeamSeasonStats
+    from rscapi.models.tier import Tier
 
 logger = logging.getLogger("red.rsc.llm")
 log = GuildLogAdapter(logger)
@@ -73,6 +75,7 @@ LLM_SUMMARY_MAX_VIEWERS = 40
 LLM_SUMMARY_MAX_TRANSCRIPT_CHARS = 20000
 LLM_SUMMARY_MAX_IMAGES = 10
 LLM_SUMMARY_MAX_IMAGE_BYTES = 20 * 1024 * 1024
+LLM_STATS_FETCH_CONCURRENCY = 8
 
 
 class LLMMixIn(RSCMixIn):
@@ -168,14 +171,14 @@ class LLMMixIn(RSCMixIn):
         else:
             # Fallback for User (non-member)
             user_identity = UserIdentity(name=author.display_name, current_datetime=msg_datetime)
-        cleaned_msg = await self.clean_question(message, user_identity)
+        question = await self.clean_question(message, user_identity)
 
         try:
             response, _sources = await llm_query(
                 guild=guild,
                 org_name=org,
                 api_key=key,
-                question=cleaned_msg,
+                question=question,
                 count=count,
                 threshold=threshold,
                 user_identity=user_identity,
@@ -377,23 +380,14 @@ class LLMMixIn(RSCMixIn):
             else None
         )
 
-        # Clean pronouns from the question
-        if user_identity:
-            cleaned_question = clean_question_impl(question, user_identity.name, guild.me.display_name)
-        else:
-            # Fall back to display name if not a member
-            display_name = getattr(member, "display_name", str(member))
-            cleaned_question = clean_question_impl(question, display_name, guild.me.display_name)
-
         log.debug(f"Original question: {question}", guild=guild)
-        log.debug(f"Cleaned question: {cleaned_question}", guild=guild)
 
         try:
             response, sources = await llm_query(
                 guild=guild,
                 org_name=org,
                 api_key=key,
-                question=cleaned_question,
+                question=question,
                 count=count,
                 threshold=threshold,
                 user_identity=user_identity,
@@ -574,20 +568,28 @@ class LLMMixIn(RSCMixIn):
             ephemeral=True,
         )
 
-    @_llm_group.command(name="refresh", description="Refresh a specific document type in the LLM Chroma DB")
-    @app_commands.describe(doc_type="Type of documents to refresh")
+    @_llm_group.command(name="refresh", description="Refresh a specific document source in the LLM Chroma DB")
+    @app_commands.describe(source="Document source to refresh")
     @app_commands.choices(
-        doc_type=[
-            app_commands.Choice(name="Rules/Help/Funny", value="rules"),
+        source=[
+            app_commands.Choice(name="All Static Docs", value="static"),
+            app_commands.Choice(name="Rulebook", value="rulebook"),
+            app_commands.Choice(name="Glossary", value="glossary"),
+            app_commands.Choice(name="Dates", value="dates"),
+            app_commands.Choice(name="Help", value="help"),
+            app_commands.Choice(name="Funny", value="funny"),
             app_commands.Choice(name="Franchises", value="franchises"),
             app_commands.Choice(name="Players", value="players"),
+            app_commands.Choice(name="Player Stats", value="player_stats"),
             app_commands.Choice(name="Matches", value="matches"),
             app_commands.Choice(name="Teams", value="teams"),
+            app_commands.Choice(name="Team Stats", value="team_stats"),
+            app_commands.Choice(name="Standings", value="standings"),
             app_commands.Choice(name="Season", value="season"),
         ]
     )
-    async def _llm_refresh_cmd(self, interaction: discord.Interaction, doc_type: app_commands.Choice[str]):
-        """Refresh a specific document type in the LLM Chroma DB"""
+    async def _llm_refresh_cmd(self, interaction: discord.Interaction, source: app_commands.Choice[str]):
+        """Refresh a specific document source in the LLM Chroma DB"""
         guild = interaction.guild
         if not guild:
             return
@@ -603,15 +605,18 @@ class LLMMixIn(RSCMixIn):
         await interaction.response.defer(ephemeral=True)
 
         try:
-            document_type = DocumentType(doc_type.value)
-            count = await self.refresh_document_type(guild, document_type, interaction=interaction)
+            if source.value == "static":
+                count = await self.refresh_static_document_sources(guild, interaction=interaction)
+            else:
+                document_source = DocumentSource(source.value)
+                count = await self.refresh_document_source(guild, document_source, interaction=interaction)
         except ValueError as exc:
             return await interaction.followup.send(content=str(exc), ephemeral=True)
 
         await interaction.followup.send(
             embed=GreenEmbed(
                 title="Documents Refreshed",
-                description=f"Refreshed **{doc_type.name}** documents.\n\nSaved **{count}** chunks to Chroma DB.",
+                description=f"Refreshed **{source.name}** documents.\n\nSaved **{count}** chunks to Chroma DB.",
             ),
             ephemeral=True,
         )
@@ -747,65 +752,38 @@ class LLMMixIn(RSCMixIn):
         # Reset the collection before adding new documents
         await reset_collection(guild)
 
-        # ===== RULES & STATIC DOCUMENTS =====
         if interaction:
             await interaction.edit_original_response(
                 embed=YellowEmbed(
                     title="Creating Chroma DB",
-                    description="Loading markdown documents.",
+                    description="Loading documents from rules, API data, and match history.",
                 )
             )
-        total_docs += await self._process_rules_documents(guild, org, key)
 
-        # ===== CURRENT SEASON DOCUMENT =====
-        if interaction:
-            await interaction.edit_original_response(
-                embed=YellowEmbed(
-                    title="Creating Chroma DB",
-                    description="Loading current season document.",
-                )
-            )
-        total_docs += await self._process_current_season_document(guild, org, key)
+        franchises_task = asyncio.create_task(self.franchises(guild))
+        doc_groups = await asyncio.gather(
+            self._build_rules_documents(guild),
+            self._build_current_season_documents(guild, current_season),
+            self._build_franchise_documents(guild, current_season.id, franchises=franchises_task),
+            self._build_player_documents(guild),
+            self._build_player_stats_documents(guild, current_season.number),
+            self._build_match_documents(guild, current_season.number),
+            self._build_team_documents(guild, franchises=franchises_task),
+            self._build_team_stats_documents(guild, current_season, franchises=franchises_task),
+            self._build_standings_documents(guild, current_season),
+        )
+        docs = [doc for group in doc_groups for doc in group]
+        total_docs = len(docs)
 
-        # ===== FRANCHISE DOCUMENTS =====
         if interaction:
             await interaction.edit_original_response(
                 embed=YellowEmbed(
                     title="Creating Chroma DB",
-                    description="Loading franchise documents.",
+                    description=f"Saving {total_docs} documents to the database.",
                 )
             )
-        total_docs += await self._process_franchise_documents(guild, org, key)
 
-        # ===== PLAYER DOCUMENTS =====
-        if interaction:
-            await interaction.edit_original_response(
-                embed=YellowEmbed(
-                    title="Creating Chroma DB",
-                    description="Loading player documents.",
-                )
-            )
-        total_docs += await self._process_player_documents(guild, org, key)
-
-        # ===== MATCH DOCUMENTS =====
-        if interaction:
-            await interaction.edit_original_response(
-                embed=YellowEmbed(
-                    title="Creating Chroma DB",
-                    description="Loading match documents.",
-                )
-            )
-        total_docs += await self._process_match_documents(guild, org, key, current_season.number)
-
-        # ===== TEAM DOCUMENTS =====
-        if interaction:
-            await interaction.edit_original_response(
-                embed=YellowEmbed(
-                    title="Creating Chroma DB",
-                    description="Loading team documents.",
-                )
-            )
-        total_docs += await self._process_team_documents(guild, org, key)
+        await save_documents(guild, org, key, docs)
 
         if interaction:
             await interaction.edit_original_response(
@@ -819,70 +797,101 @@ class LLMMixIn(RSCMixIn):
         log.info("Chroma database created")
         return total_docs
 
-    async def _process_current_season_document(self, guild: discord.Guild, org: str, key: str) -> int:
-        """Process and save current season document."""
-        log.info("Creating current season document.", guild=guild)
-        season = await self.current_season(guild)
+    async def _build_current_season_documents(self, guild: discord.Guild, current_season: Season | None = None) -> list[Document]:
+        """Build current season documents without saving them."""
+        season = current_season or await self.current_season(guild)
         if not season:
             log.warning("API returned no current season.", guild=guild)
-            return 0
+            return []
         season_doc = await load_current_season_doc(season)
+        set_document_source(season_doc, DocumentSource.SEASON)
+        return [season_doc]
 
-        await save_documents(guild, org, key, [season_doc])
-        log.info("Saved current season document.", guild=guild)
-        return 1
-
-    async def _process_rules_documents(self, guild: discord.Guild, org: str, key: str) -> int:
-        """Process and save rules, help, and funny documents."""
+    async def _build_rules_documents(self, guild: discord.Guild) -> list[Document]:
+        """Build rules, help, date, and funny documents without saving them."""
         log.info("Creating rules/help/funny documents.", guild=guild)
-        rule_docs: list[Document] = []
+        doc_groups = await asyncio.gather(
+            self._build_dates_documents(guild),
+            self._build_rulebook_documents(guild),
+            self._build_glossary_documents(guild),
+            self._build_help_documents(guild),
+            self._build_funny_documents(guild),
+        )
+        return [doc for group in doc_groups for doc in group]
 
-        # Dates document
-        log.debug("Create dates document.", guild=guild)
+    async def _build_dates_documents(self, guild: discord.Guild) -> list[Document]:
+        """Build dates corpus documents without saving them."""
         dates = await self._get_dates(guild)
         if dates:
             date_doc = await string_to_doc(dates)
-            date_doc.metadata["type"] = DocumentType.RULES.value
-            rule_docs.append(date_doc)
+            date_doc.metadata["source"] = "Dates"
+            set_document_source(date_doc, DocumentSource.DATES)
+            return [date_doc]
+        return []
 
-        # Rule documents
+    async def _build_rulebook_documents(self, guild: discord.Guild) -> list[Document]:
+        """Build rulebook corpus documents without saving them."""
         log.debug("Creating rule documents.", guild=guild)
+        rule_docs: list[Document] = []
         rulepath = Path(__file__).parent.parent / "resources" / "rules"
-        for fd in rulepath.glob("*.md"):
-            log.debug(f"Rule Doc: {fd}", guild=guild)
-            rdocs = await load_rule_style_docs(fd)
+        rule_files = [rulepath / "RSC Rules.md"]
+        rule_groups = await asyncio.gather(*(load_rule_style_docs(fd) for fd in rule_files))
+        for rdocs in rule_groups:
             for doc in rdocs:
-                doc.metadata["type"] = DocumentType.RULES.value
+                set_document_source(doc, DocumentSource.RULEBOOK)
             rule_docs.extend(rdocs)
+        return rule_docs
 
-        # Help documents
+    async def _build_glossary_documents(self, guild: discord.Guild) -> list[Document]:
+        """Build glossary corpus documents without saving them."""
+        log.debug("Creating glossary documents.", guild=guild)
+        rulepath = Path(__file__).parent.parent / "resources" / "rules" / "RSC Rules.md"
+        glossary_docs = await load_rule_glossary_docs(rulepath)
+        for doc in glossary_docs:
+            set_document_source(doc, DocumentSource.GLOSSARY)
+        return glossary_docs
+
+    async def _build_help_documents(self, guild: discord.Guild) -> list[Document]:
+        """Build help corpus documents without saving them."""
         log.debug("Creating help documents.", guild=guild)
         helpdocs = await load_help_docs()
         help_md_docs = await markdown_to_documents(helpdocs)
         for doc in help_md_docs:
-            doc.metadata["type"] = DocumentType.RULES.value
-        rule_docs.extend(help_md_docs)
+            set_document_source(doc, DocumentSource.HELP)
+        return help_md_docs
 
-        # Funny documents
+    async def _build_funny_documents(self, guild: discord.Guild) -> list[Document]:
+        """Build funny corpus documents without saving them."""
         log.debug("Creating funny documents.", guild=guild)
         funnydocs = await load_funny_docs()
         funny_md_docs = await markdown_to_documents(funnydocs)
         for doc in funny_md_docs:
-            doc.metadata["type"] = DocumentType.RULES.value
-        rule_docs.extend(funny_md_docs)
+            set_document_source(doc, DocumentSource.FUNNY)
+        return funny_md_docs
 
-        # Save rules/help/funny docs
-        await save_documents(guild, org, key, rule_docs)
-        log.info(f"Saved {len(rule_docs)} rules/help/funny documents.", guild=guild)
-        return len(rule_docs)
+    async def _resolve_franchises(
+        self,
+        guild: discord.Guild,
+        franchises: list[FranchiseList] | Awaitable[list[FranchiseList]] | None = None,
+    ) -> list[FranchiseList]:
+        if franchises is None:
+            return await self.franchises(guild)
+        if isinstance(franchises, list):
+            return franchises
+        return await franchises
 
-    async def _process_franchise_documents(self, guild: discord.Guild, org: str, key: str, current_season: int | None = None) -> int:
-        """Process and save franchise documents."""
+    async def _build_franchise_documents(
+        self,
+        guild: discord.Guild,
+        current_season: int | None = None,
+        franchises: list[FranchiseList] | Awaitable[list[FranchiseList]] | None = None,
+    ) -> list[Document]:
+        """Build franchise documents without saving them."""
         log.info("Creating franchise documents.", guild=guild)
-        franchises: list[FranchiseList] = await self.franchises(guild)
+        franchises = await self._resolve_franchises(guild, franchises)
         if not franchises:
             log.debug("No franchises found.", guild=guild)
-            return 0
+            return []
 
         standings = None
         if current_season:
@@ -891,90 +900,179 @@ class LLMMixIn(RSCMixIn):
         log.debug(f"Franchise Count: {len(franchises)}", guild=guild)
         franchise_docs = await load_franchise_docs(franchises, standings=standings)
         for doc in franchise_docs:
-            doc.metadata["type"] = DocumentType.FRANCHISES.value
-        await save_documents(guild, org, key, franchise_docs)
-        log.info(f"Saved {len(franchise_docs)} franchise documents.", guild=guild)
-        return len(franchise_docs)
+            set_document_source(doc, DocumentSource.FRANCHISES)
+        return franchise_docs
 
-    async def _process_player_documents(self, guild: discord.Guild, org: str, key: str) -> int:
-        """Process and save player documents."""
+    async def _build_player_documents(self, guild: discord.Guild) -> list[Document]:
+        """Build player documents without saving them."""
         log.info("Creating player documents.", guild=guild)
-        player_docs: list[Document] = []
-        pcount = await self.total_players(guild)
-        log.debug(f"Total Players: {pcount}", guild=guild)
-        player_index = 0
-        async for player in self.paged_players(guild):
-            pdocs = await load_player_docs([player], chunk_index=player_index)
-            for doc in pdocs:
-                doc.metadata["type"] = DocumentType.PLAYERS.value
-            player_docs.extend(pdocs)
-            player_index += 1
+        players = await utils.async_iter_gather(self.paged_players(guild))
+        log.debug(f"Total Players: {len(players)}", guild=guild)
+        player_docs = await load_player_docs(players)
+        for doc in player_docs:
+            set_document_source(doc, DocumentSource.PLAYERS)
+        return player_docs
 
-        await save_documents(guild, org, key, player_docs)
-        log.info(f"Saved {len(player_docs)} player documents.", guild=guild)
-        return len(player_docs)
+    async def _build_player_stats_documents(self, guild: discord.Guild, season_number: int) -> list[Document]:
+        """Build current-season player stats documents without saving them."""
+        log.info("Creating player stats documents.", guild=guild)
+        players = await utils.async_iter_gather(self.paged_players(guild))
+        semaphore = asyncio.Semaphore(LLM_STATS_FETCH_CONCURRENCY)
 
-    async def _process_match_documents(self, guild: discord.Guild, org: str, key: str, season_number: int) -> int:
-        """Process and save match documents."""
+        async def fetch_player_stats(player: LeaguePlayer) -> PlayerSeasonStats | None:
+            if not (player.player and player.player.discord_id):
+                return None
+            async with semaphore:
+                member = cast("discord.Member", guild.get_member(player.player.discord_id) or discord.Object(id=player.player.discord_id))
+                try:
+                    return await self.player_stats(guild, member, season=season_number)
+                except Exception as exc:
+                    log.debug(f"Unable to fetch player stats for {player.player.name}: {exc}", guild=guild)
+                    return None
+
+        stats_results = await asyncio.gather(*(fetch_player_stats(player) for player in players))
+        stats = [stats for stats in stats_results if stats]
+        log.debug(f"Player Stats Count: {len(stats)}", guild=guild)
+        player_stats_docs = await load_player_stats_docs(stats)
+        for doc in player_stats_docs:
+            set_document_source(doc, DocumentSource.PLAYER_STATS)
+        return player_stats_docs
+
+    async def _build_match_documents(self, guild: discord.Guild, season_number: int) -> list[Document]:
+        """Build match documents without saving them."""
         log.info("Creating match documents.", guild=guild)
-        match_docs: list[Document] = []
-        match_index = 0
 
         # Create a match fetcher that captures the guild
         async def fetch_match(match_id: int):
+            log.debug(f"Fetching match results for ID: {match_id}", guild=guild)
             return await self.match_results(guild, match_id)
 
-        async for match in self.paged_matches(guild, season_number=season_number):
-            mdocs = await load_match_docs([match], chunk_index=match_index, match_fetcher=fetch_match)
-            for doc in mdocs:
-                doc.metadata["type"] = DocumentType.MATCHES.value
-            match_docs.extend(mdocs)
-            match_index += 1
+        matches = await utils.async_iter_gather(self.paged_matches(guild, season_number=season_number))
+        log.debug(f"Total Matches: {len(matches)}", guild=guild)
+        match_docs = await load_match_docs(matches, match_fetcher=fetch_match)
+        for doc in match_docs:
+            set_document_source(doc, DocumentSource.MATCHES)
+        return match_docs
 
-        await save_documents(guild, org, key, match_docs)
-        log.info(f"Saved {len(match_docs)} match documents.", guild=guild)
-        return len(match_docs)
-
-    async def _process_team_documents(self, guild: discord.Guild, org: str, key: str) -> int:
-        """Process and save team documents."""
-        log.info("Creating team documents.", guild=guild)
-        franchises: list[FranchiseList] = await self.franchises(guild)
+    async def _collect_franchise_teams(
+        self,
+        guild: discord.Guild,
+        franchises: list[FranchiseList] | Awaitable[list[FranchiseList]] | None = None,
+    ) -> list[Team]:
+        franchises = await self._resolve_franchises(guild, franchises)
         teams: list[Team] = []
-        for f in franchises:
+
+        async def fetch_franchise_teams(f: FranchiseList) -> list[Team]:
             if not (f.id and f.teams):
-                continue
+                return []
 
             fdata = await self.franchise_by_id(guild, id=f.id)
             if not (fdata and fdata.teams):
-                continue
+                return []
 
-            for t in fdata.teams:
-                teams.append(t)  # noqa: PERF402
+            return list(fdata.teams)
+
+        franchise_team_groups = await asyncio.gather(*(fetch_franchise_teams(f) for f in franchises))
+        for group in franchise_team_groups:
+            teams.extend(group)
+
+        return teams
+
+    async def _build_team_documents(
+        self,
+        guild: discord.Guild,
+        franchises: list[FranchiseList] | Awaitable[list[FranchiseList]] | None = None,
+    ) -> list[Document]:
+        """Build team documents without saving them."""
+        log.info("Creating team documents.", guild=guild)
+        teams = await self._collect_franchise_teams(guild, franchises=franchises)
 
         if not teams:
             log.debug("No teams found.", guild=guild)
-            return 0
+            return []
 
         log.debug(f"Team Count: {len(teams)}", guild=guild)
         team_docs = await load_team_docs(teams)
         for doc in team_docs:
-            doc.metadata["type"] = DocumentType.TEAMS.value
-        await save_documents(guild, org, key, team_docs)
-        log.info(f"Saved {len(team_docs)} team documents.", guild=guild)
-        return len(team_docs)
+            set_document_source(doc, DocumentSource.TEAMS)
+        return team_docs
 
-    async def refresh_document_type(
+    async def _build_team_stats_documents(
         self,
         guild: discord.Guild,
-        doc_type: DocumentType,
+        current_season: Season,
+        franchises: list[FranchiseList] | Awaitable[list[FranchiseList]] | None = None,
+    ) -> list[Document]:
+        """Build current-season team stats documents without saving them."""
+        log.info("Creating team stats documents.", guild=guild)
+        teams = await self._collect_franchise_teams(guild, franchises=franchises)
+        semaphore = asyncio.Semaphore(LLM_STATS_FETCH_CONCURRENCY)
+
+        async def fetch_team_stats(team: Team) -> TeamSeasonStats | None:
+            if not team.id:
+                return None
+            async with semaphore:
+                try:
+                    return await self.team_stats(guild, team_id=team.id, season=current_season.id)
+                except Exception as exc:
+                    log.debug(f"Unable to fetch team stats for {team.name}: {exc}", guild=guild)
+                    return None
+
+        stats_results = await asyncio.gather(*(fetch_team_stats(team) for team in teams))
+        stats = [stats for stats in stats_results if stats]
+        log.debug(f"Team Stats Count: {len(stats)}", guild=guild)
+        team_stats_docs = await load_team_stats_docs(stats, season_number=current_season.number)
+        for doc in team_stats_docs:
+            set_document_source(doc, DocumentSource.TEAM_STATS)
+        return team_stats_docs
+
+    async def _build_standings_documents(self, guild: discord.Guild, current_season: Season) -> list[Document]:
+        """Build current-season franchise and tier standings documents without saving them."""
+        log.info("Creating standings documents.", guild=guild)
+        franchise_standings = []
+        if current_season.id:
+            franchise_standings = await self.franchise_standings(guild, season_id=current_season.id)
+
+        tiers = await self.tiers(guild)
+        semaphore = asyncio.Semaphore(LLM_STATS_FETCH_CONCURRENCY)
+
+        async def fetch_tier_standings(tier: Tier):
+            if not (tier.id and current_season.number):
+                return []
+            async with semaphore:
+                try:
+                    return await self.tier_standings(guild, tier_id=tier.id, season=current_season.number)
+                except Exception as exc:
+                    log.debug(f"Unable to fetch standings for tier {tier.name}: {exc}", guild=guild)
+                    return []
+
+        team_standings_groups = await asyncio.gather(*(fetch_tier_standings(tier) for tier in tiers))
+        team_standings = [standing for group in team_standings_groups for standing in group]
+        log.debug(
+            f"Standings Count: {len(franchise_standings)} franchise, {len(team_standings)} team",
+            guild=guild,
+        )
+        standings_docs = await load_standings_docs(
+            franchise_standings=franchise_standings,
+            team_standings=team_standings,
+            season_number=current_season.number,
+        )
+        for doc in standings_docs:
+            set_document_source(doc, DocumentSource.STANDINGS)
+        return standings_docs
+
+    async def refresh_document_source(
+        self,
+        guild: discord.Guild,
+        source: DocumentSource,
         interaction: discord.Interaction | None = None,
     ) -> int:
         """
-        Refresh only a specific document type in the ChromaDB.
+        Refresh only a specific document source in the ChromaDB.
 
         Args:
             guild: Discord guild
-            doc_type: Type of documents to refresh
+            source: Source of documents to refresh
             interaction: Optional interaction for progress updates
 
         Returns:
@@ -984,45 +1082,101 @@ class LLMMixIn(RSCMixIn):
         if not (org and key):
             raise ValueError("OpenAI organization and or API key has not been configured.")
 
-        current_season = await self.current_season(guild)
-        if not current_season or not current_season.number:
-            raise ValueError("Current season is not configured.")
+        async def require_current_season() -> Season:
+            current_season = await self.current_season(guild)
+            if not current_season or not current_season.number:
+                raise ValueError("Current season is not configured.")
+            return current_season
 
-        # Delete existing documents of this type
         if interaction:
             await interaction.edit_original_response(
                 embed=YellowEmbed(
                     title="Refreshing Documents",
-                    description=f"Deleting existing {doc_type.value} documents...",
+                    description=f"Deleting existing {source.value} documents...",
                 )
             )
-        deleted = await delete_documents_by_type(guild, doc_type.value)
-        log.info(f"Deleted {deleted} existing {doc_type.value} documents.", guild=guild)
+        deleted = await delete_documents_by_source(guild, source)
+        log.info(f"Deleted {deleted} existing {source.value} documents.", guild=guild)
 
-        # Process and save new documents
         if interaction:
             await interaction.edit_original_response(
                 embed=YellowEmbed(
                     title="Refreshing Documents",
-                    description=f"Loading new {doc_type.value} documents...",
+                    description=f"Loading new {source.value} documents...",
                 )
             )
 
-        match doc_type:
-            case DocumentType.RULES:
-                count = await self._process_rules_documents(guild, org, key)
-            case DocumentType.FRANCHISES:
-                count = await self._process_franchise_documents(guild, org, key, current_season.id)
-            case DocumentType.PLAYERS:
-                count = await self._process_player_documents(guild, org, key)
-            case DocumentType.MATCHES:
-                count = await self._process_match_documents(guild, org, key, current_season.number)
-            case DocumentType.TEAMS:
-                count = await self._process_team_documents(guild, org, key)
-            case DocumentType.SEASON:
-                count = await self._process_current_season_document(guild, org, key)
+        match source:
+            case DocumentSource.RULEBOOK:
+                docs = await self._build_rulebook_documents(guild)
+            case DocumentSource.GLOSSARY:
+                docs = await self._build_glossary_documents(guild)
+            case DocumentSource.DATES:
+                docs = await self._build_dates_documents(guild)
+            case DocumentSource.HELP:
+                docs = await self._build_help_documents(guild)
+            case DocumentSource.FUNNY:
+                docs = await self._build_funny_documents(guild)
+            case DocumentSource.FRANCHISES:
+                current_season = await require_current_season()
+                docs = await self._build_franchise_documents(guild, current_season.id)
+            case DocumentSource.PLAYERS:
+                docs = await self._build_player_documents(guild)
+            case DocumentSource.PLAYER_STATS:
+                current_season = await require_current_season()
+                docs = await self._build_player_stats_documents(guild, current_season.number)
+            case DocumentSource.MATCHES:
+                current_season = await require_current_season()
+                docs = await self._build_match_documents(guild, current_season.number)
+            case DocumentSource.TEAMS:
+                docs = await self._build_team_documents(guild)
+            case DocumentSource.TEAM_STATS:
+                current_season = await require_current_season()
+                docs = await self._build_team_stats_documents(guild, current_season)
+            case DocumentSource.STANDINGS:
+                current_season = await require_current_season()
+                docs = await self._build_standings_documents(guild, current_season)
+            case DocumentSource.SEASON:
+                current_season = await require_current_season()
+                docs = await self._build_current_season_documents(guild, current_season)
 
-        return count
+        await save_documents(guild, org, key, docs)
+        log.info(f"Saved {len(docs)} {source.value} documents.", guild=guild)
+        return len(docs)
+
+    async def refresh_static_document_sources(
+        self,
+        guild: discord.Guild,
+        interaction: discord.Interaction | None = None,
+    ) -> int:
+        """Refresh all static document sources and save them in one Chroma write."""
+        org, key = await self.get_llm_credentials(guild)
+        if not (org and key):
+            raise ValueError("OpenAI organization and or API key has not been configured.")
+
+        for source in STATIC_DOCUMENT_SOURCES:
+            if interaction:
+                await interaction.edit_original_response(
+                    embed=YellowEmbed(
+                        title="Refreshing Documents",
+                        description=f"Deleting existing {source.value} documents...",
+                    )
+                )
+            deleted = await delete_documents_by_source(guild, source)
+            log.info(f"Deleted {deleted} existing {source.value} documents.", guild=guild)
+
+        if interaction:
+            await interaction.edit_original_response(
+                embed=YellowEmbed(
+                    title="Refreshing Documents",
+                    description="Loading new static documents...",
+                )
+            )
+
+        docs = await self._build_rules_documents(guild)
+        await save_documents(guild, org, key, docs)
+        log.info(f"Saved {len(docs)} static documents.", guild=guild)
+        return len(docs)
 
     async def resolve_user_identity(
         self,
@@ -1074,24 +1228,11 @@ class LLMMixIn(RSCMixIn):
         cleaned_msg = message.clean_content.replace(f"@{message.guild.me.display_name}", "").strip()
         log.debug(f"Original Question: {cleaned_msg}")
 
-        # Get user name from identity or fall back to display name
-        if user_identity:
-            user_name = user_identity.name
-        elif isinstance(message.author, discord.Member):
-            user_name = await utils.remove_prefix(message.author)
-        else:
-            user_name = message.author.display_name
-
-        bot_name = message.guild.me.display_name
-
-        # Use the regex-based pronoun replacement
-        cleaned_msg = clean_question_impl(cleaned_msg, user_name, bot_name)
-
-        log.debug(f"Cleaned Question: {cleaned_msg}")
+        log.debug(f"Question without bot mention: {cleaned_msg}")
 
         return cleaned_msg
 
-    async def format_llm_sources(self, sources: list[dict[str, str | None]]) -> str:
+    async def format_llm_sources(self, sources: list[dict[str, str | int | None]]) -> str:
         """Format source metadata for display.
 
         Args:

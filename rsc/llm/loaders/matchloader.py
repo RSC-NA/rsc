@@ -1,6 +1,7 @@
+import asyncio
 import logging
 from collections.abc import AsyncIterator, Awaitable, Callable, Iterator
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from langchain_core.document_loaders import BaseLoader
 from langchain_core.documents import Document
@@ -15,14 +16,23 @@ log = logging.getLogger("red.rsc.llm.loaders.matchloader")
 MatchFetcher = Callable[[int], Awaitable[MatchResults]]
 
 
-def is_match_in_past(match_date: datetime | None) -> bool:
-    """Check if a match date is in the past, accounting for timezone."""
+RESULT_FETCH_GRACE_PERIOD = timedelta(days=2)
+
+
+def should_fetch_match_results(
+    match_date: datetime | None,
+    grace_period: timedelta = RESULT_FETCH_GRACE_PERIOD,
+) -> bool:
+    """Check if match results are worth fetching, accounting for timezone."""
     if not match_date:
         return False
 
-    effective_tz = match_date.tzinfo or UTC
+    if match_date.tzinfo is None:
+        match_date = match_date.replace(tzinfo=UTC)
+
+    effective_tz = match_date.tzinfo
     now = datetime.now(effective_tz)
-    return match_date < now
+    return match_date <= now + grace_period
 
 
 def format_match_results(results: MatchResults | None, home_team: str, away_team: str) -> str:
@@ -105,6 +115,8 @@ Away Team: {away_team}
 class MatchDocumentLoader(BaseLoader):
     """RSC Match Document loader"""
 
+    RESULT_FETCH_CONCURRENCY = 8
+
     def __init__(
         self,
         matches: list[MatchList],
@@ -162,7 +174,16 @@ class MatchDocumentLoader(BaseLoader):
 
         doc = Document(
             page_content=content,
-            metadata={"source": "Matches API", "id": str(m.id), "chunk_index": self.chunk_index},
+            metadata={
+                "source": "Matches API",
+                "id": str(m.id),
+                "chunk_index": self.chunk_index,
+                "home_team": m.home_team,
+                "away_team": m.away_team,
+                "match_day": match_day,
+                "match_status": status,
+                "date": date_fmt,
+            },
         )
         self.chunk_index += 1
         return doc
@@ -179,24 +200,36 @@ class MatchDocumentLoader(BaseLoader):
     async def alazy_load(self) -> AsyncIterator[Document]:
         """An async lazy loader for RSC Match documents.
 
-        If a match_fetcher was provided and the match date is in the past,
-        fetches the full Match object to include results.
+        If a match_fetcher was provided and the match date is within the result
+        fetch grace window, fetches the full Match object to include results.
         """
-        for m in self.matches:
-            results: MatchResults | None = None
+        if not self.match_fetcher:
+            for m in self.matches:
+                yield self._build_document(m)
+            return
 
-            # Fetch results for past matches if we have a fetcher and valid ID
+        semaphore = asyncio.Semaphore(self.RESULT_FETCH_CONCURRENCY)
+
+        async def fetch_results(m: MatchList) -> MatchResults | None:
+            results: MatchResults | None = None
             match_id = m.id
-            if self.match_fetcher and match_id is not None and is_match_in_past(m.var_date):
+            if match_id is None or not should_fetch_match_results(m.var_date):
+                return None
+
+            async with semaphore:
                 try:
-                    results = await self.match_fetcher(match_id)
+                    results = await self.match_fetcher(match_id) if self.match_fetcher else None
                 except RscException as e:
-                    # Silently skip 404 errors (match not found)
                     if e.status == 404:
                         log.debug(f"Match {match_id} not found or invalid (HTTP {e.status})")
                     else:
                         log.error(f"Failed to fetch match {match_id} results: HTTP {e.status} - {e.reason}")
                 except Exception as e:
                     log.warning(f"Failed to fetch match {match_id} results: {e}")
+            return results
 
+        result_tasks = [fetch_results(match) for match in self.matches]
+        results_by_match = await asyncio.gather(*result_tasks)
+
+        for m, results in zip(self.matches, results_by_match, strict=True):
             yield self._build_document(m, results=results)

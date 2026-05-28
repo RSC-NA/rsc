@@ -1,5 +1,6 @@
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
+from zoneinfo import ZoneInfo
 
 import discord
 import pytest
@@ -15,7 +16,7 @@ from rscapi.models.trade_object import TradeObject
 from rscapi.models.trade_player import TradePlayer
 from rscapi.models.league_player import LeaguePlayer
 
-from rsc.enums import TransactionType
+from rsc.enums import Status, TransactionType
 from rsc.exceptions import (
     MalformedTransactionResponse,
     RscException,
@@ -56,11 +57,12 @@ def _make_player(discord_id, name="TestPlayer"):
     return p
 
 
-def _make_ptu(discord_id, name="TestPlayer", old_team=None, new_team=None, tier=None, franchise=None):
+def _make_ptu(discord_id, name="TestPlayer", old_team=None, new_team=None, tier=None, franchise=None, status=None):
     ptu = MagicMock(spec=PlayerTransactionUpdates)
     ptu.player = MagicMock(spec=LeaguePlayer)
     ptu.player.player = _make_player(discord_id, name)
     ptu.player.tier = tier
+    ptu.player.status = status
     ptu.player.team = MagicMock()
     ptu.player.team.franchise = franchise
     ptu.old_team = old_team
@@ -97,6 +99,22 @@ def _make_franchise_identifier(name="TestFranchise", gm_discord_id=999, fid=1):
     f.gm = MagicMock()
     f.gm.discord_id = gm_discord_id
     return f
+
+
+def _make_league_player(discord_id, status=Status.ROSTERED):
+    league_player = MagicMock(spec=LeaguePlayer)
+    league_player.player = _make_player(discord_id)
+    league_player.status = status
+    league_player.team = MagicMock()
+    league_player.team.franchise = _make_franchise_identifier("TestFranchise", 999)
+    return league_player
+
+
+def _make_member_remove_event(guild, user):
+    event = MagicMock(spec=discord.RawMemberRemoveEvent)
+    event.guild_id = guild.id
+    event.user = user
+    return event
 
 
 # --- Regex Tests ---
@@ -221,6 +239,102 @@ class TestLeaguePlayerFromTransaction:
         response = _make_transaction_response(player_updates=[ptu_other, ptu_target])
         result = await mixin.league_player_from_transaction(response, mock_member)
         assert result is ptu_target
+
+
+class TestMemberRemoveListener:
+    @pytest.fixture
+    def mixin(self, mock_guild):
+        mock_guild.me = MagicMock(spec=discord.Member)
+        mock_guild.me.id = 444444444
+
+        bot = MagicMock()
+        bot.get_guild.return_value = mock_guild
+
+        m = _create_mixin(bot=bot)
+        m.players = AsyncMock()
+        m.retire = AsyncMock()
+        m._notifications_enabled = AsyncMock(return_value=True)
+        m._gm_notifications_enabled = AsyncMock(return_value=True)
+        m.timezone = AsyncMock(return_value=ZoneInfo("UTC"))
+        m._trans_log_channel = AsyncMock(return_value=MagicMock(spec=discord.TextChannel))
+        m.announce_to_transaction_committee = AsyncMock()
+        m.announce_to_franchise_transactions = AsyncMock()
+        return m
+
+    @patch("rsc.transactions.transactions.utils.get_audit_log_reason", new_callable=AsyncMock)
+    async def test_verified_retire_sends_notifications(self, mock_audit_reason, mixin, mock_guild, mock_member):
+        mock_audit_reason.return_value = (None, "left")
+        player_before_retire = _make_league_player(mock_member.id, status=Status.ROSTERED)
+        player_update = _make_ptu(mock_member.id, status=Status.FORMER)
+        mixin.players.return_value = [player_before_retire]
+        mixin.retire.return_value = _make_transaction_response(type=TransactionType.RETIRE, player_updates=[player_update])
+
+        await mixin._transactions_on_member_remove(_make_member_remove_event(mock_guild, mock_member))
+
+        mixin.retire.assert_awaited_once_with(
+            mock_guild,
+            player=mock_member,
+            executor=mock_guild.me,
+            notes="Player left the RSC discord server",
+            override=True,
+        )
+        mock_audit_reason.assert_awaited_once_with(mock_guild, mock_member, discord.AuditLogAction.kick)
+        mixin.announce_to_transaction_committee.assert_awaited_once()
+        mixin.announce_to_franchise_transactions.assert_awaited_once()
+
+    @patch("rsc.transactions.transactions.utils.get_audit_log_reason", new_callable=AsyncMock)
+    async def test_unverified_retire_response_retries_once(self, mock_audit_reason, mixin, mock_guild, mock_member):
+        mock_audit_reason.return_value = (None, None)
+        player_before_retire = _make_league_player(mock_member.id, status=Status.FREE_AGENT)
+        bad_update = _make_ptu(mock_member.id, status=Status.FREE_AGENT)
+        good_update = _make_ptu(mock_member.id, status=Status.FORMER)
+        mixin.players.return_value = [player_before_retire]
+        mixin.retire.side_effect = [
+            _make_transaction_response(type=TransactionType.RETIRE, player_updates=[bad_update], id=1),
+            _make_transaction_response(type=TransactionType.RETIRE, player_updates=[good_update], id=2),
+        ]
+
+        await mixin._transactions_on_member_remove(_make_member_remove_event(mock_guild, mock_member))
+
+        assert mixin.retire.await_count == 2
+        mock_audit_reason.assert_awaited_once()
+
+    async def test_failed_retire_verification_skips_notifications(self, mixin, mock_guild, mock_member, caplog):
+        player_before_retire = _make_league_player(mock_member.id, status=Status.ROSTERED)
+        bad_update = _make_ptu(mock_member.id, status=Status.ROSTERED)
+        mixin.players.return_value = [player_before_retire]
+        mixin.retire.side_effect = [
+            _make_transaction_response(type=TransactionType.RETIRE, player_updates=[bad_update], id=1),
+            _make_transaction_response(type=TransactionType.RETIRE, player_updates=None, id=2),
+        ]
+
+        with caplog.at_level("ERROR", logger="red.rsc.transactions"):
+            await mixin._transactions_on_member_remove(_make_member_remove_event(mock_guild, mock_member))
+
+        assert mixin.retire.await_count == 2
+        mixin._notifications_enabled.assert_not_awaited()
+        mixin.announce_to_transaction_committee.assert_not_awaited()
+        assert "Unable to verify retirement" in caplog.text
+
+    @patch("rsc.transactions.transactions.utils.get_audit_log_reason", new_callable=AsyncMock)
+    async def test_non_member_user_remove_does_not_require_member_scoped_player(self, mock_audit_reason, mixin, mock_guild):
+        user = MagicMock(spec=discord.User)
+        user.id = 555555555
+        user.name = "FormerUser"
+        user.display_name = "FormerUser"
+        user.mention = "<@555555555>"
+        user.display_avatar = "https://example.com/avatar.png"
+
+        player_before_retire = _make_league_player(user.id, status=Status.ROSTERED)
+        player_update = _make_ptu(user.id, status=Status.FORMER)
+        mixin.players.return_value = [player_before_retire]
+        mixin.retire.return_value = _make_transaction_response(type=TransactionType.RETIRE, player_updates=[player_update])
+
+        await mixin._transactions_on_member_remove(_make_member_remove_event(mock_guild, user))
+
+        mock_audit_reason.assert_not_awaited()
+        mixin.announce_to_transaction_committee.assert_awaited_once()
+        mixin.announce_to_franchise_transactions.assert_awaited_once()
 
 
 # --- build_transaction_embed Tests ---
