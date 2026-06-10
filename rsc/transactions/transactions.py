@@ -69,7 +69,7 @@ FUTURE_TRADE_REGEX = re.compile(
     re.IGNORECASE,
 )
 GM_TRADE_REGEX = re.compile(r"^(?P<gm>.+?) receives:$", re.IGNORECASE)
-PLAYER_TRADE_REGEX = re.compile(r"^@(?P<player>.+?)(?:\sto\s(?P<team>[a-z0-9\x20]+))?$", re.IGNORECASE)
+PLAYER_TRADE_REGEX = re.compile(r"^@(?P<player>.+?)(?:\sto\s(?P<team>[a-z0-9\x20\x2d]+))?$", re.IGNORECASE)
 
 defaults = TransactionSettings(
     TransChannel=None,
