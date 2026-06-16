@@ -552,13 +552,16 @@ class AdminSyncMixIn(AdminMixIn):
     )
     @app_commands.describe(
         category="Guild category that holds all franchise transaction channels",
+        delete_stale="Delete channels in the category that no longer match an active franchise",
     )
     async def _validate_transaction_channels(
         self,
         interaction: discord.Interaction,
         category: discord.CategoryChannel,
+        delete_stale: bool = False,
     ):
         added: list[discord.TextChannel] = []
+        deleted: list[str] = []
         existing: list[discord.TextChannel] = []
 
         guild = interaction.guild
@@ -574,6 +577,27 @@ class AdminSyncMixIn(AdminMixIn):
             return
 
         franchises = await self.franchises(guild)
+        channel_names = []
+
+        for f in franchises:
+            if not f.name:
+                log.error("Franchise %d has no name.", f.id)
+                await interaction.edit_original_response(embed=ErrorEmbed(description=f"Franchise {f.id} has no name in the API..."))
+                return
+
+            channel_names.append(await self.get_franchise_transaction_channel_name(f.name))
+
+        if delete_stale:
+            franchise_channel_names = set(channel_names)
+
+            for channel in category.text_channels:
+                if channel.name in franchise_channel_names:
+                    continue
+
+                log.info("Deleting stale transaction channel: %s", channel.name, guild=guild)
+                deleted.append(channel.name)
+                await channel.delete(reason="Removing stale franchise transaction channels during API sync")
+
         for f in franchises:
             if not f.name:
                 log.error("Franchise %d has no name.", f.id)
@@ -657,6 +681,8 @@ class AdminSyncMixIn(AdminMixIn):
             )
         if added:
             embed.add_field(name="Created", value="\n".join([r.mention for r in added]), inline=True)
+        if delete_stale and deleted:
+            embed.add_field(name="Deleted", value="\n".join(deleted), inline=True)
 
         await interaction.edit_original_response(embed=embed)
 

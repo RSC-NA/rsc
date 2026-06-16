@@ -10,6 +10,8 @@ from rscapi.models.player_transaction_updates import PlayerTransactionUpdates
 from rscapi.models.transaction_response import TransactionResponse
 from rscapi.models.franchise_identifier import FranchiseIdentifier
 from rscapi.models.draft_pick_trade import DraftPickTrade
+from rscapi.models.franchise_futures_validation import FranchiseFuturesValidation
+from rscapi.models.franchise_futures_validation_response import FranchiseFuturesValidationResponse
 from rscapi.models.trade_franchise import TradeFranchise
 from rscapi.models.trade_item import TradeItem
 from rscapi.models.trade_object import TradeObject
@@ -115,6 +117,15 @@ def _make_member_remove_event(guild, user):
     event.guild_id = guild.id
     event.user = user
     return event
+
+
+def _make_futures_validation_response(franchise_name="Test Franchise", future_season=26, is_valid=False, violations=None):
+    return FranchiseFuturesValidationResponse(
+        franchise_name=franchise_name,
+        future_season=future_season,
+        is_valid=is_valid,
+        violations=violations or ["Missing first-round pick"],
+    )
 
 
 # --- Regex Tests ---
@@ -1157,6 +1168,110 @@ class TestTradeApi:
 
         result = await mixin.trade(mock_guild, trades=[], executor=mock_executor, notes="Test trade")
         assert result is expected
+
+
+class TestValidateFranchiseFuturesApi:
+    @pytest.fixture
+    def mixin(self, mock_guild):
+        m = _create_mixin()
+        m._api_conf = {mock_guild.id: MagicMock()}
+        m._league = {mock_guild.id: 1}
+        return m
+
+    @patch("rsc.transactions.transactions.TransactionsApi")
+    @patch("rsc.transactions.transactions.ApiClient")
+    async def test_validate_futures_success(self, mock_client_cls, mock_api_cls, mixin, mock_guild):
+        mock_api = AsyncMock()
+        expected = _make_futures_validation_response(is_valid=False)
+        mock_api.transactions_trade_validate_futures_create.return_value = expected
+        mock_api_cls.return_value = mock_api
+
+        mock_ctx = AsyncMock()
+        mock_ctx.__aenter__ = AsyncMock(return_value=mock_api)
+        mock_ctx.__aexit__ = AsyncMock(return_value=False)
+        mock_client_cls.return_value = mock_ctx
+
+        result = await mixin.validate_franchise_futures(mock_guild, "Test Franchise")
+
+        assert result is expected
+        schema = mock_api.transactions_trade_validate_futures_create.call_args.args[0]
+        assert isinstance(schema, FranchiseFuturesValidation)
+        assert schema.league == 1
+        assert schema.franchise_name == "Test Franchise"
+
+    @patch("rsc.transactions.transactions.TransactionsApi")
+    @patch("rsc.transactions.transactions.ApiClient")
+    async def test_validate_futures_api_exception(self, mock_client_cls, mock_api_cls, mixin, mock_guild):
+        mock_api = AsyncMock()
+        exc = ApiException(status=400, reason="Bad Request")
+        exc.body = json.dumps({"detail": "Validation failed"})
+        mock_api.transactions_trade_validate_futures_create.side_effect = exc
+        mock_api_cls.return_value = mock_api
+
+        mock_ctx = AsyncMock()
+        mock_ctx.__aenter__ = AsyncMock(return_value=mock_api)
+        mock_ctx.__aexit__ = AsyncMock(return_value=False)
+        mock_client_cls.return_value = mock_ctx
+
+        with pytest.raises(RscException):
+            await mixin.validate_franchise_futures(mock_guild, "Test Franchise")
+
+
+class TestValidateFuturesCommands:
+    @pytest.fixture
+    def mixin(self, mock_guild):
+        m = _create_mixin()
+        m._api_conf = {mock_guild.id: MagicMock()}
+        m._league = {mock_guild.id: 1}
+        m.validate_franchise_futures = AsyncMock()
+        m.franchises = AsyncMock()
+        m.announce_to_franchise_transactions = AsyncMock()
+        return m
+
+    @pytest.fixture
+    def interaction(self, mock_guild):
+        interaction = MagicMock(spec=discord.Interaction)
+        interaction.guild = mock_guild
+        interaction.response = MagicMock()
+        interaction.response.defer = AsyncMock()
+        interaction.followup = MagicMock()
+        interaction.followup.send = AsyncMock()
+        return interaction
+
+    async def test_validatefutures_command_sends_ephemeral_embed(self, mixin, interaction, mock_guild):
+        response = _make_futures_validation_response(is_valid=True, violations=[])
+        mixin.validate_franchise_futures.return_value = response
+
+        await TransactionMixIn._transactions_validate_futures_cmd.callback(mixin, interaction, "Test Franchise")
+
+        interaction.response.defer.assert_awaited_once_with(ephemeral=True)
+        mixin.validate_franchise_futures.assert_awaited_once_with(guild=mock_guild, franchise_name="Test Franchise")
+        kwargs = interaction.followup.send.await_args.kwargs
+        assert kwargs["ephemeral"] is True
+        assert isinstance(kwargs["embed"], discord.Embed)
+        assert kwargs["embed"].title == "Test Franchise Futures Validation"
+
+    async def test_validatefuturesall_command_pings_invalid_franchises(self, mixin, interaction, mock_guild):
+        franchise = MagicMock()
+        franchise.name = "Test Franchise"
+        franchise.gm = MagicMock()
+        franchise.gm.discord_id = 999
+        mixin.franchises.return_value = [franchise]
+        mixin.validate_franchise_futures.return_value = _make_futures_validation_response(is_valid=False)
+        mixin.announce_to_franchise_transactions.return_value = MagicMock(spec=discord.Message)
+
+        await TransactionMixIn._transactions_validate_futures_all_cmd.callback(mixin, interaction, ping=True)
+
+        interaction.response.defer.assert_awaited_once_with(ephemeral=True)
+        mixin.announce_to_franchise_transactions.assert_awaited_once()
+        announce_kwargs = mixin.announce_to_franchise_transactions.await_args.kwargs
+        assert announce_kwargs["franchise"] == "Test Franchise"
+        assert announce_kwargs["gm"] == 999
+        assert "You must reconcile these issues" in announce_kwargs["embed"].description
+
+        kwargs = interaction.followup.send.await_args.kwargs
+        assert kwargs["ephemeral"] is True
+        assert isinstance(kwargs["embed"], discord.Embed)
 
 
 class TestTransactionHistoryApi:

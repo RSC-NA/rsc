@@ -31,6 +31,7 @@ class TestTransactionsApiContract:
         "transactions_history_list_without_preload_content",
         "transactions_history_retrieve",
         "transactions_trade_create",
+        "transactions_trade_validate_futures_create",
         "transactions_draft_create",
     ]
 

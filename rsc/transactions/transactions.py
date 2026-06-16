@@ -15,6 +15,8 @@ from rscapi import ApiClient, LeaguePlayersApi, TransactionsApi
 from rscapi.exceptions import ApiException
 from rscapi.models.draft_input import DraftInput
 from rscapi.models.draft_pick_trade import DraftPickTrade
+from rscapi.models.franchise_futures_validation import FranchiseFuturesValidation
+from rscapi.models.franchise_futures_validation_response import FranchiseFuturesValidationResponse
 from rscapi.models.ir_input import IRInput
 from rscapi.models.league_player import LeaguePlayer
 from rscapi.models.player_input import PlayerInput
@@ -44,6 +46,7 @@ from rsc.exceptions import (
     TradeParserException,
     translate_api_error,
 )
+from rsc.franchises import FranchiseMixIn
 from rsc.logs import GuildLogAdapter
 from rsc.teams import TeamMixIn
 from rsc.transactions.modals import CutMsgModal, TransactionAnnouncementModal
@@ -345,6 +348,13 @@ class TransactionMixIn(RSCMixIn):
     _transactions = app_commands.Group(
         name="transactions",
         description="Transaction commands and configuration",
+        guild_only=True,
+        default_permissions=discord.Permissions(manage_roles=True),
+    )
+    _transactions_tools = app_commands.Group(
+        name="tools",
+        description="Transaction maintenance and validation tools",
+        parent=_transactions,
         guild_only=True,
         default_permissions=discord.Permissions(manage_roles=True),
     )
@@ -1593,7 +1603,7 @@ class TransactionMixIn(RSCMixIn):
             ephemeral=True,
         )
 
-    @_transactions.command(name="clearsublist", description="Clear cached substitute list")
+    @_transactions_tools.command(name="clearsublist", description="Clear cached substitute list")
     @app_commands.checks.has_permissions(manage_guild=True)
     async def _transactions_clear_sub_list(self, interaction: discord.Interaction):
         if not interaction.guild:
@@ -1862,7 +1872,175 @@ class TransactionMixIn(RSCMixIn):
         # Report result
         await interaction.followup.send(content=f"Done. Round: {round} Pick: {pick}")
 
+    @_transactions_tools.command(name="validatefutures", description="Validate a franchise future board")
+    @app_commands.autocomplete(franchise=FranchiseMixIn.franchise_autocomplete)
+    @app_commands.describe(franchise="Franchise to validate")
+    async def _transactions_validate_futures_cmd(
+        self,
+        interaction: discord.Interaction,
+        franchise: str,
+    ):
+        guild = interaction.guild
+        if not guild:
+            return
+
+        await interaction.response.defer(ephemeral=True)
+
+        try:
+            response = await self.validate_franchise_futures(guild=guild, franchise_name=franchise)
+            embed = self.build_futures_validation_embed(response)
+            await interaction.followup.send(embed=embed, ephemeral=True)
+        except RscException as exc:
+            await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc), ephemeral=True)
+        except Exception as exc:
+            log.exception(f"Error validating futures for {franchise}: {exc}", guild=guild)
+            await interaction.followup.send(embed=ExceptionErrorEmbed(str(exc)), ephemeral=True)
+
+    @_transactions_tools.command(name="validatefuturesall", description="Validate all franchise future boards")
+    @app_commands.describe(ping="Ping violating GMs in their franchise transaction channels")
+    async def _transactions_validate_futures_all_cmd(
+        self,
+        interaction: discord.Interaction,
+        ping: bool = False,
+    ):
+        guild = interaction.guild
+        if not guild:
+            return
+
+        await interaction.response.defer(ephemeral=True)
+
+        try:
+            franchises = await self.franchises(guild)
+        except RscException as exc:
+            await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc), ephemeral=True)
+            return
+        except Exception as exc:
+            log.exception(f"Error fetching franchises for futures validation: {exc}", guild=guild)
+            await interaction.followup.send(embed=ExceptionErrorEmbed(str(exc)), ephemeral=True)
+            return
+
+        validation_results: list[FranchiseFuturesValidationResponse] = []
+        validation_failures: list[str] = []
+        pinged_franchises: list[str] = []
+        ping_failures: list[str] = []
+
+        for franchise in franchises:
+            if not franchise.name:
+                continue
+
+            try:
+                result = await self.validate_franchise_futures(guild=guild, franchise_name=franchise.name)
+                validation_results.append(result)
+
+                if not ping or result.is_valid:
+                    continue
+
+                if not franchise.gm or not franchise.gm.discord_id:
+                    ping_failures.append(f"{result.franchise_name}: missing GM discord ID")
+                    continue
+
+                message = self.build_futures_validation_channel_message(result)
+                sent_message = await self.announce_to_franchise_transactions(
+                    guild=guild,
+                    franchise=result.franchise_name,
+                    gm=franchise.gm.discord_id,
+                    embed=YellowEmbed(
+                        title=f"{result.franchise_name} Futures Validation",
+                        description=message,
+                    ),
+                )
+
+                if sent_message:
+                    pinged_franchises.append(result.franchise_name)
+                else:
+                    ping_failures.append(f"{result.franchise_name}: missing transaction channel")
+            except RscException as exc:
+                validation_failures.append(f"{franchise.name}: validation failed ({exc})")
+            except Exception as exc:
+                log.exception(f"Error validating futures for {franchise.name}: {exc}", guild=guild)
+                validation_failures.append(f"{franchise.name}: unexpected error")
+
+        embed = self.build_futures_validation_summary_embed(
+            validation_results=validation_results,
+            validation_failures=validation_failures,
+            ping=ping,
+            pinged_franchises=pinged_franchises,
+            ping_failures=ping_failures,
+        )
+        await interaction.followup.send(embed=embed, ephemeral=True)
+
     # Functions
+
+    def build_futures_validation_channel_message(self, response: FranchiseFuturesValidationResponse) -> str:
+        season = f"Season {response.future_season}" if response.future_season is not None else "Future board"
+        if response.is_valid:
+            return f"{season} is valid."
+
+        violations = "\n".join(f"- {violation}" for violation in response.violations) or "- Unknown violation"
+        return (
+            f"{season} has the following violations:\n{violations}\n\n"
+            "You must reconcile these issues in order to trade futures within the current season."
+        )
+
+    def build_futures_validation_embed(self, response: FranchiseFuturesValidationResponse) -> discord.Embed:
+        season = f"Season {response.future_season}" if response.future_season is not None else "Future board"
+        if response.is_valid:
+            return SuccessEmbed(
+                title=f"{response.franchise_name} Futures Validation",
+                description=f"{season} is valid.",
+            )
+
+        embed = YellowEmbed(
+            title=f"{response.franchise_name} Futures Validation",
+            description=f"{season} has {len(response.violations)} violation(s).",
+        )
+        embed.add_field(
+            name="Violations",
+            value="\n".join(f"- {violation}" for violation in response.violations)[:1024] or "None",
+            inline=False,
+        )
+        return embed
+
+    def build_futures_validation_summary_embed(
+        self,
+        validation_results: list[FranchiseFuturesValidationResponse],
+        validation_failures: list[str],
+        ping: bool,
+        pinged_franchises: list[str],
+        ping_failures: list[str],
+    ) -> discord.Embed:
+        invalid_results = [result for result in validation_results if not result.is_valid]
+        valid_results = [result for result in validation_results if result.is_valid]
+
+        embed: discord.Embed
+        if invalid_results:
+            embed = YellowEmbed(
+                title="Futures Validation Summary",
+                description=f"Validated {len(validation_results)} franchise future boards.",
+            )
+        else:
+            embed = SuccessEmbed(
+                title="Futures Validation Summary",
+                description=f"Validated {len(validation_results)} franchise future boards with no violations.",
+            )
+
+        embed.add_field(name="Valid", value=str(len(valid_results)), inline=True)
+        embed.add_field(name="Violations", value=str(len(invalid_results)), inline=True)
+        embed.add_field(name="Errors", value=str(len(validation_failures)), inline=True)
+
+        if invalid_results:
+            invalid_lines = [f"{result.franchise_name} ({len(result.violations)}): {result.violations[0]}" for result in invalid_results]
+            embed.add_field(name="Violating Franchises", value="\n".join(invalid_lines)[:1024], inline=False)
+
+        if validation_failures:
+            embed.add_field(name="Validation Failures", value="\n".join(validation_failures)[:1024], inline=False)
+
+        if ping:
+            embed.add_field(name="Ping GMs", value="Yes", inline=True)
+            embed.add_field(name="Pinged", value="\n".join(pinged_franchises)[:1024] or "None", inline=False)
+            embed.add_field(name="Ping Failures", value="\n".join(ping_failures)[:1024] or "None", inline=False)
+
+        return embed
 
     async def announce_transaction(
         self,
@@ -2852,6 +3030,24 @@ class TransactionMixIn(RSCMixIn):
                 )
                 log.debug(f"Schema: {pformat(schema)}", guild=guild)
                 return await api.transactions_trade_create(schema)
+            except ApiException as exc:
+                raise RscException(response=exc)
+
+    async def validate_franchise_futures(
+        self,
+        guild: discord.Guild,
+        franchise_name: str,
+    ) -> FranchiseFuturesValidationResponse:
+        """Validate a franchise future board."""
+        async with ApiClient(self._api_conf[guild.id]) as client:
+            api = TransactionsApi(client)
+            try:
+                schema = FranchiseFuturesValidation(
+                    league=self._league[guild.id],
+                    franchise_name=franchise_name,
+                )
+                log.debug(f"Futures validation schema: {schema}", guild=guild)
+                return await api.transactions_trade_validate_futures_create(schema)
             except ApiException as exc:
                 raise RscException(response=exc)
 
