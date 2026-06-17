@@ -73,13 +73,13 @@ class AdminMembersMixIn(AdminMixIn):
         else:
             embed.description = f"Member: {member.mention}"
 
-        history.sort(key=lambda x: x.date_changed if x.date_changed else "None", reverse=True)
+        history.sort(key=lambda x: x.date_changed or "None", reverse=True)
         log.debug(f"Post sort: {history}")
 
         embed.add_field(name="API Name", value="\n".join([h.old_name for h in history]))
         embed.add_field(
             name="Date",
-            value="\n".join([(h.date_changed.strftime("%-m/%-d/%y") if isinstance(h.date_changed, datetime) else "None") for h in history]),
+            value="\n".join([(h.date_changed.strftime("%-m-%d-%y") if h.date_changed else "None") for h in history]),
         )
         await interaction.followup.send(embed=embed)
 

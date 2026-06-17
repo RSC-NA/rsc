@@ -1,9 +1,7 @@
-import json
 import logging
 from typing import cast
 
 import discord
-from pydantic import ValidationError
 from redbot.core import app_commands, commands
 from rscapi import ApiClient, MembersApi
 from rscapi.exceptions import ApiException
@@ -1116,19 +1114,13 @@ class MemberMixIn(RSCMixIn):
             except ApiException as exc:
                 raise RscException(response=exc)
 
-    async def name_history(self, guild: discord.Guild, member: discord.Member) -> list[NameChangeHistory]:
+    async def name_history(self, guild: discord.Guild, member: discord.Member, offset: int = 0, limit: int = 25) -> list[NameChangeHistory]:
         async with ApiClient(self._api_conf[guild.id]) as client:
             api = MembersApi(client)
             try:
                 log.debug(f"Fetching name history for {member.id}", guild=guild)
-                history = await api.members_name_changes_list(member.id)
+                history = await api.members_name_changes_list(member.id, offset=offset, limit=limit)
                 return history.results
-            except ValidationError:
-                response = await api.members_name_changes_list_without_preload_content(member.id)
-                payload = json.loads(await response.read())
-                if isinstance(payload, list):
-                    return [NameChangeHistory.model_construct(**item) for item in payload]
-                return [NameChangeHistory.model_construct(**item) for item in payload.get("results", [])]
             except ApiException as exc:
                 raise RscException(response=exc)
 

@@ -1,10 +1,8 @@
-import json
 import logging
 from datetime import UTC, datetime, timedelta
 from typing import cast
 
 import discord
-from pydantic import ValidationError
 from redbot.core import app_commands
 from rscapi import ApiClient, TrackerIDInput, TrackerLinksApi
 from rscapi.exceptions import ApiException
@@ -449,16 +447,6 @@ class TrackerMixIn(RSCMixIn):
                     offset=offset,
                 )
                 return trackers.results
-            except ValidationError:
-                response = await api.tracker_links_list_without_preload_content(
-                    status=status_filter,
-                    discord_id=player_id,
-                    member_name=name,
-                    limit=limit,
-                    offset=offset,
-                )
-                payload = json.loads(await response.read())
-                return [TrackerLink.model_construct(**item) for item in payload.get("results", [])]
             except ApiException as exc:
                 raise RscException(response=exc)
 
