@@ -110,7 +110,7 @@ class FreeAgentMixIn(RSCMixIn):
         free_agents = await self.free_agents(guild, tier)
         free_agents.extend(await self.permanent_free_agents(guild, tier))
 
-        fa_fmt_list: list[str] = []
+        fa_fmt_list: list[tuple[str, int | None]] = []
         for fa in free_agents:
             log.debug(fa.player)
             if not fa.player.discord_id:
@@ -125,16 +125,32 @@ class FreeAgentMixIn(RSCMixIn):
             fstr = fmember.display_name
             if fa.status == Status.PERM_FA:
                 fstr += " (Permanent FA)"
-            fa_fmt_list.append(fstr)
-        data = "\n".join(fa_fmt_list)
+            fa_fmt_list.append((fstr, fa.current_mmr))
+
+        fa_fmt_list.sort(key=lambda x: x[1] if x[1] is not None else float("-inf"), reverse=True)
 
         tier_role = await utils.role_by_name(guild, tier)
 
-        embed = discord.Embed(
-            title=f"{tier} Free Agents",
-            description=f"```\n{data}\n```",
-            color=tier_role.color if tier_role else discord.Color.blue(),
-        )
+        if not fa_fmt_list:
+            embed = discord.Embed(
+                title=f"{tier} Free Agents",
+                description="No free agents available",
+                color=tier_role.color if tier_role else discord.Color.blue(),
+            )
+        else:
+            embed = discord.Embed(
+                title=f"{tier} Free Agents",
+                description=f"The following free agents are available for the **{tier}** tier",
+                color=tier_role.color if tier_role else discord.Color.blue(),
+            )
+            embed.add_field(
+                name="Player",
+                value="\n".join([f[0] for f in fa_fmt_list]),
+            )
+            embed.add_field(
+                name="MMR",
+                value="\n".join([str(f[1]) if f[1] is not None else "N/A" for f in fa_fmt_list]),
+            )
 
         await interaction.followup.send(embed=embed)
 
