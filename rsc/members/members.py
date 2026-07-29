@@ -457,9 +457,9 @@ class MemberMixIn(RSCMixIn):
                 )
             return await interaction.response.send_message(embed=ApiExceptionErrorEmbed(exc), ephemeral=True)
 
-        if not (signup_season and signup_season.id):
+        if not (signup_season and signup_season.id and signup_season.number):
             return await interaction.response.send_message(
-                embed=ErrorEmbed(description="API returned a Season without an ID. Please open a modmail ticket."),
+                embed=ErrorEmbed(description="API returned a Season without an ID or number. Please open a modmail ticket."),
                 ephemeral=True,
             )
 
@@ -468,6 +468,15 @@ class MemberMixIn(RSCMixIn):
         plist = await self.players(guild, season=signup_season.id, discord_id=interaction.user.id, limit=1)
         if plist:
             log.debug("User is already signed up for the league. Using intent declaration instead.")
+            return await self._intent_to_play_flow(interaction, guild, interaction.user)
+
+        # A returning player declaring intent for the first time has no league player
+        # for the signup season yet. Route on last season instead (dropped players must re-signup).
+        log.debug(f"Checking if user played season {signup_season.number - 1}")
+        prev_list = await self.players(guild, season_number=signup_season.number - 1, discord_id=interaction.user.id, limit=1)
+        prev_lp = prev_list[0] if prev_list else None
+        if prev_lp and prev_lp.status != Status.DROPPED:
+            log.debug("User played last season. Using intent declaration instead.")
             return await self._intent_to_play_flow(interaction, guild, interaction.user)
 
         log.debug(f"{interaction.user} is signing up for the league")
