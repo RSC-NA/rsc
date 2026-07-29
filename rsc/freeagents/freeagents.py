@@ -124,7 +124,7 @@ class FreeAgentMixIn(RSCMixIn):
 
             fstr = fmember.display_name
             if fa.status == Status.PERM_FA:
-                fstr += " (Permanent FA)"
+                fstr += " (PermFA)"
             fa_fmt_list.append((fstr, fa.current_mmr))
 
         fa_fmt_list.sort(key=lambda x: x[1] if x[1] is not None else float("-inf"), reverse=True)

@@ -434,9 +434,38 @@ class MemberMixIn(RSCMixIn):
         if not guild or not isinstance(interaction.user, discord.Member):
             return
 
+        # Signups must target the season currently accepting them, not whatever
+        # season the API considers current (it rolls over mid signup period)
+        try:
+            signup_season = await self.next_signup_season(guild)
+        except LeagueNotConfigured:
+            return await interaction.response.send_message(
+                embed=YellowEmbed(
+                    title="Not Configured",
+                    description="League ID has not been configured for this guild.",
+                ),
+                ephemeral=True,
+            )
+        except RscException as exc:
+            if exc.type == "SignupsClosedException":
+                return await interaction.response.send_message(
+                    embed=YellowEmbed(
+                        title="Signups Closed",
+                        description="Signups are not currently open for RSC. Please try again when the next season is accepting signups.",
+                    ),
+                    ephemeral=True,
+                )
+            return await interaction.response.send_message(embed=ApiExceptionErrorEmbed(exc), ephemeral=True)
+
+        if not (signup_season and signup_season.id):
+            return await interaction.response.send_message(
+                embed=ErrorEmbed(description="API returned a Season without an ID. Please open a modmail ticket."),
+                ephemeral=True,
+            )
+
         # A current player must declare intent, use that instead
-        log.debug("Checking if user is already signed up for the league")
-        plist = await self.players(guild, discord_id=interaction.user.id, limit=1)
+        log.debug(f"Checking if user is already signed up for season {signup_season.number}")
+        plist = await self.players(guild, season=signup_season.id, discord_id=interaction.user.id, limit=1)
         if plist:
             log.debug("User is already signed up for the league. Using intent declaration instead.")
             return await self._intent_to_play_flow(interaction, guild, interaction.user)
