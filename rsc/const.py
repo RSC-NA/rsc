@@ -40,7 +40,7 @@ COMBINE_CUP_EMOJI = "\U0001f964"  # :cup_with_straw:
 # Links
 
 BALLCHASING_URL = "https://ballchasing.com"
-BEHAVIOR_RULES_URL = "https://docs.google.com/document/d/1AR241UmyNos8xflYqrzmpHE6Cy6xDcCtfn-32gdtPdI/"
+BEHAVIOR_RULES_URL = "https://docs.google.com/document/d/1VjpoLWmUkfkqkQFUpGhTyBMGM8OBEpZHZTyJmY5cpXA/"
 RSC_TRACKER_URL = "https://docs.google.com/spreadsheets/d/1WVQEfU1DuFMm4s4XUXKI6mdU7k54c8OmdHvjLlDTWX0"
 
 # Moderation
