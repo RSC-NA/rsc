@@ -11,6 +11,7 @@ from rscapi.models.tracker_link_linking import TrackerLinkLinking
 from rscapi.models.tracker_link_stats import TrackerLinkStats
 
 from rsc.abc import RSCMixIn
+from rsc.checks import elevated_role_required
 from rsc.const import RSC_TRACKER_URL
 from rsc.embeds import (
     ApiExceptionErrorEmbed,
@@ -19,12 +20,19 @@ from rsc.embeds import (
     SuccessEmbed,
     YellowEmbed,
 )
-from rsc.enums import TrackerLinksStatus
+from rsc.enums import StaffPositions, TrackerLinksStatus
 from rsc.exceptions import RscException
 from rsc.utils import utils
 from rsc.views import LinkButton
 
 log = logging.getLogger("red.rsc.trackers")
+
+# Elevated roles permitted to manage RSC tracker links
+TRACKER_POSITIONS = (
+    StaffPositions.ADMIN,
+    StaffPositions.NUMBERS,
+    StaffPositions.NUMBERS_HEAD,
+)
 
 
 class TrackerMixIn(RSCMixIn):
@@ -40,7 +48,7 @@ class TrackerMixIn(RSCMixIn):
 
     @_trackers.command(name="add", description="Add a new player tracker")
     @app_commands.describe(player="RSC Discord Member", tracker="Rocket League tracker link")
-    @app_commands.checks.has_permissions(manage_guild=True)
+    @elevated_role_required(*TRACKER_POSITIONS)
     async def _trackers_add_cmd(self, interaction: discord.Interaction, player: discord.Member, tracker: str):
         guild = interaction.guild
         if not guild:
@@ -66,6 +74,7 @@ class TrackerMixIn(RSCMixIn):
 
     @_trackers.command(name="list", description="List the trackers")
     @app_commands.describe(player="RSC Discord Member", ids="Show tracker ids")
+    @elevated_role_required(*TRACKER_POSITIONS)
     async def _trackers_list(self, interaction: discord.Interaction, player: discord.Member, ids: bool = False):
         guild = interaction.guild
         if not guild:
@@ -103,7 +112,7 @@ class TrackerMixIn(RSCMixIn):
 
     @_trackers.command(name="link", description="Link a tracker from player")
     @app_commands.describe(tracker_id="Tracker API ID", player="RSC Discord Member")
-    @app_commands.checks.has_permissions(manage_guild=True)
+    @elevated_role_required(*TRACKER_POSITIONS)
     async def _trackers_link_cmd(self, interaction: discord.Interaction, tracker_id: int, player: discord.Member):
         guild = interaction.guild
         if not (guild and isinstance(interaction.user, discord.Member)):
@@ -129,7 +138,7 @@ class TrackerMixIn(RSCMixIn):
 
     @_trackers.command(name="unlink", description="Unlink a tracker from player")
     @app_commands.describe(tracker_id="Tracker API ID", player="RSC Discord Member")
-    @app_commands.checks.has_permissions(manage_guild=True)
+    @elevated_role_required(*TRACKER_POSITIONS)
     async def _trackers_unlink_cmd(self, interaction: discord.Interaction, tracker_id: int, player: discord.Member):
         guild = interaction.guild
         if not (guild and isinstance(interaction.user, discord.Member)):
@@ -155,7 +164,7 @@ class TrackerMixIn(RSCMixIn):
 
     @_trackers.command(name="delete", description="Delete a tracker (Must have zero MMR pulls)")
     @app_commands.describe(tracker_id="Tracker API ID")
-    @app_commands.checks.has_permissions(manage_guild=True)
+    @elevated_role_required(*TRACKER_POSITIONS)
     async def _trackers_delete_cmd(self, interaction: discord.Interaction, tracker_id: int):
         guild = interaction.guild
         if not (guild and isinstance(interaction.user, discord.Member)):
@@ -188,6 +197,7 @@ class TrackerMixIn(RSCMixIn):
 
     @_trackers.command(name="recent", description="Show most recent RL tracker pulls")
     @app_commands.describe(status="Tracker status to query (Default: Pulled)")
+    @elevated_role_required(*TRACKER_POSITIONS)
     async def _trackers_recent_pull(
         self,
         interaction: discord.Interaction,
@@ -232,6 +242,7 @@ class TrackerMixIn(RSCMixIn):
         await interaction.followup.send(embed=embed, ephemeral=False)
 
     @_trackers.command(name="stats", description="Display RSC tracker link stats")
+    @elevated_role_required(*TRACKER_POSITIONS)
     async def _trackers_stats(
         self,
         interaction: discord.Interaction,
@@ -266,6 +277,7 @@ class TrackerMixIn(RSCMixIn):
         status="Tracker status to query (Default: Pulled)",
         days="Number of days since last update (Default: 90)",
     )
+    @elevated_role_required(*TRACKER_POSITIONS)
     async def _trackers_old(
         self,
         interaction: discord.Interaction,
@@ -308,7 +320,7 @@ class TrackerMixIn(RSCMixIn):
 
     @_trackers.command(name="merge", description="Merge tracker pulls")
     @app_commands.describe(source="Source tracker ID", dest="Destination tracker ID")
-    @app_commands.checks.has_permissions(manage_guild=True)
+    @elevated_role_required(*TRACKER_POSITIONS)
     async def _trackers_merge_cmd(
         self,
         interaction: discord.Interaction,
@@ -330,7 +342,7 @@ class TrackerMixIn(RSCMixIn):
 
     @_trackers.command(name="byid", description="Get information on a tracker ID")
     @app_commands.describe(tracker_id="Tracker ID to query")
-    @app_commands.checks.has_permissions(manage_guild=True)
+    @elevated_role_required(*TRACKER_POSITIONS)
     async def _trackers_byid_cmd(
         self,
         interaction: discord.Interaction,

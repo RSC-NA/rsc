@@ -136,6 +136,18 @@ class LLMSettings(TypedDict):
 
 
 class TransactionSettings(TypedDict):
+    """Transaction channel configuration.
+
+    The three `Trade*` keys govern what the bot does when the API reports a trade
+    performed through the web UI (a `PTR` league event). Announcements and role
+    updates get separate switches because the role/nickname half is destructive:
+    it drives edits to real members from an external system.
+
+    `AnnouncedTrades` is a bounded ring of transaction ids already announced. It
+    is the only guard that survives a cursor rewind or a poll batch re-running
+    after a reload, so it must be persisted.
+    """
+
     TransChannel: discord.TextChannel | None
     TransDMs: bool
     TransLogChannel: discord.TextChannel | None
@@ -145,6 +157,35 @@ class TransactionSettings(TypedDict):
     CutMessage: str | None
     ContractExpirationMessage: str | None
     Substitutes: list[Substitute]
+    TradeAnnouncements: bool
+    TradeRoleUpdates: bool
+    AnnouncedTrades: list[int]
+
+
+class EventSettings(TypedDict):
+    """Per guild configuration for the league event poller.
+
+    `ConfirmedId` is a lagged watermark, not a simple "last seen id". Postgres
+    hands out sequence values before commit, so a lower id can become visible
+    after a higher one was already read. `SeenIds` holds ids above the watermark
+    that were already processed and must be persisted, otherwise a restart
+    replays the lag window into the log channel.
+
+    Filters store enum *values* (`"TRN"`), never names.
+    """
+
+    EventsEnabled: bool
+    EventChannel: int | None
+    EventInterval: int
+    ConfirmedId: int
+    ConfirmedCreatedAt: str | None
+    SeenIds: list[int]
+    CategoryFilter: list[str]
+    ActionFilter: list[str]
+    SeverityFilter: list[str]
+    IncludePrivate: bool
+    IncludeGlobal: bool
+    TotalProcessed: int
 
 
 class WelcomeSettings(TypedDict):

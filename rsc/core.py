@@ -29,8 +29,10 @@ from rsc.ballchasing import BallchasingMixIn
 from rsc.combines import CombineMixIn
 from rsc.developer import DeveloperMixIn
 from rsc.devleague import DevLeagueMixIn
+from rsc.checks import bot_owner_required
 from rsc.embeds import BlueEmbed, ErrorEmbed, SuccessEmbed
 from rsc.enums import LogLevel
+from rsc.events import EventMixIn
 from rsc.extras import ExtrasMixIn
 from rsc.franchises import FranchiseMixIn
 from rsc.freeagents import FreeAgentMixIn
@@ -42,6 +44,7 @@ from rsc.members import MemberMixIn
 from rsc.moderator import ModeratorMixIn, ThreadMixIn
 from rsc.numbers import NumberMixIn
 from rsc.seasons import SeasonsMixIn
+from rsc.settings import RSCSettingsMixIn
 from rsc.stats import StatsMixIn
 from rsc.teams import TeamMixIn
 from rsc.tiers import TierMixIn
@@ -81,6 +84,7 @@ class RSC(
     CombineMixIn,
     DeveloperMixIn,
     DevLeagueMixIn,
+    EventMixIn,
     ExtrasMixIn,
     FranchiseMixIn,
     FreeAgentMixIn,
@@ -100,6 +104,7 @@ class RSC(
     TrophyMixIn,
     UtilsMixIn,
     WelcomeMixIn,
+    RSCSettingsMixIn,
     commands.Cog,
     metaclass=CompositeMetaClass,
 ):
@@ -139,6 +144,10 @@ class RSC(
         self.expire_free_agent_checkins_loop.cancel()
         self.sync_discord_roles.cancel()
         self.weekly_llm_db_refresh.cancel()
+        # tasks.Loop.__get__ hands each cog instance its own copy, so a reloaded
+        # cog sees is_running() == False and would start a second poller against
+        # the same cursor. Cancelling here is mandatory, not tidiness.
+        self.rsc_events_loop.cancel()
         await self._dm_helper.stop()
         await self.close_ballchasing_sessions()
         await self._web_runner.cleanup()
@@ -284,15 +293,13 @@ class RSC(
         return [app_commands.Choice(name=tz, value=tz) for tz in pytz.common_timezones if current.lower() in tz.lower()]
 
     # Settings
+    #
+    # The `/rsc` group itself lives on RSCSettingsMixIn so feature mixins can
+    # nest sub groups under it without importing this module (which imports
+    # every mixin). The commands still live here; CogMeta walks the full MRO.
 
-    rsc_settings = app_commands.Group(
-        name="rsc",
-        description="RSC API Configuration",
-        guild_only=True,
-        default_permissions=discord.Permissions(manage_guild=True),
-    )
-
-    @rsc_settings.command(name="key", description="Configure the RSC API key.")
+    @RSCSettingsMixIn.rsc_settings.command(name="key", description="Configure the RSC API key.")
+    @bot_owner_required()
     async def _rsc_set_key(self, interaction: discord.Interaction, key: str):
         if not interaction.guild:
             return
@@ -305,7 +312,8 @@ class RSC(
             ephemeral=True,
         )
 
-    @rsc_settings.command(name="url", description="Configure the RSC API web address.")
+    @RSCSettingsMixIn.rsc_settings.command(name="url", description="Configure the RSC API web address.")
+    @bot_owner_required()
     async def _rsc_set_url(self, interaction: discord.Interaction, url: str):
         if not interaction.guild:
             return
@@ -318,7 +326,7 @@ class RSC(
             ephemeral=True,
         )
 
-    @rsc_settings.command(name="settings", description="Display the current RSC API settings.")
+    @RSCSettingsMixIn.rsc_settings.command(name="settings", description="Display the current RSC API settings.")
     async def _rsc_settings(self, interaction: discord.Interaction):
         guild = interaction.guild
         if not guild:
@@ -348,7 +356,8 @@ class RSC(
         settings_embed.add_field(name="Time Zone", value=tz, inline=False)
         await interaction.response.send_message(embed=settings_embed, ephemeral=True)
 
-    @rsc_settings.command(name="league", description="Set the league this guild correlates to in the API")
+    @RSCSettingsMixIn.rsc_settings.command(name="league", description="Set the league this guild correlates to in the API")
+    @bot_owner_required()
     async def _rsc_league(self, interaction: discord.Interaction):
         if not interaction.guild:
             return None
@@ -366,7 +375,8 @@ class RSC(
                 embed=SuccessEmbed(description=f"Configured the server league to **{league_name}**"),
             )
 
-    @rsc_settings.command(name="setup", description="Perform some basic first time setup for the server")
+    @RSCSettingsMixIn.rsc_settings.command(name="setup", description="Perform some basic first time setup for the server")
+    @bot_owner_required()
     async def _rsc_setup(self, interaction: discord.Interaction):
         if not interaction.guild:
             return
@@ -397,9 +407,10 @@ class RSC(
         await self._set_api_key(interaction.guild, setup_modal.key.value)
         await interaction.followup.send(embed=SuccessEmbed(description="Successfully configured RSC API key and url"))
 
-    @rsc_settings.command(name="timezone", description="Set the desired time zone for the guild")
+    @RSCSettingsMixIn.rsc_settings.command(name="timezone", description="Set the desired time zone for the guild")
     @app_commands.describe(timezone="Common time zone string (Ex: America/New_York)")
     @app_commands.autocomplete(timezone=timezone_autocomplete)
+    @bot_owner_required()
     async def _rsc_timezone(self, interaction: discord.Interaction, timezone: str):
         if not interaction.guild:
             return
@@ -417,10 +428,11 @@ class RSC(
             ephemeral=True,
         )
 
-    @rsc_settings.command(
+    @RSCSettingsMixIn.rsc_settings.command(
         name="loglevel",
         description="Modify the log level of the bot (Development Feature)",
     )
+    @bot_owner_required()
     async def _rsc_dev_loglevel(self, interaction: discord.Interaction, level: LogLevel):
         logging.getLogger("red.rsc").setLevel(level)
         logging.getLogger("ballchasing").setLevel(level)

@@ -40,6 +40,7 @@ class TestMembersApiContract:
         "members_name_changes_list_without_preload_content",
         "members_make_player_create",
         "members_member_league_drop_create",
+        "members_elevated_roles_list",
     ]
 
     @pytest.mark.parametrize("method_name", EXPECTED_METHODS)
@@ -55,33 +56,67 @@ class TestMembersApiCalls:
     @pytest.mark.asyncio
     async def test_members_api_call(self, rsc_bot: RSC, mock_guild):
         """Test that members() API call doesn't raise exceptions."""
-        try:
-            result = await rsc_bot.members(mock_guild, limit=10)
-            assert result is not None
-            assert isinstance(result, list)
-            print(f"✓ members() returned {len(result)} member(s)")
-            for m in result:
-                print(f"  - Discord ID: {m.discord_id}, RSC Name: {m.rsc_name}")
-        except RscException as e:
-            pytest.fail(f"members() raised RscException: {e}")
-        except Exception as e:
-            pytest.fail(f"members() raised unexpected exception: {e}")
+        result = await rsc_bot.members(mock_guild, limit=10)
+        assert result is not None
+        assert isinstance(result, list)
+        print(f"✓ members() returned {len(result)} member(s)")
+        for m in result:
+            print(f"  - Discord ID: {m.discord_id}, RSC Name: {m.rsc_name}")
+
+    @pytest.mark.asyncio
+    async def test_member_elevated_roles_api_call(self, rsc_bot: RSC, mock_guild, mock_member):
+        """Test that member_elevated_roles() returns a bare list, not a paginated wrapper."""
+        result = await rsc_bot.member_elevated_roles(mock_guild, mock_member.id)
+        assert isinstance(result, list), f"Expected a list, got {type(result)}"
+        for r in result:
+            assert hasattr(r, "position"), "ElevatedRole should have 'position' attribute"
+            assert hasattr(r, "league"), "ElevatedRole should have 'league' attribute"
+            assert hasattr(r, "gm"), "ElevatedRole should have 'gm' attribute"
+
+    @pytest.mark.asyncio
+    async def test_every_api_position_resolves_to_enum(self, rsc_bot: RSC, mock_guild):
+        """Every `position` the API actually returns must resolve via StaffPositions.parse.
+
+        The API is asymmetric: it accepts codes as query input (`position=NUMS`)
+        but returns display labels in responses (`"Numbers"`). If parse() stops
+        covering a label, permission checks silently match nothing and the whole
+        committee loses access.
+        """
+        from rsc.enums import StaffPositions
+        from rscapi import ApiClient, ElevatedRolesApi
+
+        async with ApiClient(rsc_bot._api_conf[mock_guild.id]) as client:
+            roles = await ElevatedRolesApi(client).elevated_roles_list(limit=500)
+
+        seen = {r.position for r in roles.results if r.position}
+        if not seen:
+            pytest.skip("No elevated roles with a position on staging")
+
+        unresolved = sorted(p for p in seen if StaffPositions.parse(p) is None)
+        assert not unresolved, f"API positions not resolvable by StaffPositions.parse: {unresolved}"
+
+    @pytest.mark.asyncio
+    async def test_elevated_positions_api_call(self, rsc_bot: RSC, mock_guild, mock_member):
+        """Test that elevated_positions() resolves to a set of position strings."""
+        rsc_bot._elevated_role_cache = {}
+        result = await rsc_bot.elevated_positions(mock_guild, mock_member.id)
+        assert isinstance(result, frozenset)
+        assert all(isinstance(p, str) for p in result)
+
+        # Second call must come from cache, not the API
+        cached = await rsc_bot.elevated_positions(mock_guild, mock_member.id)
+        assert cached == result
 
     @pytest.mark.asyncio
     async def test_paged_members_api_call(self, rsc_bot: RSC, mock_guild):
         """Test that paged_members() API call doesn't raise exceptions."""
-        try:
-            count = 0
-            async for member in rsc_bot.paged_members(guild=mock_guild, per_page=3):
-                count += 1
-                if count > 5:
-                    break
-                print(f"  - Discord ID: {member.discord_id}, RSC Name: {member.rsc_name}")
-            print(f"✓ paged_members() yielded {count} member(s)")
-        except RscException as e:
-            pytest.fail(f"paged_members() raised RscException: {e}")
-        except Exception as e:
-            pytest.fail(f"paged_members() raised unexpected exception: {e}")
+        count = 0
+        async for member in rsc_bot.paged_members(guild=mock_guild, per_page=3):
+            count += 1
+            if count > 5:
+                break
+            print(f"  - Discord ID: {member.discord_id}, RSC Name: {member.rsc_name}")
+        print(f"✓ paged_members() yielded {count} member(s)")
 
     @pytest.mark.asyncio
     async def test_create_member_api_call(self, rsc_bot: RSC, mock_guild, generated_discord_member):
@@ -94,9 +129,7 @@ class TestMembersApiCalls:
         except RscException as e:
             # Expected if member already exists
             print(f"Exception: {e}")
-            pytest.fail(f"create_member() raised unexpected RscException: {e}")
-        except Exception as e:
-            pytest.fail(f"create_member() raised unexpected exception: {e}")
+            raise
 
     @pytest.mark.asyncio
     async def test_change_member_name_api_call(self, rsc_bot: RSC, mock_guild):
@@ -115,8 +148,6 @@ class TestMembersApiCalls:
         except RscException as e:
             # Some name changes may fail due to business rules
             print(f"✓ change_member_name() handled business rule: {e.reason}")
-        except Exception as e:
-            pytest.fail(f"change_member_name() raised unexpected exception: {e}")
 
     @pytest.mark.asyncio
     async def test_player_stats_api_call(self, rsc_bot: RSC, mock_guild):
@@ -139,31 +170,23 @@ class TestMembersApiCalls:
             if e.status == 404:
                 print("✓ player_stats() correctly handled player with no stats (404)")
             else:
-                pytest.fail(f"player_stats() raised unexpected RscException: {e}")
-        except Exception as e:
-            pytest.fail(f"player_stats() raised unexpected exception: {e}")
+                raise
 
     @pytest.mark.asyncio
     async def test_name_history_api_call(self, rsc_bot: RSC, mock_guild):
         """Test that name_history() API call doesn't raise exceptions."""
-        try:
-            # Get a member first
-            members = await rsc_bot.members(mock_guild, limit=1)
-            if not members:
-                pytest.skip("No members found to test name history")
+        members = await rsc_bot.members(mock_guild, limit=1)
+        if not members:
+            pytest.skip("No members found to test name history")
 
-            member = members[0]
-            mock_player = MagicMock(spec=discord.Member)
-            mock_player.id = member.discord_id
+        member = members[0]
+        mock_player = MagicMock(spec=discord.Member)
+        mock_player.id = member.discord_id
 
-            result = await rsc_bot.name_history(guild=mock_guild, member=mock_player)
-            assert result is not None
-            assert isinstance(result, list)
-            print(f"✓ name_history() returned {len(result)} name change(s)")
-        except RscException as e:
-            pytest.fail(f"name_history() raised RscException: {e}")
-        except Exception as e:
-            pytest.fail(f"name_history() raised unexpected exception: {e}")
+        result = await rsc_bot.name_history(guild=mock_guild, member=mock_player)
+        assert result is not None
+        assert isinstance(result, list)
+        print(f"✓ name_history() returned {len(result)} name change(s)")
 
     @pytest.mark.asyncio
     async def test_transfer_membership_api_call(self, rsc_bot: RSC, mock_guild, mock_member):
@@ -179,8 +202,6 @@ class TestMembersApiCalls:
         except RscException as e:
             # Expected to fail for non-existent members or other business rules
             print(f"✓ transfer_membership() correctly handled business rule: {e.reason}")
-        except Exception as e:
-            pytest.fail(f"transfer_membership() raised unexpected exception: {e}")
 
     @pytest.mark.asyncio
     async def test_delete_member_api_call(self, rsc_bot: RSC, mock_guild, generated_discord_member):
@@ -196,8 +217,6 @@ class TestMembersApiCalls:
                 print("✓ delete_member() correctly handled non-existent member (404)")
             else:
                 print(f"✓ delete_member() handled business rule: {e.reason}")
-        except Exception as e:
-            pytest.fail(f"delete_member() raised unexpected exception: {e}")
 
 
 class TestMembersApiDataStructures:
@@ -206,33 +225,27 @@ class TestMembersApiDataStructures:
     @pytest.mark.asyncio
     async def test_member_structure(self, rsc_bot: RSC, mock_guild):
         """Test that member objects have expected attributes."""
-        try:
-            members = await rsc_bot.members(mock_guild, limit=1)
-            if members:
-                member = members[0]
-                # Check for expected attributes
-                assert hasattr(member, "discord_id"), "Member should have 'discord_id' attribute"
-                assert hasattr(member, "rsc_name"), "Member should have 'rsc_name' attribute"
-                assert hasattr(member, "username"), "Member should have 'username' attribute"
-                print(f"✓ Member structure valid - Discord ID: {member.discord_id}, RSC Name: {member.rsc_name}")
-        except Exception as e:
-            pytest.fail(f"Member structure test failed: {e}")
+        members = await rsc_bot.members(mock_guild, limit=1)
+        if members:
+            member = members[0]
+            # Check for expected attributes
+            assert hasattr(member, "discord_id"), "Member should have 'discord_id' attribute"
+            assert hasattr(member, "rsc_name"), "Member should have 'rsc_name' attribute"
+            assert hasattr(member, "username"), "Member should have 'username' attribute"
+            print(f"✓ Member structure valid - Discord ID: {member.discord_id}, RSC Name: {member.rsc_name}")
 
     @pytest.mark.asyncio
     async def test_league_player_from_member(self, rsc_bot: RSC, mock_guild):
         """Test that league_player_from_member() helper function works."""
-        try:
-            members = await rsc_bot.members(mock_guild, limit=1)
-            if not members:
-                pytest.skip("No members found to test league_player_from_member")
+        members = await rsc_bot.members(mock_guild, limit=1)
+        if not members:
+            pytest.skip("No members found to test league_player_from_member")
 
-            member = members[0]
-            result = await rsc_bot.league_player_from_member(mock_guild, member)
+        member = members[0]
+        result = await rsc_bot.league_player_from_member(mock_guild, member)
 
-            # Result can be None if member is not a league player
-            print(f"✓ league_player_from_member() returned: {type(result)}")
-        except Exception as e:
-            pytest.fail(f"league_player_from_member() failed: {e}")
+        # Result can be None if member is not a league player
+        print(f"✓ league_player_from_member() returned: {type(result)}")
 
 
 class TestMembersApiBusinessLogic:
@@ -261,9 +274,7 @@ class TestMembersApiBusinessLogic:
             if e.status in [409, 405]:
                 print(f"✓ signup() correctly handled business rule (status {e.status}): {e.reason}")
             else:
-                pytest.fail(f"signup() raised unexpected RscException: {e}")
-        except Exception as e:
-            pytest.fail(f"signup() raised unexpected exception: {e}")
+                raise
 
     @pytest.mark.asyncio
     async def test_permfa_signup_api_call(self, rsc_bot: RSC, mock_guild, generated_discord_member):
@@ -288,9 +299,7 @@ class TestMembersApiBusinessLogic:
             if e.status in [409, 405]:
                 print(f"✓ permfa_signup() correctly handled business rule (status {e.status}): {e.reason}")
             else:
-                pytest.fail(f"permfa_signup() raised unexpected RscException: {e}")
-        except Exception as e:
-            pytest.fail(f"permfa_signup() raised unexpected exception: {e}")
+                raise
 
     @pytest.mark.asyncio
     async def test_declare_intent_api_call(self, rsc_bot: RSC, mock_guild, mock_member):
@@ -308,9 +317,7 @@ class TestMembersApiBusinessLogic:
             if e.status in [409, 404, 405]:
                 print(f"✓ declare_intent() correctly handled business rule (status {e.status}): {e.reason}")
             else:
-                pytest.fail(f"declare_intent() raised unexpected RscException: {e}")
-        except Exception as e:
-            pytest.fail(f"declare_intent() raised unexpected exception: {e}")
+                raise
 
 
 if __name__ == "__main__":

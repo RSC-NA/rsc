@@ -48,6 +48,7 @@ from rsc.franchises import FranchiseMixIn
 from rsc.logs import GuildLogAdapter
 from rsc.teams import TeamMixIn
 from rsc.transactions.modals import CutMsgModal, TransactionAnnouncementModal
+from rsc.transactions.trade_announce import announce_trade, apply_trade_role_updates
 from rsc.transactions.roles import (
     update_cut_player_discord,
     update_nonplaying_discord,
@@ -82,6 +83,9 @@ defaults = TransactionSettings(
     CutMessage=None,
     ContractExpirationMessage=None,
     Substitutes=[],
+    TradeAnnouncements=True,
+    TradeRoleUpdates=True,
+    AnnouncedTrades=[],
 )
 
 
@@ -372,6 +376,8 @@ class TransactionMixIn(RSCMixIn):
         notifications = await self._notifications_enabled(interaction.guild)
         gm_notifications = await self._gm_notifications_enabled(interaction.guild)
         dms = await self._trans_dms_enabled(interaction.guild)
+        trade_announcements = await self._trade_announcements_enabled(interaction.guild)
+        trade_role_updates = await self._trade_role_updates_enabled(interaction.guild)
         cut_msg = await self._get_cut_message(interaction.guild) or "None"
 
         settings_embed = discord.Embed(
@@ -385,6 +391,10 @@ class TransactionMixIn(RSCMixIn):
         settings_embed.add_field(name="GM Notifications Enabled", value=gm_notifications, inline=False)
 
         settings_embed.add_field(name="Direct Messages Enabled", value=dms, inline=False)
+
+        settings_embed.add_field(name="Website Trade Announcements", value=trade_announcements, inline=True)
+
+        settings_embed.add_field(name="Website Trade Role Updates", value=trade_role_updates, inline=True)
 
         # Check channel values before mention to avoid exception
         settings_embed.add_field(
@@ -434,6 +444,105 @@ class TransactionMixIn(RSCMixIn):
             ),
             ephemeral=True,
         )
+
+    @_transactions_tools.command(
+        name="tradeannouncements",
+        description="Toggle announcing trades performed on the RSC website",
+    )
+    @app_commands.checks.has_permissions(manage_guild=True)
+    async def transactions_trade_announcements_cmd(self, interaction: discord.Interaction):
+        """Toggle announcements for trades performed outside Discord."""
+        guild = interaction.guild
+        if not guild:
+            return
+
+        status = await self._trade_announcements_enabled(guild)
+        status ^= True
+        await self._set_trade_announcements(guild, status)
+        result = "**enabled**" if status else "**disabled**"
+        await interaction.response.send_message(
+            embed=SuccessEmbed(
+                description=(
+                    f"Announcements for website trades are now {result}.\n\nTrades performed with `/transactions trade` are unaffected."
+                )
+            ),
+            ephemeral=True,
+        )
+
+    @_transactions_tools.command(
+        name="traderoleupdates",
+        description="Toggle role and nickname updates for trades performed on the RSC website",
+    )
+    @app_commands.checks.has_permissions(manage_guild=True)
+    async def transactions_trade_role_updates_cmd(self, interaction: discord.Interaction):
+        """Toggle Discord role/nickname reconciliation for website trades."""
+        guild = interaction.guild
+        if not guild:
+            return
+
+        status = await self._trade_role_updates_enabled(guild)
+        status ^= True
+        await self._set_trade_role_updates(guild, status)
+        result = "**enabled**" if status else "**disabled**"
+        await interaction.response.send_message(
+            embed=SuccessEmbed(
+                description=(
+                    f"Role and nickname updates for website trades are now {result}.\n\n"
+                    "When disabled, traded players keep their old franchise role and prefix "
+                    "until a sync is run."
+                )
+            ),
+            ephemeral=True,
+        )
+
+    @_transactions_tools.command(
+        name="processtrade",
+        description="Announce a website trade by transaction ID and reapply player roles",
+    )
+    @app_commands.describe(
+        transaction_id="Transaction ID from the RSC website",
+        roles="Also reapply Discord roles and nicknames for traded players",
+    )
+    @app_commands.checks.has_permissions(manage_guild=True)
+    async def transactions_announce_cmd(
+        self,
+        interaction: discord.Interaction,
+        transaction_id: int,
+        roles: bool = True,
+    ):
+        """Manually drive a trade through the announcement path.
+
+        The event poller advances its cursor without running handlers in several
+        cases (an oversized backlog, initial bootstrap, or a handler that raised),
+        so a trade can legitimately never reach Discord. This is the recovery path.
+        """
+        guild = interaction.guild
+        if not guild:
+            return
+
+        await interaction.response.defer(ephemeral=True)
+
+        try:
+            response = await self.transaction_history_by_id(guild, transaction_id)
+        except RscException as exc:
+            return await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc), ephemeral=True)
+
+        msg = await announce_trade(self, guild, response)
+        if not msg:
+            return await interaction.followup.send(
+                embed=ErrorEmbed(description="Transaction channel is not configured."),
+                ephemeral=True,
+            )
+
+        embed = SuccessEmbed(description=f"Transaction **{transaction_id}** has been announced.")
+        embed.add_field(name="Announcement", value=msg.jump_url, inline=False)
+
+        if roles:
+            errors = await apply_trade_role_updates(self, guild, response)
+            if errors:
+                embed.add_long_field(name="Role Update Errors", value="\n".join(f"- {e}" for e in errors))
+
+        return await interaction.followup.send(embed=embed, ephemeral=True)
 
     @_transactions.command(name="gmnotifications", description="Toggle GM notifications on or off")
     @app_commands.checks.has_permissions(manage_guild=True)
@@ -3109,6 +3218,18 @@ class TransactionMixIn(RSCMixIn):
 
     async def _set_gm_notifications(self, guild: discord.Guild, enabled: bool):
         await self.config.custom("Transactions", str(guild.id)).TransGMNotifications.set(enabled)
+
+    async def _trade_announcements_enabled(self, guild: discord.Guild) -> bool:
+        return await self.config.custom("Transactions", str(guild.id)).TradeAnnouncements()
+
+    async def _set_trade_announcements(self, guild: discord.Guild, enabled: bool):
+        await self.config.custom("Transactions", str(guild.id)).TradeAnnouncements.set(enabled)
+
+    async def _trade_role_updates_enabled(self, guild: discord.Guild) -> bool:
+        return await self.config.custom("Transactions", str(guild.id)).TradeRoleUpdates()
+
+    async def _set_trade_role_updates(self, guild: discord.Guild, enabled: bool):
+        await self.config.custom("Transactions", str(guild.id)).TradeRoleUpdates.set(enabled)
 
     async def _trans_dms_enabled(self, guild: discord.Guild) -> bool:
         return await self.config.custom("Transactions", str(guild.id)).TransDMs()

@@ -174,7 +174,7 @@ COMBINES_HOW_TO_PLAY_3 = (
 COMBINES_HOW_TO_PLAY_4 = (
     "## Report score and upload replays\n\n"
     "After you have played your 3 matches, the away team will need to upload the replays. The person that created the lobby will report the score and the person from the away team that is uploading the replays will verify the score **after** uploading the replays. It is usually the person on the top of the list that is responsible for uploading the replays. If you are unsure how or are on a console, coordinate with your teammates on who will upload the replays. You can also ask the home team if you don't have anyone on your team capable of uploading them.\n\n"
-    "Note: Replays can usually be found in the following directory. `Documents\My Games\Rocket League\TAGame\Demos`\n"
+    "Note: Replays can usually be found in the following directory. `Documents\\My Games\\Rocket League\\TAGame\\Demos`\n"
 )
 COMBINES_HOW_TO_PLAY_5 = (
     "## Queue again!\n\n"

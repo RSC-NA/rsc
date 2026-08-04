@@ -44,53 +44,37 @@ class TestFranchisesApiCalls:
     @pytest.mark.asyncio
     async def test_franchises_api_call(self, rsc_bot: RSC, mock_guild):
         """Test that franchises() API call doesn't raise exceptions."""
-        try:
-            result = await rsc_bot.franchises(mock_guild)
-            assert result is not None
-            assert isinstance(result, list)
-            print(f"✓ franchises() returned {len(result)} franchise(s)")
-            for f in result:
-                gm_name = f.gm.rsc_name if f.gm else "None"
-                print(f"  - ID: {f.id}, Name: {f.name}, GM: {gm_name}")
-        except RscException as e:
-            # pytest.fail(f"franchises() raised RscException: {str(e)}")
-            pytest.fail(reason=str(e))
-        except Exception as e:
-            pytest.fail(f"franchises() raised unexpected exception: {str(e)}")
+        result = await rsc_bot.franchises(mock_guild)
+        assert result is not None
+        assert isinstance(result, list)
+        print(f"✓ franchises() returned {len(result)} franchise(s)")
+        for f in result:
+            gm_name = f.gm.rsc_name if f.gm else "None"
+            print(f"  - ID: {f.id}, Name: {f.name}, GM: {gm_name}")
 
     @pytest.mark.asyncio
     async def test_franchise_logo_api_call(self, rsc_bot: RSC, mock_guild):
         """Test that franchise_logo() API call doesn't raise exceptions."""
-        try:
-            # Get a franchise first
-            franchises = await rsc_bot.franchises(mock_guild)
-            if not franchises:
-                pytest.skip("No franchises found to test logo")
+        franchises = await rsc_bot.franchises(mock_guild)
+        if not franchises:
+            pytest.skip("No franchises found to test logo")
 
-            franchise = franchises[0]
-            if not franchise.id:
-                pytest.skip("Franchise has no ID")
+        franchise = franchises[0]
+        if not franchise.id:
+            pytest.skip("Franchise has no ID")
 
-            result = await rsc_bot.franchise_logo(mock_guild, franchise.id)
-            if result:
-                print(f"✓ franchise_logo() returned URL: {result}")
-            else:
-                print("✓ franchise_logo() returned None (no logo)")
-
-        except RscException as e:
-            pytest.fail(f"franchise_logo() raised RscException: {str(e)}")
-        except Exception as e:
-            pytest.fail(f"franchise_logo() raised unexpected exception: {str(e)}")
+        result = await rsc_bot.franchise_logo(mock_guild, franchise.id)
+        if result:
+            print(f"✓ franchise_logo() returned URL: {result}")
+        else:
+            print("✓ franchise_logo() returned None (no logo)")
 
     @pytest.mark.asyncio
     @pytest.mark.skip(reason="Test not correctly verified yet")
     async def test_create_franchise(self, rsc_bot: RSC, mock_guild, mock_member):
         """Test that create_franchise() API call raises NotImplementedError."""
-        try:
-            new_franchise = await rsc_bot.create_franchise(guild=mock_guild, name="Test Franchise", prefix="TF", gm=mock_member)
-            pytest.fail("create_franchise() should raise NotImplementedError")
-        except Exception as e:
-            pytest.fail(f"create_franchise() raised unexpected exception: {str(e)}")
+        new_franchise = await rsc_bot.create_franchise(guild=mock_guild, name="Test Franchise", prefix="TF", gm=mock_member)
+        pytest.fail("create_franchise() should raise NotImplementedError")
 
         assert new_franchise is None
         assert isinstance(new_franchise, Franchise)
@@ -207,21 +191,18 @@ class TestFranchisesApiDataStructures:
     @pytest.mark.asyncio
     async def test_franchise_structure(self, rsc_bot: RSC, mock_guild):
         """Test that franchise objects have expected attributes."""
-        try:
-            franchises = await rsc_bot.franchises(mock_guild)
-            if not franchises:
-                pytest.skip("No franchises found to test logo")
+        franchises = await rsc_bot.franchises(mock_guild)
+        if not franchises:
+            pytest.skip("No franchises found to test logo")
 
-            franchise = franchises[0]
+        franchise = franchises[0]
 
-            # Check for expected attributes
-            assert hasattr(franchise, "id"), "Franchise should have 'id' attribute"
-            assert hasattr(franchise, "name"), "Franchise should have 'name' attribute"
-            assert hasattr(franchise, "prefix"), "Franchise should have 'prefix' attribute"
-            assert hasattr(franchise, "gm"), "Franchise should have 'gm' attribute"
-            print(f"✓ Franchise structure valid - ID: {franchise.id}, Name: {franchise.name}")
-        except Exception as e:
-            pytest.fail(f"Franchise structure test failed: {str(e)}")
+        # Check for expected attributes
+        assert hasattr(franchise, "id"), "Franchise should have 'id' attribute"
+        assert hasattr(franchise, "name"), "Franchise should have 'name' attribute"
+        assert hasattr(franchise, "prefix"), "Franchise should have 'prefix' attribute"
+        assert hasattr(franchise, "gm"), "Franchise should have 'gm' attribute"
+        print(f"✓ Franchise structure valid - ID: {franchise.id}, Name: {franchise.name}")
 
 
 class TestFranchisesApiHelperFunctions:
@@ -247,8 +228,6 @@ class TestFranchisesApiHelperFunctions:
 
         except ValueError as e:
             print(f"✓ franchise_gm_by_name() correctly handled multiple matches: {e}")
-        except Exception as e:
-            pytest.fail(f"franchise_gm_by_name() failed: {str(e)}")
 
     @pytest.mark.asyncio
     async def test_fetch_franchise(self, rsc_bot: RSC, mock_guild):
@@ -270,30 +249,22 @@ class TestFranchisesApiHelperFunctions:
 
         except ValueError as e:
             print(f"✓ fetch_franchise() correctly handled multiple matches: {e}")
-        except Exception as e:
-            pytest.fail(f"fetch_franchise() failed: {str(e)}")
 
     @pytest.mark.asyncio
     async def test_franchise_name_to_id(self, rsc_bot: RSC, mock_guild):
         """Test that franchise_name_to_id() helper function works."""
-        try:
-            franchises = await rsc_bot.franchises(mock_guild)
-            if not franchises:
-                pytest.skip("No franchises found to test franchise_name_to_id")
+        franchises = await rsc_bot.franchises(mock_guild)
+        if not franchises:
+            pytest.skip("No franchises found to test franchise_name_to_id")
 
-            franchise = franchises[0]
-            if not franchise.name:
-                pytest.skip("Franchise has no name")
+        franchise = franchises[0]
+        if not franchise.name:
+            pytest.skip("Franchise has no name")
 
-            result = await rsc_bot.franchise_name_to_id(mock_guild, franchise.name)
-            assert isinstance(result, int)
-            assert result == franchise.id
-            print(f"✓ franchise_name_to_id() returned ID: {result}")
-
-        except AttributeError as e:
-            pytest.fail(f"franchise_name_to_id() raised AttributeError: {str(e)}")
-        except Exception as e:
-            pytest.fail(f"franchise_name_to_id() failed: {str(e)}")
+        result = await rsc_bot.franchise_name_to_id(mock_guild, franchise.name)
+        assert isinstance(result, int)
+        assert result == franchise.id
+        print(f"✓ franchise_name_to_id() returned ID: {result}")
 
     @pytest.mark.asyncio
     async def test_full_logo_url(self, rsc_bot: RSC, mock_guild):
@@ -308,8 +279,6 @@ class TestFranchisesApiHelperFunctions:
         except RuntimeError as e:
             # Expected if API host not configured
             print(f"✓ full_logo_url() correctly handled missing host: {e}")
-        except Exception as e:
-            pytest.fail(f"full_logo_url() failed: {str(e)}")
 
 
 if __name__ == "__main__":

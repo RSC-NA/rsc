@@ -39,32 +39,22 @@ class TestSeasonsApiCalls:
     @pytest.mark.asyncio
     async def test_seasons_api_call(self, rsc_bot: RSC, mock_guild):
         """Test that seasons() API call doesn't raise exceptions."""
-        try:
-            result = await rsc_bot.seasons(mock_guild)
-            assert result is not None
-            assert isinstance(result, list)
-            print(f"✓ seasons() returned {len(result)} season(s)")
-            for s in result:
-                print(f"  - ID: {s.id}, Number: {s.number}")
-        except RscException as e:
-            pytest.fail(f"seasons() raised RscException: {e}")
-        except Exception as e:
-            pytest.fail(f"seasons() raised unexpected exception: {e}")
+        result = await rsc_bot.seasons(mock_guild)
+        assert result is not None
+        assert isinstance(result, list)
+        print(f"✓ seasons() returned {len(result)} season(s)")
+        for s in result:
+            print(f"  - ID: {s.id}, Number: {s.number}")
 
     @pytest.mark.asyncio
     async def test_current_season_api_call(self, rsc_bot: RSC, mock_guild):
         """Test that current_season() API call doesn't raise exceptions."""
-        try:
-            result = await rsc_bot.current_season(mock_guild)
-            if result:
-                print(f"✓ current_season() returned season: {result.number}")
-                print(f"  - ID: {result.id} Number: {result.number}")
-            else:
-                print("✓ current_season() returned None (no current season)")
-        except RscException as e:
-            pytest.fail(f"current_season() raised RscException: {e}")
-        except Exception as e:
-            pytest.fail(f"current_season() raised unexpected exception: {e}")
+        result = await rsc_bot.current_season(mock_guild)
+        if result:
+            print(f"✓ current_season() returned season: {result.number}")
+            print(f"  - ID: {result.id} Number: {result.number}")
+        else:
+            print("✓ current_season() returned None (no current season)")
 
     @pytest.mark.asyncio
     async def test_next_season_api_call(self, rsc_bot: RSC, mock_guild):
@@ -80,9 +70,7 @@ class TestSeasonsApiCalls:
             if e.status == 404:
                 print("✓ next_season() correctly handled no next season (404)")
             else:
-                pytest.fail(f"next_season() raised unexpected RscException: {e}")
-        except Exception as e:
-            pytest.fail(f"next_season() raised unexpected exception: {e}")
+                raise
 
     @pytest.mark.asyncio
     async def test_next_signup_season_api_call(self, rsc_bot: RSC, mock_guild):
@@ -98,33 +86,25 @@ class TestSeasonsApiCalls:
             if e.status == 404:
                 print("✓ next_signup_season() correctly handled no signup season (404)")
             else:
-                pytest.fail(f"next_signup_season() raised unexpected RscException: {e}")
-        except Exception as e:
-            pytest.fail(f"next_signup_season() raised unexpected exception: {e}")
+                raise
 
     @pytest.mark.asyncio
     async def test_season_by_number_api_call(self, rsc_bot: RSC, mock_guild):
         """Test that season_by_number() API call doesn't raise exceptions."""
-        try:
-            seasons = await rsc_bot.seasons(mock_guild)
-            if not seasons:
-                pytest.skip("No seasons found to test season_by_number")
+        seasons = await rsc_bot.seasons(mock_guild)
+        if not seasons:
+            pytest.skip("No seasons found to test season_by_number")
 
-            season = seasons[0]
-            if season.number is None:
-                pytest.skip("Season has no number")
+        season = seasons[0]
+        if season.number is None:
+            pytest.skip("Season has no number")
 
-            result = await rsc_bot.season_by_id(mock_guild, season.id)
-            if result:
-                print(f"✓ season_by_id() succeeded for season {season.id}")
-                print(f"  - ID: {result.id}, Nuymber: {result.number}")
-            else:
-                print(f"✓ season_by_number() returned None for season {season.number}")
-
-        except RscException as e:
-            pytest.fail(f"season_by_number() raised RscException: {e}")
-        except Exception as e:
-            pytest.fail(f"season_by_number() raised unexpected exception: {e}")
+        result = await rsc_bot.season_by_id(mock_guild, season.id)
+        if result:
+            print(f"✓ season_by_id() succeeded for season {season.id}")
+            print(f"  - ID: {result.id}, Nuymber: {result.number}")
+        else:
+            print(f"✓ season_by_number() returned None for season {season.number}")
 
 
 class TestSeasonsApiDataStructures:
@@ -133,17 +113,14 @@ class TestSeasonsApiDataStructures:
     @pytest.mark.asyncio
     async def test_season_structure(self, rsc_bot: RSC, mock_guild):
         """Test that season objects have expected attributes."""
-        try:
-            seasons = await rsc_bot.seasons(mock_guild)
-            if not seasons:
-                pytest.skip("No seasons found to test structure")
+        seasons = await rsc_bot.seasons(mock_guild)
+        if not seasons:
+            pytest.skip("No seasons found to test structure")
 
-            season = seasons[0]
-            assert hasattr(season, "id"), "Season should have 'id' attribute"
-            assert hasattr(season, "number"), "Season should have 'number' attribute"
-            print(f"✓ Season structure valid - ID: {season.id}, Number: {season.number}")
-        except Exception as e:
-            pytest.fail(f"Season structure test failed: {e}")
+        season = seasons[0]
+        assert hasattr(season, "id"), "Season should have 'id' attribute"
+        assert hasattr(season, "number"), "Season should have 'number' attribute"
+        print(f"✓ Season structure valid - ID: {season.id}, Number: {season.number}")
 
 
 if __name__ == "__main__":

@@ -107,16 +107,194 @@ class APIKeyInfo(StrEnum):
     DEVELOPER = "D"  # Developer
 
 
+class EventCategory(StrEnum):
+    """Category of an `/integrations/events/` league event.
+
+    Mirrors `rscapi.models.category_enum.CategoryEnum`. Kept in parity by
+    `tests/test_enum_parity.py`.
+    """
+
+    OBJECT = "OBJ"  # Object
+    ANNOUNCEMENT = "ANN"  # Announcement
+    TRANSACTION = "TRN"  # Transaction
+    SYSTEM = "SYS"  # System
+
+    @property
+    def full_name(self) -> str:
+        match self:
+            case EventCategory.OBJECT:
+                return "Object"
+            case EventCategory.ANNOUNCEMENT:
+                return "Announcement"
+            case EventCategory.TRANSACTION:
+                return "Transaction"
+            case EventCategory.SYSTEM:
+                return "System"
+            case _:
+                return "Unknown"
+
+
+class EventAction(StrEnum):
+    """Action of an `/integrations/events/` league event.
+
+    Mirrors `rscapi.models.action_enum.ActionEnum`. Kept in parity by
+    `tests/test_enum_parity.py`.
+    """
+
+    # Object
+    NAME_CHANGE = "NCH"
+    TRANSFER = "TRF"
+    UPDATE = "UPD"
+    # Announcement
+    LEAGUE_NOTICE = "LNC"
+    EVERYONE_NOTICE = "ENC"
+    GM_NOTICE = "GNC"
+    TRADE_NOTICE = "TNC"
+    # Transaction
+    PLAYER_SIGNED = "PSG"
+    PLAYER_CUT = "PCT"
+    PLAYER_RESIGNED = "PRS"
+    DRAFT_PICK_MADE = "PDR"
+    PLAYER_TRADED = "PTR"
+    WAIVER_CLAIM_WON = "WCW"
+    WAIVER_CLAIM_LOST = "WCL"
+    # System - these are an operational error stream, not league activity.
+    TRACKER_MERGE_FAILED = "TMF"
+    TRACKER_VALIDATION_FAILED = "TVF"
+    PLATFORM_ID_SYNC_FAILED = "PSF"
+    MMR_PULL_FAILED = "MPF"
+    MMR_TRACKER_SKIPPED = "MTS"
+    TASK_FAILED = "TKF"
+
+    @property
+    def full_name(self) -> str:
+        match self:
+            case EventAction.NAME_CHANGE:
+                return "Name Change"
+            case EventAction.TRANSFER:
+                return "Transfer"
+            case EventAction.UPDATE:
+                return "Update"
+            case EventAction.LEAGUE_NOTICE:
+                return "League Notice"
+            case EventAction.EVERYONE_NOTICE:
+                return "Everyone Notice"
+            case EventAction.GM_NOTICE:
+                return "GM Notice"
+            case EventAction.TRADE_NOTICE:
+                return "Trade Notice"
+            case EventAction.PLAYER_SIGNED:
+                return "Player Signed"
+            case EventAction.PLAYER_CUT:
+                return "Player Cut"
+            case EventAction.PLAYER_RESIGNED:
+                return "Player Re-Signed"
+            case EventAction.DRAFT_PICK_MADE:
+                return "Draft Pick Made"
+            case EventAction.PLAYER_TRADED:
+                return "Player Traded"
+            case EventAction.WAIVER_CLAIM_WON:
+                return "Waiver Claim Won"
+            case EventAction.WAIVER_CLAIM_LOST:
+                return "Waiver Claim Lost"
+            case EventAction.TRACKER_MERGE_FAILED:
+                return "Tracker Merge Failed"
+            case EventAction.TRACKER_VALIDATION_FAILED:
+                return "Tracker Validation Failed"
+            case EventAction.PLATFORM_ID_SYNC_FAILED:
+                return "Platform ID Sync Failed"
+            case EventAction.MMR_PULL_FAILED:
+                return "MMR Pull Failed"
+            case EventAction.MMR_TRACKER_SKIPPED:
+                return "MMR Tracker Skipped"
+            case EventAction.TASK_FAILED:
+                return "Task Failed"
+            case _:
+                return "Unknown"
+
+
+class EventSeverity(StrEnum):
+    """Severity of an `/integrations/events/` league event.
+
+    Mirrors `rscapi.models.severity_enum.SeverityEnum`. Kept in parity by
+    `tests/test_enum_parity.py`.
+
+    Ordered least to most severe. `rank` exists so a minimum-severity filter can
+    be expressed without hard coding the order at each call site.
+    """
+
+    INFO = "INF"
+    WARNING = "WRN"
+    ERROR = "ERR"
+    CRITICAL = "CRT"
+
+    @property
+    def full_name(self) -> str:
+        match self:
+            case EventSeverity.INFO:
+                return "Info"
+            case EventSeverity.WARNING:
+                return "Warning"
+            case EventSeverity.ERROR:
+                return "Error"
+            case EventSeverity.CRITICAL:
+                return "Critical"
+            case _:
+                return "Unknown"
+
+    @property
+    def rank(self) -> int:
+        order = (
+            EventSeverity.INFO,
+            EventSeverity.WARNING,
+            EventSeverity.ERROR,
+            EventSeverity.CRITICAL,
+        )
+        return order.index(self)
+
+
 class StaffPositions(StrEnum):
     TM = "TM"  # Transactions
+    TRANSACTIONS_HEAD = "TMH"  # Transactions Head
     STATS = "STATS"  # Stats
     EVENTS = "EVENTS"  # Events
+    FRANCHISE = "FRAN"  # Franchise Manager
     NUMBERS = "NUMS"  # Numbers
+    NUMBERS_HEAD = "NH"  # Numbers Head
     MEDIA = "MEDIA"  # Media
     DEVELOPMENT = "DEV"  # Development
     ADMIN = "ADM"  # Admin
     STAFF = "STAFF"  # Staff
     MMR = "MMR"  # MMR Puller
+
+    @property
+    def full_name(self) -> str:
+        if self is StaffPositions.TM:
+            return "Transactions"
+        if self is StaffPositions.MMR:
+            return "MMR Puller"
+        if self is StaffPositions.FRANCHISE:
+            return "Franchise Manager"
+        return self.name.replace("_", " ").title()
+
+    @classmethod
+    def parse(cls, value: str | None) -> "StaffPositions | None":
+        """Resolve an API `position` string to an enum member.
+
+        The elevated roles API is asymmetric: it accepts codes as query input
+        (`position=NUMS`) but returns display labels in responses
+        (`"position": "Numbers"`). Both forms must resolve, or permission checks
+        keyed off this enum silently match nothing.
+
+        Returns None for an unrecognized value so callers can log the drift.
+        """
+        if not value:
+            return None
+        key = value.strip().casefold()
+        for p in cls:
+            if key in (p.value.casefold(), p.full_name.casefold()):
+                return p
+        return None
 
 
 class Status(StrEnum):

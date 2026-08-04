@@ -11,7 +11,7 @@ from rsc.llm.config import (
 
 
 def test_llm_chat_model_is_shared_with_query_defaults() -> None:
-    assert OPENAI_CHAT_MODEL == "gpt-5.5"
+    assert OPENAI_CHAT_MODEL == "gpt-5.4-mini"
     assert signature(query.llm_query).parameters["model"].default == OPENAI_CHAT_MODEL
     assert signature(query.summarize_ticket_messages).parameters["model"].default == OPENAI_CHAT_MODEL
 

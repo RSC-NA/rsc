@@ -1,4 +1,5 @@
 import logging
+import time
 from typing import cast
 
 import discord
@@ -10,6 +11,7 @@ from rscapi.models.activity_check import ActivityCheck
 from rscapi.models.create_member_input import CreateMemberInput
 from rscapi.models.deleted import Deleted
 from rscapi.models.drop_a_player_from_a_league import DropAPlayerFromALeague
+from rscapi.models.elevated_role import ElevatedRole
 from rscapi.models.intent_to_play_request import IntentToPlayRequest
 from rscapi.models.league_player import LeaguePlayer
 from rscapi.models.league_player_patch import LeaguePlayerPatch
@@ -36,7 +38,7 @@ from rsc.embeds import (
     OrangeEmbed,
     YellowEmbed,
 )
-from rsc.enums import Platform, PlayerType, Referrer, RegionPreference, Status
+from rsc.enums import Platform, PlayerType, Referrer, RegionPreference, StaffPositions, Status
 from rsc.exceptions import LeagueNotConfigured, RscException
 from rsc.franchises import FranchiseMixIn
 from rsc.logs import GuildLogAdapter
@@ -52,10 +54,14 @@ from rsc.views import ResultView
 logger = logging.getLogger("red.rsc.members")
 log = GuildLogAdapter(logger)
 
+# Seconds an elevated role lookup stays cached before being refetched
+ELEVATED_ROLE_TTL = 300.0
+
 
 class MemberMixIn(RSCMixIn):
     def __init__(self):
         log.debug("Initializing MemberMixIn")
+        self._elevated_role_cache: dict[int, dict[int, tuple[float, frozenset[str]]]] = {}
         super().__init__()
 
     # Listeners
@@ -923,6 +929,41 @@ class MemberMixIn(RSCMixIn):
                 return lp
         return None
 
+    async def elevated_positions(self, guild: discord.Guild, discord_id: int) -> frozenset[str]:
+        """Staff positions held by a member in this guild's league.
+
+        Cached for `ELEVATED_ROLE_TTL` seconds since this is called on every
+        invocation of a permission gated command. Raises `RscException` on API
+        failure so callers can decide how to handle it.
+        """
+        gcache = self._elevated_role_cache.setdefault(guild.id, {})
+
+        cached = gcache.get(discord_id)
+        if cached and cached[0] > time.monotonic():
+            log.debug(f"Elevated role cache hit for {discord_id}: {sorted(cached[1])}", guild=guild)
+            return cached[1]
+
+        roles = await self.member_elevated_roles(guild, discord_id)
+
+        # The API returns display labels ("Numbers"), not codes ("NUMS"), so
+        # normalize before handing these to any check keyed off StaffPositions.
+        # The API returns display labels ("Numbers"), not codes ("NUMS"), so
+        # normalize before handing these to any check keyed off StaffPositions.
+        found: set[str] = set()
+        for r in roles:
+            if not r.position:
+                continue  # GM/AGM rows carry no staff position
+            parsed = StaffPositions.parse(r.position)
+            if parsed is None:
+                log.warning(f"Unrecognized elevated role position from API: {r.position!r}", guild=guild)
+                continue
+            found.add(parsed.value)
+        positions = frozenset(found)
+
+        log.debug(f"Fetched elevated roles for {discord_id}: {sorted(positions)}", guild=guild)
+        gcache[discord_id] = (time.monotonic() + ELEVATED_ROLE_TTL, positions)
+        return positions
+
     # API
 
     async def members(
@@ -984,6 +1025,27 @@ class MemberMixIn(RSCMixIn):
                     offset += per_page
                 except ApiException as exc:
                     raise RscException(exc)
+
+    async def member_elevated_roles(
+        self,
+        guild: discord.Guild,
+        discord_id: int,
+        position: str | None = None,
+    ) -> list[ElevatedRole]:
+        """Elevated roles held by a member in this guild's league.
+
+        Returns a bare list, not a paginated wrapper.
+        """
+        async with ApiClient(self._api_conf[guild.id]) as client:
+            api = MembersApi(client)
+            try:
+                return await api.members_elevated_roles_list(
+                    id=discord_id,
+                    league=self._league[guild.id],
+                    position=position,
+                )
+            except ApiException as exc:
+                raise RscException(exc)
 
     async def signup(
         self,

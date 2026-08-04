@@ -1,5 +1,5 @@
 from abc import ABC, ABCMeta, abstractmethod
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Sequence
 from datetime import datetime
 from os import PathLike
 from typing import TYPE_CHECKING
@@ -14,6 +14,7 @@ from redbot.core.bot import Red
 from rscapi import Configuration as ApiConfig
 from rscapi.models.activity_check import ActivityCheck
 from rscapi.models.deleted import Deleted
+from rscapi.models.elevated_role import ElevatedRole
 from rscapi.models import Franchise
 from rscapi.models.franchise_gm import FranchiseGM
 from rscapi.models.franchise_list import FranchiseList
@@ -39,6 +40,7 @@ from rscapi.models.team_standings import TeamStandings
 from rscapi.models.tier import Tier
 from rscapi.models.tracker_link import TrackerLink
 from rscapi.models.tracker_link_stats import TrackerLinkStats
+from rscapi.models.transaction_response import TransactionResponse
 
 from rsc.enums import (
     MatchFormat,
@@ -54,6 +56,7 @@ from rsc.enums import (
 
 if TYPE_CHECKING:
     from rsc.combines.models import CombinesLobby
+    from rsc.events.models import EventPage, LeagueEventData
     from rsc.utils.dm import DMHelper
 
 
@@ -72,6 +75,9 @@ class RSCMixIn(ABC):
 
     _team_cache: dict[int, list[str]]
 
+    # guild.id -> discord_id -> (monotonic expiry, positions held in that guild's league)
+    _elevated_role_cache: dict[int, dict[int, tuple[float, frozenset[str]]]]
+
     _dm_helper: "DMHelper"
 
     # Core
@@ -81,6 +87,37 @@ class RSCMixIn(ABC):
 
     @abstractmethod
     async def _get_api_url(self, guild: discord.Guild) -> str | None: ...
+
+    # Events
+
+    @abstractmethod
+    async def fetch_league_events(
+        self,
+        guild: discord.Guild,
+        *,
+        id__gt: int,
+        limit: int,
+        include_private: bool = False,
+        include_global: bool = False,
+    ) -> "EventPage": ...
+
+    @abstractmethod
+    async def newest_league_event(
+        self,
+        guild: discord.Guild,
+        *,
+        include_private: bool = False,
+        include_global: bool = False,
+    ) -> "LeagueEventData | None": ...
+
+    @abstractmethod
+    async def league_event(self, guild: discord.Guild, event_id: int) -> "LeagueEventData | None": ...
+
+    @abstractmethod
+    async def _get_event_channel(self, guild: discord.Guild) -> "discord.TextChannel | discord.Thread | None": ...
+
+    @abstractmethod
+    async def _try_post_embeds(self, guild: discord.Guild, embeds: Sequence[discord.Embed]) -> None: ...
 
     # Admin
 
@@ -438,6 +475,17 @@ class RSCMixIn(ABC):
     ) -> AsyncIterator[RSCMember]: ...
 
     @abstractmethod
+    async def member_elevated_roles(
+        self,
+        guild: discord.Guild,
+        discord_id: int,
+        position: str | None = None,
+    ) -> list[ElevatedRole]: ...
+
+    @abstractmethod
+    async def elevated_positions(self, guild: discord.Guild, discord_id: int) -> frozenset[str]: ...
+
+    @abstractmethod
     async def declare_intent(
         self,
         guild: discord.Guild,
@@ -683,6 +731,9 @@ class RSCMixIn(ABC):
     ) -> TrackerLink: ...
 
     # Transactions
+
+    @abstractmethod
+    async def transaction_history_by_id(self, guild: discord.Guild, transaction_id: int) -> TransactionResponse: ...
 
     @abstractmethod
     async def get_franchise_transaction_channel_name(self, franchise_name: str) -> str: ...

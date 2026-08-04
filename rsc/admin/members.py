@@ -16,7 +16,7 @@ from rsc.embeds import (
     GreenEmbed,
     OrangeEmbed,
 )
-from rsc.enums import Platform, PlayerType, Referrer, RegionPreference, Status
+from rsc.enums import Platform, PlayerType, Referrer, RegionPreference, StaffPositions, Status
 from rsc.exceptions import RscException, LeagueNotConfigured
 from rsc.logs import GuildLogAdapter
 from rsc.teams import TeamMixIn
@@ -81,6 +81,63 @@ class AdminMembersMixIn(AdminMixIn):
             name="Date",
             value="\n".join([(h.date_changed.strftime("%-m-%d-%y") if h.date_changed else "None") for h in history]),
         )
+        await interaction.followup.send(embed=embed)
+
+    @_members.command(name="elevatedroles", description="Display API elevated roles for a member")
+    @app_commands.describe(member="RSC discord member")
+    async def _member_elevated_roles_cmd(
+        self,
+        interaction: discord.Interaction,
+        member: discord.Member,
+    ):
+        guild = interaction.guild
+        if not guild:
+            return
+
+        await interaction.response.defer(ephemeral=False)
+
+        # Deliberately calls the API directly instead of `elevated_positions()` so
+        # the output is never served from the permission check's TTL cache.
+        try:
+            roles = await self.member_elevated_roles(guild, member.id)
+        except RscException as exc:
+            return await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc), ephemeral=False)
+
+        log.debug(f"Elevated roles for {member.id}: {roles}", guild=guild)
+
+        embed = BlueEmbed(title="Elevated Roles")
+
+        if not roles:
+            embed.description = f"{member.mention} has no elevated roles in this league."
+            return await interaction.followup.send(embed=embed)
+
+        league = roles[0].league.name if roles[0].league else "Unknown"
+        embed.description = f"API elevated roles for {member.mention} in **{league}**"
+
+        for r in roles:
+            # The API returns display labels, not codes. Fall back to the raw
+            # value if it ever sends a position we do not know yet.
+            parsed = StaffPositions.parse(r.position)
+            if parsed:
+                name = parsed.full_name
+            elif r.position:
+                name = f"{r.position} (unrecognized)"
+            else:
+                name = "Unknown"
+
+            details = [
+                f"- **Role ID:** {r.id}",
+                # Show the code too, since that is what permission checks match on
+                f"- **Position:** {r.position or 'None'} (`{parsed.value if parsed else '?'}`)",
+                f"- **GM:** {'Yes' if r.gm else 'No'}",
+                f"- **AGM:** {'Yes' if r.agm else 'No'}",
+                f"- **Arbiter:** {'Yes' if r.arbiter else 'No'}",
+                f"- **Project Role:** {r.project_role or 'None'}",
+                f"- **Franchise ID:** {r.franchise_id if r.franchise_id is not None else 'None'}",
+            ]
+            embed.add_field(name=name, value="\n".join(details), inline=True)
+
+        embed.set_footer(text="Fetched live from the API. Not served from the permission cache.")
         await interaction.followup.send(embed=embed)
 
     @_members.command(name="changename", description="Change RSC name for a member")

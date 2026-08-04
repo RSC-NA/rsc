@@ -1,13 +1,18 @@
+import asyncio
 import os
 import sys
+import urllib.error
+import urllib.request
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 from dotenv import load_dotenv
 
+import aiohttp
 import pytest
 import discord
 
 from rsc.core import RSC
+from rsc.exceptions import RscException
 
 from rscapi import Configuration
 
@@ -23,10 +28,62 @@ STAGING_URL = "https://staging-api.rscna.com/api/v1/"
 # STAGING_URL = "http://127.0.0.1:8000/api/v1/"
 LEAGUE_ID = 1
 
+# Live API calls need far more headroom than the 10s default used by unit tests.
+INTEGRATION_TIMEOUT = 30
+# How long to wait when probing whether the staging server is up at all.
+HEALTHCHECK_TIMEOUT = 5
+
+# Transport level failures mean the staging server is unreachable, not that the
+# code under test is broken. These are reported as skips rather than failures.
+TRANSPORT_ERRORS = (aiohttp.ClientError, asyncio.TimeoutError)
+
 
 @pytest.fixture(scope="session", autouse=True)
 def load_env():
     load_dotenv()
+
+
+def pytest_collection_modifyitems(config, items):
+    """Give integration tests a longer timeout than the unit suite."""
+    for item in items:
+        if "integration" in item.keywords:
+            item.add_marker(pytest.mark.timeout(INTEGRATION_TIMEOUT))
+
+
+@pytest.hookimpl(wrapper=True)
+def pytest_runtest_call(item):
+    """Report staging outages as skips instead of failures.
+
+    Only applies to integration tests. A transport error or a 5xx means the
+    staging server is unhealthy; neither says anything about our code.
+    """
+    if "integration" not in item.keywords:
+        return (yield)
+
+    try:
+        return (yield)
+    except TRANSPORT_ERRORS as exc:
+        pytest.skip(f"Staging API unreachable: {exc!r}")
+    except RscException as exc:
+        if exc.status and exc.status >= 500:
+            pytest.skip(f"Staging API returned HTTP {exc.status}")
+        raise
+
+
+@pytest.fixture(scope="session")
+def staging_reachable() -> bool:
+    """Probe the staging server once per session.
+
+    Any HTTP response (including 401/403) proves the server is up. Only a
+    transport failure counts as unreachable.
+    """
+    try:
+        with urllib.request.urlopen(STAGING_URL, timeout=HEALTHCHECK_TIMEOUT):
+            return True
+    except urllib.error.HTTPError:
+        return True
+    except Exception:
+        return False
 
 
 @pytest.fixture
@@ -98,8 +155,10 @@ def api_url():
 
 
 @pytest.fixture
-def api_conf(api_url, api_key) -> Configuration:
+def api_conf(api_url, api_key, staging_reachable) -> Configuration:
     """Return a basic API configuration dictionary."""
+    if not staging_reachable:
+        pytest.skip(f"Staging API is unreachable ({api_url})")
     print()
     return Configuration(host=api_url, api_key={"Api-Key": api_key}, api_key_prefix={"Api-Key": "Api-Key"})
 
@@ -128,15 +187,20 @@ def rsc_bot(mock_guild, api_conf) -> RSC:
     return MockBot(mock_guild, api_conf)
 
 @pytest.fixture
-def rsc_bot_no_key(mock_guild) -> RSC:
+def rsc_bot_no_key(mock_guild, staging_reachable) -> RSC:
     """Testable version of MemberMixIn with minimal dependencies."""
+    if not staging_reachable:
+        pytest.skip(f"Staging API is unreachable ({STAGING_URL})")
     api_conf_no_key = Configuration(host=STAGING_URL)  # Create a copy without the API key
 
     return MockBot(mock_guild, api_conf_no_key)
 
+
 @pytest.fixture
-def rsc_bot_invalid_key(mock_guild) -> RSC:
+def rsc_bot_invalid_key(mock_guild, staging_reachable) -> RSC:
     """Testable version of MemberMixIn with minimal dependencies."""
+    if not staging_reachable:
+        pytest.skip(f"Staging API is unreachable ({STAGING_URL})")
     api_conf_invalid_key = Configuration(host=STAGING_URL, api_key={"Api-Key": "invalid_key"}, api_key_prefix={"Api-Key": "Api-Key"})
 
     return MockBot(mock_guild, api_conf_invalid_key)

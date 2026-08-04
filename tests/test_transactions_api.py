@@ -81,9 +81,7 @@ class TestTransactionsApiCalls:
             if e.status in [400, 404, 409]:
                 print(f"✓ sign() correctly handled business rule (status {e.status}): {e.reason}")
             else:
-                pytest.fail(f"sign() raised unexpected RscException: {e}")
-        except Exception as e:
-            pytest.fail(f"sign() raised unexpected exception: {e}")
+                raise
 
     @pytest.mark.asyncio
     @pytest.mark.skip(reason="Skipping transaction tests to avoid changing API data")
@@ -98,9 +96,7 @@ class TestTransactionsApiCalls:
             if e.status in [400, 404, 409]:
                 print(f"✓ cut() correctly handled business rule (status {e.status}): {e.reason}")
             else:
-                pytest.fail(f"cut() raised unexpected RscException: {e}")
-        except Exception as e:
-            pytest.fail(f"cut() raised unexpected exception: {e}")
+                raise
 
     @pytest.mark.asyncio
     @pytest.mark.skip(reason="Skipping transaction tests to avoid changing API data")
@@ -124,9 +120,7 @@ class TestTransactionsApiCalls:
             if e.status in [400, 404, 409]:
                 print(f"✓ resign() correctly handled business rule (status {e.status}): {e.reason}")
             else:
-                pytest.fail(f"resign() raised unexpected RscException: {e}")
-        except Exception as e:
-            pytest.fail(f"resign() raised unexpected exception: {e}")
+                raise
 
     @pytest.mark.asyncio
     @pytest.mark.skip(reason="Skipping transaction tests to avoid changing API data")
@@ -148,9 +142,7 @@ class TestTransactionsApiCalls:
             if e.status in [400, 404, 409]:
                 print(f"✓ set_captain() correctly handled business rule (status {e.status}): {e.reason}")
             else:
-                pytest.fail(f"set_captain() raised unexpected RscException: {e}")
-        except Exception as e:
-            pytest.fail(f"set_captain() raised unexpected exception: {e}")
+                raise
 
     @pytest.mark.asyncio
     @pytest.mark.skip(reason="Skipping transaction tests to avoid changing API data")
@@ -170,9 +162,7 @@ class TestTransactionsApiCalls:
             if e.status in [400, 404, 409]:
                 print(f"✓ substitution() correctly handled business rule (status {e.status}): {e.reason}")
             else:
-                pytest.fail(f"substitution() raised unexpected RscException: {e}")
-        except Exception as e:
-            pytest.fail(f"substitution() raised unexpected exception: {e}")
+                raise
 
     @pytest.mark.asyncio
     @pytest.mark.skip(reason="Skipping transaction tests to avoid changing API data")
@@ -185,9 +175,7 @@ class TestTransactionsApiCalls:
             if e.status in [400, 404, 409]:
                 print(f"✓ expire_sub() correctly handled business rule (status {e.status}): {e.reason}")
             else:
-                pytest.fail(f"expire_sub() raised unexpected RscException: {e}")
-        except Exception as e:
-            pytest.fail(f"expire_sub() raised unexpected exception: {e}")
+                raise
 
     @pytest.mark.asyncio
     @pytest.mark.skip(reason="Skipping transaction tests to avoid changing API data")
@@ -202,9 +190,7 @@ class TestTransactionsApiCalls:
             if e.status in [400, 404, 409]:
                 print(f"✓ retire() correctly handled business rule (status {e.status}): {e.reason}")
             else:
-                pytest.fail(f"retire() raised unexpected RscException: {e}")
-        except Exception as e:
-            pytest.fail(f"retire() raised unexpected exception: {e}")
+                raise
 
     @pytest.mark.asyncio
     @pytest.mark.skip(reason="Skipping transaction tests to avoid changing API data")
@@ -219,58 +205,40 @@ class TestTransactionsApiCalls:
             if e.status in [400, 404, 409]:
                 print(f"✓ inactive_reserve() correctly handled business rule (status {e.status}): {e.reason}")
             else:
-                pytest.fail(f"inactive_reserve() raised unexpected RscException: {e}")
-        except Exception as e:
-            pytest.fail(f"inactive_reserve() raised unexpected exception: {e}")
+                raise
 
     @pytest.mark.asyncio
     async def test_transaction_history_api_call(self, rsc_bot: RSC, mock_guild):
         """Test that transaction_history() API call doesn't raise exceptions."""
-        try:
-            result = await rsc_bot.transaction_history(mock_guild, limit=10)
-            assert isinstance(result, list)
-            print(f"✓ transaction_history() returned {len(result)} transaction(s)")
-        except RscException as e:
-            pytest.fail(f"transaction_history() raised RscException: {e}")
-        except Exception as e:
-            pytest.fail(f"transaction_history() raised unexpected exception: {e}")
+        result = await rsc_bot.transaction_history(mock_guild, limit=10)
+        assert isinstance(result, list)
+        print(f"✓ transaction_history() returned {len(result)} transaction(s)")
 
     @pytest.mark.asyncio
     async def test_paged_transaction_history_api_call(self, rsc_bot: RSC, mock_guild):
         """Test that paged_transaction_history() API call doesn't raise exceptions."""
-        try:
-            count = 0
-            async for transaction in rsc_bot.paged_transaction_history(guild=mock_guild, per_page=5):
-                count += 1
-                if count > 3:
-                    break
-                tx_type = TransactionType(transaction.type).name if transaction.type else "Unknown"
-                print(f"  - Type: {tx_type}")
-            print(f"✓ paged_transaction_history() yielded {count} transaction(s)")
-        except RscException as e:
-            pytest.fail(f"paged_transaction_history() raised RscException: {e}")
-        except Exception as e:
-            pytest.fail(f"paged_transaction_history() raised unexpected exception: {e}")
+        count = 0
+        async for transaction in rsc_bot.paged_transaction_history(guild=mock_guild, per_page=5):
+            count += 1
+            if count > 3:
+                break
+            tx_type = TransactionType(transaction.type).name if transaction.type else "Unknown"
+            print(f"  - Type: {tx_type}")
+        print(f"✓ paged_transaction_history() yielded {count} transaction(s)")
 
     @pytest.mark.asyncio
     async def test_transaction_history_by_id_api_call(self, rsc_bot: RSC, mock_guild):
         """Test that transaction_history_by_id() API call doesn't raise exceptions."""
-        try:
-            # Get a transaction first
-            transactions = await rsc_bot.transaction_history(mock_guild, limit=1)
-            if not transactions:
-                pytest.skip("No transactions found to test transaction_history_by_id")
+        transactions = await rsc_bot.transaction_history(mock_guild, limit=1)
+        if not transactions:
+            pytest.skip("No transactions found to test transaction_history_by_id")
 
-            transaction = transactions[0]
-            if not transaction.id:
-                pytest.skip("Transaction has no ID")
+        transaction = transactions[0]
+        if not transaction.id:
+            pytest.skip("Transaction has no ID")
 
-            result = await rsc_bot.transaction_history_by_id(mock_guild, transaction.id)
-            print(f"✓ transaction_history_by_id() succeeded for transaction {transaction.id}")
-        except RscException as e:
-            pytest.fail(f"transaction_history_by_id() raised RscException: {e}")
-        except Exception as e:
-            pytest.fail(f"transaction_history_by_id() raised unexpected exception: {e}")
+        result = await rsc_bot.transaction_history_by_id(mock_guild, transaction.id)
+        print(f"✓ transaction_history_by_id() succeeded for transaction {transaction.id}")
 
     @pytest.mark.asyncio
     @pytest.mark.skip(reason="Skipping transaction tests to avoid changing API data")
@@ -299,9 +267,7 @@ class TestTransactionsApiCalls:
             if e.status in [400, 404, 409]:
                 print(f"✓ trade() correctly handled business rule (status {e.status}): {e.reason}")
             else:
-                pytest.fail(f"trade() raised unexpected RscException: {e}")
-        except Exception as e:
-            pytest.fail(f"trade() raised unexpected exception: {e}")
+                raise
 
     @pytest.mark.asyncio
     @pytest.mark.skip(reason="Skipping transaction tests to avoid changing API data")
@@ -325,9 +291,7 @@ class TestTransactionsApiCalls:
             if e.status in [400, 404, 409]:
                 print(f"✓ draft() correctly handled business rule (status {e.status}): {e.reason}")
             else:
-                pytest.fail(f"draft() raised unexpected RscException: {e}")
-        except Exception as e:
-            pytest.fail(f"draft() raised unexpected exception: {e}")
+                raise
 
 
 class TestTransactionsPrivilegedApiCalls:
@@ -357,18 +321,15 @@ class TestTransactionsApiDataStructures:
     @pytest.mark.asyncio
     async def test_transaction_response_structure(self, rsc_bot: RSC, mock_guild):
         """Test that transaction response objects have expected attributes."""
-        try:
-            transactions = await rsc_bot.transaction_history(mock_guild, limit=1)
-            if not transactions:
-                pytest.skip("No transactions found to test structure")
+        transactions = await rsc_bot.transaction_history(mock_guild, limit=1)
+        if not transactions:
+            pytest.skip("No transactions found to test structure")
 
-            transaction = transactions[0]
-            assert hasattr(transaction, "id"), "Transaction should have 'id' attribute"
-            assert hasattr(transaction, "type"), "Transaction should have 'type' attribute"
-            assert hasattr(transaction, "executor"), "Transaction should have 'executor' attribute"
-            print(f"✓ Transaction structure valid - ID: {transaction.id}")
-        except Exception as e:
-            pytest.fail(f"Transaction structure test failed: {e}")
+        transaction = transactions[0]
+        assert hasattr(transaction, "id"), "Transaction should have 'id' attribute"
+        assert hasattr(transaction, "type"), "Transaction should have 'type' attribute"
+        assert hasattr(transaction, "executor"), "Transaction should have 'executor' attribute"
+        print(f"✓ Transaction structure valid - ID: {transaction.id}")
 
 
 class TestTransactionsApiHelperFunctions:
