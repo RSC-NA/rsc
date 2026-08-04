@@ -73,7 +73,8 @@ class TestAddLongField:
     def test_leftover_fits_in_continuation_embed(self):
         first = BlueEmbed(title="RSC AI")
         first.add_long_field(name="Filler", value="x" * 5000)
-        value = "y" * 2000
+        filler_fields = len(first.fields)
+        value = "\n".join(f"line {i} of the response" for i in range(100))
 
         leftover = first.add_long_field(name="Response", value=value)
         second = BlueEmbed(title="RSC AI (continued)")
@@ -81,6 +82,9 @@ class TestAddLongField:
 
         assert remaining == ""
         assert not second.exceeds_limits()
+        # Splitting across embeds preserves the response content
+        written = [f.value or "" for f in first.fields[filler_fields:]] + [f.value or "" for f in second.fields]
+        assert "".join(written) == value
 
 
 class TestBuildQueryEmbeds:

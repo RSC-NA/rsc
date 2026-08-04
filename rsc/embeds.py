@@ -75,11 +75,11 @@ class BetterEmbed(discord.Embed):
             fname = name if idx == 0 else continuation
 
             if len(self.fields) >= EmbedLimits.Fields:
-                return "\n".join(chunks[idx:])
+                return "".join(chunks[idx:])
 
             remaining = EmbedLimits.Total - overhead - self.total_field_chars()
             if len(fname) + len(chunk) > remaining:
-                return "\n".join(chunks[idx:])
+                return "".join(chunks[idx:])
 
             self.add_field(name=fname, value=chunk, inline=inline)
 
