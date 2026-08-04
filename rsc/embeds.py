@@ -24,9 +24,66 @@ class EmbedLimits:
         Name = 256
 
 
+def chunk_field_value(value: str) -> list[str]:
+    """Split text into chunks that each fit within an embed field value.
+
+    Breaks on paragraphs, then newlines, then spaces. Falls back to a hard
+    split if no delimiter is found in a page.
+    """
+    # Imported here to avoid a circular import (pagify -> utils -> embeds)
+    from rsc.utils.pagify import Pagify
+
+    chunks = list(
+        Pagify(
+            text=value,
+            delims=("\n\n", "\n", " "),
+            priority=True,
+            shorten_by=0,
+            page_length=EmbedLimits.Field.Value,
+        )
+    )
+
+    # Pagify skips whitespace only pages. Always return something.
+    return chunks or [value]
+
+
 class BetterEmbed(discord.Embed):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+
+    def add_long_field(self, name: str, value: str, inline: bool = False) -> str:
+        """Add a field, splitting the value across multiple fields if needed.
+
+        Continuation fields are named `{name} (cont.)`. Fields are only added
+        while they fit within the embed field count and total character limits.
+
+        Returns:
+            Any text that did not fit. Empty string if everything was added.
+        """
+        name = name[: EmbedLimits.Field.Name]
+        continuation = f"{name} (cont.)"[: EmbedLimits.Field.Name]
+
+        # Non-field content counts against the 6000 character total
+        overhead = len(self.title or "") + len(self.description or "")
+        if self.footer and self.footer.text:
+            overhead += len(self.footer.text)
+        if self.author and self.author.name:
+            overhead += len(self.author.name)
+
+        chunks = chunk_field_value(value)
+        for idx, chunk in enumerate(chunks):
+            fname = name if idx == 0 else continuation
+
+            if len(self.fields) >= EmbedLimits.Fields:
+                return "\n".join(chunks[idx:])
+
+            remaining = EmbedLimits.Total - overhead - self.total_field_chars()
+            if len(fname) + len(chunk) > remaining:
+                return "\n".join(chunks[idx:])
+
+            self.add_field(name=fname, value=chunk, inline=inline)
+
+        return ""
 
     def valid_fields(self) -> bool:
         c = 0

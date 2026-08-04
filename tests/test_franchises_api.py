@@ -130,7 +130,7 @@ class TestFranchisesPrivilegedApiCalls:
         franchise = flist.pop(0)
         print(f"Testing rebrand_franchise() on franchise ID {franchise.id}, Name: {franchise.name}")
 
-        rebrand = FranchiseRebrand.model_construct(name="New Franchise Name", prefix="NF", teams=[])
+        rebrand = FranchiseRebrand(name="New Franchise Name", prefix="NF", teams=[], admin_override=False)
         with pytest.raises(RscException) as exc:
             await rsc_bot_no_key.rebrand_franchise(guild=mock_guild, id=franchise.id, rebrand=rebrand)
         assert exc.type == RscException

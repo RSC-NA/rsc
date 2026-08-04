@@ -26,7 +26,7 @@ def _create_mixin(**attrs):
 
 
 def _make_tier(id=1, name="Premier", color=0xFF0000, position=1):
-    return Tier.model_construct(id=id, name=name, color=color, position=position)
+    return Tier(id=id, name=name, color=color, position=position)
 
 
 def _make_standings(franchise="Eagles", team="Eagles Blue", tier="Premier", rank=1, gp=10, gw=7, gl=3):

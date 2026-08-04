@@ -1,5 +1,5 @@
 import logging
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 from typing import cast
 
 import discord
@@ -484,21 +484,7 @@ class TrackerMixIn(RSCMixIn):
         """Add a tracker to a user"""
         async with ApiClient(self._api_conf[guild.id]) as client:
             api = TrackerLinksApi(client)
-            data = TrackerLink.model_construct(
-                link=tracker,
-                discord_id=player.id,
-                member=None,
-                id=0,
-                name="",
-                pulls=0,
-                platform="",
-                status="",
-                last_updated=datetime.now(tz=UTC),
-                member_name="",
-                platform_id="",
-                rscid="",
-                _fields_set={"link", "discord_id"},
-            )
+            data = TrackerLink(link=tracker, discord_id=player.id)
             log.debug(
                 "add_tracker request params guild_id=%s player_id=%s tracker=%s",
                 guild.id,

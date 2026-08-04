@@ -100,6 +100,30 @@ class RscException(Exception):  # noqa: N818
 
         super().__init__(self.message, *args, **kwargs)
 
+    def __str__(self) -> str:
+        if self.message:
+            return str(self.message)
+
+        parts = []
+        if self.status:
+            parts.append(f"[{self.status}]")
+        if self.type:
+            parts.append(f"{self.type}:")
+        if self.reason:
+            parts.append(str(self.reason))
+        if self.extra:
+            parts.append(f"(extra: {self.extra})")
+
+        if parts:
+            return " ".join(parts)
+
+        # Fall back to a message passed positionally, e.g. RscException("boom")
+        for arg in self.args:
+            if isinstance(arg, str) and arg:
+                return arg
+
+        return self.__doc__ or type(self).__name__
+
 
 # Generic
 

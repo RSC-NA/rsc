@@ -12,7 +12,7 @@ from discord.ext import tasks
 from redbot.core import app_commands, commands
 
 from rsc.abc import RSCMixIn
-from rsc.embeds import BlueEmbed, ErrorEmbed, GreenEmbed, YellowEmbed
+from rsc.embeds import BetterEmbed, BlueEmbed, EmbedLimits, ErrorEmbed, GreenEmbed, YellowEmbed
 from rsc.llm.create_db import (
     delete_documents_by_source,
     get_db_stats,
@@ -42,6 +42,7 @@ from rsc.llm.query import (
 from rsc.logs import GuildLogAdapter
 from rsc.types import LLMSettings
 from rsc.utils import utils
+from rsc.utils.pagify import Pagify
 
 
 if TYPE_CHECKING:
@@ -76,6 +77,8 @@ LLM_SUMMARY_MAX_TRANSCRIPT_CHARS = 20000
 LLM_SUMMARY_MAX_IMAGES = 10
 LLM_SUMMARY_MAX_IMAGE_BYTES = 20 * 1024 * 1024
 LLM_STATS_FETCH_CONCURRENCY = 8
+LLM_QUERY_MAX_CONTINUATIONS = 5
+LLM_MAX_MESSAGE_LENGTH = 2000
 
 
 class LLMMixIn(RSCMixIn):
@@ -190,7 +193,14 @@ class LLMMixIn(RSCMixIn):
         if not response:
             return await message.reply(content="I am unable to answer that question.")
 
-        await message.reply(content=str(response))
+        # Response may exceed the discord message length limit
+        pages = list(Pagify(text=str(response), page_length=LLM_MAX_MESSAGE_LENGTH))
+        if not pages:
+            return
+
+        await message.reply(content=pages[0])
+        for page in pages[1:]:
+            await message.channel.send(content=page)
 
     # Top Level Group
 
@@ -402,17 +412,16 @@ class LLMMixIn(RSCMixIn):
             response_fmt = str(response)
             source_fmt = await self.format_llm_sources(sources)
 
-        embed = BlueEmbed(title="RSC AI")
-        embed.add_field(name="Question", value=question, inline=False)
-        embed.add_field(name="Response", value=response_fmt, inline=False)
+        embeds = self._build_llm_query_embeds(
+            question=question,
+            response=response_fmt,
+            sources=source_fmt,
+            icon_url=guild.icon.url if guild.icon else None,
+        )
 
-        if source_fmt:
-            embed.add_field(name="Sources", value=source_fmt, inline=False)
-
-        if guild.icon:
-            embed.set_thumbnail(url=guild.icon.url)
-
-        await interaction.followup.send(embed=embed)
+        await interaction.followup.send(embed=embeds[0])
+        for extra in embeds[1:]:
+            await interaction.followup.send(embed=extra)
 
     @_llm_group.command(name="summarize", description="Summarize a private ModMail ticket channel or thread")
     @app_commands.describe(
@@ -1231,6 +1240,44 @@ class LLMMixIn(RSCMixIn):
         log.debug(f"Question without bot mention: {cleaned_msg}")
 
         return cleaned_msg
+
+    def _build_llm_query_embeds(
+        self,
+        question: str,
+        response: str,
+        sources: str | None = None,
+        icon_url: str | None = None,
+    ) -> list[BetterEmbed]:
+        """Build the LLM query response embed(s), splitting long content as needed.
+
+        A response too large for a single embed spills into continuation embeds.
+        """
+        embed = BlueEmbed(title="RSC AI")
+        if icon_url:
+            embed.set_thumbnail(url=icon_url)
+
+        # Question is user input and only echoed back. Truncation is fine.
+        if len(question) > EmbedLimits.Field.Value:
+            question = question[: EmbedLimits.Field.Value - 1] + "…"
+        embed.add_field(name="Question", value=question, inline=False)
+
+        embeds: list[BetterEmbed] = [embed]
+        leftover = embed.add_long_field(name="Response", value=response, inline=False)
+
+        while leftover and len(embeds) <= LLM_QUERY_MAX_CONTINUATIONS:
+            embed = BlueEmbed(title="RSC AI (continued)")
+            embeds.append(embed)
+            leftover = embed.add_long_field(name="Response (cont.)", value=leftover, inline=False)
+
+        if leftover:
+            log.warning(f"LLM response truncated after {len(embeds)} embeds. (Remaining: {len(leftover)})")
+            embed.set_footer(text="Response was too long to display in full.")
+
+        if sources:
+            # Attach sources to the final embed so they follow the response
+            embeds[-1].add_long_field(name="Sources", value=sources, inline=False)
+
+        return embeds
 
     async def format_llm_sources(self, sources: list[dict[str, str | int | None]]) -> str:
         """Format source metadata for display.

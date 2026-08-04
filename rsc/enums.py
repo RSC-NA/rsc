@@ -197,6 +197,9 @@ class TransactionType(StrEnum):
     IR_RETURN = "IRT"  # IR Return
     DRAFT = "DFT"  # Draft Player
     PATCH = "PCH"  # Patched Player
+    INTENT_TO_PLAY = "INT"  # Intent to Play
+    SIGN_UP = "SGN"  # Sign Up
+    PERMANENT_FA_SIGN_UP = "PSG"  # Permanent FA Sign Up
 
     @property
     def full_name(self) -> str:

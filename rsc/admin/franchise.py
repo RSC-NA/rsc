@@ -630,7 +630,7 @@ class AdminFranchiseMixIn(AdminMixIn):
         self,
         interaction: discord.Interaction,
         name: str,
-        prefix: str,
+        prefix: app_commands.Range[str, 1, 3],
         gm: discord.Member,
     ):
         guild = interaction.guild

@@ -4,6 +4,7 @@ from typing import cast
 from urllib.parse import urljoin
 
 import discord
+from pydantic import ValidationError
 from redbot.core import app_commands
 from rscapi import ApiClient, FranchisesApi
 from rscapi.exceptions import ApiException, NotFoundException
@@ -223,19 +224,17 @@ class FranchiseMixIn(RSCMixIn):
         async with ApiClient(self._api_conf[guild.id]) as client:
             api = FranchisesApi(client)
 
-            data = Franchise.model_construct(
-                name=name,
-                prefix=prefix,
-                id=0,
-                league=FranchiseLeague.model_construct(id=self._league[guild.id], name="", guild_id=guild.id, _fields_set={"id"}),
-                tiers=[],
-                active=True,
-                teams=[],
-                logo="",
-                gm=FranchiseGM.model_construct(discord_id=gm.id, rsc_name=gm.display_name, _fields_set={"discord_id"}),
-                agms=[],
-                _fields_set={"name", "prefix", "league", "gm"},
-            )
+            # Remaining fields are read-only and excluded from the request body
+            try:
+                data = Franchise(
+                    name=name,
+                    prefix=prefix,
+                    league=FranchiseLeague(id=self._league[guild.id]),
+                    gm=FranchiseGM(discord_id=gm.id, rsc_name=gm.display_name),
+                )
+            except ValidationError as exc:
+                raise RscException(message=f"Invalid franchise data: {exc.errors()[0]['msg']}")
+
             log.debug(f"Create Franchise Data: {data}")
             try:
                 result = await api.franchises_create(data)

@@ -50,6 +50,7 @@ logging.getLogger("urllib3").setLevel(logging.ERROR)
 CHROMA_PATH_ABS = CHROMA_PATH.absolute()
 
 # Constants
+LLM_MAX_RESPONSE_CHARS = 4000
 ANCHOR_SCORE_THRESHOLD = 0.95
 ANCHOR_EXPANSION_MIN_SCORE = 0.5  # Minimum score for expanded context
 DYNAMIC_CUTOFF = 0.65
@@ -808,7 +809,7 @@ Use API context as the authority for live league state such as players, teams, f
 Answer the question using the context provided above. If you can provide rule number references, do so.
 Do not create your own acronyms.
 If you cannot answer the question based on the context provided, say so clearly. Do not try to make assumptions.
-Keep your response under 2000 characters for Discord compatibility.
+Keep your response under 4000 characters for Discord compatibility.
 
 Do NOT respond with anything that could be considered a discord bot command (e.g., starting with a "!" or "?").
 """
@@ -1129,8 +1130,12 @@ async def llm_query(
 
         log.debug(f"LLM Response: {response_text}", guild=guild)
 
-        if len(response_text) > 2000:
-            return ("Sorry, that response is too long for me to put in Discord.", [])
+        if len(response_text) > LLM_MAX_RESPONSE_CHARS:
+            log.warning(
+                f"LLM response exceeded {LLM_MAX_RESPONSE_CHARS} characters, truncating. (Length: {len(response_text)})",
+                guild=guild,
+            )
+            response_text = response_text[:LLM_MAX_RESPONSE_CHARS].rstrip() + "…"
 
         return (response_text, sources)
     finally:

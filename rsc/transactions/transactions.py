@@ -1677,10 +1677,14 @@ class TransactionMixIn(RSCMixIn):
             else:
                 date = str(t.var_date.date())
 
-            if not t.type:  # noqa: SIM108
+            if not t.type:
                 trans_type = "Unknown"
             else:
-                trans_type = TransactionType(t.type).full_name
+                try:
+                    trans_type = TransactionType(t.type).full_name
+                except ValueError:
+                    log.warning(f"Unknown transaction type from API: {t.type}", guild=guild)
+                    trans_type = str(t.type)
 
             if t.executor.discord_id:  # noqa: SIM108
                 texc = str(t.executor.discord_id)
@@ -2087,7 +2091,11 @@ class TransactionMixIn(RSCMixIn):
         if not response.type:
             raise MalformedTransactionResponse("Transaction response type not returned by API.")
 
-        action = TransactionType(response.type)
+        try:
+            action = TransactionType(response.type)
+        except ValueError as exc:
+            raise MalformedTransactionResponse(f"Unknown transaction response type from API: {response.type}") from exc
+
         log.debug(f"Building transactions embed for type {action.name}", guild=guild)
 
         # LeaguePlayer Objects

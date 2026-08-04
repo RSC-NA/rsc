@@ -8,6 +8,7 @@ import sys
 from datetime import datetime
 from enum import StrEnum
 from operator import attrgetter
+from pathlib import Path
 from typing import AsyncIterator, TypedDict, cast
 
 import numpy as np
@@ -17,7 +18,6 @@ from rich.table import Table
 from rscapi import (
     ApiClient,
     Configuration,
-    DraftAPlayerToATeam,
     LeaguePlayersApi,
     SeasonsApi,
     TeamList,
@@ -29,6 +29,11 @@ from rscapi import (
 from rscapi.models.league_player import LeaguePlayer
 from rscapi.models.season import Season
 from rscapi.models.tier import Tier
+
+# Allow importing the bot package when running this script directly
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from rsc.enums import TransactionType
 
 console = Console()
 
@@ -49,28 +54,6 @@ class CountKeeper(TypedDict):
     count: int
     keeper: int
 
-
-class TransactionType(StrEnum):
-    NONE = "NON"  # Invalid Transaction
-    CUT = "CUT"  # Cut
-    PICKUP = "PKU"  # Pickup
-    TRADE = "TRD"  # Trade
-    PLAYER_TRADE = "PTD"  # Player Trade
-    SUBSTITUTION = "SUB"  # Substitution
-    TEMP_FA = "TMP"  # Temporary Free Agent
-    PROMOTION = "PRO"  # Promotion
-    RELEGATION = "RLG"  # Relegation
-    RESIGN = "RES"  # Re-sign
-    INACTIVE_RESERVE = "IR"  # Inactive Reserve
-    RETIRE = "RET"  # Retire
-    WAIVER_RELEASE = "WVR"  # Waiver Release
-    AGM_IR = "AIR"  # AGM Inactive Reserve
-    IR_RETURN = "IRT"  # IR Return
-    DRAFT = "DFT"  # Draft Player
-
-    @property
-    def full_name(self) -> str:
-        return self.name.replace("_", " ").title()
 
 class Status(StrEnum):
     DRAFT_ELIGIBLE = "DE"  # Draft Eligible

@@ -18,9 +18,13 @@ from rscapi.models.league_player_signup import LeaguePlayerSignup
 from rscapi.models.member import Member
 from rscapi.models.member_transfer_request import MemberTransferRequest
 from rscapi.models.name_change_history import NameChangeHistory
+from rscapi.models.new_or_returning_enum import NewOrReturningEnum
 from rscapi.models.patched_member_name_change_request import PatchedMemberNameChangeRequest
 from rscapi.models.perm_fa_signup_details import PermFASignupDetails
+from rscapi.models.platform_enum import PlatformEnum
 from rscapi.models.player_season_stats import PlayerSeasonStats
+from rscapi.models.referrer_enum import ReferrerEnum
+from rscapi.models.region_preference_enum import RegionPreferenceEnum
 from rscapi.models.signup_details_request import SignupDetailsRequest
 
 from rsc.abc import RSCMixIn
@@ -58,17 +62,37 @@ class MemberMixIn(RSCMixIn):
 
     @commands.Cog.listener("on_member_join")
     async def on_join_member_processing(self, member: discord.Member):
-        log.debug(f"Processing new member on_join: {member}")
-        ml = await self.members(member.guild, discord_id=member.id, limit=1)
+        guild = member.guild
+        log.debug(f"Processing new member on_join: {member}", guild=guild)
+
+        if not self._api_conf.get(guild.id):
+            log.warning(f"Unable to process {member} ({member.id}) on join. Guild has not configured API settings.", guild=guild)
+            return
+
+        try:
+            ml = await self.members(guild, discord_id=member.id, limit=1)
+        except RscException as exc:
+            log.warning(f"Unable to look up {member} ({member.id}) on join. {exc}", guild=guild)
+            return
+
         if not ml:
             # Member does not exist, create one
-            log.debug(f"{member} does not exist. Creating member in API")
-            await self.create_member(member.guild, member=member)
-        else:
-            # Change nickname to RSC name
-            m = ml.pop()
-            log.debug(f"{member} already exists. Changing nickname to {m.rsc_name}")
+            log.debug(f"{member} does not exist. Creating member in API", guild=guild)
+            try:
+                await self.create_member(guild, member=member)
+            except RscException as exc:
+                log.warning(f"Unable to create member {member} ({member.id}) on join. {exc}", guild=guild)
+            return
+
+        # Change nickname to RSC name
+        m = ml.pop()
+        log.debug(f"{member} already exists. Changing nickname to {m.rsc_name}", guild=guild)
+        try:
             await member.edit(nick=m.rsc_name)
+        except discord.Forbidden:
+            log.warning(f"Missing permissions to change nickname of {member} ({member.id}) on join.", guild=guild)
+        except discord.HTTPException as exc:
+            log.warning(f"Error changing nickname of {member} ({member.id}) on join. {exc}", guild=guild)
 
     # App Groups
 
@@ -489,7 +513,7 @@ class MemberMixIn(RSCMixIn):
         try:
             await self.create_member(guild, interaction.user, rsc_name=interaction.user.display_name)
         except RscException as exc:
-            log.warning(f"MemberCreate exception during sign-up: {exc.response.body}")
+            log.warning(f"MemberCreate exception during sign-up for {interaction.user} ({interaction.user.id}). {exc}", guild=guild)
 
         # Wait for embed finish.
         await signup_view.wait()
@@ -967,10 +991,10 @@ class MemberMixIn(RSCMixIn):
         member: discord.Member,
         rsc_name: str,
         trackers: list[str],
-        region_preference: RegionPreference | None = None,
-        player_type: PlayerType | None = None,
-        platform: Platform | None = None,
-        referrer: Referrer | None = None,
+        region_preference: RegionPreference,
+        player_type: PlayerType,
+        platform: Platform,
+        referrer: Referrer,
         accepted_rules: bool = True,
         accepted_match_nights: bool = True,
         executor: discord.Member | None = None,
@@ -978,14 +1002,14 @@ class MemberMixIn(RSCMixIn):
     ) -> LeaguePlayer:
         async with ApiClient(self._api_conf[guild.id]) as client:
             api = MembersApi(client)
-            data = SignupDetailsRequest.model_construct(
+            data = SignupDetailsRequest(
                 league=self._league[guild.id],
                 rsc_name=rsc_name,
                 tracker_links=trackers,
-                new_or_returning=str(player_type),
-                platform=str(platform),
-                referrer=str(referrer),
-                region_preference=str(region_preference),
+                new_or_returning=NewOrReturningEnum(player_type.value),
+                platform=PlatformEnum(platform.value),
+                referrer=ReferrerEnum(referrer.value),
+                region_preference=RegionPreferenceEnum(region_preference.value),
                 accepted_rules=accepted_rules,
                 accepted_match_nights=accepted_match_nights,
                 executor=executor.id if executor else None,
@@ -1090,10 +1114,10 @@ class MemberMixIn(RSCMixIn):
         member: discord.Member,
         rsc_name: str,
         trackers: list[str],
-        region_preference: RegionPreference | None = None,
-        player_type: PlayerType | None = None,
-        platform: Platform | None = None,
-        referrer: Referrer | None = None,
+        region_preference: RegionPreference,
+        player_type: PlayerType,
+        platform: Platform,
+        referrer: Referrer,
         accepted_rules: bool = True,
         accepted_match_nights: bool = True,
         executor: discord.Member | None = None,
@@ -1101,14 +1125,14 @@ class MemberMixIn(RSCMixIn):
     ) -> LeaguePlayer:
         async with ApiClient(self._api_conf[guild.id]) as client:
             api = MembersApi(client)
-            data = PermFASignupDetails.model_construct(
+            data = PermFASignupDetails(
                 league=self._league[guild.id],
                 rsc_name=rsc_name,
                 tracker_links=trackers,
-                new_or_returning=str(player_type),
-                platform=str(platform),
-                referrer=str(referrer),
-                region_preference=str(region_preference),
+                new_or_returning=NewOrReturningEnum(player_type.value),
+                platform=PlatformEnum(platform.value),
+                referrer=ReferrerEnum(referrer.value),
+                region_preference=RegionPreferenceEnum(region_preference.value),
                 accepted_rules=accepted_rules,
                 accepted_match_nights=accepted_match_nights,
                 executor=executor.id if executor else None,
@@ -1175,7 +1199,7 @@ class MemberMixIn(RSCMixIn):
     ) -> LeaguePlayerPatch:
         async with ApiClient(self._api_conf[guild.id]) as client:
             api = MembersApi(client)
-            data = LeaguePlayerSignup.model_construct(
+            data = LeaguePlayerSignup(
                 league=self._league[guild.id],
                 base_mmr=base_mmr,
                 current_mmr=current_mmr,

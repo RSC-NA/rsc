@@ -1,7 +1,7 @@
 from pathlib import Path
 
 CHROMA_PATH = Path(__file__).parent / "db"
-OPENAI_CHAT_MODEL = "gpt-5.5"
+OPENAI_CHAT_MODEL = "gpt-5.4-mini"
 OPENAI_CHAT_TEMPERATURE: float | None = None
 OPENAI_EMBEDDING_MODEL = "text-embedding-3-large"
 
