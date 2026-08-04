@@ -1,5 +1,4 @@
 import asyncio
-import json
 import logging
 import random
 import time
@@ -8,7 +7,6 @@ from datetime import UTC, datetime
 
 import discord
 from discord.ext import tasks
-from pydantic import ValidationError
 from redbot.core import app_commands
 from rscapi import ApiClient, IntegrationsApi
 from rscapi.exceptions import ApiException
@@ -795,7 +793,7 @@ class EventMixIn(RSCMixIn):
         include_private: bool,
         include_global: bool,
     ) -> EventPage:
-        """Single request against the events feed, with a lenient fallback."""
+        """Single request against the events feed."""
         is_public = None if include_private else True
 
         # Global events (league is null) cannot be reached through `league=`,
@@ -825,22 +823,6 @@ class EventMixIn(RSCMixIn):
                 )
             except ApiException as exc:
                 raise RscException(response=exc) from exc
-            except ValidationError:
-                # A single unknown enum value fails validation for the whole
-                # page, not one element. Re-fetch without pydantic so an API
-                # side addition degrades to a generic embed, not an outage.
-                log.warning("League event validation failed. Falling back to lenient parsing.", guild=guild)
-                count, events = await self._request_events_raw(
-                    api,
-                    ordering=ordering,
-                    id__gt=id__gt,
-                    limit=limit,
-                    is_public=is_public,
-                    league=league,
-                    guild_id=guild_id,
-                    include_global=global_scope,
-                )
-                return EventPage(events=events, count=count)
 
         events = []
         for raw in page.results:
@@ -852,61 +834,6 @@ class EventMixIn(RSCMixIn):
             events.append(event)
 
         return EventPage(events=events, count=page.count)
-
-    @staticmethod
-    async def _request_events_raw(
-        api: IntegrationsApi,
-        *,
-        ordering: str,
-        id__gt: int | None,
-        limit: int,
-        is_public: bool | None,
-        league: int | None,
-        guild_id: int | None,
-        include_global: bool | None,
-    ) -> tuple[int, list[LeagueEventData]]:
-        """Lenient fallback path. Returns (count, events).
-
-        `*_without_preload_content` returns an unread `ClientResponse` and never
-        raises `ApiException`, so the body must be read before the `ApiClient`
-        context exits and the status has to be checked by hand. This is called
-        from inside the `async with ApiClient(...)` block for that reason.
-        """
-        response = await api.integrations_events_list_without_preload_content(
-            ordering=ordering,
-            id__gt=id__gt,
-            limit=limit,
-            is_public=is_public,
-            league=league,
-            guild_id=guild_id,
-            include_global=include_global,
-            _request_timeout=REQUEST_TIMEOUT,
-        )
-        body = await response.read()
-
-        if response.status >= 400:
-            raise RscException(
-                message=f"Integrations events request failed with status {response.status}",
-            )
-
-        try:
-            decoded = json.loads(body)
-        except json.JSONDecodeError as exc:
-            raise RscException(message=f"Malformed league event response: {exc}") from exc
-
-        if not isinstance(decoded, dict) or not isinstance(decoded.get("results"), list):
-            raise RscException(message="Unexpected league event response shape (expected a paginated envelope)")
-
-        events = []
-        for item in decoded["results"]:
-            if not isinstance(item, dict):
-                continue
-            event = LeagueEventData.from_raw(item)
-            if event is not None:
-                events.append(event)
-
-        count = decoded.get("count")
-        return (count if isinstance(count, int) else len(events)), events
 
     async def league_event(self, guild: discord.Guild, event_id: int) -> LeagueEventData | None:
         """Fetch a single league event by id."""

@@ -1,18 +1,15 @@
 """Tests for the real `EventMixIn` API layer.
 
 `test_events_poller.py` fakes these out to test the poll flow. Here they run
-against a stubbed `IntegrationsApi`, so the request shape and the lenient
-fallback are pinned down.
+against a stubbed `IntegrationsApi`, so the request shape is pinned down.
 """
 
-import json
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
-from pydantic import ValidationError
 
 # Add the project root to the path so we can import the modules
 project_root = Path(__file__).parent.parent
@@ -20,7 +17,6 @@ sys.path.insert(0, str(project_root))
 
 from rsc.events.events import EventMixIn
 from rsc.events.models import EventPollState
-from rsc.exceptions import RscException
 
 GUILD_ID = 1
 LEAGUE_ID = 7
@@ -51,10 +47,9 @@ class FakeEvent:
 class FakeApi:
     """Serves a fixed corpus honouring `ordering`, `id__gt` and `limit`."""
 
-    def __init__(self, total: int, *, fail_typed: bool = False):
+    def __init__(self, total: int):
         self.corpus = [FakeEvent(i) for i in range(1, total + 1)]
         self.calls: list[dict] = []
-        self.fail_typed = fail_typed
 
     def _window(self, kwargs: dict) -> tuple[int, list[FakeEvent]]:
         matched = [e for e in self.corpus if kwargs.get("id__gt") is None or e.id > kwargs["id__gt"]]
@@ -63,43 +58,8 @@ class FakeApi:
 
     async def integrations_events_list(self, **kwargs):
         self.calls.append(kwargs)
-        if self.fail_typed:
-            raise ValidationError.from_exception_data("LeagueEventList", [])
         count, window = self._window(kwargs)
         return FakePage(count=count, results=window)
-
-    async def integrations_events_list_without_preload_content(self, **kwargs):
-        self.calls.append(kwargs)
-        count, window = self._window(kwargs)
-        body = json.dumps(
-            {
-                "count": count,
-                "next": None,
-                "previous": None,
-                "results": [
-                    {
-                        "id": e.id,
-                        "league": e.league,
-                        "category": e.category,
-                        # An action the installed client does not know about.
-                        "action": "BRAND_NEW_ACTION",
-                        "severity": e.severity,
-                        "payload": e.payload,
-                        "is_public": True,
-                        "created_at": e.created_at.isoformat(),
-                    }
-                    for e in window
-                ],
-            }
-        )
-        response = MagicMock()
-        response.status = 200
-
-        async def read():
-            return body.encode()
-
-        response.read = read
-        return response
 
 
 class Fetcher(EventMixIn):
@@ -261,81 +221,3 @@ class TestNewestEvent:
     async def test_returns_none_on_an_empty_feed(self, guild):
         api = FakeApi(total=0)
         assert await run_newest(api, guild) is None
-
-
-class TestLenientFallback:
-    async def test_unknown_enum_falls_back_to_raw_parsing(self, guild):
-        """One unknown value fails validation for the whole page, not one row."""
-        api = FakeApi(total=5, fail_typed=True)
-        page = await run_fetch(api, guild)
-
-        assert page.count == 5
-        assert len(page.events) == 5
-        assert page.events[0].action == "BRAND_NEW_ACTION"
-        assert page.events[0].event_action is None, "unknown action must degrade, not raise"
-
-    async def test_fallback_preserves_the_request_shape(self, guild):
-        api = FakeApi(total=5, fail_typed=True)
-        await run_fetch(api, guild, id__gt=2, limit=10)
-
-        fallback_call = api.calls[-1]
-        assert fallback_call["ordering"] == "id"
-        assert fallback_call["id__gt"] == 2
-        assert fallback_call["limit"] == 10
-
-    async def test_fallback_raises_on_an_http_error(self, guild):
-        """`_without_preload_content` never raises ApiException itself, so the
-        status has to be checked by hand."""
-        api = FakeApi(total=5, fail_typed=True)
-
-        async def erroring(**kwargs):
-            response = MagicMock()
-            response.status = 500
-
-            async def read():
-                return b"<html>Internal Server Error</html>"
-
-            response.read = read
-            return response
-
-        api.integrations_events_list_without_preload_content = erroring
-
-        with pytest.raises(RscException):
-            await run_fetch(api, guild)
-
-    async def test_fallback_rejects_a_bare_list(self, guild):
-        """A bare array would mean the server dropped pagination unexpectedly."""
-        api = FakeApi(total=5, fail_typed=True)
-
-        async def bare_list(**kwargs):
-            response = MagicMock()
-            response.status = 200
-
-            async def read():
-                return b'[{"id": 1}]'
-
-            response.read = read
-            return response
-
-        api.integrations_events_list_without_preload_content = bare_list
-
-        with pytest.raises(RscException):
-            await run_fetch(api, guild)
-
-    async def test_fallback_rejects_malformed_json(self, guild):
-        api = FakeApi(total=5, fail_typed=True)
-
-        async def garbage(**kwargs):
-            response = MagicMock()
-            response.status = 200
-
-            async def read():
-                return b"not json at all"
-
-            response.read = read
-            return response
-
-        api.integrations_events_list_without_preload_content = garbage
-
-        with pytest.raises(RscException):
-            await run_fetch(api, guild)

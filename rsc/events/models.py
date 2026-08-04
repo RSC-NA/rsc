@@ -2,10 +2,12 @@
 
 The dataclasses here are deliberately independent of the generated `rscapi`
 models. `LeagueEventData` is what gets dispatched to listeners, so regenerating
-the API client does not break every consumer. It also parses leniently: unknown
-`category`/`action` values are kept as raw strings instead of raising, because a
-single unknown enum value fails pydantic validation for the *entire* list
-response, not just one element.
+the API client does not change the shape consumers see.
+
+`category`/`action`/`severity` are stored as plain strings with enum accessors
+rather than enum members. That keeps the dispatched payload decoupled from the
+generated client, and means an event whose enum this bot does not recognise still
+renders as a generic embed instead of raising.
 """
 
 import logging
@@ -143,43 +145,6 @@ class LeagueEventData:
             payload=event.payload,
             is_public=bool(event.is_public),
             created_at=event.created_at,
-        )
-
-    @classmethod
-    def from_raw(cls, data: dict[str, Any]) -> "LeagueEventData | None":
-        """Build from raw decoded JSON, bypassing pydantic validation.
-
-        Used when the typed call fails because the API emitted an enum value the
-        installed client does not know.
-        """
-        raw_id = data.get("id")
-        if not isinstance(raw_id, int):
-            return None
-
-        actor = data.get("actor") or {}
-        if not isinstance(actor, dict):
-            actor = {}
-
-        created_at = None
-        raw_created = data.get("created_at")
-        if isinstance(raw_created, str):
-            try:
-                created_at = datetime.fromisoformat(raw_created)
-            except ValueError:
-                log.warning("Unparsable created_at on event %d: %r", raw_id, raw_created)
-
-        return cls(
-            id=raw_id,
-            league=data.get("league"),
-            category=data.get("category"),
-            action=data.get("action"),
-            severity=data.get("severity"),
-            actor_name=actor.get("name"),
-            actor_discord_id=actor.get("discord_id"),
-            object_id=data.get("object_id"),
-            payload=data.get("payload"),
-            is_public=bool(data.get("is_public", True)),
-            created_at=created_at,
         )
 
 

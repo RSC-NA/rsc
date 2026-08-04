@@ -20,7 +20,6 @@ class TestIntegrationsApiContract:
 
     EXPECTED_METHODS = [
         "integrations_events_list",
-        "integrations_events_list_without_preload_content",
         "integrations_events_retrieve",
     ]
 
@@ -64,6 +63,37 @@ class TestIntegrationsApiContract:
         fields = PaginatedLeagueEventListList.model_fields
         assert "count" in fields
         assert "results" in fields
+
+    def test_poller_kwargs_bind_against_the_real_signature(self):
+        """The exact kwargs `rsc.events` sends must be accepted by the client.
+
+        A regenerated client briefly shipped without `ordering`, `id__gt` and
+        `id__lte`, which would have raised TypeError at call time. The poller's
+        own tests cannot catch that because they stub the API with a `**kwargs`
+        fake, so the real signature is checked here.
+        """
+        import inspect
+
+        sig = inspect.signature(IntegrationsApi.integrations_events_list)
+        # Mirrors EventMixIn._request_events exactly.
+        sig.bind(
+            None,  # self
+            ordering="id",
+            id__gt=1,
+            limit=25,
+            is_public=True,
+            league=1,
+            guild_id=None,
+            include_global=None,
+            _request_timeout=30.0,
+        )
+
+    def test_retrieve_kwargs_bind_against_the_real_signature(self):
+        """Mirrors `EventMixIn.league_event`, used by `/rsc events replay`."""
+        import inspect
+
+        sig = inspect.signature(IntegrationsApi.integrations_events_retrieve)
+        sig.bind(None, id=1, _request_timeout=30.0)
 
     def test_ordering_supports_ascending_id(self):
         """The whole cursor design rests on this.

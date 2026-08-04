@@ -187,35 +187,6 @@ class TestLeagueEventData:
         assert event.event_category is None
         assert event.event_action is None
 
-    def test_from_raw_parses_a_json_payload(self):
-        event = LeagueEventData.from_raw(
-            {
-                "id": 42,
-                "league": 1,
-                "category": "TRN",
-                "action": "WCL",
-                "actor": {"name": "nickm", "discord_id": 138778232802508801},
-                "object_id": 9,
-                "payload": {"waiver_claim": {"player_name": "someone"}},
-                "is_public": True,
-                "created_at": "2026-08-04T12:00:00Z",
-            }
-        )
-        assert event is not None
-        assert event.id == 42
-        assert event.actor_name == "nickm"
-        assert event.actor_discord_id == 138778232802508801
-        assert event.created_at == datetime(2026, 8, 4, 12, 0, tzinfo=UTC)
-
-    def test_from_raw_rejects_an_event_without_an_id(self):
-        """The id is the cursor and cannot be substituted."""
-        assert LeagueEventData.from_raw({"category": "TRN"}) is None
-
-    def test_from_raw_survives_an_unparseable_timestamp(self):
-        event = LeagueEventData.from_raw({"id": 1, "created_at": "not-a-date"})
-        assert event is not None
-        assert event.created_at is None
-
     def test_from_api_rejects_an_event_without_an_id(self):
         from rscapi.models.league_event_list import LeagueEventList
 

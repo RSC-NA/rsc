@@ -53,9 +53,9 @@ def test_event_category_covers_api_enum():
 def test_event_action_covers_api_enum():
     """Every league event action the API can emit must be representable locally.
 
-    Drift here is what motivated the lenient parsing fallback in
-    `rsc.events.events.fetch_league_events`: a single unrecognized value fails
-    pydantic validation for the *entire* list response, not one element.
+    A single unrecognized value fails pydantic validation for the *entire* page,
+    not one element, so drift here stops the poller processing anything until the
+    client is regenerated. This test is the early warning.
     """
     api_values = {e.value for e in ActionEnum}
     local_values = {e.value for e in EventAction}
