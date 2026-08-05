@@ -165,6 +165,7 @@ class EventAction(StrEnum):
     MMR_PULL_FAILED = "MPF"
     MMR_TRACKER_SKIPPED = "MTS"
     TASK_FAILED = "TKF"
+    DISCORD_JOIN_FAILED = "DJF"
 
     @property
     def full_name(self) -> str:
@@ -209,6 +210,8 @@ class EventAction(StrEnum):
                 return "MMR Tracker Skipped"
             case EventAction.TASK_FAILED:
                 return "Task Failed"
+            case EventAction.DISCORD_JOIN_FAILED:
+                return "Discord Join Failed"
             case _:
                 return "Unknown"
 
