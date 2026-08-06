@@ -8,7 +8,7 @@ from redbot.core.app_commands import Transform
 
 from rsc.abc import RSCMixIn
 from rsc.admin.modals import BulkRetireModal, LeagueDatesModal
-from rsc.embeds import ApiExceptionErrorEmbed, BlueEmbed, ErrorEmbed, GreenEmbed, SuccessEmbed, YellowEmbed
+from rsc.embeds import ApiExceptionErrorEmbed, BlueEmbed, ErrorEmbed, GreenEmbed, OrangeEmbed, SuccessEmbed, YellowEmbed
 from rsc.exceptions import MalformedTransactionResponse, RscException
 from rsc.logs import GuildLogAdapter
 from rsc.transactions.roles import update_nonplaying_discord
@@ -29,6 +29,9 @@ defaults_guild = AdminSettings(
     IntentChannel=None,
     IntentMissingRole=None,
     IntentMissingMsg=None,
+    IntentDmLastSeason=None,
+    IntentDmLastRun=None,
+    IntentDmLastExecutor=None,
     PermFAChannel=None,
     PermFAMsgIds=None,
 )
@@ -124,10 +127,54 @@ class AdminMixIn(RSCMixIn):
             f"**Pending:** {helper.pending}\n"
             f"**Scheduled:** {helper.scheduled}"
         )
+        if helper.skipped:
+            desc += f"\n**Skipped (no longer needed):** {helper.skipped}"
+        if helper.cancelled:
+            desc += f"\n**Cancelled:** {helper.cancelled}"
+        if helper.pending or helper.scheduled:
+            desc += "\n\nUse `/admin dmcancel` to abort the remaining queue."
 
         embed_cls = YellowEmbed if helper.pending > 0 else GreenEmbed
+        embed = embed_cls(title="DM Queue Status", description=desc)
+
+        # Name who could not be reached so an admin can follow up manually. The DM
+        # queue is shared across features, so this is not scoped to a single batch.
+        # The field caps at 1024 chars, so only the first ~23 render regardless of
+        # how many are retained - the count in the heading is the honest number.
+        unreachable = helper.failed_members
+        if unreachable:
+            embed.add_field(
+                name=f"Recently Undeliverable ({len(unreachable)})",
+                value=self._format_truncated_list([f"{m.mention} ({m.id})" for m in unreachable]),
+                inline=False,
+            )
+
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+    @_admin.command(name="dmcancel", description="Abort all pending bot DMs")
+    async def _admin_dmcancel_cmd(self, interaction: discord.Interaction):
+        guild = interaction.guild
+        if not guild:
+            return
+
+        helper = self._dm_helper
+        queued = helper.pending + helper.scheduled
+        if not queued:
+            return await interaction.response.send_message(
+                embed=GreenEmbed(title="Nothing To Cancel", description="The DM queue is already empty."),
+                ephemeral=True,
+            )
+
+        # No confirmation gate on purpose. This is an abort - every second spent
+        # confirming is another DM delivered.
+        dropped = await helper.purge()
+        log.warning(f"{interaction.user} cancelled {dropped} pending DM(s)", guild=guild)
+
         await interaction.response.send_message(
-            embed=embed_cls(title="DM Queue Status", description=desc),
+            embed=OrangeEmbed(
+                title="DM Queue Cancelled",
+                description=(f"Dropped **{dropped}** pending DM(s).\n\nA message already being sent when you ran this may still go out."),
+            ),
             ephemeral=True,
         )
 
@@ -221,11 +268,11 @@ class AdminMixIn(RSCMixIn):
         embed = embed_cls(title="Bulk Retire Complete", description=description)
 
         if retired_players:
-            embed.add_field(name="Retired", value=self._format_bulk_retire_results(retired_players), inline=False)
+            embed.add_field(name="Retired", value=self._format_truncated_list(retired_players), inline=False)
         if skipped_players:
-            embed.add_field(name="Skipped", value=self._format_bulk_retire_results(skipped_players), inline=False)
+            embed.add_field(name="Skipped", value=self._format_truncated_list(skipped_players), inline=False)
         if failed_players:
-            embed.add_field(name="Failed", value=self._format_bulk_retire_results(failed_players), inline=False)
+            embed.add_field(name="Failed", value=self._format_truncated_list(failed_players), inline=False)
 
         await modal_interaction.followup.send(embed=embed, ephemeral=True)
 
@@ -336,6 +383,16 @@ class AdminMixIn(RSCMixIn):
     async def _get_intent_missing_message(self, guild: discord.Guild) -> str | None:
         return await self.config.custom("Admin", str(guild.id)).IntentMissingMsg()
 
+    async def _set_intent_dm_last_run(self, guild: discord.Guild, season: int, timestamp: int, executor: int):
+        await self.config.custom("Admin", str(guild.id)).IntentDmLastSeason.set(season)
+        await self.config.custom("Admin", str(guild.id)).IntentDmLastRun.set(timestamp)
+        await self.config.custom("Admin", str(guild.id)).IntentDmLastExecutor.set(executor)
+
+    async def _get_intent_dm_last_run(self, guild: discord.Guild) -> tuple[int | None, int | None, int | None]:
+        """Season, unix timestamp, and executor of the last `/admin intents dm` run."""
+        conf = self.config.custom("Admin", str(guild.id))
+        return await conf.IntentDmLastSeason(), await conf.IntentDmLastRun(), await conf.IntentDmLastExecutor()
+
     async def _set_activity_check_missing_role(self, guild: discord.Guild, role_id: int | None):
         await self.config.custom("Admin", str(guild.id)).ActivityCheckMissingRole.set(role_id)
 
@@ -364,7 +421,7 @@ class AdminMixIn(RSCMixIn):
         return c
 
     @staticmethod
-    def _format_bulk_retire_results(lines: list[str]) -> str:
+    def _format_truncated_list(lines: list[str]) -> str:
         if not lines:
             return "None"
 

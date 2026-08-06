@@ -6,7 +6,7 @@ from urllib.parse import urljoin
 import discord
 from pydantic import ValidationError
 from redbot.core import app_commands
-from rscapi import ApiClient, FranchisesApi
+from rscapi import FranchisesApi
 from rscapi.exceptions import ApiException, NotFoundException
 from rscapi.models.franchise import Franchise
 from rscapi.models.franchise_gm import FranchiseGM
@@ -16,6 +16,7 @@ from rscapi.models.franchise_rebrand import FranchiseRebrand
 from rscapi.models.franchise_transfer_request import FranchiseTransferRequest
 
 from rsc.abc import RSCMixIn
+from rsc.const import API_TIMEOUT
 from rsc.embeds import BlueEmbed
 from rsc.exceptions import RscException
 
@@ -165,7 +166,13 @@ class FranchiseMixIn(RSCMixIn):
     ) -> list[FranchiseList]:
         tier_names = [tier_name] if isinstance(tier_name, str) else tier_name
 
-        async with ApiClient(self._api_conf[guild.id]) as client:
+        # An unfiltered query returns the authoritative full list, so the cache
+        # is rebuilt from it. A filtered one can only add. Merging in both cases
+        # meant a rebranded or deleted franchise lingered in autocomplete until
+        # the process restarted.
+        full_refresh = not any((prefix, gm_name, gm_discord_id, name, tier, tier_names))
+
+        async with self.api_client(guild) as client:
             api = FranchisesApi(client)
             flist = await api.franchises_list(
                 prefix=prefix,
@@ -175,6 +182,7 @@ class FranchiseMixIn(RSCMixIn):
                 name=name,
                 tier=tier,
                 tier_name=tier_names,
+                _request_timeout=API_TIMEOUT,
             )
 
             # Populate cache
@@ -183,20 +191,20 @@ class FranchiseMixIn(RSCMixIn):
                     raise AttributeError("API returned a franchise with no name.")
 
                 flist.sort(key=lambda f: cast("str", f.name))
-                if self._franchise_cache.get(guild.id):
+                if full_refresh or not self._franchise_cache.get(guild.id):
+                    log.debug(f"[{guild.name}] Starting fresh franchises cache")
+                    self._franchise_cache[guild.id] = [f.name for f in flist if f.name]
+                else:
                     cached = set(self._franchise_cache[guild.id])
                     different = {f.name for f in flist if f.name} - cached
                     if different:
                         log.debug(f"[{guild.name}] Franchises being added to cache: {different}")
                         self._franchise_cache[guild.id] += list(different)
-                else:
-                    log.debug(f"[{guild.name}] Starting fresh franchises cache")
-                    self._franchise_cache[guild.id] = [f.name for f in flist if f.name]
                 self._franchise_cache[guild.id].sort()
             return flist
 
     async def franchise_by_id(self, guild: discord.Guild, id: int) -> Franchise | None:
-        async with ApiClient(self._api_conf[guild.id]) as client:
+        async with self.api_client(guild) as client:
             api = FranchisesApi(client)
             return await api.franchises_retrieve(id)
 
@@ -206,7 +214,7 @@ class FranchiseMixIn(RSCMixIn):
         id: int,
         logo: str | bytes | PathLike,
     ) -> Franchise:
-        async with ApiClient(self._api_conf[guild.id]) as client:
+        async with self.api_client(guild) as client:
             api = FranchisesApi(client)
             try:
                 logo_param = str(logo) if isinstance(logo, PathLike) else logo
@@ -221,7 +229,7 @@ class FranchiseMixIn(RSCMixIn):
         prefix: str,
         gm: discord.Member,
     ) -> Franchise:
-        async with ApiClient(self._api_conf[guild.id]) as client:
+        async with self.api_client(guild) as client:
             api = FranchisesApi(client)
 
             # Remaining fields are read-only and excluded from the request body
@@ -250,7 +258,7 @@ class FranchiseMixIn(RSCMixIn):
             return result
 
     async def delete_franchise(self, guild: discord.Guild, id: int) -> None:
-        async with ApiClient(self._api_conf[guild.id]) as client:
+        async with self.api_client(guild) as client:
             api = FranchisesApi(client)
             try:
                 await api.franchises_destroy(id)
@@ -258,7 +266,7 @@ class FranchiseMixIn(RSCMixIn):
                 raise RscException(response=exc)
 
     async def rebrand_franchise(self, guild: discord.Guild, id: int, rebrand: FranchiseRebrand) -> Franchise:
-        async with ApiClient(self._api_conf[guild.id]) as client:
+        async with self.api_client(guild) as client:
             api = FranchisesApi(client)
             try:
                 log.debug(f"Rebrand Params: {rebrand}")
@@ -267,7 +275,7 @@ class FranchiseMixIn(RSCMixIn):
                 raise RscException(response=exc)
 
     async def transfer_franchise(self, guild: discord.Guild, id: int, gm: discord.Member) -> Franchise:
-        async with ApiClient(self._api_conf[guild.id]) as client:
+        async with self.api_client(guild) as client:
             api = FranchisesApi(client)
             try:
                 data = FranchiseTransferRequest(general_manager=gm.id, league=self._league[guild.id])
@@ -281,7 +289,7 @@ class FranchiseMixIn(RSCMixIn):
         if not host:
             return None
 
-        async with ApiClient(self._api_conf[guild.id]) as client:
+        async with self.api_client(guild) as client:
             api = FranchisesApi(client)
             try:
                 logo = await api.franchises_logo_retrieve(id)

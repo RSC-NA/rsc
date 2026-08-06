@@ -1,9 +1,12 @@
 import logging
+from datetime import datetime
 from enum import Enum, EnumMeta
 from itertools import islice
 
 import discord
+from discord.utils import MISSING
 from redbot.core import app_commands
+from redbot.core.app_commands import Transform
 
 from rsc.admin import AdminMixIn
 from rsc.embeds import ErrorEmbed
@@ -15,12 +18,12 @@ log = GuildLogAdapter(logger)
 
 
 class IndexableEnumMeta(EnumMeta):
-    def __getitem__(cls, index: int | str):
-        if isinstance(index, slice):
-            return [cls._member_map_[i] for i in islice(cls._member_map_, index.start, index.stop, index.step)]
-        if isinstance(index, int):
-            return cls._member_map_[next(islice(cls._member_map_, index, index + 1))]
-        return cls._member_map_[index]
+    def __getitem__(cls, name: int | str | slice):  # type: ignore[override]
+        if isinstance(name, slice):
+            return [cls._member_map_[i] for i in islice(cls._member_map_, name.start, name.stop, name.step)]
+        if isinstance(name, int):
+            return cls._member_map_[next(islice(cls._member_map_, name, name + 1))]
+        return cls._member_map_[name]
 
 
 class RSCAuditLogAction(Enum, metaclass=IndexableEnumMeta):
@@ -105,7 +108,7 @@ class AdminAuditMixIn(AdminMixIn):
         default_permissions=discord.Permissions(manage_guild=True),
     )
 
-    async def audit_action_autocomplete(self, interaction: discord.Interaction, current: str) -> list[app_commands.Choice[str]]:
+    async def audit_action_autocomplete(self, interaction: discord.Interaction, current: str) -> list[app_commands.Choice[int]]:
         if not current:
             return [app_commands.Choice(name=action.name, value=action.value) for action in RSCAuditLogAction[:25]]
 
@@ -121,8 +124,8 @@ class AdminAuditMixIn(AdminMixIn):
         self,
         interaction: discord.Interaction,
         action: int | None = None,
-        before: DateTransformer | None = None,
-        after: DateTransformer | None = None,
+        before: Transform[datetime, DateTransformer] | None = None,
+        after: Transform[datetime, DateTransformer] | None = None,
         user: discord.Member | None = None,
         limit: int = 20,
     ):
@@ -144,9 +147,13 @@ class AdminAuditMixIn(AdminMixIn):
                 embed=ErrorEmbed(title="Invalid Action", description="Unable to find the specified action."), ephemeral=True
             )
 
+        # discord.py uses MISSING (not None) to signal an unset before/after
+        before_arg: datetime = before if before is not None else MISSING
+        after_arg: datetime = after if after is not None else MISSING
+
         if user:
-            async for entry in guild.audit_logs(action=audit_action, limit=limit, before=before, after=after, user=user):
+            async for entry in guild.audit_logs(action=audit_action, limit=limit, before=before_arg, after=after_arg, user=user):
                 log.debug(f"Entry: {entry}")
         else:
-            async for entry in guild.audit_logs(action=audit_action, limit=limit, before=before, after=after):
+            async for entry in guild.audit_logs(action=audit_action, limit=limit, before=before_arg, after=after_arg):
                 log.debug(f"Entry: {entry}")

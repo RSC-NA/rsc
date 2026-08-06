@@ -86,7 +86,7 @@ class TestElevatedRoleRequired:
         mock_api.members_elevated_roles_list.return_value = [role]
         interaction = _mock_interaction(mock_guild, manage_guild=False)
 
-        with patch("rsc.members.members.ApiClient") as mock_client:
+        with patch("rsc.abc.ApiClient") as mock_client:
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
             with patch("rsc.members.members.MembersApi", return_value=mock_api):
@@ -168,7 +168,7 @@ class TestElevatedPositionsCache:
         """Patch ApiClient/MembersApi so members_elevated_roles_list returns `roles`."""
         mock_api = AsyncMock()
         mock_api.members_elevated_roles_list.return_value = roles
-        client = patch("rsc.members.members.ApiClient")
+        client = patch("rsc.abc.ApiClient")
         return client, mock_api
 
     async def test_caches_within_ttl(self, mock_guild):
@@ -299,7 +299,7 @@ class TestElevatedPositionsCache:
         mock_api = AsyncMock()
         mock_api.members_elevated_roles_list.side_effect = ApiException(status=500, reason="Error")
 
-        with patch("rsc.members.members.ApiClient") as mock_client:
+        with patch("rsc.abc.ApiClient") as mock_client:
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
             with patch("rsc.members.members.MembersApi", return_value=mock_api):

@@ -5,7 +5,7 @@ from collections.abc import AsyncIterator
 
 import discord
 from redbot.core import app_commands
-from rscapi import ApiClient, MatchesApi, TeamsApi
+from rscapi import MatchesApi, TeamsApi
 from rscapi.exceptions import ApiException
 from rscapi.models.match import Match
 from rscapi.models.match_list import MatchList
@@ -602,7 +602,7 @@ class MatchMixIn(RSCMixIn):
         limit: int = 0,
         offset: int = 0,
     ) -> list[MatchList]:
-        async with ApiClient(self._api_conf[guild.id]) as client:
+        async with self.api_client(guild) as client:
             api = MatchesApi(client)
             try:
                 matches: PaginatedMatchListList = await api.matches_list(
@@ -642,7 +642,7 @@ class MatchMixIn(RSCMixIn):
         """Generator to page through matches (Must have season number due to high API load)"""
         offset = 0
         while True:
-            async with ApiClient(self._api_conf[guild.id]) as client:
+            async with self.api_client(guild) as client:
                 api = MatchesApi(client)
                 try:
                     matches: PaginatedMatchListList = await api.matches_list(
@@ -674,7 +674,7 @@ class MatchMixIn(RSCMixIn):
             offset += per_page
 
     async def match_by_day(self, guild: discord.Guild, team_id: int, day: int, preseason: bool = False) -> Match:
-        async with ApiClient(self._api_conf[guild.id]) as client:
+        async with self.api_client(guild) as client:
             api = TeamsApi(client)
             try:
                 log.debug(f"Fetching match for team ID: {team_id} on day: {day} (preseason={preseason})", guild=guild)
@@ -701,7 +701,7 @@ class MatchMixIn(RSCMixIn):
         limit: int = 0,
         offset: int = 0,
     ) -> list[Match]:
-        async with ApiClient(self._api_conf[guild.id]) as client:
+        async with self.api_client(guild) as client:
             api = MatchesApi(client)
             teams_fmt = ",".join(teams)
             try:
@@ -721,7 +721,7 @@ class MatchMixIn(RSCMixIn):
                 raise RscException(response=exc)
 
     async def match_by_id(self, guild: discord.Guild, id: int) -> Match:
-        async with ApiClient(self._api_conf[guild.id]) as client:
+        async with self.api_client(guild) as client:
             api = MatchesApi(client)
             return await api.matches_retrieve(id)
 
@@ -735,7 +735,7 @@ class MatchMixIn(RSCMixIn):
         executor: discord.Member,
         override: bool = False,
     ) -> MatchResults:
-        async with ApiClient(self._api_conf[guild.id]) as client:
+        async with self.api_client(guild) as client:
             api = MatchesApi(client)
             try:
                 data = MatchScoreReportRequest(
@@ -759,7 +759,7 @@ class MatchMixIn(RSCMixIn):
         away_team_id: int,
         day: int,
     ) -> Match:
-        async with ApiClient(self._api_conf[guild.id]) as client:
+        async with self.api_client(guild) as client:
             api = MatchesApi(client)
             try:
                 data = MatchSubmission(
@@ -776,7 +776,7 @@ class MatchMixIn(RSCMixIn):
 
     async def match_results(self, guild: discord.Guild, id: int) -> MatchResults:
         """Fetch Match results object by ID"""
-        async with ApiClient(self._api_conf[guild.id]) as client:
+        async with self.api_client(guild) as client:
             api = MatchesApi(client)
             try:
                 return await api.matches_results_retrieve(id)

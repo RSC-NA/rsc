@@ -1,6 +1,7 @@
 import discord.ui
 import logging
 from enum import IntEnum
+from typing import cast
 
 import discord
 from discord.ui import (
@@ -108,7 +109,7 @@ class _StepButton(discord.ui.Button):
         self.step = step
 
     async def callback(self, interaction: discord.Interaction):
-        view: SignupLayoutView = self.view  # type: ignore[assignment]
+        view = cast("SignupLayoutView", self.view)
         await view.complete_step(interaction, self.step)
 
 
@@ -119,7 +120,7 @@ class _CancelButton(discord.ui.Button):
         super().__init__(label="Cancel", style=discord.ButtonStyle.danger, emoji="\N{OCTAGONAL SIGN}")
 
     async def callback(self, interaction: discord.Interaction):
-        view: SignupLayoutView = self.view  # type: ignore[assignment]
+        view = cast("SignupLayoutView", self.view)
         view.state = SignupState.CANCELLED
         view.stop()
         await interaction.response.defer(ephemeral=True)
@@ -131,7 +132,7 @@ class _EnumSelect(discord.ui.Select):
     step: SignupState  # set by subclasses
 
     async def callback(self, interaction: discord.Interaction):
-        view: SignupLayoutView = self.view  # type: ignore[assignment]
+        view = cast("SignupLayoutView", self.view)
         self.store_value(view, self.values[0])
         # Mark the chosen option as default so it displays when disabled
         for opt in self.options:
@@ -430,8 +431,8 @@ class SignupLayoutView(AuthorOnlyLayoutView):
                 self.stop()
                 return
 
-            rsc_name_input: TextInput = info_modal.rsc_name.component  # type: ignore[assignment]
-            links_input: TextInput = info_modal.links.component  # type: ignore[assignment]
+            rsc_name_input = cast("TextInput", info_modal.rsc_name.component)
+            links_input = cast("TextInput", info_modal.links.component)
             self.rsc_name = rsc_name_input.value
             self.trackers = links_input.value.splitlines()
 

@@ -8,11 +8,12 @@ from datetime import UTC, datetime
 import discord
 from discord.ext import tasks
 from redbot.core import app_commands
-from rscapi import ApiClient, IntegrationsApi
+from rscapi import IntegrationsApi
 from rscapi.exceptions import ApiException
 
 from rsc.abc import RSCMixIn
 from rsc.checks import bot_owner_required
+from rsc.const import API_TIMEOUT
 from rsc.embeds import ApiExceptionErrorEmbed, BlueEmbed, EmbedLimits, ErrorEmbed, SuccessEmbed
 from rsc.enums import EventAction, EventCategory
 from rsc.events.formatters import (
@@ -44,7 +45,6 @@ from rsc.types import EventSettings
 logger = logging.getLogger("red.rsc.events")
 log = GuildLogAdapter(logger)
 
-REQUEST_TIMEOUT = 30.0
 MIN_INTERVAL = 30
 MAX_INTERVAL = 3600
 SEND_PACING_DELAY = 1.0
@@ -808,7 +808,7 @@ class EventMixIn(RSCMixIn):
         else:
             league = self._league[guild.id]
 
-        async with ApiClient(self._api_conf[guild.id]) as client:
+        async with self.api_client(guild) as client:
             api = IntegrationsApi(client)
             try:
                 page = await api.integrations_events_list(
@@ -819,7 +819,7 @@ class EventMixIn(RSCMixIn):
                     league=league,
                     guild_id=guild_id,
                     include_global=global_scope,
-                    _request_timeout=REQUEST_TIMEOUT,
+                    _request_timeout=API_TIMEOUT,
                 )
             except ApiException as exc:
                 raise RscException(response=exc) from exc
@@ -837,10 +837,10 @@ class EventMixIn(RSCMixIn):
 
     async def league_event(self, guild: discord.Guild, event_id: int) -> LeagueEventData | None:
         """Fetch a single league event by id."""
-        async with ApiClient(self._api_conf[guild.id]) as client:
+        async with self.api_client(guild) as client:
             api = IntegrationsApi(client)
             try:
-                event = await api.integrations_events_retrieve(id=event_id, _request_timeout=REQUEST_TIMEOUT)
+                event = await api.integrations_events_retrieve(id=event_id, _request_timeout=API_TIMEOUT)
             except ApiException as exc:
                 raise RscException(response=exc) from exc
         return LeagueEventData.from_api(event)

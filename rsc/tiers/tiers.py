@@ -3,12 +3,13 @@ from typing import cast
 
 import discord
 from redbot.core import app_commands
-from rscapi import ApiClient, TiersApi
+from rscapi import TiersApi
 from rscapi.exceptions import ApiException
 from rscapi.models.tier import Tier
 from rscapi.models.team_standings import TeamStandings
 
 from rsc.abc import RSCMixIn
+from rsc.const import API_TIMEOUT
 from rsc.embeds import BlueEmbed, ErrorEmbed
 from rsc.exceptions import RscException
 
@@ -106,16 +107,21 @@ class TierMixIn(RSCMixIn):
     # API
 
     async def tier_by_id(self, guild: discord.Guild, id: int) -> Tier:
-        async with ApiClient(self._api_conf[guild.id]) as client:
+        async with self.api_client(guild) as client:
             api = TiersApi(client)
             tier = await api.tiers_retrieve(id)
             return tier
 
     async def tiers(self, guild: discord.Guild, name: str | None = None) -> list[Tier]:
         """Fetch a list of tiers"""
-        async with ApiClient(self._api_conf[guild.id]) as client:
+        # An unfiltered query returns the authoritative full list, so the cache
+        # is rebuilt from it. A filtered one can only add. Merging in both cases
+        # meant a renamed or deleted tier lingered in autocomplete until restart.
+        full_refresh = name is None
+
+        async with self.api_client(guild) as client:
             api = TiersApi(client)
-            tiers = await api.tiers_list(name=name, league=self._league[guild.id])
+            tiers = await api.tiers_list(name=name, league=self._league[guild.id], _request_timeout=API_TIMEOUT)
             tiers.sort(key=lambda t: cast("int", t.position), reverse=True)
 
             # Populate cache
@@ -123,18 +129,18 @@ class TierMixIn(RSCMixIn):
                 if not all(t.name for t in tiers):
                     raise AttributeError("API returned a tier with no name.")
 
-                if self._tier_cache.get(guild.id):
+                if full_refresh or not self._tier_cache.get(guild.id):
+                    self._tier_cache[guild.id] = [t.name for t in tiers if t.name]
+                else:
                     cached = set(self._tier_cache[guild.id])
                     different = {t.name for t in tiers if t.name} - cached
                     if different:
                         self._tier_cache[guild.id] += list(different)
-                else:
-                    self._tier_cache[guild.id] = [t.name for t in tiers if t.name]
             return tiers
 
     async def tier_standings(self, guild: discord.Guild, tier_id: int, season: int) -> list[TeamStandings]:
         """Fetch a list of tiers"""
-        async with ApiClient(self._api_conf[guild.id]) as client:
+        async with self.api_client(guild) as client:
             api = TiersApi(client)
             try:
                 standings: list[TeamStandings] = await api.tiers_standings_list(id=tier_id, season=season)
@@ -144,7 +150,7 @@ class TierMixIn(RSCMixIn):
                 raise RscException(response=exc)
 
     async def create_tier(self, guild: discord.Guild, name: str, color: int, position: int) -> Tier:
-        async with ApiClient(self._api_conf[guild.id]) as client:
+        async with self.api_client(guild) as client:
             api = TiersApi(client)
             data = cast("Tier", {"name": name, "color": color, "position": position})
             log.debug(f"Create Tier Data: {data}")
@@ -154,7 +160,7 @@ class TierMixIn(RSCMixIn):
                 raise RscException(response=exc)
 
     async def delete_tier(self, guild: discord.Guild, id: int) -> None:
-        async with ApiClient(self._api_conf[guild.id]) as client:
+        async with self.api_client(guild) as client:
             api = TiersApi(client)
             try:
                 return await api.tiers_destroy(id)

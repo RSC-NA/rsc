@@ -30,7 +30,7 @@ class TestLeaguesApi:
         leagues = [MagicMock(), MagicMock()]
         mixin = _create_mixin(_api_conf={mock_guild.id: MagicMock()})
 
-        with patch("rsc.leagues.leagues.ApiClient") as mock_client:
+        with patch("rsc.abc.ApiClient") as mock_client:
             mock_api = AsyncMock()
             mock_api.leagues_list.return_value = leagues
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
@@ -43,7 +43,7 @@ class TestLeaguesApi:
     async def test_raises_rsc_exception(self, mock_guild):
         mixin = _create_mixin(_api_conf={mock_guild.id: MagicMock()})
 
-        with patch("rsc.leagues.leagues.ApiClient") as mock_client:
+        with patch("rsc.abc.ApiClient") as mock_client:
             mock_api = AsyncMock()
             mock_api.leagues_list.side_effect = ApiException(status=500, reason="Error")
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
@@ -64,7 +64,7 @@ class TestLeagueApi:
             _league={mock_guild.id: 1},
         )
 
-        with patch("rsc.leagues.leagues.ApiClient") as mock_client:
+        with patch("rsc.abc.ApiClient") as mock_client:
             mock_api = AsyncMock()
             mock_api.leagues_retrieve.return_value = league
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
@@ -83,7 +83,7 @@ class TestLeagueByIdApi:
         league = MagicMock()
         mixin = _create_mixin(_api_conf={mock_guild.id: MagicMock()})
 
-        with patch("rsc.leagues.leagues.ApiClient") as mock_client:
+        with patch("rsc.abc.ApiClient") as mock_client:
             mock_api = AsyncMock()
             mock_api.leagues_retrieve.return_value = league
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
@@ -105,7 +105,7 @@ class TestCurrentSeasonApi:
             _league={mock_guild.id: 1},
         )
 
-        with patch("rsc.leagues.leagues.ApiClient") as mock_client:
+        with patch("rsc.abc.ApiClient") as mock_client:
             mock_api = AsyncMock()
             mock_api.leagues_current_season_retrieve.return_value = season
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
@@ -127,7 +127,7 @@ class TestLeagueSeasonsApi:
             _league={mock_guild.id: 1},
         )
 
-        with patch("rsc.leagues.leagues.ApiClient") as mock_client:
+        with patch("rsc.abc.ApiClient") as mock_client:
             mock_api = AsyncMock()
             mock_api.leagues_seasons_list.return_value = seasons
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
@@ -150,7 +150,7 @@ class TestPlayersApi:
             _league={mock_guild.id: 1},
         )
 
-        with patch("rsc.leagues.leagues.ApiClient") as mock_client:
+        with patch("rsc.abc.ApiClient") as mock_client:
             mock_api = AsyncMock()
             mock_api.league_players_list.return_value = resp
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
@@ -166,7 +166,7 @@ class TestPlayersApi:
             _league={mock_guild.id: 1},
         )
 
-        with patch("rsc.leagues.leagues.ApiClient") as mock_client:
+        with patch("rsc.abc.ApiClient") as mock_client:
             mock_api = AsyncMock()
             mock_api.league_players_list.side_effect = ApiException(status=500, reason="Error")
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
@@ -183,7 +183,7 @@ class TestPlayersApi:
             _league={mock_guild.id: 1},
         )
 
-        with patch("rsc.leagues.leagues.ApiClient") as mock_client:
+        with patch("rsc.abc.ApiClient") as mock_client:
             mock_api = AsyncMock()
             mock_api.league_players_list.return_value = resp
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
@@ -207,7 +207,7 @@ class TestTotalPlayersApi:
             _league={mock_guild.id: 1},
         )
 
-        with patch("rsc.leagues.leagues.ApiClient") as mock_client:
+        with patch("rsc.abc.ApiClient") as mock_client:
             mock_api = AsyncMock()
             mock_api.league_players_list.return_value = resp
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
@@ -229,7 +229,7 @@ class TestUpdateLeaguePlayer:
             _league={mock_guild.id: 1},
         )
 
-        with patch("rsc.leagues.leagues.ApiClient") as mock_client:
+        with patch("rsc.abc.ApiClient") as mock_client:
             mock_api = AsyncMock()
             mock_api.league_players_partial_update.return_value = updated
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
@@ -265,7 +265,7 @@ class TestUpdateLeaguePlayer:
             _league={mock_guild.id: 1},
         )
 
-        with patch("rsc.leagues.leagues.ApiClient") as mock_client:
+        with patch("rsc.abc.ApiClient") as mock_client:
             mock_api = AsyncMock()
             mock_api.league_players_partial_update.side_effect = ApiException(status=400, reason="Bad")
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
@@ -286,7 +286,7 @@ class TestUpdateLeaguePlayer:
             _league={mock_guild.id: 1},
         )
 
-        with patch("rsc.leagues.leagues.ApiClient") as mock_client:
+        with patch("rsc.abc.ApiClient") as mock_client:
             mock_api = AsyncMock()
             mock_api.league_players_partial_update.return_value = updated
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())

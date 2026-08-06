@@ -27,7 +27,7 @@ class TestTrackersApi:
         resp.results = [MagicMock()]
         mixin = _create_mixin(_api_conf={mock_guild.id: MagicMock()})
 
-        with patch("rsc.trackers.trackers.ApiClient") as mock_client:
+        with patch("rsc.abc.ApiClient") as mock_client:
             mock_api = AsyncMock()
             mock_api.tracker_links_list.return_value = resp
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
@@ -40,7 +40,7 @@ class TestTrackersApi:
     async def test_raises_rsc_exception(self, mock_guild):
         mixin = _create_mixin(_api_conf={mock_guild.id: MagicMock()})
 
-        with patch("rsc.trackers.trackers.ApiClient") as mock_client:
+        with patch("rsc.abc.ApiClient") as mock_client:
             mock_api = AsyncMock()
             mock_api.tracker_links_list.side_effect = ApiException(status=500, reason="Error")
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
@@ -54,7 +54,7 @@ class TestTrackersApi:
         resp.results = []
         mixin = _create_mixin(_api_conf={mock_guild.id: MagicMock()})
 
-        with patch("rsc.trackers.trackers.ApiClient") as mock_client:
+        with patch("rsc.abc.ApiClient") as mock_client:
             mock_api = AsyncMock()
             mock_api.tracker_links_list.return_value = resp
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
@@ -70,7 +70,7 @@ class TestTrackersApi:
         resp.results = []
         mixin = _create_mixin(_api_conf={mock_guild.id: MagicMock()})
 
-        with patch("rsc.trackers.trackers.ApiClient") as mock_client:
+        with patch("rsc.abc.ApiClient") as mock_client:
             mock_api = AsyncMock()
             mock_api.tracker_links_list.return_value = resp
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
@@ -87,7 +87,7 @@ class TestTrackerStatsApi:
         stats = [MagicMock()]
         mixin = _create_mixin(_api_conf={mock_guild.id: MagicMock()})
 
-        with patch("rsc.trackers.trackers.ApiClient") as mock_client:
+        with patch("rsc.abc.ApiClient") as mock_client:
             mock_api = AsyncMock()
             mock_api.tracker_links_links_stats_list.return_value = stats
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
@@ -103,7 +103,7 @@ class TestNextTrackerApi:
         trackers = [MagicMock()]
         mixin = _create_mixin(_api_conf={mock_guild.id: MagicMock()})
 
-        with patch("rsc.trackers.trackers.ApiClient") as mock_client:
+        with patch("rsc.abc.ApiClient") as mock_client:
             mock_api = AsyncMock()
             mock_api.tracker_links_next_list.return_value = trackers
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
@@ -119,7 +119,7 @@ class TestAddTrackerApi:
         created = MagicMock()
         mixin = _create_mixin(_api_conf={mock_guild.id: MagicMock()})
 
-        with patch("rsc.trackers.trackers.ApiClient") as mock_client:
+        with patch("rsc.abc.ApiClient") as mock_client:
             mock_api = AsyncMock()
             mock_api.tracker_links_create.return_value = created
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
@@ -134,7 +134,7 @@ class TestRmTrackerApi:
     async def test_removes_tracker(self, mock_guild):
         mixin = _create_mixin(_api_conf={mock_guild.id: MagicMock()})
 
-        with patch("rsc.trackers.trackers.ApiClient") as mock_client:
+        with patch("rsc.abc.ApiClient") as mock_client:
             mock_api = AsyncMock()
             mock_api.tracker_links_destroy.return_value = None
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
@@ -150,7 +150,7 @@ class TestUnlinkTrackerApi:
         unlinked = MagicMock()
         mixin = _create_mixin(_api_conf={mock_guild.id: MagicMock()})
 
-        with patch("rsc.trackers.trackers.ApiClient") as mock_client:
+        with patch("rsc.abc.ApiClient") as mock_client:
             mock_api = AsyncMock()
             mock_api.tracker_links_unlink_create.return_value = unlinked
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
@@ -166,7 +166,7 @@ class TestLinkTrackerApi:
         linked = MagicMock()
         mixin = _create_mixin(_api_conf={mock_guild.id: MagicMock()})
 
-        with patch("rsc.trackers.trackers.ApiClient") as mock_client:
+        with patch("rsc.abc.ApiClient") as mock_client:
             mock_api = AsyncMock()
             mock_api.tracker_links_link_create.return_value = linked
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
@@ -183,7 +183,7 @@ class TestFetchTrackerByIdApi:
         tracker.id = 42
         mixin = _create_mixin(_api_conf={mock_guild.id: MagicMock()})
 
-        with patch("rsc.trackers.trackers.ApiClient") as mock_client:
+        with patch("rsc.abc.ApiClient") as mock_client:
             mock_api = AsyncMock()
             mock_api.tracker_links_retrieve.return_value = tracker
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
@@ -199,7 +199,7 @@ class TestMigrateTrackerPullsApi:
         migrated = MagicMock()
         mixin = _create_mixin(_api_conf={mock_guild.id: MagicMock()})
 
-        with patch("rsc.trackers.trackers.ApiClient") as mock_client:
+        with patch("rsc.abc.ApiClient") as mock_client:
             mock_api = AsyncMock()
             mock_api.tracker_links_migrate_pulls_create.return_value = migrated
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())

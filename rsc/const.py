@@ -1,11 +1,30 @@
-# flake8: noqa
-
 import re
 
 import discord
+from aiohttp import ClientOSError, ServerDisconnectedError
 
 # Views
 DEFAULT_TIMEOUT = 30.0
+
+# RSC API
+#
+# rscapi defaults to a 300 second per-request timeout, which lets a hung API
+# stall startup for five minutes with empty caches. Pass API_TIMEOUT explicitly
+# on calls where waiting that long is never the right answer.
+API_TIMEOUT = 30.0
+# aiohttp_retry only retries the methods in rscapi.rest.ALLOW_RETRY_METHODS
+# (GET/PUT/DELETE/HEAD/OPTIONS/TRACE), so POST transactions are never replayed.
+API_RETRIES = 3
+# Stale pooled sockets. API clients are long lived (see RSCMixIn.api_client), so
+# a keep-alive connection can be closed by the server between requests and only
+# fail when we next write to it. aiohttp does not retry that on its own, and
+# aiohttp_retry's default `exceptions` set is EMPTY -- passing a bare int for
+# `retries` retries 5xx responses but re-raises connection errors. Name them.
+#
+# ClientOSError covers connection resets and, via ClientConnectorError, a
+# refused connection. ServerTimeoutError is deliberately excluded: retrying a
+# timeout would multiply API_TIMEOUT by the attempt count.
+API_RETRY_EXCEPTIONS = frozenset({ServerDisconnectedError, ClientOSError})
 
 # Role Names
 AGM_ROLE = "Assistant GM"
@@ -27,8 +46,20 @@ SPECTATOR_ROLE = "Spectator"
 SUBBED_OUT_ROLE = "Subbed Out"
 PERM_FA_WAITING_ROLE = "PermFA in Waiting"
 
+# Cog
+#
+# Name the RSC cog is registered under. Persistent DM components resolve the cog
+# by this name at click time, so a rename here must match the class name.
+RSC_COG_NAME = "RSC"
+
 # NICKM
 NICKM_ID = 138778232802508801
+
+# ModMail
+#
+# Fallback used when a guild has not configured its own via `/rsc modmailbot`.
+# This is the RSC 3v3 ModMail bot.
+DEFAULT_MODMAIL_BOT_ID = 1489437974008565840
 
 # Emoji
 TROPHY_EMOJI = "\U0001f3c6"  # :trophy:

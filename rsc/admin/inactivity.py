@@ -51,13 +51,15 @@ class AdminInactivityMixIn(AdminMixIn):
             return
 
         # Get API configuration since view is independent of RscMixIn
-        conf = self._api_conf[guild.id]
+        conf = self._api_conf.get(guild.id)
         if not conf:
             log.error(f"{guild.name} has an inactivity check but no API configuration")
+            return
 
-        league_id = self._league[guild.id]
+        league_id = self._league.get(guild.id)
         if not league_id:
             log.error(f"{guild.name} has an inactivity check but no league ID")
+            return
 
         inactive_channel = discord.utils.get(guild.channels, name="inactivity-check")
         if not inactive_channel:
@@ -124,7 +126,7 @@ class AdminInactivityMixIn(AdminMixIn):
             create_public_threads=False,
         )
 
-        activity_overwrites: MutableMapping[discord.Member | discord.Role, discord.PermissionOverwrite] = {
+        activity_overwrites: MutableMapping[discord.Role | discord.Member | discord.Object, discord.PermissionOverwrite] = {
             guild.default_role: discord.PermissionOverwrite(
                 view_channel=False,
                 send_messages=False,

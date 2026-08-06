@@ -4,7 +4,7 @@ from typing import cast
 
 import discord
 from redbot.core import app_commands
-from rscapi import ApiClient, NumbersApi
+from rscapi import NumbersApi
 from rscapi.exceptions import ApiException
 from rscapi.models.player_mmr import PlayerMMR
 
@@ -254,7 +254,7 @@ class NumberMixIn(RSCMixIn):
         psyonix_season: int | None = None,
     ) -> list[PlayerMMR]:
         """Get list of trackers ready to be updated"""
-        async with ApiClient(self._api_conf[guild.id]) as client:
+        async with self.api_client(guild) as client:
             api = NumbersApi(client)
             try:
                 data = await api.numbers_mmr_list(

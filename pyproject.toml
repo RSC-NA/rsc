@@ -100,11 +100,16 @@ ignore = [
     "PLR0912", # Too many branches
     "PLR0913", # Too many arguments to function call
     "PLR0915", # Too many statements
+    "PLR0917", # Too many positional arguments in function declaration
     "PLR2004", # Magic value used in comparison
     "PLW2901", # Outer for loop variable overwritten by inner for loop target
     "S324",    # Probable use of insecure hash functions in `hashlib`
     "SIM105",  # Use `contextlib.suppress(ValueError)` instead of `try`-`except`-`pass`
 ]
+
+[tool.ruff.lint.per-file-ignores]
+# Discord message copy. Wrapping would insert line breaks into the rendered output.
+"rsc/const.py" = ["E501"]
 
 [tool.ruff.format]
 # Like Black, use double quotes for strings.

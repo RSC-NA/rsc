@@ -7,7 +7,7 @@ from redbot.core import Config, app_commands
 from rscapi.models.league_player import LeaguePlayer
 
 from rsc.abc import RSCMixIn
-from rsc.embeds import ErrorEmbed, SuccessEmbed
+from rsc.embeds import BetterEmbed, ErrorEmbed, SuccessEmbed
 from rsc.enums import Status
 from rsc.freeagents.views import CheckInView, CheckOutView
 from rsc.tiers import TierMixIn
@@ -73,12 +73,11 @@ class FreeAgentMixIn(RSCMixIn):
 
     @expire_free_agent_checkins_loop.before_loop
     async def before_expire_free_agent_checkins_loop(self):
+        # The FA cache is populated by setup(), which runs on_ready() for every
+        # guild. Populating it here as well just raced that for the same result.
         log.debug("Waiting for bot to be ready before starting expire FA check in loop...")
         await self.bot.wait_until_ready()
-        log.debug("Bot is ready, populating FA cache...")
-        for guild in self.bot.guilds:
-            await self._populate_free_agent_cache(guild)
-        log.debug("FA cache populated, starting expire FA check in loop.")
+        log.debug("Bot is ready, starting expire FA check in loop.")
 
     # Groups
 
@@ -132,25 +131,27 @@ class FreeAgentMixIn(RSCMixIn):
         tier_role = await utils.role_by_name(guild, tier)
 
         if not fa_fmt_list:
-            embed = discord.Embed(
+            embed = BetterEmbed(
                 title=f"{tier} Free Agents",
                 description="No free agents available",
                 color=tier_role.color if tier_role else discord.Color.blue(),
             )
         else:
-            embed = discord.Embed(
+            # One line per player so name/MMR stay paired for mobile users
+            fa_lines = [f"{name} — **{mmr if mmr is not None else 'N/A'}**" for name, mmr in fa_fmt_list]
+
+            embed = BetterEmbed(
                 title=f"{tier} Free Agents",
                 description=f"The following free agents are available for the **{tier}** tier",
                 color=tier_role.color if tier_role else discord.Color.blue(),
             )
-            embed.add_field(
-                name="Player",
-                value="\n".join([f[0] for f in fa_fmt_list]),
+            leftover = embed.add_long_field(
+                name=f"Players ({len(fa_lines)})",
+                value="\n".join(fa_lines),
+                inline=False,
             )
-            embed.add_field(
-                name="MMR",
-                value="\n".join([str(f[1]) if f[1] is not None else "N/A" for f in fa_fmt_list]),
-            )
+            if leftover:
+                log.warning(f"Truncated {tier} free agent list, exceeded embed limits")
 
         await interaction.followup.send(embed=embed)
 

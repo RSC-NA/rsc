@@ -4,7 +4,7 @@ from typing import cast
 
 import discord
 from redbot.core import app_commands
-from rscapi import ApiClient, TrackerIDInput, TrackerLinksApi
+from rscapi import TrackerIDInput, TrackerLinksApi
 from rscapi.exceptions import ApiException
 from rscapi.models.tracker_link import TrackerLink
 from rscapi.models.tracker_link_linking import TrackerLinkLinking
@@ -409,10 +409,11 @@ class TrackerMixIn(RSCMixIn):
         desc = ""
         for t in trackers:
             url = await utils.fix_tracker_url(t.link)
+            platform = t.platform.value if t.platform else "Unknown"
             if t.platform == "STEAM":
-                desc += f"- [{t.platform.value} - {t.platform_id}]({url})\n"
+                desc += f"- [{platform} - {t.platform_id}]({url})\n"
             else:
-                desc += f"- [{t.platform.value} - {t.name}]({url})\n"
+                desc += f"- [{platform} - {t.name}]({url})\n"
 
         embed = BlueEmbed(title=f"{player.display_name} Accounts", description=desc)
 
@@ -447,7 +448,7 @@ class TrackerMixIn(RSCMixIn):
         elif isinstance(player, int):
             player_id = player
 
-        async with ApiClient(self._api_conf[guild.id]) as client:
+        async with self.api_client(guild) as client:
             api = TrackerLinksApi(client)
             try:
                 status_filter = str(status) if status else None
@@ -467,7 +468,7 @@ class TrackerMixIn(RSCMixIn):
         guild: discord.Guild,
     ) -> list[TrackerLinkStats]:
         """Fetch RSC Tracker Stats"""
-        async with ApiClient(self._api_conf[guild.id]) as client:
+        async with self.api_client(guild) as client:
             api = TrackerLinksApi(client)
             try:
                 return await api.tracker_links_links_stats_list()
@@ -480,7 +481,7 @@ class TrackerMixIn(RSCMixIn):
         limit: int = 25,
     ) -> list[TrackerLink]:
         """Get list of trackers ready to be updated"""
-        async with ApiClient(self._api_conf[guild.id]) as client:
+        async with self.api_client(guild) as client:
             api = TrackerLinksApi(client)
             try:
                 return await api.tracker_links_next_list(limit=limit)
@@ -494,7 +495,7 @@ class TrackerMixIn(RSCMixIn):
         tracker: str,
     ) -> TrackerLink:
         """Add a tracker to a user"""
-        async with ApiClient(self._api_conf[guild.id]) as client:
+        async with self.api_client(guild) as client:
             api = TrackerLinksApi(client)
             data = TrackerLink(link=tracker, discord_id=player.id)
             log.debug(
@@ -521,7 +522,7 @@ class TrackerMixIn(RSCMixIn):
         tracker_id: int,
     ) -> None:
         """Delete a tracker"""
-        async with ApiClient(self._api_conf[guild.id]) as client:
+        async with self.api_client(guild) as client:
             api = TrackerLinksApi(client)
             log.debug(f"Tracker Delete: {tracker_id}")
             try:
@@ -537,7 +538,7 @@ class TrackerMixIn(RSCMixIn):
         executor: discord.Member,
     ) -> TrackerLink:
         """Unlink a tracker from a user"""
-        async with ApiClient(self._api_conf[guild.id]) as client:
+        async with self.api_client(guild) as client:
             api = TrackerLinksApi(client)
             data = TrackerLinkLinking(member=player.id, executor=executor.id)
             log.debug(f"Tracker Unlink: {tracker_id} (Member: {player})")
@@ -554,7 +555,7 @@ class TrackerMixIn(RSCMixIn):
         executor: discord.Member,
     ) -> TrackerLink:
         """Unlink a tracker from a user"""
-        async with ApiClient(self._api_conf[guild.id]) as client:
+        async with self.api_client(guild) as client:
             api = TrackerLinksApi(client)
             data = TrackerLinkLinking(member=player.id, executor=executor.id)
             log.debug(f"Tracker Link: {tracker_id} (Member: {player})")
@@ -569,7 +570,7 @@ class TrackerMixIn(RSCMixIn):
         tracker_id: int,
     ) -> TrackerLink:
         """Fetch a Tracker Link by API ID"""
-        async with ApiClient(self._api_conf[guild.id]) as client:
+        async with self.api_client(guild) as client:
             api = TrackerLinksApi(client)
             log.debug(f"Fetch Tracker ID: {tracker_id}")
             try:
@@ -584,7 +585,7 @@ class TrackerMixIn(RSCMixIn):
         dest: int,
     ) -> TrackerLink:
         """Fetch a Tracker Link by API ID"""
-        async with ApiClient(self._api_conf[guild.id]) as client:
+        async with self.api_client(guild) as client:
             api = TrackerLinksApi(client)
             log.debug(f"Merging {source} pulls into {dest}")
             try:

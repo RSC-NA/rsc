@@ -4,7 +4,7 @@ from typing import cast
 
 import discord
 from redbot.core import app_commands, commands
-from rscapi import ApiClient, MembersApi
+from rscapi import MembersApi
 from rscapi.exceptions import ApiException
 from rscapi.models.activity_request import ActivityRequest
 from rscapi.models.activity_check import ActivityCheck
@@ -811,7 +811,7 @@ class MemberMixIn(RSCMixIn):
             await interaction.followup.send(embed=embed)
             return
 
-        players.sort(key=lambda x: cast("str", x.player.name), reverse=True)
+        players.sort(key=lambda x: x.player.name, reverse=True)
 
         waiver_dates = []
         members = []
@@ -975,7 +975,7 @@ class MemberMixIn(RSCMixIn):
         limit: int = 0,
         offset: int = 0,
     ) -> list[Member]:
-        async with ApiClient(self._api_conf[guild.id]) as client:
+        async with self.api_client(guild) as client:
             api = MembersApi(client)
             try:
                 members = await api.members_list(
@@ -999,7 +999,7 @@ class MemberMixIn(RSCMixIn):
     ):
         offset = 0
         while True:
-            async with ApiClient(self._api_conf[guild.id]) as client:
+            async with self.api_client(guild) as client:
                 api = MembersApi(client)
                 try:
                     members = await api.members_list(
@@ -1036,7 +1036,7 @@ class MemberMixIn(RSCMixIn):
 
         Returns a bare list, not a paginated wrapper.
         """
-        async with ApiClient(self._api_conf[guild.id]) as client:
+        async with self.api_client(guild) as client:
             api = MembersApi(client)
             try:
                 return await api.members_elevated_roles_list(
@@ -1062,7 +1062,7 @@ class MemberMixIn(RSCMixIn):
         executor: discord.Member | None = None,
         override: bool = False,
     ) -> LeaguePlayer:
-        async with ApiClient(self._api_conf[guild.id]) as client:
+        async with self.api_client(guild) as client:
             api = MembersApi(client)
             data = SignupDetailsRequest(
                 league=self._league[guild.id],
@@ -1089,7 +1089,7 @@ class MemberMixIn(RSCMixIn):
         member: discord.Member,
         rsc_name: str | None = None,
     ) -> Member:
-        async with ApiClient(self._api_conf[guild.id]) as client:
+        async with self.api_client(guild) as client:
             api = MembersApi(client)
             data = CreateMemberInput(
                 username=member.name,
@@ -1107,7 +1107,7 @@ class MemberMixIn(RSCMixIn):
         guild: discord.Guild,
         member: discord.Member,
     ):
-        async with ApiClient(self._api_conf[guild.id]) as client:
+        async with self.api_client(guild) as client:
             api = MembersApi(client)
             try:
                 await api.members_destroy(member.id)
@@ -1121,7 +1121,7 @@ class MemberMixIn(RSCMixIn):
         name: str,
         override: bool = False,
     ) -> Member:
-        async with ApiClient(self._api_conf[guild.id]) as client:
+        async with self.api_client(guild) as client:
             api = MembersApi(client)
             try:
                 data = PatchedMemberNameChangeRequest(name=name, admin_override=override)
@@ -1137,7 +1137,7 @@ class MemberMixIn(RSCMixIn):
         season: int | None = None,
         postseason: bool = False,
     ) -> PlayerSeasonStats:
-        async with ApiClient(self._api_conf[guild.id]) as client:
+        async with self.api_client(guild) as client:
             api = MembersApi(client)
             try:
                 if postseason:
@@ -1155,7 +1155,7 @@ class MemberMixIn(RSCMixIn):
         executor: discord.Member | None = None,
         admin_overrride: bool = False,
     ) -> Deleted:
-        async with ApiClient(self._api_conf[guild.id]) as client:
+        async with self.api_client(guild) as client:
             api = MembersApi(client)
             data = IntentToPlayRequest(
                 league=self._league[guild.id],
@@ -1185,7 +1185,7 @@ class MemberMixIn(RSCMixIn):
         executor: discord.Member | None = None,
         override: bool = False,
     ) -> LeaguePlayer:
-        async with ApiClient(self._api_conf[guild.id]) as client:
+        async with self.api_client(guild) as client:
             api = MembersApi(client)
             data = PermFASignupDetails(
                 league=self._league[guild.id],
@@ -1214,7 +1214,7 @@ class MemberMixIn(RSCMixIn):
         executor: discord.Member,
         override: bool = False,
     ) -> ActivityCheck:
-        async with ApiClient(self._api_conf[guild.id]) as client:
+        async with self.api_client(guild) as client:
             api = MembersApi(client)
             data = ActivityRequest(
                 league=self._league[guild.id],
@@ -1229,7 +1229,7 @@ class MemberMixIn(RSCMixIn):
                 raise RscException(response=exc)
 
     async def transfer_membership(self, guild: discord.Guild, old: int, new: discord.Member) -> Member:
-        async with ApiClient(self._api_conf[guild.id]) as client:
+        async with self.api_client(guild) as client:
             api = MembersApi(client)
             data = MemberTransferRequest(new_account=new.id)
             try:
@@ -1239,7 +1239,7 @@ class MemberMixIn(RSCMixIn):
                 raise RscException(response=exc)
 
     async def name_history(self, guild: discord.Guild, member: discord.Member, offset: int = 0, limit: int = 25) -> list[NameChangeHistory]:
-        async with ApiClient(self._api_conf[guild.id]) as client:
+        async with self.api_client(guild) as client:
             api = MembersApi(client)
             try:
                 log.debug(f"Fetching name history for {member.id}", guild=guild)
@@ -1259,7 +1259,7 @@ class MemberMixIn(RSCMixIn):
         team_name: str | None = None,
         contract_length: int | None = None,
     ) -> LeaguePlayerPatch:
-        async with ApiClient(self._api_conf[guild.id]) as client:
+        async with self.api_client(guild) as client:
             api = MembersApi(client)
             data = LeaguePlayerSignup(
                 league=self._league[guild.id],
@@ -1284,7 +1284,7 @@ class MemberMixIn(RSCMixIn):
         guild: discord.Guild,
         member: discord.Member,
     ) -> Member:
-        async with ApiClient(self._api_conf[guild.id]) as client:
+        async with self.api_client(guild) as client:
             api = MembersApi(client)
             data = DropAPlayerFromALeague(
                 league=self._league[guild.id],

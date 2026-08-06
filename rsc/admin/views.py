@@ -1,5 +1,8 @@
+import contextlib
 import logging
+import re
 from enum import IntEnum
+from typing import TYPE_CHECKING, Any, cast
 
 import discord
 from rscapi import ApiClient, Configuration, MembersApi
@@ -8,13 +11,14 @@ from rscapi.models.activity_request import ActivityRequest
 from rscapi.models.activity_check import ActivityCheck
 from rscapi.models.league_player import LeaguePlayer
 
-from rsc.const import DEFAULT_TIMEOUT
+from rsc.const import DEFAULT_MODMAIL_BOT_ID, DEFAULT_TIMEOUT, RSC_COG_NAME
 from rsc.embeds import (
     ApiExceptionErrorEmbed,
     GreenEmbed,
     LoadingEmbed,
     OrangeEmbed,
     RedEmbed,
+    YellowEmbed,
 )
 from rsc.exceptions import RscException
 from rsc.types import RebrandTeamDict
@@ -25,6 +29,11 @@ from rsc.views import (
     ConfirmButton,
     DeclineButton,
 )
+
+if TYPE_CHECKING:
+    from redbot.core.bot import Red
+
+    from rsc.abc import RSCMixIn
 
 log = logging.getLogger("red.rsc.admin.views")
 
@@ -117,6 +126,270 @@ class InactiveCheckView(discord.ui.View):
                 return await api.members_activity_check_create(player.id, data)
             except ApiException as exc:
                 raise RscException(response=exc)
+
+
+INTENT_DM_TEMPLATE = r"intent_dm:(?P<guild>\d+):(?P<season>\d+):(?P<returning>yes|no)"
+
+
+def modmail_reference(modmail_id: int) -> str:
+    """Render the ModMail bot as a mention plus a profile link.
+
+    A bare mention can display as a raw ID in a DM when the client has not
+    cached the bot user, so the link is included as a guaranteed fallback.
+    """
+    return f"<@{modmail_id}> (https://discord.com/users/{modmail_id})"
+
+
+class IntentDMButton(discord.ui.DynamicItem[discord.ui.Button], template=INTENT_DM_TEMPLATE):
+    """Declare Intent to Play directly from a DM button.
+
+    Registered once globally with `bot.add_dynamic_items()`. The guild and season
+    ride along inside the custom_id, so a click resolves without persisting
+    anything per message or per season, and buttons from prior seasons keep
+    matching the template instead of dying silently.
+
+    The season in the custom_id does NOT enforce the signup deadline - it only
+    identifies which prompt was clicked. `next_signup_season` is the authority
+    on whether signups are still open.
+    """
+
+    def __init__(self, guild_id: int, season: int, returning: bool):
+        self.guild_id = guild_id
+        self.season = season
+        self.returning = returning
+        # Set once the API has accepted the declaration, so the catch-all can tell
+        # "we never recorded it" apart from "recorded, but the reply failed".
+        self.declared = False
+        super().__init__(
+            discord.ui.Button(
+                label="Returning" if returning else "Not Returning",
+                style=discord.ButtonStyle.green if returning else discord.ButtonStyle.red,
+                custom_id=f"intent_dm:{guild_id}:{season}:{'yes' if returning else 'no'}",
+            )
+        )
+
+    @classmethod
+    async def from_custom_id(
+        cls,
+        interaction: discord.Interaction,
+        item: discord.ui.Item[Any],
+        match: re.Match[str],
+        /,
+    ) -> "IntentDMButton":
+        # Parsing only. This runs inside the same 3 second budget as the callback
+        # and any exception raised here is logged then swallowed, which would
+        # leave the player staring at a dead button.
+        return cls(
+            guild_id=int(match["guild"]),
+            season=int(match["season"]),
+            returning=match["returning"] == "yes",
+        )
+
+    async def callback(self, interaction: discord.Interaction):
+        # Acknowledge before anything else. Every branch below hits the RSC API,
+        # which can easily exceed the 3 second initial response deadline.
+        await interaction.response.defer()
+
+        # discord.py swallows anything raised out of a dynamic item callback, and
+        # a type 6 deferral leaves the message untouched. Without this catch-all an
+        # escaping error looks to the player like a click that silently did nothing.
+        try:
+            await self._declare(interaction)
+        except Exception:
+            log.exception(f"[Intent DM] Unhandled error handling click from {interaction.user.id}")
+            with contextlib.suppress(discord.HTTPException):
+                await self._retry(interaction, self._late_error() if self.declared else self._player_error())
+
+    async def _declare(self, interaction: discord.Interaction):
+        bot = cast("Red", interaction.client)
+        raw_cog = bot.get_cog(RSC_COG_NAME)
+        guild = bot.get_guild(self.guild_id)
+        if not (raw_cog and guild):
+            log.warning(f"[Intent DM] Unable to resolve guild {self.guild_id} or {RSC_COG_NAME} cog")
+            return await self._retry(interaction, self._player_error())
+
+        cog = cast("RSCMixIn", raw_cog)
+        # Reads config only, so it is safe before the API readiness check below
+        modmail = modmail_reference(await cog._get_modmail_bot(guild))
+
+        # The API wrappers index `_api_conf`/`_league` directly, so an unconfigured
+        # guild - or one clicked before `setup()` finished after a restart - would
+        # raise KeyError rather than RscException. Same guard as `rsc.decorator.apicall`.
+        if not (cog._api_conf.get(guild.id) and cog._league.get(guild.id)):
+            log.warning(f"[{guild.name}] [Intent DM] Guild is not configured for API access")
+            return await self._retry(interaction, self._player_error(modmail))
+
+        # Signups closed is the authoritative deadline check
+        try:
+            season = await cog.next_signup_season(guild)
+        except RscException as exc:
+            if exc.type == "SignupsClosedException":
+                return await self._finish(
+                    interaction,
+                    OrangeEmbed(
+                        title="Signups Are Closed",
+                        description=(
+                            f"Signups for **{guild.name}** have closed, so intent can no longer be declared here.\n\n"
+                            f"If you still need to sign up, please message {modmail} to open a ticket."
+                        ),
+                    ),
+                )
+            log.warning(f"[{guild.name}] [Intent DM] Error fetching signup season: {exc.reason}")
+            return await self._retry(interaction, self._player_error(modmail))
+
+        if not (season and season.number):
+            return await self._finish(
+                interaction,
+                OrangeEmbed(
+                    title="Signups Are Closed",
+                    description=(
+                        f"There is no season currently open for signups in **{guild.name}**.\n\n"
+                        f"If you still need to sign up, please message {modmail} to open a ticket."
+                    ),
+                ),
+            )
+
+        # The DM belongs to an older season than the one now open for signups
+        if season.number != self.season:
+            return await self._finish(
+                interaction,
+                YellowEmbed(
+                    title="This Message Is Out Of Date",
+                    description=(
+                        f"This message asked about **Season {self.season}**, but signups are now open for "
+                        f"**Season {season.number}**.\n\n"
+                        f"Please run `/signup` in **{guild.name}** to declare your intent for the current season."
+                    ),
+                ),
+            )
+
+        try:
+            result = await cog.declare_intent(guild=guild, member=interaction.user.id, returning=self.returning)
+            self.declared = True
+            log.debug(f"[{guild.name}] [Intent DM] Result for {interaction.user.id}: {result}")
+        except RscException as exc:
+            if exc.status == 409:
+                return await self._finish(
+                    interaction,
+                    YellowEmbed(
+                        title="Intent to Play",
+                        description=exc.reason or "You have already declared your intent for this season.",
+                    ),
+                )
+            log.warning(f"[{guild.name}] [Intent DM] Error declaring intent: {exc.reason}")
+            return await self._retry(interaction, self._player_error(modmail))
+
+        if self.returning:
+            embed = GreenEmbed(
+                title="Intent to Play Declared",
+                description=f"You are marked as **RETURNING** for Season {season.number} of **{guild.name}**.",
+            )
+        else:
+            embed = RedEmbed(
+                title="Intent to Play Declared",
+                description=f"You are marked as **NOT RETURNING** for Season {season.number} of **{guild.name}**.",
+            )
+        await self._finish(interaction, embed)
+
+    @staticmethod
+    def _late_error() -> discord.Embed:
+        """The declaration landed but the reply did not.
+
+        Must not tell the player to try again - the intent is already recorded and
+        a retry would only earn them a 409.
+        """
+        return YellowEmbed(
+            title="Intent Recorded",
+            description=(
+                "Your intent was recorded, but we could not update this message.\n\n"
+                "No further action is needed. Use `/intent status` in the server to confirm."
+            ),
+        )
+
+    @staticmethod
+    def _player_error(modmail: str | None = None) -> discord.Embed:
+        """Player facing error. The technical detail goes to the log, not the DM.
+
+        `modmail` is optional so the catch-all in `callback` can still produce a
+        useful message when the failure happened before the guild's configured
+        ModMail bot could be resolved.
+        """
+        return RedEmbed(
+            title="Something Went Wrong",
+            description=(
+                "We could not record your intent right now. Please try the buttons again in a few minutes.\n\n"
+                f"If it keeps failing, message {modmail or modmail_reference(DEFAULT_MODMAIL_BOT_ID)} to open a ticket."
+            ),
+        )
+
+    async def _finish(self, interaction: discord.Interaction, embed: discord.Embed):
+        """Terminal outcome. Replace the DM body and strip the buttons.
+
+        Never call `self.stop()` or mutate the buttons here - a dynamic item is
+        reconstructed per click, but the underlying view belongs to the message.
+        """
+        await interaction.edit_original_response(embed=embed, view=None)
+
+    async def _retry(self, interaction: discord.Interaction, embed: discord.Embed):
+        """Transient failure. Leave the buttons in place so the player can retry."""
+        await interaction.followup.send(embed=embed, ephemeral=True)
+
+
+def build_intent_dm_view(guild_id: int, season: int) -> discord.ui.View:
+    """Build the button pair sent in an Intent to Play DM.
+
+    Deliberately not registered with `add_view()`. Dispatch happens through the
+    `IntentDMButton` template registered once via `add_dynamic_items()`.
+    """
+    view = discord.ui.View(timeout=None)
+    view.add_item(IntentDMButton(guild_id=guild_id, season=season, returning=True))
+    view.add_item(IntentDMButton(guild_id=guild_id, season=season, returning=False))
+    return view
+
+
+class IntentDMConfirmView(AuthorOnlyView):
+    """Confirmation gate shown before mass DMing players with missing intents.
+
+    Assumes the invoking interaction was already deferred, so the prompt edits
+    the original response rather than sending a followup. That keeps the
+    confirm/decline edits pointed at the same message.
+    """
+
+    def __init__(
+        self,
+        interaction: discord.Interaction,
+        prompt_embed: discord.Embed,
+        timeout: float = DEFAULT_TIMEOUT,
+    ):
+        super().__init__(interaction=interaction, timeout=timeout)
+        self.prompt_embed = prompt_embed
+        self.result = False
+        self.add_item(ConfirmButton())
+        self.add_item(CancelButton())
+
+    async def prompt(self):
+        await self.interaction.edit_original_response(embed=self.prompt_embed, view=self)
+
+    async def confirm(self, interaction: discord.Interaction):
+        self.result = True
+        await interaction.response.defer(ephemeral=True)
+        await self.interaction.edit_original_response(
+            embed=LoadingEmbed(title="Queueing Intent DMs"),
+            view=None,
+        )
+        self.stop()
+
+    async def decline(self, interaction: discord.Interaction):
+        self.result = False
+        await interaction.response.defer(ephemeral=True)
+        await self.interaction.edit_original_response(
+            embed=RedEmbed(
+                title="Cancelled",
+                description="No DMs were sent.",
+            ),
+            view=None,
+        )
+        self.stop()
 
 
 class ConfirmSyncView(AuthorOnlyView):

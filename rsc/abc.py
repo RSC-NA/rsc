@@ -1,5 +1,7 @@
+import logging
 from abc import ABC, ABCMeta, abstractmethod
 from collections.abc import AsyncIterator, Sequence
+from contextlib import asynccontextmanager
 from datetime import datetime
 from os import PathLike
 from typing import TYPE_CHECKING
@@ -11,7 +13,7 @@ from aiohttp.web_runner import AppRunner, TCPSite
 from discord.ext.commands import CogMeta as DPYCogMeta
 from redbot.core import Config as RedConfig
 from redbot.core.bot import Red
-from rscapi import Configuration as ApiConfig
+from rscapi import ApiClient, Configuration as ApiConfig
 from rscapi.models.activity_check import ActivityCheck
 from rscapi.models.deleted import Deleted
 from rscapi.models.elevated_role import ElevatedRole
@@ -60,6 +62,9 @@ if TYPE_CHECKING:
     from rsc.utils.dm import DMHelper
 
 
+logger = logging.getLogger("red.rsc.abc")
+
+
 class RSCMixIn(ABC):
     """ABC class used for type hinting RSC Mix In modules"""
 
@@ -68,10 +73,13 @@ class RSCMixIn(ABC):
 
     _league: dict[int, int]
     _api_conf: dict[int, ApiConfig]
+    # Long lived API clients. One session per guild, reused for the process
+    # lifetime so calls do not pay a TLS handshake each time.
+    _api_clients: dict[int, ApiClient]
 
     _franchise_cache: dict[int, list[str]]
-    _web_runner: AppRunner
-    _web_site: TCPSite
+    _web_runner: AppRunner | None
+    _web_site: TCPSite | None
 
     _team_cache: dict[int, list[str]]
 
@@ -82,11 +90,47 @@ class RSCMixIn(ABC):
 
     # Core
 
+    @asynccontextmanager
+    async def api_client(self, guild: discord.Guild) -> AsyncIterator[ApiClient]:
+        """Yield the guild's long lived API client.
+
+        Deliberately does NOT close the client on exit. `ApiClient` owns an
+        `aiohttp.ClientSession` created on first request and closed by
+        `ApiClient.close()`, so the previous `async with ApiClient(...)` pattern
+        paid a fresh TCP + TLS handshake on every single call. The session is
+        safe for concurrent use and is torn down by `close_api_clients()`.
+        """
+        # Lazily initialized: a mixin used standalone has not run RSC.__init__.
+        cache = getattr(self, "_api_clients", None)
+        if cache is None:
+            cache = self._api_clients = {}
+
+        client = cache.get(guild.id)
+        if client is None:
+            client = ApiClient(self._api_conf[guild.id])
+            cache[guild.id] = client
+        yield client
+
+    async def close_api_clients(self):
+        """Close every long lived API client and drop them from the cache."""
+        cache = getattr(self, "_api_clients", None)
+        if cache is None:
+            return
+        for guild_id, client in list(cache.items()):
+            del cache[guild_id]
+            try:
+                await client.close()
+            except Exception as exc:
+                logger.warning(f"Error closing API client for guild {guild_id}: {exc}")
+
     @abstractmethod
     async def timezone(self, guild: discord.Guild) -> ZoneInfo: ...
 
     @abstractmethod
     async def _get_api_url(self, guild: discord.Guild) -> str | None: ...
+
+    @abstractmethod
+    async def _get_modmail_bot(self, guild: discord.Guild) -> int: ...
 
     # Events
 

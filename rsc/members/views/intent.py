@@ -1,5 +1,6 @@
 import logging
 from enum import IntEnum
+from typing import cast
 
 import discord
 from discord.ui import ActionRow, Container, Separator, TextDisplay
@@ -23,7 +24,7 @@ class _IntentSelect(discord.ui.Select):
         self.add_option(label="Not returning next season", value="no", emoji="\N{CROSS MARK}")
 
     async def callback(self, interaction: discord.Interaction):
-        view: IntentToPlayView = self.view  # type: ignore[assignment]
+        view = cast("IntentToPlayView", self.view)
         view.result = self.values[0] == "yes"
         # Mark chosen option as default so it shows when disabled
         for opt in self.options:
@@ -39,7 +40,7 @@ class _ConfirmButton(discord.ui.Button):
         )
 
     async def callback(self, interaction: discord.Interaction):
-        view: IntentToPlayView = self.view  # type: ignore[assignment]
+        view = cast("IntentToPlayView", self.view)
         await view.confirm(interaction)
 
 
@@ -51,7 +52,7 @@ class _CancelButton(discord.ui.Button):
         )
 
     async def callback(self, interaction: discord.Interaction):
-        view: IntentToPlayView = self.view  # type: ignore[assignment]
+        view = cast("IntentToPlayView", self.view)
         view.state = IntentState.CANCELLED
         view.stop()
         await interaction.response.defer(ephemeral=True)

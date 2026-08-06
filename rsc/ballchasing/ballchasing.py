@@ -4,6 +4,7 @@ import math
 
 # import statistics
 import string
+from collections.abc import Sequence
 from datetime import datetime, timedelta
 from urllib.parse import urljoin
 
@@ -71,9 +72,21 @@ class BallchasingMixIn(RSCMixIn):
 
     async def prepare_ballchasing(self, guild: discord.Guild):
         token = await self._get_bc_auth_token(guild)
-        log.debug(f"Preparing ballchasing API for guild. Token: {token}", guild=guild)
-        if token:
-            self._ballchasing_api[guild.id] = await ballchasing.Api.create(auth_key=token.strip())
+        log.debug("Preparing ballchasing API for guild", guild=guild)
+        if not token:
+            return
+
+        # setup() re-runs on every on_ready(). Api.create() builds a new
+        # ClientSession each time, so the previous one must be closed or it
+        # leaks a socket per reconnect.
+        stale = self._ballchasing_api.pop(guild.id, None)
+        if stale is not None:
+            try:
+                await stale.close()
+            except Exception as exc:
+                log.warning(f"Error closing stale ballchasing session: {exc}", guild=guild)
+
+        self._ballchasing_api[guild.id] = await ballchasing.Api.create(auth_key=token.strip())
 
     # Settings
 
@@ -458,7 +471,7 @@ class BallchasingMixIn(RSCMixIn):
         await interaction.followup.send(embed=embed, ephemeral=True)
 
         try:
-            bc_group = await self.process_match_replays(guild, match=match, replays=replay_files)  # type: ignore[arg-type]
+            bc_group = await self.process_match_replays(guild, match=match, replays=replay_files)
         except Exception as exc:
             log.exception(f"Error processing match replays: {exc}", exc_info=exc, guild=guild, match=match)
             return await interaction.edit_original_response(embed=ExceptionErrorEmbed(exc_message=str(exc)))
@@ -531,7 +544,7 @@ class BallchasingMixIn(RSCMixIn):
 
     # Functions
 
-    async def process_match_replays(self, guild: discord.Guild, match: Match, replays: list[discord.Attachment | str | bytes]):
+    async def process_match_replays(self, guild: discord.Guild, match: Match, replays: Sequence[discord.Attachment | str | bytes]):
         log.debug(
             f"Processing match: {match.home_team.name} vs {match.away_team.name}",
             guild=guild,
@@ -569,19 +582,18 @@ class BallchasingMixIn(RSCMixIn):
         log.debug(f"Replay Collisions: {collisions}", guild=guild, match=match)
 
         # Remove collisions from upload list
-        for c in collisions:
-            replays.remove(c)
+        pending = [r for r in replays if r not in collisions]
 
         # Upload replays (only if we need to)
-        if replays:
-            await self.upload_replays(guild, group=match_group_id, replays=replays, match=match)
+        if pending:
+            await self.upload_replays(guild, group=match_group_id, replays=pending, match=match)
         else:
             log.debug("No new replays to upload", guild=guild, match=match)
 
         return match_group_id
 
     async def upload_replays(
-        self, guild: discord.Guild, group: str, replays: list[discord.Attachment | str | bytes], match: Match | None = None
+        self, guild: discord.Guild, group: str, replays: Sequence[discord.Attachment | str | bytes], match: Match | None = None
     ) -> list[str]:
         if not replays:
             raise ValueError("No replays provided for upload to ballchasing.")
@@ -603,8 +615,10 @@ class BallchasingMixIn(RSCMixIn):
                 elif isinstance(replay, bytes):
                     rdata = replay
                 elif isinstance(replay, str):
-                    # Read bytes from file
-                    fdata = await trio.Path(replay).read_bytes()
+                    # Read bytes from file. trio declares its Path methods as plain
+                    # `Callable` attributes, which do not bind `self` under the typing
+                    # spec, so ty sees the call as missing an argument.
+                    fdata = await trio.Path(replay).read_bytes()  # ty: ignore[missing-argument]
                     rdata = fdata
 
                 # Upload to ballchasing group
@@ -785,8 +799,12 @@ class BallchasingMixIn(RSCMixIn):
 
     async def close_ballchasing_sessions(self):
         log.info("Closing ballchasing sessions")
-        for bapi in self._ballchasing_api.values():
-            await bapi.close()
+        for guild_id, bapi in list(self._ballchasing_api.items()):
+            del self._ballchasing_api[guild_id]
+            try:
+                await bapi.close()
+            except Exception as exc:
+                log.warning(f"Error closing ballchasing session for guild {guild_id}: {exc}")
 
     async def ballchasing_init(self, guild: discord.Guild) -> ballchasing.Api:
         token = await self._get_bc_auth_token(guild)

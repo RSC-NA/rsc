@@ -178,7 +178,7 @@ class CombineRunnerMixIn(RSCMixIn):
             log.error("League role does not exist in guild.")
             return []
 
-        player_overwrites = {
+        player_overwrites: dict[discord.Role | discord.Member | discord.Object, discord.PermissionOverwrite] = {
             guild.default_role: discord.PermissionOverwrite(
                 view_channel=True,
                 connect=False,

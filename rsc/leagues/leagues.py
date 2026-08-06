@@ -5,7 +5,7 @@ from datetime import datetime
 from aiohttp import web
 import discord
 from redbot.core import app_commands
-from rscapi import ApiClient, LeaguePlayersApi, LeaguesApi
+from rscapi import LeaguePlayersApi, LeaguesApi
 from rscapi.exceptions import ApiException
 from rscapi.models.league import League
 from rscapi.models.league_player import LeaguePlayer
@@ -208,7 +208,7 @@ class LeagueMixIn(RSCMixIn):
     async def leagues(self, guild: discord.Guild) -> list[League]:
         """Get a list of leagues from the API"""
         try:
-            async with ApiClient(self._api_conf[guild.id]) as client:
+            async with self.api_client(guild) as client:
                 api = LeaguesApi(client)
                 return await api.leagues_list()
         except ApiException as exc:
@@ -217,7 +217,7 @@ class LeagueMixIn(RSCMixIn):
     async def league(self, guild: discord.Guild) -> League | None:
         """Get data for the guilds configured league"""
         try:
-            async with ApiClient(self._api_conf[guild.id]) as client:
+            async with self.api_client(guild) as client:
                 api = LeaguesApi(client)
                 return await api.leagues_retrieve(self._league[guild.id])
         except ApiException as exc:
@@ -226,7 +226,7 @@ class LeagueMixIn(RSCMixIn):
     async def league_by_id(self, guild: discord.Guild, id: int) -> League | None:
         """Fetch a league from the API by ID"""
         try:
-            async with ApiClient(self._api_conf[guild.id]) as client:
+            async with self.api_client(guild) as client:
                 api = LeaguesApi(client)
                 return await api.leagues_retrieve(id)
         except ApiException as exc:
@@ -235,7 +235,7 @@ class LeagueMixIn(RSCMixIn):
     async def current_season(self, guild: discord.Guild) -> Season | None:
         """Get current season of league from API"""
         try:
-            async with ApiClient(self._api_conf[guild.id]) as client:
+            async with self.api_client(guild) as client:
                 api = LeaguesApi(client)
                 return await api.leagues_current_season_retrieve(self._league[guild.id])
         except ApiException as exc:
@@ -244,7 +244,7 @@ class LeagueMixIn(RSCMixIn):
     async def league_seasons(self, guild: discord.Guild) -> list[Season]:
         """Get current season of league from API"""
         try:
-            async with ApiClient(self._api_conf[guild.id]) as client:
+            async with self.api_client(guild) as client:
                 api = LeaguesApi(client)
                 return await api.leagues_seasons_list(self._league[guild.id])
         except ApiException as exc:
@@ -265,7 +265,7 @@ class LeagueMixIn(RSCMixIn):
         limit: int = 0,
         offset: int = 0,
     ) -> list[LeaguePlayer]:
-        async with ApiClient(self._api_conf[guild.id]) as client:
+        async with self.api_client(guild) as client:
             api = LeaguePlayersApi(client)
             try:
                 players = await api.league_players_list(
@@ -299,7 +299,7 @@ class LeagueMixIn(RSCMixIn):
         franchise: str | None = None,
         discord_id: int | None = None,
     ) -> int:
-        async with ApiClient(self._api_conf[guild.id]) as client:
+        async with self.api_client(guild) as client:
             api = LeaguePlayersApi(client)
             try:
                 # Get one player to get the count, we don't actually care about the data here
@@ -334,7 +334,7 @@ class LeagueMixIn(RSCMixIn):
         franchise: str | None = None,
         discord_id: int | None = None,
     ) -> int:
-        async with ApiClient(self._api_conf[guild.id]) as client:
+        async with self.api_client(guild) as client:
             api = LeaguePlayersApi(client)
             try:
                 players = await api.league_players_list(
@@ -371,7 +371,7 @@ class LeagueMixIn(RSCMixIn):
     ) -> AsyncIterator[LeaguePlayer]:
         offset = 0
         while True:
-            async with ApiClient(self._api_conf[guild.id]) as client:
+            async with self.api_client(guild) as client:
                 api = LeaguePlayersApi(client)
                 try:
                     players = await api.league_players_list(
@@ -439,7 +439,7 @@ class LeagueMixIn(RSCMixIn):
                 waiver_period = waiver_period.replace(hour=12, minute=0, second=0, microsecond=0, tzinfo=tz)
             data.waiver_period = waiver_period.isoformat()
 
-        async with ApiClient(self._api_conf[guild.id]) as client:
+        async with self.api_client(guild) as client:
             api = LeaguePlayersApi(client)
             log.debug(f"League Player Patch: {data}")
             try:

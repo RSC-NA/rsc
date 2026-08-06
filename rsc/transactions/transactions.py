@@ -9,7 +9,7 @@ from pprint import pformat
 import discord
 from discord.ext import tasks
 from redbot.core import app_commands, commands
-from rscapi import ApiClient, LeaguePlayersApi, TransactionsApi
+from rscapi import LeaguePlayersApi, TransactionsApi
 from rscapi.exceptions import ApiException
 from rscapi.models.draft_input import DraftInput
 from rscapi.models.draft_pick_trade import DraftPickTrade
@@ -2838,7 +2838,7 @@ class TransactionMixIn(RSCMixIn):
         override: bool = False,
     ) -> TransactionResponse:
         """Sign player to a team"""
-        async with ApiClient(self._api_conf[guild.id]) as client:
+        async with self.api_client(guild) as client:
             api = TransactionsApi(client)
             data = PlayerTeamInput(
                 player=player.id,
@@ -2863,7 +2863,7 @@ class TransactionMixIn(RSCMixIn):
         override: bool = False,
     ) -> TransactionResponse:
         """Cut a player from their team"""
-        async with ApiClient(self._api_conf[guild.id]) as client:
+        async with self.api_client(guild) as client:
             api = TransactionsApi(client)
             data = PlayerInput(
                 player=player.id,
@@ -2888,7 +2888,7 @@ class TransactionMixIn(RSCMixIn):
         override: bool = False,
     ) -> TransactionResponse:
         """Resign player to a team"""
-        async with ApiClient(self._api_conf[guild.id]) as client:
+        async with self.api_client(guild) as client:
             api = TransactionsApi(client)
             data = PlayerTeamInput(
                 player=player.id,
@@ -2906,7 +2906,7 @@ class TransactionMixIn(RSCMixIn):
 
     async def set_captain(self, guild: discord.Guild, id: int) -> LeaguePlayer:
         """Set a player as captain using their discord ID"""
-        async with ApiClient(self._api_conf[guild.id]) as client:
+        async with self.api_client(guild) as client:
             api = LeaguePlayersApi(client)
             return await api.league_players_set_captain_create(id)
 
@@ -2920,7 +2920,7 @@ class TransactionMixIn(RSCMixIn):
         override: bool = False,
     ) -> TransactionResponse:
         """Sub a player in for another player"""
-        async with ApiClient(self._api_conf[guild.id]) as client:
+        async with self.api_client(guild) as client:
             api = TransactionsApi(client)
             data = SubInput(
                 league=self._league[guild.id],
@@ -2943,7 +2943,7 @@ class TransactionMixIn(RSCMixIn):
         executor: discord.Member,
     ) -> LeaguePlayer:
         """Sub a player in for another player"""
-        async with ApiClient(self._api_conf[guild.id]) as client:
+        async with self.api_client(guild) as client:
             api = TransactionsApi(client)
             data = PlayerInput(league=self._league[guild.id], player=player.id, executor=executor.id)
             log.debug(f"Expire Sub Data: {data}", guild=guild)
@@ -2961,7 +2961,7 @@ class TransactionMixIn(RSCMixIn):
         override: bool = False,
     ) -> TransactionResponse:
         """Retire a player from the league"""
-        async with ApiClient(self._api_conf[guild.id]) as client:
+        async with self.api_client(guild) as client:
             api = TransactionsApi(client)
             data = PlayerInput(
                 league=self._league[guild.id],
@@ -2987,7 +2987,7 @@ class TransactionMixIn(RSCMixIn):
         remove: bool = False,
     ) -> TransactionResponse:
         """Move a player or AGM to inactive reserve"""
-        async with ApiClient(self._api_conf[guild.id]) as client:
+        async with self.api_client(guild) as client:
             api = TransactionsApi(client)
             data = IRInput(
                 league=self._league[guild.id],
@@ -3015,7 +3015,7 @@ class TransactionMixIn(RSCMixIn):
         offset: int = 0,
     ) -> list[TransactionResponse]:
         """Fetch transaction history based on specified criteria"""
-        async with ApiClient(self._api_conf[guild.id]) as client:
+        async with self.api_client(guild) as client:
             api = TransactionsApi(client)
             player_id = player.id if player else None
             executor_id = executor.id if executor else None
@@ -3058,7 +3058,7 @@ class TransactionMixIn(RSCMixIn):
         )
 
         offset = 0
-        async with ApiClient(self._api_conf[guild.id]) as client:
+        async with self.api_client(guild) as client:
             api = TransactionsApi(client)
             while True:
                 log.debug(f"Offset: {offset}")
@@ -3091,7 +3091,7 @@ class TransactionMixIn(RSCMixIn):
 
     async def transaction_history_by_id(self, guild: discord.Guild, transaction_id: int) -> TransactionResponse:
         """Fetch transaction history based on specified criteria"""
-        async with ApiClient(self._api_conf[guild.id]) as client:
+        async with self.api_client(guild) as client:
             api = TransactionsApi(client)
             try:
                 return await api.transactions_history_retrieve(id=transaction_id)
@@ -3107,7 +3107,7 @@ class TransactionMixIn(RSCMixIn):
         override: bool = False,
     ) -> TransactionResponse:
         """Fetch transaction history based on specified criteria"""
-        async with ApiClient(self._api_conf[guild.id]) as client:
+        async with self.api_client(guild) as client:
             api = TransactionsApi(client)
             try:
                 schema = TradeTransaction(
@@ -3128,7 +3128,7 @@ class TransactionMixIn(RSCMixIn):
         franchise_name: str,
     ) -> FranchiseFuturesValidationResponse:
         """Validate a franchise future board."""
-        async with ApiClient(self._api_conf[guild.id]) as client:
+        async with self.api_client(guild) as client:
             api = TransactionsApi(client)
             try:
                 schema = FranchiseFuturesValidation(
@@ -3151,7 +3151,7 @@ class TransactionMixIn(RSCMixIn):
         override: bool = False,
     ) -> TransactionResponse:
         """Fetch transaction history based on specified criteria"""
-        async with ApiClient(self._api_conf[guild.id]) as client:
+        async with self.api_client(guild) as client:
             api = TransactionsApi(client)
             try:
                 draft_pick = DraftInput(

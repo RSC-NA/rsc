@@ -76,8 +76,16 @@ class Accolades:
         if isinstance(other, int):
             return self.total == other
         if isinstance(other, Accolades):
-            return self.total == other.total
+            return (
+                self.trophy == other.trophy
+                and self.star == other.star
+                and self.devleague == other.devleague
+                and self.combine_cup == other.combine_cup
+            )
         return NotImplemented
+
+    def __hash__(self) -> int:
+        return hash((self.trophy, self.star, self.devleague, self.combine_cup))
 
     def __gt__(self, other: object):
         if isinstance(other, int):
@@ -86,7 +94,7 @@ class Accolades:
             return self.total > other.total
         return NotImplemented
 
-    def __lt(self, other: object):
+    def __lt__(self, other: object):
         if isinstance(other, int):
             return self.total < other
         if isinstance(other, Accolades):
@@ -100,7 +108,7 @@ class Accolades:
             return self.total >= other.total
         return NotImplemented
 
-    def __le(self, other: object):
+    def __le__(self, other: object):
         if isinstance(other, int):
             return self.total <= other
         if isinstance(other, Accolades):
@@ -116,6 +124,9 @@ class AdminSettings(TypedDict):
     IntentChannel: discord.TextChannel | None
     IntentMissingRole: discord.Role | None
     IntentMissingMsg: str | None
+    IntentDmLastSeason: int | None
+    IntentDmLastRun: int | None  # unix timestamp, rendered with discord <t:> markup
+    IntentDmLastExecutor: int | None
     PermFAChannel: int | None
     PermFAMsgIds: list[int] | None
 

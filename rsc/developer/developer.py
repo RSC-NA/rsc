@@ -1,10 +1,10 @@
 import logging
-from logging import handlers
 import os
 
 import aiofiles
 import discord
 from redbot.core import app_commands
+from redbot.logging import RotatingFileHandler
 
 from rsc.abc import RSCMixIn
 from rsc.embeds import ErrorEmbed
@@ -68,7 +68,8 @@ class DeveloperMixIn(RSCMixIn):
         latest_log_path = None
         root_logger = logging.getLogger()
         for fh in root_logger.handlers:
-            if not isinstance(fh, handlers.RotatingFileHandler):  # type: ignore[attr-defined]
+            # Red's subclass, not the stdlib one. Only it defines `baseStem`.
+            if not isinstance(fh, RotatingFileHandler):
                 log.debug("Not a file handler...")
                 continue
             if fh.baseStem == "latest":

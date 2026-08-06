@@ -28,7 +28,7 @@ class TestMmrPullsApi:
         resp.results = [MagicMock(), MagicMock()]
         mixin = _create_mixin(_api_conf={mock_guild.id: MagicMock()})
 
-        with patch("rsc.numbers.numbers.ApiClient") as mock_client:
+        with patch("rsc.abc.ApiClient") as mock_client:
             mock_api = AsyncMock()
             mock_api.numbers_mmr_list.return_value = resp
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
@@ -61,7 +61,7 @@ class TestMmrPullsApi:
     async def test_raises_rsc_exception(self, mock_guild):
         mixin = _create_mixin(_api_conf={mock_guild.id: MagicMock()})
 
-        with patch("rsc.numbers.numbers.ApiClient") as mock_client:
+        with patch("rsc.abc.ApiClient") as mock_client:
             mock_api = AsyncMock()
             mock_api.numbers_mmr_list.side_effect = ApiException(status=500, reason="Error")
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())

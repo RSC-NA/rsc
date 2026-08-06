@@ -869,7 +869,7 @@ class TestSignApi:
         return m
 
     @patch("rsc.transactions.transactions.TransactionsApi")
-    @patch("rsc.transactions.transactions.ApiClient")
+    @patch("rsc.abc.ApiClient")
     async def test_sign_success(self, mock_client_cls, mock_api_cls, mixin, mock_guild, mock_member, mock_executor):
         mock_api = AsyncMock()
         expected = _make_transaction_response(type=TransactionType.PICKUP)
@@ -885,7 +885,7 @@ class TestSignApi:
         assert result is expected
 
     @patch("rsc.transactions.transactions.TransactionsApi")
-    @patch("rsc.transactions.transactions.ApiClient")
+    @patch("rsc.abc.ApiClient")
     async def test_sign_api_exception(self, mock_client_cls, mock_api_cls, mixin, mock_guild, mock_member, mock_executor):
         mock_api = AsyncMock()
         exc = ApiException(status=400, reason="Bad Request")
@@ -911,7 +911,7 @@ class TestCutApi:
         return m
 
     @patch("rsc.transactions.transactions.TransactionsApi")
-    @patch("rsc.transactions.transactions.ApiClient")
+    @patch("rsc.abc.ApiClient")
     async def test_cut_success(self, mock_client_cls, mock_api_cls, mixin, mock_guild, mock_member, mock_executor):
         mock_api = AsyncMock()
         expected = _make_transaction_response(type=TransactionType.CUT)
@@ -927,7 +927,7 @@ class TestCutApi:
         assert result is expected
 
     @patch("rsc.transactions.transactions.TransactionsApi")
-    @patch("rsc.transactions.transactions.ApiClient")
+    @patch("rsc.abc.ApiClient")
     async def test_cut_api_exception_translated(self, mock_client_cls, mock_api_cls, mixin, mock_guild, mock_member, mock_executor):
         mock_api = AsyncMock()
         exc = ApiException(status=400, reason="Bad Request")
@@ -955,7 +955,7 @@ class TestResignApi:
         return m
 
     @patch("rsc.transactions.transactions.TransactionsApi")
-    @patch("rsc.transactions.transactions.ApiClient")
+    @patch("rsc.abc.ApiClient")
     async def test_resign_success(self, mock_client_cls, mock_api_cls, mixin, mock_guild, mock_member, mock_executor):
         mock_api = AsyncMock()
         expected = _make_transaction_response(type=TransactionType.RESIGN)
@@ -980,7 +980,7 @@ class TestSubstitutionApi:
         return m
 
     @patch("rsc.transactions.transactions.TransactionsApi")
-    @patch("rsc.transactions.transactions.ApiClient")
+    @patch("rsc.abc.ApiClient")
     async def test_substitution_success(self, mock_client_cls, mock_api_cls, mixin, mock_guild, mock_member, mock_player_out, mock_executor):
         mock_api = AsyncMock()
         expected = _make_transaction_response(type=TransactionType.SUBSTITUTION)
@@ -996,7 +996,7 @@ class TestSubstitutionApi:
         assert result is expected
 
     @patch("rsc.transactions.transactions.TransactionsApi")
-    @patch("rsc.transactions.transactions.ApiClient")
+    @patch("rsc.abc.ApiClient")
     async def test_substitution_api_exception(self, mock_client_cls, mock_api_cls, mixin, mock_guild, mock_member, mock_player_out, mock_executor):
         mock_api = AsyncMock()
         exc = ApiException(status=400, reason="Bad Request")
@@ -1022,7 +1022,7 @@ class TestRetireApi:
         return m
 
     @patch("rsc.transactions.transactions.TransactionsApi")
-    @patch("rsc.transactions.transactions.ApiClient")
+    @patch("rsc.abc.ApiClient")
     async def test_retire_success(self, mock_client_cls, mock_api_cls, mixin, mock_guild, mock_member, mock_executor):
         mock_api = AsyncMock()
         expected = _make_transaction_response(type=TransactionType.RETIRE)
@@ -1047,7 +1047,7 @@ class TestInactiveReserveApi:
         return m
 
     @patch("rsc.transactions.transactions.TransactionsApi")
-    @patch("rsc.transactions.transactions.ApiClient")
+    @patch("rsc.abc.ApiClient")
     async def test_ir_move_success(self, mock_client_cls, mock_api_cls, mixin, mock_guild, mock_member, mock_executor):
         mock_api = AsyncMock()
         expected = _make_transaction_response(type=TransactionType.INACTIVE_RESERVE)
@@ -1063,7 +1063,7 @@ class TestInactiveReserveApi:
         assert result is expected
 
     @patch("rsc.transactions.transactions.TransactionsApi")
-    @patch("rsc.transactions.transactions.ApiClient")
+    @patch("rsc.abc.ApiClient")
     async def test_ir_return_success(self, mock_client_cls, mock_api_cls, mixin, mock_guild, mock_member, mock_executor):
         mock_api = AsyncMock()
         expected = _make_transaction_response(type=TransactionType.IR_RETURN)
@@ -1079,7 +1079,7 @@ class TestInactiveReserveApi:
         assert result is expected
 
     @patch("rsc.transactions.transactions.TransactionsApi")
-    @patch("rsc.transactions.transactions.ApiClient")
+    @patch("rsc.abc.ApiClient")
     async def test_ir_redshirt_success(self, mock_client_cls, mock_api_cls, mixin, mock_guild, mock_member, mock_executor):
         mock_api = AsyncMock()
         expected = _make_transaction_response(type=TransactionType.INACTIVE_RESERVE)
@@ -1104,7 +1104,7 @@ class TestExpireSubApi:
         return m
 
     @patch("rsc.transactions.transactions.TransactionsApi")
-    @patch("rsc.transactions.transactions.ApiClient")
+    @patch("rsc.abc.ApiClient")
     async def test_expire_sub_success(self, mock_client_cls, mock_api_cls, mixin, mock_guild, mock_member, mock_executor):
         mock_api = AsyncMock()
         expected = MagicMock(spec=LeaguePlayer)
@@ -1129,7 +1129,7 @@ class TestDraftApi:
         return m
 
     @patch("rsc.transactions.transactions.TransactionsApi")
-    @patch("rsc.transactions.transactions.ApiClient")
+    @patch("rsc.abc.ApiClient")
     async def test_draft_success(self, mock_client_cls, mock_api_cls, mixin, mock_guild, mock_member, mock_executor):
         mock_api = AsyncMock()
         expected = _make_transaction_response(type=TransactionType.DRAFT)
@@ -1154,7 +1154,7 @@ class TestTradeApi:
         return m
 
     @patch("rsc.transactions.transactions.TransactionsApi")
-    @patch("rsc.transactions.transactions.ApiClient")
+    @patch("rsc.abc.ApiClient")
     async def test_trade_success(self, mock_client_cls, mock_api_cls, mixin, mock_guild, mock_executor):
         mock_api = AsyncMock()
         expected = _make_transaction_response(type=TransactionType.TRADE)
@@ -1179,7 +1179,7 @@ class TestValidateFranchiseFuturesApi:
         return m
 
     @patch("rsc.transactions.transactions.TransactionsApi")
-    @patch("rsc.transactions.transactions.ApiClient")
+    @patch("rsc.abc.ApiClient")
     async def test_validate_futures_success(self, mock_client_cls, mock_api_cls, mixin, mock_guild):
         mock_api = AsyncMock()
         expected = _make_futures_validation_response(is_valid=False)
@@ -1200,7 +1200,7 @@ class TestValidateFranchiseFuturesApi:
         assert schema.franchise_name == "Test Franchise"
 
     @patch("rsc.transactions.transactions.TransactionsApi")
-    @patch("rsc.transactions.transactions.ApiClient")
+    @patch("rsc.abc.ApiClient")
     async def test_validate_futures_api_exception(self, mock_client_cls, mock_api_cls, mixin, mock_guild):
         mock_api = AsyncMock()
         exc = ApiException(status=400, reason="Bad Request")
@@ -1283,7 +1283,7 @@ class TestTransactionHistoryApi:
         return m
 
     @patch("rsc.transactions.transactions.TransactionsApi")
-    @patch("rsc.transactions.transactions.ApiClient")
+    @patch("rsc.abc.ApiClient")
     async def test_history_success(self, mock_client_cls, mock_api_cls, mixin, mock_guild):
         mock_api = AsyncMock()
         mock_result = MagicMock()
@@ -1300,7 +1300,7 @@ class TestTransactionHistoryApi:
         assert len(result) == 1
 
     @patch("rsc.transactions.transactions.TransactionsApi")
-    @patch("rsc.transactions.transactions.ApiClient")
+    @patch("rsc.abc.ApiClient")
     async def test_history_with_filters(self, mock_client_cls, mock_api_cls, mixin, mock_guild, mock_member, mock_executor):
         mock_api = AsyncMock()
         mock_result = MagicMock()
@@ -1324,7 +1324,7 @@ class TestTransactionHistoryApi:
         assert isinstance(result, list)
 
     @patch("rsc.transactions.transactions.TransactionsApi")
-    @patch("rsc.transactions.transactions.ApiClient")
+    @patch("rsc.abc.ApiClient")
     async def test_history_api_exception(self, mock_client_cls, mock_api_cls, mixin, mock_guild):
         mock_api = AsyncMock()
         exc = ApiException(status=500, reason="Internal Server Error")
@@ -1350,7 +1350,7 @@ class TestTransactionHistoryByIdApi:
         return m
 
     @patch("rsc.transactions.transactions.TransactionsApi")
-    @patch("rsc.transactions.transactions.ApiClient")
+    @patch("rsc.abc.ApiClient")
     async def test_history_by_id_success(self, mock_client_cls, mock_api_cls, mixin, mock_guild):
         mock_api = AsyncMock()
         expected = _make_transaction_response(type=TransactionType.CUT, id=42)
@@ -1375,7 +1375,7 @@ class TestPagedTransactionHistoryApi:
         return m
 
     @patch("rsc.transactions.transactions.TransactionsApi")
-    @patch("rsc.transactions.transactions.ApiClient")
+    @patch("rsc.abc.ApiClient")
     async def test_paged_history_iterates(self, mock_client_cls, mock_api_cls, mixin, mock_guild):
         mock_api = AsyncMock()
 
@@ -1402,7 +1402,7 @@ class TestPagedTransactionHistoryApi:
         assert results[1] is t2
 
     @patch("rsc.transactions.transactions.TransactionsApi")
-    @patch("rsc.transactions.transactions.ApiClient")
+    @patch("rsc.abc.ApiClient")
     async def test_paged_history_empty(self, mock_client_cls, mock_api_cls, mixin, mock_guild):
         mock_api = AsyncMock()
         page = MagicMock()

@@ -84,7 +84,7 @@ def guild() -> MagicMock:
 
 def stub_api(api: FakeApi):
     """Patch `ApiClient`/`IntegrationsApi` in the module under test."""
-    client_patch = patch("rsc.events.events.ApiClient")
+    client_patch = patch("rsc.abc.ApiClient")
     api_patch = patch("rsc.events.events.IntegrationsApi", return_value=api)
     return client_patch, api_patch
 

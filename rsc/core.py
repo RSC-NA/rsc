@@ -4,13 +4,14 @@ import logging
 from zoneinfo import ZoneInfo
 
 from aiohttp import web
+from aiohttp_retry import ExponentialRetry
 import discord
 import pytz
 import validators
 from pydantic import ValidationError
 from redbot.core import Config, app_commands, commands
 from redbot.core.bot import Red
-from rscapi import Configuration
+from rscapi import ApiClient, Configuration
 from rscapi.exceptions import ApiException
 
 from rsc.abc import CompositeMetaClass
@@ -25,11 +26,13 @@ from rsc.admin.members import AdminMembersMixIn
 # from rsc.admin.permfa import AdminPermFAMixIn
 from rsc.admin.stats import AdminStatsMixIn
 from rsc.admin.sync import AdminSyncMixIn
+from rsc.admin.views import IntentDMButton
 from rsc.ballchasing import BallchasingMixIn
 from rsc.combines import CombineMixIn
 from rsc.developer import DeveloperMixIn
 from rsc.devleague import DevLeagueMixIn
 from rsc.checks import bot_owner_required
+from rsc.const import API_RETRIES, API_RETRY_EXCEPTIONS, DEFAULT_MODMAIL_BOT_ID
 from rsc.embeds import BlueEmbed, ErrorEmbed, SuccessEmbed
 from rsc.enums import LogLevel
 from rsc.events import EventMixIn
@@ -65,6 +68,7 @@ defaults_guild = {
     "ApiKey": None,
     "ApiUrl": None,
     "League": None,
+    "ModmailBot": None,
     "TimeZone": "UTC",
 }
 
@@ -116,8 +120,18 @@ class RSC(
 
         # Define state of API connection
         self._api_conf: dict[int, Configuration] = {}
+        # Long lived API clients, keyed by guild. See api_client().
+        self._api_clients: dict[int, ApiClient] = {}
         # Cache the league associated with each guild
         self._league: dict[int, int] = {}
+
+        # Web runner state. Assigned by start_webapp(), which is idempotent.
+        self._web_runner = None
+        self._web_site = None
+
+        # setup() runs from both cog_load() and on_ready(). Serialize it so a
+        # reconnect firing mid-setup cannot interleave with the first run.
+        self._setup_lock = asyncio.Lock()
 
         # Shared rate-limited DM queue
         self._dm_helper = DMHelper()
@@ -148,64 +162,116 @@ class RSC(
         # cog sees is_running() == False and would start a second poller against
         # the same cursor. Cancelling here is mandatory, not tidiness.
         self.rsc_events_loop.cancel()
-        await self._dm_helper.stop()
+        # Discard rather than drain. Draining sends one DM per `rate` seconds, so a
+        # large queued batch would block the reload for many minutes.
+        await self._dm_helper.stop(drain=False)
         await self.close_ballchasing_sessions()
-        await self._web_runner.cleanup()
+        await self.close_api_clients()
+        if self._web_runner is not None:
+            await self._web_runner.cleanup()
+            self._web_runner = None
+            self._web_site = None
 
     async def setup(self):
         """Prepare the bot API and caches. Requires API configuration"""
-        log.info("Preparing API connector and local caches")
+        async with self._setup_lock:
+            log.info("Preparing API connector and local caches")
 
-        # Start runners
-        await self.start_webapp()
+            # Start runners
+            await self.start_webapp()
 
-        # Per guild setup
-        for guild in self.bot.guilds:
-            log.debug("Preparing RSC API configuration", guild=guild)
-            await self.prepare_api(guild)
+            # Intent to Play DM buttons.
+            #
+            # Registered once globally, not per guild and not per message. The guild
+            # and season live in the custom_id and are matched by regex, so buttons
+            # from any season keep dispatching after a restart instead of dying.
+            self.bot.add_dynamic_items(IntentDMButton)
 
-            if self._api_conf.get(guild.id):
-                await self.prepare_league(guild)
-                log.debug("Preparing caches", guild=guild)
-                try:
-                    async with asyncio.TaskGroup() as tg:
-                        tg.create_task(self.tiers(guild))
-                        tg.create_task(self.franchises(guild))
-                        tg.create_task(self.teams(guild))
-                        # tg.create_task(self._populate_combines_cache(guild))
-                        tg.create_task(self._populate_free_agent_cache(guild))
-                        tg.create_task(self.prepare_ballchasing(guild))
-                        tg.create_task(self.setup_persistent_activity_check(guild))
-                except* ApiException as eg:
-                    # API is down or not responding
-                    for err in eg.exceptions:
-                        if hasattr(err, "status"):
-                            log.exception(
-                                f"Setup Error. Status: {err.status} Reason: {err}",
-                                exc_info=err,
-                                guild=guild,
-                            )
-                            match err.status:
-                                case 504:
-                                    log.error("Connection to RSC API timed out. (504)")
-                                case 502:
-                                    log.error("Bad gateway response from RSC API. (502)")
-                                case 500:
-                                    log.error("API Internal Server Error. (500)")
-                                case 403:
-                                    log.error("Forbidden response from RSC API. (403)")
-                                case 401:
-                                    log.error("Unauthorized response from RSC API. (401)")
-                                case _:
-                                    raise err
-                        else:
-                            log.exception(f"Setup Error: {err}", exc_info=err, guild=guild)
-                            # raise err
-                except* ValidationError as eg:
-                    for verr in eg.exceptions:
-                        log.exception(f"*ValidationError: {verr!r}", exc_info=verr, guild=guild)
-                    # raise eg.exceptions[0]
-        log.info("Finished preparing caches.")
+            # Per guild setup.
+            #
+            # Guilds share no state, so prepare them concurrently instead of
+            # paying the sum of their round trips. return_exceptions keeps one
+            # guild's failure from aborting the others -- previously an error
+            # type outside the except* handlers below unwound the whole loop and
+            # every remaining guild was silently left with empty caches.
+            guilds = list(self.bot.guilds)
+            results = await asyncio.gather(
+                *(self._setup_guild(guild) for guild in guilds),
+                return_exceptions=True,
+            )
+            for guild, result in zip(guilds, results, strict=True):
+                if isinstance(result, BaseException):
+                    log.error(
+                        f"Unhandled error preparing guild: {result!r}",
+                        exc_info=result,
+                        guild=guild,
+                    )
+            log.info("Finished preparing caches.")
+
+    async def _setup_guild(self, guild: discord.Guild):
+        """Prepare the API configuration and caches for a single guild."""
+        log.debug("Preparing RSC API configuration", guild=guild)
+        await self.prepare_api(guild)
+
+        has_api = bool(self._api_conf.get(guild.id))
+        if has_api:
+            await self.prepare_league(guild)
+        else:
+            log.debug("Guild has no API configuration. Skipping API caches.", guild=guild)
+
+        # tiers/franchises/teams/setup_persistent_activity_check index _league
+        # directly rather than using .get(), so a guild with no league must not
+        # reach them.
+        has_league = has_api and bool(self._league.get(guild.id))
+        if has_api and not has_league:
+            log.warning("Guild has no league configured. Skipping league caches.", guild=guild)
+
+        log.debug("Preparing caches", guild=guild)
+        try:
+            async with asyncio.TaskGroup() as tg:
+                # Reads Config only, so it runs for every guild regardless of
+                # API configuration. This used to live in the FA loop's
+                # before_loop hook, which looped over all guilds unconditionally.
+                tg.create_task(self._populate_free_agent_cache(guild))
+                if has_api:
+                    tg.create_task(self.prepare_ballchasing(guild))
+                if has_league:
+                    tg.create_task(self.tiers(guild))
+                    tg.create_task(self.franchises(guild))
+                    tg.create_task(self.teams(guild))
+                    tg.create_task(self.setup_persistent_activity_check(guild))
+        except* ApiException as eg:
+            # API is down or not responding
+            for err in eg.exceptions:
+                if hasattr(err, "status"):
+                    log.exception(
+                        f"Setup Error. Status: {err.status} Reason: {err}",
+                        exc_info=err,
+                        guild=guild,
+                    )
+                    match err.status:
+                        case 504:
+                            log.error("Connection to RSC API timed out. (504)")
+                        case 502:
+                            log.error("Bad gateway response from RSC API. (502)")
+                        case 500:
+                            log.error("API Internal Server Error. (500)")
+                        case 403:
+                            log.error("Forbidden response from RSC API. (403)")
+                        case 401:
+                            log.error("Unauthorized response from RSC API. (401)")
+                        case _:
+                            log.error(f"Unexpected RSC API status during setup: {err.status}")
+                else:
+                    log.exception(f"Setup Error: {err}", exc_info=err, guild=guild)
+        except* ValidationError as eg:
+            for verr in eg.exceptions:
+                log.exception(f"*ValidationError: {verr!r}", exc_info=verr, guild=guild)
+        except* Exception as eg:
+            # teams() re-raises ApiException as RscException, which is not an
+            # ApiException and would otherwise escape every handler above.
+            for exc in eg.exceptions:
+                log.exception(f"Setup Error: {exc!r}", exc_info=exc, guild=guild)
 
     async def prepare_league(self, guild: discord.Guild):
         league = await self._get_league(guild)
@@ -218,10 +284,31 @@ class RSC(
         url = await self._get_api_url(guild)
         key = await self._get_api_key(guild)
         if url and key:
+            # The cached client is bound to the old Configuration. Both
+            # _set_api_key() and _set_api_url() funnel through here, so this is
+            # the only invalidation point required.
+            stale = self._api_clients.pop(guild.id, None)
+            if stale is not None:
+                try:
+                    await stale.close()
+                except Exception as exc:
+                    log.warning(f"Error closing stale API client: {exc}", guild=guild)
+
             self._api_conf[guild.id] = Configuration(
                 host=url,
                 api_key={"Api-Key": key},
                 api_key_prefix={"Api-Key": "Api-Key"},
+                # Built explicitly rather than passing a bare int. rscapi's int
+                # path leaves `exceptions` empty, which retries 5xx responses
+                # but re-raises the stale-socket errors that connection reuse
+                # makes possible. retry_all_server_errors stays on by default.
+                #
+                # ALLOW_RETRY_METHODS excludes POST, so no transaction is ever
+                # replayed regardless of what is listed here.
+                retries=ExponentialRetry(
+                    attempts=API_RETRIES,
+                    exceptions=set(API_RETRY_EXCEPTIONS),
+                ),
             )
         else:
             log.warning("RSC API key or url has not been configured!", guild=guild)
@@ -243,6 +330,14 @@ class RSC(
                 log.exception(f"Error: {e}", exc_info=e)
 
     async def start_webapp(self):
+        # setup() re-runs on every on_ready(), including gateway reconnects.
+        # Rebinding would raise "address already in use" and orphan the runner
+        # that actually owns the listening socket, so cog_unload() would then
+        # clean up the wrong one and leak the port across reloads.
+        if self._web_runner is not None:
+            log.debug("Web App is already running")
+            return
+
         log.debug("Starting Web App")
 
         self._web_app = web.Application()
@@ -253,11 +348,23 @@ class RSC(
         self._web_app.router.add_post("/league_player_update", self.league_player_update_handler)
 
         # Runner and Site
-        self._web_runner = web.AppRunner(self._web_app)
-        await self._web_runner.setup()
-        self._web_site = web.TCPSite(self._web_runner, "localhost", 8008)
+        runner = web.AppRunner(self._web_app)
+        await runner.setup()
+        site = web.TCPSite(runner, "localhost", 8008)
 
-        self._web_app_task = self.bot.loop.create_task(self._web_site.start())
+        try:
+            # Awaited rather than fired into a task. A bind failure used to
+            # surface only as "Task exception was never retrieved" at GC time.
+            await site.start()
+        except OSError as exc:
+            # Non-fatal. The webhook endpoints are dead, but the guild caches
+            # below are what the bot needs to be usable in Discord.
+            log.error(f"Unable to bind web app to localhost:8008: {exc}")
+            await runner.cleanup()
+            return
+
+        self._web_runner = runner
+        self._web_site = site
 
     # Autocomplete
 
@@ -326,6 +433,20 @@ class RSC(
             ephemeral=True,
         )
 
+    @RSCSettingsMixIn.rsc_settings.command(name="modmailbot", description="Configure the ModMail bot players are directed to.")
+    @bot_owner_required()
+    async def _rsc_set_modmail_bot(self, interaction: discord.Interaction, member: discord.Member | discord.User):
+        if not interaction.guild:
+            return
+
+        await self._set_modmail_bot(interaction.guild, member)
+        await interaction.response.send_message(
+            embed=SuccessEmbed(
+                description=f"ModMail bot has been set to {member.mention}",
+            ),
+            ephemeral=True,
+        )
+
     @RSCSettingsMixIn.rsc_settings.command(name="settings", description="Display the current RSC API settings.")
     async def _rsc_settings(self, interaction: discord.Interaction):
         guild = interaction.guild
@@ -335,6 +456,11 @@ class RSC(
         key = "Configured" if await self._get_api_key(guild) else "Not Configured"
         url = await self._get_api_url(guild) or "Not Configured"
         tz = await self._get_timezone(guild)
+
+        modmail_id = await self._get_modmail_bot(guild)
+        modmail_str = f"<@{modmail_id}>"
+        if not await self.config.guild(guild).ModmailBot():
+            modmail_str = f"{modmail_str} (default)"
 
         # Find league name if it is configured/exists
         league = None
@@ -353,6 +479,7 @@ class RSC(
         settings_embed.add_field(name="API Key", value=key, inline=False)
         settings_embed.add_field(name="API URL", value=url, inline=False)
         settings_embed.add_field(name="League", value=league_str, inline=False)
+        settings_embed.add_field(name="ModMail Bot", value=modmail_str, inline=False)
         settings_embed.add_field(name="Time Zone", value=tz, inline=False)
         await interaction.response.send_message(embed=settings_embed, ephemeral=True)
 
@@ -478,7 +605,10 @@ class RSC(
                 if cmd.name.lower() == "ballchasing":
                     stats_role = await self._get_bc_manager_role(guild)
                     if (stats_role and stats_role in interaction.user.roles) or interaction.user.guild_permissions.manage_guild:
-                        groups.append(cmd)  # type: ignore[arg-type]
+                        if isinstance(cmd, discord.app_commands.Group):
+                            groups.append(cmd)
+                        else:
+                            cmd_list.append(cmd)
                     continue
 
                 if isinstance(cmd, discord.app_commands.Group):
@@ -580,3 +710,10 @@ class RSC(
     async def _get_timezone(self, guild: discord.Guild) -> str:
         """Default: UTC"""
         return await self.config.guild(guild).TimeZone()
+
+    async def _set_modmail_bot(self, guild: discord.Guild, member: discord.Member | discord.User | None):
+        await self.config.guild(guild).ModmailBot.set(member.id if member else None)
+
+    async def _get_modmail_bot(self, guild: discord.Guild) -> int:
+        """ModMail bot discord ID. Falls back to `DEFAULT_MODMAIL_BOT_ID` if unconfigured."""
+        return await self.config.guild(guild).ModmailBot() or DEFAULT_MODMAIL_BOT_ID

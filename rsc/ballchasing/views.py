@@ -43,6 +43,8 @@ class BallchasingProcessingView(AuthorOnlyView):
 
         for m in self.matches:
             tier = m.home_team.tier
+            if not tier:
+                continue
 
             if not self.tier_groups.get(tier):
                 self.tier_groups[tier] = None
@@ -123,7 +125,9 @@ class BallchasingProcessingView(AuthorOnlyView):
 
     async def update(self, matches: list[Match]):
         for m in matches:
-            self.status[m.home_team.tier] += 1
+            tier = m.home_team.tier
+            if tier:
+                self.status[tier] += 1
         await self.prompt()
 
     async def prompt(self):

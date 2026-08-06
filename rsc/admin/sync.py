@@ -423,7 +423,7 @@ class AdminSyncMixIn(AdminMixIn):
                 farole = await guild.create_role(
                     name=f"{t.name}FA",
                     hoist=False,
-                    display_icon=fa_icon,  # type: ignore[arg-type]
+                    display_icon=fa_icon or discord.utils.MISSING,
                     permissions=const.GENERIC_ROLE_PERMS,
                     color=t.color or discord.Color.default(),
                     reason="Syncing tier roles from API.",

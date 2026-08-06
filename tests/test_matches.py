@@ -303,7 +303,7 @@ class TestMatchesApi:
             _league={mock_guild.id: 1},
         )
 
-        with patch("rsc.matches.matches.ApiClient") as mock_client:
+        with patch("rsc.abc.ApiClient") as mock_client:
             mock_api = AsyncMock()
             mock_api.matches_list.return_value = match_resp
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
@@ -319,7 +319,7 @@ class TestMatchesApi:
             _league={mock_guild.id: 1},
         )
 
-        with patch("rsc.matches.matches.ApiClient") as mock_client:
+        with patch("rsc.abc.ApiClient") as mock_client:
             mock_api = AsyncMock()
             mock_api.matches_list.side_effect = ApiException(status=500, reason="Error")
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
@@ -334,7 +334,7 @@ class TestMatchByDayApi:
         match = MagicMock()
         mixin = _create_mixin(_api_conf={mock_guild.id: MagicMock()})
 
-        with patch("rsc.matches.matches.ApiClient") as mock_client:
+        with patch("rsc.abc.ApiClient") as mock_client:
             mock_api = AsyncMock()
             mock_api.teams_match_retrieve.return_value = match
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
@@ -347,7 +347,7 @@ class TestMatchByDayApi:
     async def test_raises_rsc_exception_on_api_error(self, mock_guild):
         mixin = _create_mixin(_api_conf={mock_guild.id: MagicMock()})
 
-        with patch("rsc.matches.matches.ApiClient") as mock_client:
+        with patch("rsc.abc.ApiClient") as mock_client:
             mock_api = AsyncMock()
             mock_api.teams_match_retrieve.side_effect = ApiException(status=404, reason="Not Found")
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
@@ -366,7 +366,7 @@ class TestFindMatchApi:
             _league={mock_guild.id: 1},
         )
 
-        with patch("rsc.matches.matches.ApiClient") as mock_client:
+        with patch("rsc.abc.ApiClient") as mock_client:
             mock_api = AsyncMock()
             mock_api.matches_find_match_retrieve.return_value = resp
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
@@ -383,7 +383,7 @@ class TestMatchByIdApi:
         match.id = 42
         mixin = _create_mixin(_api_conf={mock_guild.id: MagicMock()})
 
-        with patch("rsc.matches.matches.ApiClient") as mock_client:
+        with patch("rsc.abc.ApiClient") as mock_client:
             mock_api = AsyncMock()
             mock_api.matches_retrieve.return_value = match
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
@@ -399,7 +399,7 @@ class TestReportMatchApi:
         result_mock = MagicMock()
         mixin = _create_mixin(_api_conf={mock_guild.id: MagicMock()})
 
-        with patch("rsc.matches.matches.ApiClient") as mock_client:
+        with patch("rsc.abc.ApiClient") as mock_client:
             mock_api = AsyncMock()
             mock_api.matches_score_report_create.return_value = result_mock
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
@@ -419,7 +419,7 @@ class TestReportMatchApi:
     async def test_raises_rsc_exception_on_api_error(self, mock_guild, mock_executor):
         mixin = _create_mixin(_api_conf={mock_guild.id: MagicMock()})
 
-        with patch("rsc.matches.matches.ApiClient") as mock_client:
+        with patch("rsc.abc.ApiClient") as mock_client:
             mock_api = AsyncMock()
             mock_api.matches_score_report_create.side_effect = ApiException(status=400, reason="Bad")
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
@@ -441,7 +441,7 @@ class TestCreateMatchApi:
         created = MagicMock()
         mixin = _create_mixin(_api_conf={mock_guild.id: MagicMock()})
 
-        with patch("rsc.matches.matches.ApiClient") as mock_client:
+        with patch("rsc.abc.ApiClient") as mock_client:
             mock_api = AsyncMock()
             mock_api.matches_create.return_value = created
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
@@ -464,7 +464,7 @@ class TestMatchResultsApi:
         results = MagicMock()
         mixin = _create_mixin(_api_conf={mock_guild.id: MagicMock()})
 
-        with patch("rsc.matches.matches.ApiClient") as mock_client:
+        with patch("rsc.abc.ApiClient") as mock_client:
             mock_api = AsyncMock()
             mock_api.matches_results_retrieve.return_value = results
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
@@ -477,7 +477,7 @@ class TestMatchResultsApi:
     async def test_raises_rsc_exception_on_api_error(self, mock_guild):
         mixin = _create_mixin(_api_conf={mock_guild.id: MagicMock()})
 
-        with patch("rsc.matches.matches.ApiClient") as mock_client:
+        with patch("rsc.abc.ApiClient") as mock_client:
             mock_api = AsyncMock()
             mock_api.matches_results_retrieve.side_effect = ApiException(status=500, reason="Error")
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())

@@ -2,7 +2,7 @@ import logging
 from operator import attrgetter
 
 import discord
-from rscapi import ApiClient, SeasonsApi
+from rscapi import SeasonsApi
 from rscapi.exceptions import ApiException
 from rscapi.models import ActivityCheck
 from rscapi.models.franchise_standings import FranchiseStandings
@@ -44,7 +44,7 @@ class SeasonsMixIn(RSCMixIn):
     # API Commands
 
     async def seasons(self, guild: discord.Guild, number: int | None = None, current: bool | None = None) -> list[Season]:
-        async with ApiClient(self._api_conf[guild.id]) as client:
+        async with self.api_client(guild) as client:
             api = SeasonsApi(client)
             league_id = self._league[guild.id]
             try:
@@ -54,7 +54,7 @@ class SeasonsMixIn(RSCMixIn):
                 raise RscException(response=exc)
 
     async def season_by_id(self, guild: discord.Guild, season_id: int) -> Season:
-        async with ApiClient(self._api_conf[guild.id]) as client:
+        async with self.api_client(guild) as client:
             api = SeasonsApi(client)
             try:
                 return await api.seasons_retrieve(season_id)
@@ -63,7 +63,7 @@ class SeasonsMixIn(RSCMixIn):
 
     async def next_signup_season(self, guild: discord.Guild) -> Season | None:
         """Query to API to find out if signups are open for any season"""
-        async with ApiClient(self._api_conf[guild.id]) as client:
+        async with self.api_client(guild) as client:
             api = SeasonsApi(client)
             league_id = self._league[guild.id]
             try:
@@ -81,7 +81,7 @@ class SeasonsMixIn(RSCMixIn):
         returning: bool | None = None,
         missing: bool | None = None,
     ) -> list[IntentToPlay]:
-        async with ApiClient(self._api_conf[guild.id]) as client:
+        async with self.api_client(guild) as client:
             api = SeasonsApi(client)
             try:
                 discord_id = player.id if player else None
@@ -96,7 +96,7 @@ class SeasonsMixIn(RSCMixIn):
                 raise RscException(response=exc)
 
     async def franchise_standings(self, guild: discord.Guild, season_id: int) -> list[FranchiseStandings]:
-        async with ApiClient(self._api_conf[guild.id]) as client:
+        async with self.api_client(guild) as client:
             api = SeasonsApi(client)
             try:
                 return await api.seasons_franchise_standings_list(season_id)
@@ -115,7 +115,7 @@ class SeasonsMixIn(RSCMixIn):
         limit: int = 50,
         offset: int = 0,
     ) -> list[ActivityCheck]:
-        async with ApiClient(self._api_conf[guild.id]) as client:
+        async with self.api_client(guild) as client:
             api = SeasonsApi(client)
             try:
                 resp = await api.seasons_activity_check_list(

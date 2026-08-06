@@ -886,7 +886,7 @@ class LLMMixIn(RSCMixIn):
         if franchises is None:
             return await self.franchises(guild)
         if isinstance(franchises, list):
-            return franchises
+            return cast("list[FranchiseList]", franchises)
         return await franchises
 
     async def _build_franchise_documents(
@@ -1097,6 +1097,12 @@ class LLMMixIn(RSCMixIn):
                 raise ValueError("Current season is not configured.")
             return current_season
 
+        async def require_season_number() -> int:
+            current_season = await require_current_season()
+            if current_season.number is None:
+                raise ValueError("Current season is not configured.")
+            return current_season.number
+
         if interaction:
             await interaction.edit_original_response(
                 embed=YellowEmbed(
@@ -1132,11 +1138,9 @@ class LLMMixIn(RSCMixIn):
             case DocumentSource.PLAYERS:
                 docs = await self._build_player_documents(guild)
             case DocumentSource.PLAYER_STATS:
-                current_season = await require_current_season()
-                docs = await self._build_player_stats_documents(guild, current_season.number)
+                docs = await self._build_player_stats_documents(guild, await require_season_number())
             case DocumentSource.MATCHES:
-                current_season = await require_current_season()
-                docs = await self._build_match_documents(guild, current_season.number)
+                docs = await self._build_match_documents(guild, await require_season_number())
             case DocumentSource.TEAMS:
                 docs = await self._build_team_documents(guild)
             case DocumentSource.TEAM_STATS:
@@ -1289,7 +1293,7 @@ class LLMMixIn(RSCMixIn):
             Formatted string of unique sources
         """
         results: list[str] = []
-        seen: set[str] = set()
+        seen: set[str | int] = set()
         for meta in sources:
             source = meta.get("source")
             doc_id = meta.get("id")
@@ -1323,8 +1327,10 @@ class LLMMixIn(RSCMixIn):
         elif len(channel.members) > LLM_SUMMARY_MAX_VIEWERS:
             return (
                 False,
-                f"This channel appears to be broadly visible ({len(channel.members)} viewers). "
-                f"Ticket summaries are limited to <= {LLM_SUMMARY_MAX_VIEWERS} viewers.",
+                (
+                    f"This channel appears to be broadly visible ({len(channel.members)} viewers). "
+                    f"Ticket summaries are limited to <= {LLM_SUMMARY_MAX_VIEWERS} viewers."
+                ),
             )
 
         return (True, "")

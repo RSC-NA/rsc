@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import discord
 import pytest
 
-from rsc.utils.dm import DMHelper, DMTask, SCHEDULE_POLL_INTERVAL
+from rsc.utils.dm import MAX_FAILED_MEMBERS, DMHelper, DMTask, SCHEDULE_POLL_INTERVAL
 
 
 def _mock_member(name="TestUser", member_id=111111111):
@@ -18,21 +18,34 @@ def _mock_member(name="TestUser", member_id=111111111):
     return member
 
 
+def _mock_user(name="TestUser", user_id=222222222):
+    """Create a mock Discord user (no guild) with a working async send()."""
+    user = MagicMock(spec=discord.User)
+    user.id = user_id
+    user.name = name
+    user.__str__ = lambda self: name
+    user.send = AsyncMock()
+    return user
+
+
 class TestDMTask:
     def test_defaults(self):
         member = _mock_member()
         task = DMTask(member=member)
         assert task.content is None
         assert task.embed is None
+        assert task.view is None
         assert task.send_at is None
 
     def test_with_all_fields(self):
         member = _mock_member()
         embed = MagicMock(spec=discord.Embed)
+        view = MagicMock(spec=discord.ui.View)
         when = datetime(2099, 1, 1, tzinfo=UTC)
-        task = DMTask(member=member, content="hi", embed=embed, send_at=when)
+        task = DMTask(member=member, content="hi", embed=embed, view=view, send_at=when)
         assert task.content == "hi"
         assert task.embed is embed
+        assert task.view is view
         assert task.send_at == when
 
 
@@ -60,6 +73,13 @@ class TestDMHelperLifecycle:
         assert helper.success == 0
         assert helper.failed == 0
         assert helper.total == 0
+        await helper.stop()
+
+    async def test_start_resets_failed_members(self):
+        helper = DMHelper(rate=0)
+        helper._failed_members = [_mock_member()]
+        helper.start()
+        assert helper.failed_members == []
         await helper.stop()
 
 
@@ -106,6 +126,27 @@ class TestDMHelperSend:
         assert helper.success == 10
         assert helper.total == 10
 
+    async def test_sends_view(self):
+        helper = DMHelper(rate=0)
+        helper.start()
+        member = _mock_member()
+        embed = MagicMock(spec=discord.Embed)
+        view = MagicMock(spec=discord.ui.View)
+        await helper.enqueue(member, embed=embed, view=view)
+        await helper.stop()
+        member.send.assert_awaited_once_with(embed=embed, view=view)
+        assert helper.success == 1
+
+    async def test_accepts_discord_user(self):
+        """DM targets need not be guild members - `send()` is Messageable.send."""
+        helper = DMHelper(rate=0)
+        helper.start()
+        user = _mock_user()
+        await helper.enqueue(user, content="hi")
+        await helper.stop()
+        user.send.assert_awaited_once_with(content="hi")
+        assert helper.success == 1
+
     async def test_forbidden_counts_as_failed(self):
         helper = DMHelper(rate=0)
         helper.start()
@@ -116,6 +157,15 @@ class TestDMHelperSend:
         assert helper.failed == 1
         assert helper.success == 0
 
+    async def test_forbidden_records_failed_member(self):
+        helper = DMHelper(rate=0)
+        helper.start()
+        member = _mock_member()
+        member.send.side_effect = discord.Forbidden(MagicMock(), "Cannot DM")
+        await helper.enqueue(member, content="hi")
+        await helper.stop()
+        assert helper.failed_members == [member]
+
     async def test_http_exception_counts_as_failed(self):
         helper = DMHelper(rate=0)
         helper.start()
@@ -125,6 +175,49 @@ class TestDMHelperSend:
         await helper.stop()
         assert helper.failed == 1
         assert helper.success == 0
+
+    async def test_http_exception_records_failed_member(self):
+        helper = DMHelper(rate=0)
+        helper.start()
+        member = _mock_member()
+        member.send.side_effect = discord.HTTPException(MagicMock(), "Server error")
+        await helper.enqueue(member, content="hi")
+        await helper.stop()
+        assert helper.failed_members == [member]
+
+    async def test_successful_send_records_no_failure(self):
+        helper = DMHelper(rate=0)
+        helper.start()
+        member = _mock_member()
+        await helper.enqueue(member, content="hi")
+        await helper.stop()
+        assert helper.failed_members == []
+
+    async def test_failed_members_is_bounded(self):
+        """The helper is a long lived singleton, so the ring must not grow forever."""
+        helper = DMHelper(rate=0)
+        helper.start()
+        overflow = 5
+        members = [_mock_member(f"U{i}", 900 + i) for i in range(MAX_FAILED_MEMBERS + overflow)]
+        for m in members:
+            m.send.side_effect = discord.Forbidden(MagicMock(), "Cannot DM")
+            await helper.enqueue(m, content="hi")
+        await helper.stop()
+
+        assert helper.failed == MAX_FAILED_MEMBERS + overflow  # counter is exact
+        assert len(helper.failed_members) == MAX_FAILED_MEMBERS  # retained set is capped
+        assert helper.failed_members == members[overflow:]  # oldest evicted
+
+    async def test_failed_members_property_is_a_copy(self):
+        """Callers must not be able to mutate the helper's internal list."""
+        helper = DMHelper(rate=0)
+        helper.start()
+        member = _mock_member()
+        member.send.side_effect = discord.Forbidden(MagicMock(), "Cannot DM")
+        await helper.enqueue(member, content="hi")
+        await helper.stop()
+        helper.failed_members.clear()
+        assert helper.failed_members == [member]
 
     @patch("rsc.utils.dm.asyncio.sleep", new_callable=AsyncMock)
     async def test_rate_limited_retries_then_succeeds(self, mock_sleep):
@@ -151,6 +244,128 @@ class TestDMHelperSend:
         await helper.stop()
         assert helper.failed == 1
         assert helper.success == 0
+
+    @patch("rsc.utils.dm.asyncio.sleep", new_callable=AsyncMock)
+    async def test_exhausted_retries_records_failed_member(self, mock_sleep):
+        helper = DMHelper(rate=0)
+        helper.start()
+        member = _mock_member()
+        member.send.side_effect = discord.RateLimited(0.0)
+        await helper.enqueue(member, content="hi")
+        await helper.stop()
+        assert helper.failed_members == [member]
+
+
+class TestDMHelperPurge:
+    """Aborting a mass DM batch. Without this a mistaken run is unrecoverable."""
+
+    async def test_purge_drops_pending_without_sending(self):
+        helper = DMHelper(rate=5)  # slow consumer so the queue actually builds
+        helper.start()
+        members = [_mock_member(f"U{i}", 700 + i) for i in range(10)]
+        for m in members:
+            await helper.enqueue(m, content="hi")
+
+        dropped = await helper.purge()
+
+        assert dropped >= 9  # at most one may already be in flight
+        assert helper.pending == 0
+        assert helper.cancelled == dropped
+        await helper.stop(drain=False)
+        # Nobody past the first should have been messaged
+        assert sum(m.send.await_count for m in members) <= 1
+
+    async def test_purge_also_drops_scheduled(self):
+        helper = DMHelper(rate=0)
+        helper.start()
+        future = datetime.now(UTC) + timedelta(hours=1)
+        for i in range(3):
+            await helper.enqueue(_mock_member(f"S{i}", 800 + i), content="later", send_at=future)
+        assert helper.scheduled == 3
+
+        dropped = await helper.purge()
+
+        assert dropped == 3
+        assert helper.scheduled == 0
+        await helper.stop(drain=False)
+
+    async def test_purge_on_empty_queue_is_a_noop(self):
+        helper = DMHelper(rate=0)
+        helper.start()
+        assert await helper.purge() == 0
+        await helper.stop()
+
+    async def test_stop_without_drain_discards_the_backlog(self):
+        """cog_unload must not block for minutes delivering a queued batch."""
+        helper = DMHelper(rate=5)
+        helper.start()
+        members = [_mock_member(f"D{i}", 850 + i) for i in range(10)]
+        for m in members:
+            await helper.enqueue(m, content="hi")
+
+        await helper.stop(drain=False)
+
+        assert sum(m.send.await_count for m in members) <= 1
+        assert helper.cancelled >= 9
+
+    async def test_stop_with_drain_still_sends_the_backlog(self):
+        helper = DMHelper(rate=0)
+        helper.start()
+        members = [_mock_member(f"E{i}", 870 + i) for i in range(5)]
+        for m in members:
+            await helper.enqueue(m, content="hi")
+
+        await helper.stop(drain=True)
+
+        for m in members:
+            m.send.assert_awaited_once_with(content="hi")
+
+
+class TestDMHelperPrecheck:
+    async def test_precheck_false_skips_the_send(self):
+        helper = DMHelper(rate=0)
+        helper.start()
+        member = _mock_member()
+
+        async def no_longer_needed() -> bool:
+            return False
+
+        await helper.enqueue(member, content="hi", precheck=no_longer_needed)
+        await helper.stop()
+
+        member.send.assert_not_awaited()
+        assert helper.skipped == 1
+        assert helper.success == 0
+
+    async def test_precheck_true_sends(self):
+        helper = DMHelper(rate=0)
+        helper.start()
+        member = _mock_member()
+
+        async def still_needed() -> bool:
+            return True
+
+        await helper.enqueue(member, content="hi", precheck=still_needed)
+        await helper.stop()
+
+        member.send.assert_awaited_once_with(content="hi")
+        assert helper.skipped == 0
+
+    async def test_precheck_failure_sends_anyway(self):
+        """Fail open - a redundant DM beats silently dropping everyone."""
+        helper = DMHelper(rate=0)
+        helper.start()
+        member = _mock_member()
+
+        async def exploding() -> bool:
+            raise RuntimeError("API down")
+
+        await helper.enqueue(member, content="hi", precheck=exploding)
+        await helper.stop()
+
+        member.send.assert_awaited_once_with(content="hi")
+        assert helper.skipped == 0
+        assert helper.success == 1
 
 
 class TestDMHelperNonBlocking:
