@@ -169,22 +169,42 @@ class AdminMembersMixIn(AdminMixIn):
             await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc), ephemeral=False)
             return
 
-        # Update nickname in RSC
-        accolades = await utils.member_accolades(member)
-        pfx = await utils.get_prefix(member)
-
-        if pfx:  # noqa: SIM108
-            new_nick = f"{pfx} | {name} {accolades}".strip()
-        else:
-            new_nick = f"{name} {accolades}".strip()
-
-        if len(new_nick) > 30:
-            return await interaction.followup.send(
-                embed=ErrorEmbed(description=f"`{new_nick}` is too long and would exceed the 32 character.")
-            )
+        # Sync roles and nickname in discord
+        try:
+            plist = await self.players(guild, discord_id=member.id, limit=1)
+            tier_list = await self.tiers(guild)
+        except RscException as exc:
+            return await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc), ephemeral=False)
 
         try:
-            await member.edit(nick=new_nick)
+            if not plist:
+                # Not a league player. Only update the name, leave roles/prefix alone.
+                log.debug(f"{member.id} is not a league player. Only updating nickname.")
+                await utils.update_discord_name(member=member, name=name, prefix=await utils.get_prefix(member))
+            else:
+                lplayer = plist.pop(0)
+                if lplayer.status == Status.UNSIGNED_GM:
+                    # Need to pull franchise information for unsigned GMs
+                    # Data not available in `LeaguePlayer`
+                    flist = await self.franchises(guild, gm_discord_id=member.id)
+                    if len(flist) != 1:
+                        return await interaction.followup.send(
+                            embed=ErrorEmbed(
+                                description=(
+                                    "Name change was successful but unable to find a single franchise for un-signed GM in API. "
+                                    "Discord roles and nickname were not updated."
+                                )
+                            )
+                        )
+                    await update_league_player_discord(
+                        guild=guild, player=member, league_player=lplayer, tiers=tier_list, franchise=flist.pop(0)
+                    )
+                else:
+                    await update_league_player_discord(guild=guild, player=member, league_player=lplayer, tiers=tier_list)
+        except RscException as exc:
+            return await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc), ephemeral=False)
+        except (ValueError, AttributeError) as exc:
+            return await interaction.followup.send(embed=ExceptionErrorEmbed(exc_message=str(exc)))
         except discord.Forbidden as exc:
             await interaction.followup.send(content=f"Unable to update nickname {member.mention}: {exc}")
 
