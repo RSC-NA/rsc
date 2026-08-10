@@ -34,6 +34,18 @@ logger = logging.getLogger("red.rsc.utils")
 log = GuildLogAdapter(logger)
 
 FRANCHISE_ROLE_REGEX = re.compile(r"^\w[\w\s\x27]+?\s\(.+?\)$")
+# The emoji `Accolades.__str__` appends to a nickname, and the only ones that may
+# be stripped from a name. Kept in that order so the longest run comes off first.
+ACCOLADE_EMOJI = (
+    const.TROPHY_EMOJI,
+    const.STAR_EMOJI,
+    const.DEV_LEAGUE_EMOJI,
+    const.COOKIE_EMOJI,
+    const.COMBINE_CUP_EMOJI,
+)
+# Franchise prefixes are two or three characters in both leagues ("TQD", "50",
+# "<0>"). Allowing more would mangle RSC names that contain their own pipe.
+MAX_FRANCHISE_PREFIX_LEN = 3
 EMOJI_REGEX = re.compile(
     "["
     "\U0001f600-\U0001f64f"  # emoticons
@@ -276,6 +288,65 @@ async def get_former_gm_role(guild: discord.Guild) -> discord.Role:
         log.error(f"[{guild.name}] Expected role does not exist: {const.FORMER_GM_ROLE}")
         raise ValueError(f"[{guild.name}] Expected role does not exist: {const.FORMER_GM_ROLE}")
     return r
+
+
+def strip_franchise_prefix(name: str) -> str:
+    """Drop a "TQD | " style franchise prefix from a display name.
+
+    Unlike `remove_prefix`, this does not assume the first segment *is* a
+    prefix. 53 RSC names contain a pipe of their own ("Santiago | Kreiker",
+    "Pure | Rugged!"), and splitting those blindly hands back half a name. Every
+    franchise prefix in the API is two or three characters with no whitespace,
+    as are the bot's own "FA |" and "DE |", so a longer segment is left alone.
+    """
+    prefix, separator, remainder = name.partition(" | ")
+    if not separator:
+        return name.strip()
+    candidate = prefix.strip()
+    if len(candidate) > MAX_FRANCHISE_PREFIX_LEN or any(char.isspace() for char in candidate):
+        return name.strip()
+    return remainder.strip()
+
+
+def strip_trailing_accolades(name: str) -> str:
+    """Drop the accolade emoji the bot appends to a nickname.
+
+    Only from the end, and only the `Accolades` emoji. Nine RSC names carry one
+    of those emoji as part of the name itself, and 379 contain something
+    `EMOJI_REGEX` matches -- its ranges cover CJK and the styled latin alphabets
+    as well, so those names strip to nothing at all. A general emoji sweep is not
+    safe here.
+    """
+    result = name.strip()
+    while True:
+        for emoji in ACCOLADE_EMOJI:
+            if result.endswith(emoji):
+                result = result.removesuffix(emoji).strip()
+                break
+        else:
+            return result
+
+
+def rsc_name_from_display_name(name: str) -> str:
+    """An RSC name as the API stores it, recovered from a Discord display name.
+
+    The bot writes nicknames as `f"{prefix} | {name} {accolades}"`, so both ends
+    have to come off before the result will match `rsc_name` in the API. Neither
+    step is reversible with certainty: a two or three character segment before a
+    pipe is indistinguishable from a real prefix (15 RSC names lose one this
+    way), so treat the result as a search term rather than a key. A Discord id
+    is exact where one is available.
+    """
+    stripped = strip_trailing_accolades(strip_franchise_prefix(name))
+    # A nickname of nothing but a prefix and accolades leaves no name to return.
+    # An empty string is the more dangerous answer: as a filter it matches every
+    # player in the league rather than none.
+    return stripped or name.strip()
+
+
+def rsc_name_from_member(member: discord.Member | discord.User) -> str:
+    """The RSC name a guild member's nickname implies."""
+    return rsc_name_from_display_name(member.display_name)
 
 
 async def remove_prefix(member: discord.Member) -> str:
@@ -892,7 +963,7 @@ class UtilsMixIn(RSCMixIn):
                 value=(
                     "AFK channel: {afk_chan}\nAFK timeout: **{afk_timeout}**\nCustom emojis: **{emoji_count}**\nRoles: **{role_count}**"
                 ).format(
-                    afk_chan=guild.afk_channel if guild.afk_channel else "**Not set**",
+                    afk_chan=guild.afk_channel or "**Not set**",
                     afk_timeout=guild.afk_timeout,
                     emoji_count=len(guild.emojis),
                     role_count=len(guild.roles),
@@ -1190,7 +1261,7 @@ class UtilsMixIn(RSCMixIn):
         if not bulk_view.result:
             return
 
-        mlist = members if members else role.members
+        mlist = members or role.members
 
         failed = []
         for m in mlist:
@@ -1354,7 +1425,7 @@ class UtilsMixIn(RSCMixIn):
             self.handle_watching(user),
             self.handle_competing(user),
         ]:
-            status_string, status_type = a
+            status_string, _status_type = a
             if status_string is None:
                 continue
             string += f"{status_string}\n"

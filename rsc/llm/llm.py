@@ -2,17 +2,20 @@ from __future__ import annotations
 
 import base64
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
+from math import ceil
 
 import discord
 from redbot.core import app_commands, commands
 
 from rsc.abc import RSCMixIn
-from rsc.embeds import BetterEmbed, BlueEmbed, ErrorEmbed, GreenEmbed, SuccessEmbed, YellowEmbed
+from rsc.embeds import BetterEmbed, BlueEmbed, EmbedLimits, ErrorEmbed, GreenEmbed, SuccessEmbed, YellowEmbed
 from rsc.llm.agent import AgentError, CooldownTracker, ToolCache, run_agent
 from rsc.llm.agent.service import (
+    BudgetError,
     build_agent_context,
     check_budget,
+    is_budget_exempt,
     record_usage,
     usage_today,
 )
@@ -20,6 +23,7 @@ from rsc.llm.summarize import summarize_ticket_messages
 from rsc.logs import GuildLogAdapter
 from rsc.types import LLMSettings, LLMUsageRecord
 from rsc.utils.pagify import Pagify
+from rsc.utils.utils import rsc_name_from_member
 
 logger = logging.getLogger("red.rsc.llm")
 log = GuildLogAdapter(logger)
@@ -45,6 +49,17 @@ LLM_SUMMARY_MAX_IMAGES = 10
 LLM_SUMMARY_MAX_IMAGE_BYTES = 20 * 1024 * 1024
 LLM_QUERY_MAX_CONTINUATIONS = 5
 LLM_MAX_MESSAGE_LENGTH = 2000
+
+# Long enough to read, short enough that the channel is not left with a trail
+# of rate limit notices.
+LLM_DECLINE_NOTICE_SECONDS = 8.0
+# One mark per reason. A single emoji for all three cannot distinguish "wait a
+# few seconds" from "you are done for the day".
+LLM_DECLINE_EMOJI = {
+    "cooldown": "\N{HOURGLASS WITH FLOWING SAND}",
+    "user_cap": "\N{BAR CHART}",
+    "guild_cap": "\N{NO ENTRY SIGN}",
+}
 
 # The bot never needs to ping anyone to answer a question, and its output is
 # derived from user-supplied text.
@@ -72,6 +87,11 @@ class LLMMixIn(RSCMixIn):
     async def llm_reply_to_mention(self, message: discord.Message):
         guild = message.guild
         if not guild:
+            return
+
+        # Never answer another bot, or ourselves. Two bots that mention each
+        # other would otherwise trade agent runs until the daily cap stops them.
+        if message.author.bot:
             return
 
         # Check if LLM active
@@ -115,10 +135,11 @@ class LLMMixIn(RSCMixIn):
                     question,
                     surface="mention",
                 )
-        except PermissionError as exc:
-            # A quiet signal. Replying invites a follow-up, which is exactly
-            # what a rate limit is trying to avoid.
-            await self._react_rate_limited(message, str(exc))
+        except BudgetError as exc:
+            # A reaction alone is indistinguishable from a broken bot, so say
+            # why. The notice deletes itself so it does not invite the
+            # follow-up conversation a rate limit is trying to avoid.
+            await self._decline_mention(message, exc)
             return
         except AgentError as exc:
             log.warning(f"Agent could not answer: {exc}", guild=guild)
@@ -137,14 +158,30 @@ class LLMMixIn(RSCMixIn):
         for page in pages[1:]:
             await message.channel.send(content=page, allowed_mentions=NO_MENTIONS)
 
-    @staticmethod
-    async def _react_rate_limited(message: discord.Message, reason: str) -> None:
-        emoji = "\N{HOURGLASS WITH FLOWING SAND}" if reason == "cooldown" else "\N{NO ENTRY SIGN}"
+    @classmethod
+    async def _decline_mention(cls, message: discord.Message, exc: BudgetError) -> None:
+        """Mark and explain a mention the spend controls turned away."""
+        log.debug(
+            f"Mention declined for {message.author.id}: {exc.reason} (retry_after={exc.retry_after:.1f}s)",
+            guild=message.guild,
+        )
+
+        emoji = LLM_DECLINE_EMOJI.get(exc.reason, "\N{NO ENTRY SIGN}")
         try:
             await message.add_reaction(emoji)
         except discord.HTTPException:
             # Reacting is a courtesy; losing it is not worth logging loudly.
             log.debug("Could not add rate limit reaction.", guild=message.guild)
+
+        try:
+            await message.reply(
+                content=cls._budget_notice(exc),
+                delete_after=LLM_DECLINE_NOTICE_SECONDS,
+                allowed_mentions=NO_MENTIONS,
+            )
+        except discord.HTTPException:
+            # Same reasoning as the reaction: the asker still has the emoji.
+            log.debug("Could not send rate limit notice.", guild=message.guild)
 
     # Public command
 
@@ -177,8 +214,8 @@ class LLMMixIn(RSCMixIn):
 
         try:
             answer = await self.answer_with_agent(guild, interaction.user, question, surface="slash")
-        except PermissionError as exc:
-            return await interaction.followup.send(embed=self._budget_embed(str(exc)), ephemeral=True)
+        except BudgetError as exc:
+            return await interaction.followup.send(embed=self._budget_embed(exc), ephemeral=True)
         except AgentError as exc:
             return await interaction.followup.send(embed=ErrorEmbed(description=str(exc)), ephemeral=True)
 
@@ -190,22 +227,22 @@ class LLMMixIn(RSCMixIn):
         for extra in embeds[1:]:
             await interaction.followup.send(embed=extra)
 
-    def _budget_embed(self, reason: str) -> discord.Embed:
+    @staticmethod
+    def _budget_notice(exc: BudgetError) -> str:
         """Explain a declined request without shaming the asker."""
-        if reason == "cooldown":
-            return YellowEmbed(
-                title="Slow down",
-                description="You have asked very recently. Give it a few seconds and try again.",
-            )
-        if reason == "user_cap":
-            return YellowEmbed(
-                title="Daily limit reached",
-                description="You have used all of your AI questions for today. It resets tomorrow.",
-            )
-        return YellowEmbed(
-            title="Daily limit reached",
-            description="The server has used all of its AI questions for today. It resets tomorrow.",
-        )
+        if exc.reason == "cooldown":
+            # A Discord relative timestamp counts itself down client side, so
+            # the notice stays correct for as long as it is on screen. Round
+            # up: a timestamp already in the past renders as "0 seconds ago".
+            retry_at = discord.utils.utcnow() + timedelta(seconds=ceil(exc.retry_after))
+            return f"You have asked very recently. Try again {discord.utils.format_dt(retry_at, style='R')}."
+        if exc.reason == "user_cap":
+            return "You have used all of your AI questions for today. It resets tomorrow."
+        return "The server has used all of its AI questions for today. It resets tomorrow."
+
+    def _budget_embed(self, exc: BudgetError) -> discord.Embed:
+        title = "Slow down" if exc.reason == "cooldown" else "Daily limit reached"
+        return YellowEmbed(title=title, description=self._budget_notice(exc))
 
     # Top Level Group
 
@@ -369,7 +406,8 @@ class LLMMixIn(RSCMixIn):
                 description=(
                     f"Per user: **{await self._get_llm_user_daily_cap(guild)}**\n"
                     f"Per server: **{await self._get_llm_guild_daily_cap(guild)}**\n\n"
-                    "Members with an elevated role are exempt from the per user cap."
+                    "Members with an elevated role are exempt from the per user cap.\n"
+                    "Members with Manage Server are exempt from all limits."
                 )
             ),
             ephemeral=True,
@@ -586,13 +624,23 @@ class LLMMixIn(RSCMixIn):
         if not message.guild:
             return message.clean_content
 
+        log.debug(f"Original Question: {message.clean_content}")
+
         # Remove bot mention
         cleaned_msg = message.clean_content.replace(f"@{message.guild.me.display_name}", "").strip()
-        log.debug(f"Original Question: {cleaned_msg}")
 
-        log.debug(f"Question without bot mention: {cleaned_msg}")
+        # `clean_content` renders a mention as the member's nickname, which
+        # carries a franchise prefix and accolade emoji the API does not store.
+        # Left as-is the model asks the API for "RF | nickm 🏆" and is told no
+        # such player exists.
+        for mentioned in message.mentions:
+            if mentioned.id == message.guild.me.id:
+                continue
+            cleaned_msg = cleaned_msg.replace(f"@{mentioned.display_name}", rsc_name_from_member(mentioned))
 
-        return cleaned_msg
+        log.debug(f"Question sent to the agent: {cleaned_msg}")
+
+        return cleaned_msg.strip()
 
     def _build_llm_query_embeds(
         self,
@@ -601,23 +649,37 @@ class LLMMixIn(RSCMixIn):
     ) -> list[BetterEmbed]:
         """Build the LLM query response embed(s), splitting long content as needed.
 
-        A response too large for a single embed spills into continuation embeds.
+        The answer is the embed description. A response too large for one
+        description spills into continuation embeds.
         """
-        embed = BlueEmbed(title="RSC AI")
-        if icon_url:
-            embed.set_thumbnail(url=icon_url)
+        pages = list(
+            Pagify(
+                text=response,
+                delims=("\n\n", "\n", " "),
+                priority=True,
+                shorten_by=0,
+                page_length=EmbedLimits.Description,
+            )
+        )
+        # Pagify skips whitespace only pages. Always return something.
+        if not pages:
+            pages = [response]
 
-        embeds: list[BetterEmbed] = [embed]
-        leftover = embed.add_long_field(name="Response", value=response, inline=False)
-
-        while leftover and len(embeds) <= LLM_QUERY_MAX_CONTINUATIONS:
-            embed = BlueEmbed(title="RSC AI (continued)")
+        max_embeds = LLM_QUERY_MAX_CONTINUATIONS + 1
+        embeds: list[BetterEmbed] = []
+        for idx, page in enumerate(pages[:max_embeds]):
+            embed = BlueEmbed(
+                title="RSC AI" if idx == 0 else "RSC AI (continued)",
+                description=page,
+            )
+            if idx == 0 and icon_url:
+                embed.set_thumbnail(url=icon_url)
             embeds.append(embed)
-            leftover = embed.add_long_field(name="Response (cont.)", value=leftover, inline=False)
 
-        if leftover:
-            log.warning(f"LLM response truncated after {len(embeds)} embeds. (Remaining: {len(leftover)})")
-            embed.set_footer(text="Response was too long to display in full.")
+        dropped = sum(len(p) for p in pages[max_embeds:])
+        if dropped:
+            log.warning(f"LLM response truncated after {len(embeds)} embeds. (Remaining: {dropped})")
+            embeds[-1].set_footer(text="Response was too long to display in full.")
 
         return embeds
 
@@ -769,7 +831,7 @@ class LLMMixIn(RSCMixIn):
         """Answer a question with the tool-calling agent.
 
         Raises `AgentError` for failures the asker should be told about, and
-        `PermissionError` when the spend controls decline the request.
+        `BudgetError` when the spend controls decline the request.
         """
         org, key = await self.get_llm_credentials(guild)
         if not key:
@@ -788,12 +850,15 @@ class LLMMixIn(RSCMixIn):
             now=now,
         )
         if not verdict.allowed:
-            raise PermissionError(verdict.reason)
+            raise BudgetError(verdict)
 
         # Started before the call, so a slow answer does not let the same user
-        # queue several more behind it.
-        self._llm_cooldown.seconds = await self._get_llm_cooldown(guild)
-        self._llm_cooldown.start(guild.id, member.id)
+        # queue several more behind it. Exempt members are never put on
+        # cooldown at all.
+        exempt = is_budget_exempt(member)
+        if not exempt:
+            self._llm_cooldown.seconds = await self._get_llm_cooldown(guild)
+            self._llm_cooldown.start(guild.id, member.id)
 
         ctx = await build_agent_context(
             self,
@@ -811,7 +876,8 @@ class LLMMixIn(RSCMixIn):
         except AgentError:
             # The question never completed, so it should not burn the asker's
             # cooldown.
-            self._llm_cooldown.clear(guild.id, member.id)
+            if not exempt:
+                self._llm_cooldown.clear(guild.id, member.id)
             raise
 
         await record_usage(self, guild, member.id, tokens=ctx.usage.total, now=now)

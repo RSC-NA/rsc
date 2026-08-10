@@ -117,6 +117,38 @@ async def test_dispatch_passes_arguments(ctx, registered_tool):
     assert await _dispatch(ctx, fn_call("arg_tool", {"value": "x"})) == "got x"
 
 
+async def test_dispatch_strips_placeholder_arguments(ctx):
+    """Optional parameters padded with blanks must fall back to their defaults.
+
+    Models send every declared property rather than only the ones they mean.
+    A zero id or an empty name looks like a real filter to the RSC API and
+    silently excludes everything.
+    """
+    entry = AgentTool(
+        name="padded_tool",
+        description="test tool",
+        parameters={
+            "type": "object",
+            "properties": {
+                "name": {"type": "string"},
+                "discord_id": {"type": "integer"},
+                "me": {"type": "boolean"},
+                "limit": {"type": "integer"},
+                "query": {"type": "string"},
+            },
+            "required": ["query"],
+            "additionalProperties": False,
+        },
+        handler=AsyncMock(),
+    )
+
+    cleaned = entry.clean_arguments(
+        {"name": "frostybrew", "discord_id": 0, "me": False, "limit": 0, "query": "", "unknown": ""}
+    )
+
+    assert cleaned == {"name": "frostybrew", "me": False, "query": "", "unknown": ""}
+
+
 async def test_dispatch_reports_unknown_tool(ctx):
     result = await _dispatch(ctx, fn_call("does_not_exist", {}))
 

@@ -93,14 +93,14 @@ class TestBuildQueryEmbeds:
         embeds = build_embeds(response)
 
         assert all(not e.exceeds_limits() for e in embeds)
-        assert all(len(f.value or "") <= EmbedLimits.Field.Value for e in embeds for f in e.fields)
+        assert all(len(e.description or "") <= EmbedLimits.Description for e in embeds)
 
     def test_short_response_is_single_embed(self):
         embeds = build_embeds("RSC is a Rocket League league.")
 
         assert len(embeds) == 1
-        field_names = [f.name for f in embeds[0].fields]
-        assert field_names == ["Response"]
+        assert embeds[0].description == "RSC is a Rocket League league."
+        assert not embeds[0].fields
 
     def test_oversized_response_spills_into_continuation_embed(self):
         response = "\n".join(f"line {i} " + "z" * 60 for i in range(200))
@@ -111,6 +111,8 @@ class TestBuildQueryEmbeds:
         assert len(embeds) > 1
         assert embeds[1].title == "RSC AI (continued)"
         assert all(not e.exceeds_limits() for e in embeds)
+        # Splitting across embeds preserves the response content
+        assert "".join(e.description or "" for e in embeds).split() == response.split()
 
     def test_thumbnail_only_on_first_embed(self):
         response = "\n".join(f"line {i} " + "z" * 60 for i in range(200))

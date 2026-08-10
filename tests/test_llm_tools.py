@@ -4,6 +4,7 @@ The cog is a mock whose `RSCMixIn` helpers return real-shaped objects, so these
 exercise the tools' aggregation and formatting without touching the API.
 """
 
+import json
 from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
@@ -11,11 +12,17 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from rsc.llm.agent.context import AgentContext, UserIdentity
+from rsc.llm.agent.loop import _dispatch
 from rsc.llm.agent.tools.league import get_franchise, list_franchises, list_players
 from rsc.llm.agent.tools.rules import ask_rulebook, get_rule, search_rules_tool
 from rsc.llm.agent.tools.stats import top_players
 from rsc.llm.config import TOOL_RESULT_MAX_CHARS
 from rsc.llm.rulebook import RuleBook, load_rulebooks
+
+
+def fn_call(name: str, args: dict) -> SimpleNamespace:
+    """A tool call in the shape the Responses API emits one."""
+    return SimpleNamespace(type="function_call", name=name, arguments=json.dumps(args), call_id="call_1")
 
 
 def franchise(id_: int, name: str, prefix: str, gm: str, tiers: tuple[str, ...] = ("Master",)) -> SimpleNamespace:
@@ -149,6 +156,46 @@ async def test_list_players_reports_true_total_when_truncated(ctx, cog):
 
     assert "total=137" in result
     assert "showing=25" in result
+
+
+async def test_find_player_ignores_the_padding_the_model_sends(ctx, cog):
+    """The bug this guards: a player who exists reported as not found.
+
+    `gpt-5-mini` asks for a name lookup as
+    `{"name": "frostybrew", "discord_id": 0, "me": false}`. Passed through,
+    `discord_id=0` becomes a query parameter that matches nobody, so the API
+    returns an empty list for a player it plainly has. Dispatch is the boundary
+    that has to strip the padding, so the test goes through it.
+    """
+    cog.players.return_value = [league_player("FrostyBrew", status="RO", team="Pushwalkers")]
+
+    result = await _dispatch(ctx, fn_call("find_player", {"name": "frostybrew", "discord_id": 0, "me": False}))
+
+    assert cog.players.await_args.kwargs["name"] == "frostybrew"
+    assert cog.players.await_args.kwargs["discord_id"] is None
+    assert "FrostyBrew" in result
+    assert "Some Franchise" in result
+
+
+async def test_find_player_still_honours_a_real_discord_id(ctx, cog):
+    cog.players.return_value = [league_player("FrostyBrew")]
+
+    await _dispatch(ctx, fn_call("find_player", {"name": "", "discord_id": 174024053143764992, "me": False}))
+
+    assert cog.players.await_args.kwargs["discord_id"] == 174024053143764992
+    assert cog.players.await_args.kwargs["name"] is None
+
+
+async def test_list_players_ignores_blank_filters(ctx, cog):
+    """Blank strings are the same padding, and would filter on nothing."""
+    cog.players.return_value = []
+    cog.player_count.return_value = 0
+
+    await _dispatch(ctx, fn_call("list_players", {"status": "RO", "tier": "Elite", "franchise": "", "team": "", "limit": 50}))
+
+    assert cog.players.await_args.kwargs["franchise"] is None
+    assert cog.players.await_args.kwargs["team_name"] is None
+    assert cog.players.await_args.kwargs["tier_name"] == "Elite"
 
 
 async def test_list_players_rejects_unknown_status(ctx):

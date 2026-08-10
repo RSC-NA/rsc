@@ -10,6 +10,21 @@ from typing import Any
 ToolHandler = Callable[..., Awaitable[str]]
 
 
+def _is_blank(value: object, declared_type: str | None) -> bool:
+    """Whether a model-supplied value is a placeholder rather than a filter."""
+    if value is None:
+        return True
+    if isinstance(value, str):
+        return not value.strip()
+    # `False` is a real choice for a boolean -- and every boolean parameter's
+    # default anyway -- so only numbers treat zero as a blank.
+    if isinstance(value, bool):
+        return False
+    if isinstance(value, int | float):
+        return value == 0 and declared_type in ("integer", "number")
+    return False
+
+
 @dataclass(frozen=True, slots=True)
 class AgentTool:
     name: str
@@ -28,6 +43,30 @@ class AgentTool:
             "name": self.name,
             "description": self.description,
             "parameters": self.parameters,
+        }
+
+    def clean_arguments(self, arguments: dict[str, Any]) -> dict[str, Any]:
+        """Drop the placeholders a model fills optional parameters with.
+
+        Models routinely send every declared property rather than only the ones
+        they mean, padding the rest with type-shaped blanks -- a name lookup
+        arrives as `{"name": "frostybrew", "discord_id": 0, "me": false}`. By
+        the time a blank reaches the RSC API it is indistinguishable from a real
+        filter: `discord_id=0` goes out as a query parameter and matches nobody,
+        so a player who plainly exists comes back "No player found".
+
+        Only optional parameters are pruned, because each has a working default
+        to fall back on. A blank in a *required* parameter is left in place so
+        the handler's own validation can tell the model what it did wrong, and
+        an undeclared parameter is left in place so the resulting `TypeError`
+        does the same.
+        """
+        properties: dict[str, Any] = self.parameters.get("properties") or {}
+        required: list[str] = self.parameters.get("required") or []
+        return {
+            key: value
+            for key, value in arguments.items()
+            if key in required or key not in properties or not _is_blank(value, (properties[key] or {}).get("type"))
         }
 
 

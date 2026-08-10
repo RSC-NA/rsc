@@ -76,6 +76,7 @@ async def _dispatch(ctx: AgentContext, call: ResponseFunctionToolCall) -> str:
         return "ERROR: arguments were not valid JSON"
     if not isinstance(kwargs, dict):
         return "ERROR: arguments must be a JSON object"
+    kwargs = entry.clean_arguments(kwargs)
 
     ctx.tools_called.record(name)
 

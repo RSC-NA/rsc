@@ -15,8 +15,10 @@ from openai import AsyncOpenAI
 from rsc.llm.agent.budget import CooldownTracker, usage_day
 from rsc.llm.agent.cache import ToolCache
 from rsc.llm.agent.context import AgentContext, UserIdentity
+from rsc.llm.agent.format import humanize_status
 from rsc.llm.rulebook import load_rulebooks
 from rsc.logs import GuildLogAdapter
+from rsc.utils.utils import rsc_name_from_member
 
 if TYPE_CHECKING:
     from rsc.abc import RSCMixIn
@@ -38,6 +40,32 @@ class BudgetVerdict:
         return self.retry_after > 0
 
 
+class BudgetError(PermissionError):
+    """A question the spend controls turned away.
+
+    Subclasses `PermissionError` so it still reads as "not allowed" at the call
+    site, but carries the verdict so a surface can tell the asker *why* and for
+    how long. A bare reaction leaves the asker unable to tell a rate limit from
+    a bot that is simply broken.
+    """
+
+    def __init__(self, verdict: BudgetVerdict) -> None:
+        super().__init__(verdict.reason)
+        self.reason = verdict.reason
+        self.retry_after = verdict.retry_after
+
+
+def is_budget_exempt(member: discord.Member | discord.User) -> bool:
+    """Whether a member is exempt from every spend control.
+
+    Manage Server is the permission that configures these limits in the first
+    place, so holding it means the cooldown and both daily caps do not apply.
+    """
+    if not isinstance(member, discord.Member):
+        return False
+    return member.guild_permissions.manage_guild
+
+
 async def resolve_agent_identity(
     cog: "RSCMixIn",
     guild: discord.Guild,
@@ -48,7 +76,9 @@ async def resolve_agent_identity(
     Never raises: an unidentified asker still gets an answer, just without
     "my team" style personalisation.
     """
-    name = getattr(member, "display_name", None) or str(member)
+    # The nickname carries a franchise prefix and accolade emoji that are not
+    # part of the asker's RSC name, and the model repeats this back at them.
+    name = rsc_name_from_member(member) or str(member)
     identity = UserIdentity(name=name, discord_id=member.id)
     if not isinstance(member, discord.Member):
         return identity
@@ -68,7 +98,9 @@ async def resolve_agent_identity(
     identity.team = team.name if team else None
     identity.franchise = team.franchise.name if team and team.franchise else None
     identity.tier = player.tier.name if player.tier else None
-    identity.status = str(player.status) if player.status else None
+    # `str()` on the generated client's enum yields "LeaguePlayerStatusEnum.FA",
+    # which the model then repeats back at the asker verbatim.
+    identity.status = humanize_status(player.status) if player.status else None
     return identity
 
 
@@ -119,10 +151,14 @@ async def check_budget(
 ) -> BudgetVerdict:
     """Apply the cooldown and daily caps.
 
-    Elevated members bypass the per-user cap but not the guild cap -- staff
-    should not be throttled mid-investigation, but nor should they be able to
-    exhaust the budget on their own.
+    Members with Manage Server bypass every control. Otherwise elevated members
+    bypass the per-user cap but not the guild cap -- staff should not be
+    throttled mid-investigation, but nor should they be able to exhaust the
+    budget on their own.
     """
+    if is_budget_exempt(member):
+        return BudgetVerdict(allowed=True)
+
     retry_after = cooldown.retry_after(guild.id, member.id)
     if retry_after > 0:
         return BudgetVerdict(allowed=False, reason="cooldown", retry_after=retry_after)

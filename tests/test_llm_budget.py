@@ -13,7 +13,7 @@ import pytest
 
 from rsc.llm.agent.budget import CooldownTracker, UsageAccumulator, usage_day
 from rsc.llm.agent.cache import ToolCache, cache_key
-from rsc.llm.agent.service import check_budget
+from rsc.llm.agent.service import check_budget, is_budget_exempt
 
 NOW = datetime(2026, 8, 10, 12, 0, tzinfo=UTC)
 
@@ -60,6 +60,9 @@ def member():
     # isinstance(member, discord.Member), which a bare MagicMock fails.
     mock = MagicMock(spec=discord.Member)
     mock.id = 100
+    # A bare mock attribute is truthy, which would silently exempt every test
+    # member from the spend controls.
+    mock.guild_permissions = discord.Permissions.none()
     return mock
 
 
@@ -181,6 +184,25 @@ async def test_elevated_members_do_not_bypass_the_guild_cap(cog, guild, member):
     )
 
     assert not verdict.allowed
+
+
+async def test_manage_guild_bypasses_every_limit(cog, guild, member, monkeypatch):
+    """Whoever configures the limits is not subject to them."""
+    monkeypatch.setattr("rsc.llm.agent.budget.time.monotonic", lambda: 1000.0)
+    member.guild_permissions = discord.Permissions(manage_guild=True)
+    seed_usage(cog, guild.id, member.id, day=usage_day(NOW), count=999)
+    seed_usage(cog, guild.id, 0, day=usage_day(NOW), count=999)
+    tracker = CooldownTracker(seconds=20)
+    tracker.start(guild.id, member.id)
+
+    verdict = await check_budget(cog, guild, member, cooldown=tracker, user_cap=15, guild_cap=400, now=NOW)
+
+    assert verdict.allowed
+
+
+def test_users_outside_a_guild_are_not_exempt():
+    """A discord.User has no guild permissions to check."""
+    assert not is_budget_exempt(MagicMock(spec=discord.User))
 
 
 async def test_zero_cap_disables_the_limit(cog, guild, member):
