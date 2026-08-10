@@ -28,6 +28,7 @@ from rsc.llm.agent.context import AgentContext
 from rsc.llm.agent.format import clamp
 from rsc.llm.agent.prompts import build_system_prefix, build_user_block
 from rsc.llm.agent.registry import TOOLS, tool_schemas
+from rsc.llm.agent.safety import sanitize_response
 from rsc.llm.config import (
     AGENT_MAX_ITERATIONS,
     AGENT_MAX_OUTPUT_TOKENS,
@@ -133,8 +134,14 @@ async def _respond(ctx: AgentContext, system: str, input_items: list[Any], *, wi
 
 
 def _output_text(response: Response) -> str:
+    """Model text, sanitized.
+
+    Every answer leaves the loop through here, so the command and credential
+    guards cannot be bypassed by a new command or listener forgetting to call
+    them.
+    """
     text = getattr(response, "output_text", None)
-    return (text or "").strip()
+    return sanitize_response((text or "").strip())
 
 
 def _function_calls(response: Response) -> list[ResponseFunctionToolCall]:

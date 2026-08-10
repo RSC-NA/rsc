@@ -4,13 +4,11 @@ from rsc.embeds import BlueEmbed, EmbedLimits, chunk_field_value
 from rsc.llm.llm import LLMMixIn
 
 
-def build_embeds(question: str, response: str, sources: str | None = None, icon_url: str | None = None):
+def build_embeds(response: str, icon_url: str | None = None):
     """Call the embed builder without instantiating the full cog."""
     return LLMMixIn._build_llm_query_embeds(
         None,  # type: ignore[arg-type]
-        question=question,
         response=response,
-        sources=sources,
         icon_url=icon_url,
     )
 
@@ -88,29 +86,27 @@ class TestAddLongField:
 
 
 class TestBuildQueryEmbeds:
-    def test_max_length_question_and_response(self):
-        question = "q" * 6000
+    def test_max_length_response(self):
         response = "\n".join(f"paragraph {i} of the answer with filler text" for i in range(90))
         assert len(response) > 3500
 
-        embeds = build_embeds(question, response, sources="- RSC Rules (ID: 1)")
+        embeds = build_embeds(response)
 
         assert all(not e.exceeds_limits() for e in embeds)
-        assert len(embeds[0].fields[0].value or "") <= EmbedLimits.Field.Value
-        assert embeds[-1].fields[-1].name == "Sources"
+        assert all(len(f.value or "") <= EmbedLimits.Field.Value for e in embeds for f in e.fields)
 
     def test_short_response_is_single_embed(self):
-        embeds = build_embeds("What is RSC?", "RSC is a Rocket League league.", sources="- Help")
+        embeds = build_embeds("RSC is a Rocket League league.")
 
         assert len(embeds) == 1
         field_names = [f.name for f in embeds[0].fields]
-        assert field_names == ["Question", "Response", "Sources"]
+        assert field_names == ["Response"]
 
     def test_oversized_response_spills_into_continuation_embed(self):
         response = "\n".join(f"line {i} " + "z" * 60 for i in range(200))
         assert len(response) > 12000
 
-        embeds = build_embeds("Explain everything", response)
+        embeds = build_embeds(response)
 
         assert len(embeds) > 1
         assert embeds[1].title == "RSC AI (continued)"
@@ -119,7 +115,7 @@ class TestBuildQueryEmbeds:
     def test_thumbnail_only_on_first_embed(self):
         response = "\n".join(f"line {i} " + "z" * 60 for i in range(200))
 
-        embeds = build_embeds("Explain everything", response, icon_url="https://example.com/icon.png")
+        embeds = build_embeds(response, icon_url="https://example.com/icon.png")
 
         assert embeds[0].thumbnail.url == "https://example.com/icon.png"
         assert all(e.thumbnail.url is None for e in embeds[1:])

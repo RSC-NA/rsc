@@ -8,7 +8,7 @@ import discord
 from redbot.core import app_commands, commands
 
 from rsc.abc import RSCMixIn
-from rsc.embeds import BetterEmbed, BlueEmbed, EmbedLimits, ErrorEmbed, GreenEmbed, SuccessEmbed, YellowEmbed
+from rsc.embeds import BetterEmbed, BlueEmbed, ErrorEmbed, GreenEmbed, SuccessEmbed, YellowEmbed
 from rsc.llm.agent import AgentError, CooldownTracker, ToolCache, run_agent
 from rsc.llm.agent.service import (
     build_agent_context,
@@ -45,6 +45,10 @@ LLM_SUMMARY_MAX_IMAGES = 10
 LLM_SUMMARY_MAX_IMAGE_BYTES = 20 * 1024 * 1024
 LLM_QUERY_MAX_CONTINUATIONS = 5
 LLM_MAX_MESSAGE_LENGTH = 2000
+
+# The bot never needs to ping anyone to answer a question, and its output is
+# derived from user-supplied text.
+NO_MENTIONS = discord.AllowedMentions.none()
 
 
 class LLMMixIn(RSCMixIn):
@@ -105,7 +109,7 @@ class LLMMixIn(RSCMixIn):
             # than returning instantly. Without the indicator it reads as
             # ignored. discord.py refreshes it past the 10s window.
             async with message.channel.typing():
-                answer, _sources = await self.answer_with_agent(
+                answer = await self.answer_with_agent(
                     guild,
                     message.author,
                     question,
@@ -118,7 +122,7 @@ class LLMMixIn(RSCMixIn):
             return
         except AgentError as exc:
             log.warning(f"Agent could not answer: {exc}", guild=guild)
-            await message.reply(content=str(exc))
+            await message.reply(content=str(exc), allowed_mentions=NO_MENTIONS)
             return
 
         # Response may exceed the discord message length limit
@@ -126,9 +130,12 @@ class LLMMixIn(RSCMixIn):
         if not pages:
             return
 
-        await message.reply(content=pages[0])
+        # Answers are model output derived from user-supplied text, so Discord
+        # itself is told to notify nobody. The content is already defanged;
+        # this makes a ping impossible rather than merely unlikely.
+        await message.reply(content=pages[0], allowed_mentions=NO_MENTIONS)
         for page in pages[1:]:
-            await message.channel.send(content=page)
+            await message.channel.send(content=page, allowed_mentions=NO_MENTIONS)
 
     @staticmethod
     async def _react_rate_limited(message: discord.Message, reason: str) -> None:
@@ -169,16 +176,14 @@ class LLMMixIn(RSCMixIn):
         await interaction.response.defer()
 
         try:
-            answer, sources = await self.answer_with_agent(guild, interaction.user, question, surface="slash")
+            answer = await self.answer_with_agent(guild, interaction.user, question, surface="slash")
         except PermissionError as exc:
             return await interaction.followup.send(embed=self._budget_embed(str(exc)), ephemeral=True)
         except AgentError as exc:
             return await interaction.followup.send(embed=ErrorEmbed(description=str(exc)), ephemeral=True)
 
         embeds = self._build_llm_query_embeds(
-            question=question,
             response=answer,
-            sources=sources,
             icon_url=guild.icon.url if guild.icon else None,
         )
         await interaction.followup.send(embed=embeds[0])
@@ -591,9 +596,7 @@ class LLMMixIn(RSCMixIn):
 
     def _build_llm_query_embeds(
         self,
-        question: str,
         response: str,
-        sources: str | None = None,
         icon_url: str | None = None,
     ) -> list[BetterEmbed]:
         """Build the LLM query response embed(s), splitting long content as needed.
@@ -603,11 +606,6 @@ class LLMMixIn(RSCMixIn):
         embed = BlueEmbed(title="RSC AI")
         if icon_url:
             embed.set_thumbnail(url=icon_url)
-
-        # Question is user input and only echoed back. Truncation is fine.
-        if len(question) > EmbedLimits.Field.Value:
-            question = question[: EmbedLimits.Field.Value - 1] + "…"
-        embed.add_field(name="Question", value=question, inline=False)
 
         embeds: list[BetterEmbed] = [embed]
         leftover = embed.add_long_field(name="Response", value=response, inline=False)
@@ -620,10 +618,6 @@ class LLMMixIn(RSCMixIn):
         if leftover:
             log.warning(f"LLM response truncated after {len(embeds)} embeds. (Remaining: {len(leftover)})")
             embed.set_footer(text="Response was too long to display in full.")
-
-        if sources:
-            # Attach sources to the final embed so they follow the response
-            embeds[-1].add_long_field(name="Sources", value=sources, inline=False)
 
         return embeds
 
@@ -771,12 +765,11 @@ class LLMMixIn(RSCMixIn):
         question: str,
         *,
         surface: str,
-    ) -> tuple[str, str | None]:
+    ) -> str:
         """Answer a question with the tool-calling agent.
 
-        Returns the answer and a sources line. Raises `AgentError` for failures
-        the asker should be told about, and `PermissionError` when the spend
-        controls decline the request.
+        Raises `AgentError` for failures the asker should be told about, and
+        `PermissionError` when the spend controls decline the request.
         """
         org, key = await self.get_llm_credentials(guild)
         if not key:
@@ -822,17 +815,7 @@ class LLMMixIn(RSCMixIn):
             raise
 
         await record_usage(self, guild, member.id, tokens=ctx.usage.total, now=now)
-        return (result.answer, self.format_agent_sources(result.tools_called, result.citations))
-
-    @staticmethod
-    def format_agent_sources(tools: list[str], citations: list[str]) -> str | None:
-        """What the answer was based on: tools consulted and rules cited."""
-        parts = []
-        if citations:
-            parts.append("Rules: " + ", ".join(citations[:6]))
-        if tools:
-            parts.append("Looked up: " + ", ".join(tools))
-        return " | ".join(parts) or None
+        return result.answer
 
     # Config
 
