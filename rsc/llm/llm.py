@@ -1,61 +1,25 @@
 from __future__ import annotations
 
 import base64
-import asyncio
 import logging
-from datetime import time, datetime
-from pathlib import Path
-from typing import TYPE_CHECKING, cast
+from datetime import datetime
 
 import discord
-from discord.ext import tasks
 from redbot.core import app_commands, commands
 
 from rsc.abc import RSCMixIn
-from rsc.embeds import BetterEmbed, BlueEmbed, EmbedLimits, ErrorEmbed, GreenEmbed, YellowEmbed
-from rsc.llm.create_db import (
-    delete_documents_by_source,
-    get_db_stats,
-    load_current_season_doc,
-    load_franchise_docs,
-    load_funny_docs,
-    load_help_docs,
-    load_player_docs,
-    load_player_stats_docs,
-    load_rule_glossary_docs,
-    load_rule_style_docs,
-    load_match_docs,
-    load_standings_docs,
-    load_team_docs,
-    load_team_stats_docs,
-    markdown_to_documents,
-    reset_collection,
-    save_documents,
-    string_to_doc,
+from rsc.embeds import BetterEmbed, BlueEmbed, EmbedLimits, ErrorEmbed, GreenEmbed, SuccessEmbed, YellowEmbed
+from rsc.llm.agent import AgentError, CooldownTracker, ToolCache, run_agent
+from rsc.llm.agent.service import (
+    build_agent_context,
+    check_budget,
+    record_usage,
+    usage_today,
 )
-from rsc.llm.sources import DocumentSource, STATIC_DOCUMENT_SOURCES, set_document_source
-from rsc.llm.query import (
-    llm_query,
-    summarize_ticket_messages,
-    UserIdentity,
-)
+from rsc.llm.summarize import summarize_ticket_messages
 from rsc.logs import GuildLogAdapter
-from rsc.types import LLMSettings
-from rsc.utils import utils
+from rsc.types import LLMSettings, LLMUsageRecord
 from rsc.utils.pagify import Pagify
-
-
-if TYPE_CHECKING:
-    from collections.abc import Awaitable
-
-    from langchain_core.documents import Document
-    from rscapi.models.franchise_list import FranchiseList
-    from rscapi.models.league_player import LeaguePlayer
-    from rscapi.models.player_season_stats import PlayerSeasonStats
-    from rscapi.models.season import Season
-    from rscapi.models.team import Team
-    from rscapi.models.team_season_stats import TeamSeasonStats
-    from rscapi.models.tier import Tier
 
 logger = logging.getLogger("red.rsc.llm")
 log = GuildLogAdapter(logger)
@@ -65,18 +29,20 @@ defaults_guild = LLMSettings(
     LLMBlacklist=None,
     OpenAIKey=None,
     OpenAIOrg=None,
-    SimilarityCount=5,
-    SimilarityThreshold=0.65,
+    LLMUserCooldown=20,
+    LLMUserDailyCap=15,
+    LLMGuildDailyCap=400,
+    LLMPublicAsk=True,
 )
 
-LLM_DB_LOOP_TIME = time(hour=8)
+defaults_usage = LLMUsageRecord(day=None, count=0, tokens=0)
+
 LLM_SUMMARY_MAX_MESSAGES = 200
 LLM_SUMMARY_HARD_CHANNEL_CAP = 300
 LLM_SUMMARY_MAX_VIEWERS = 40
 LLM_SUMMARY_MAX_TRANSCRIPT_CHARS = 20000
 LLM_SUMMARY_MAX_IMAGES = 10
 LLM_SUMMARY_MAX_IMAGE_BYTES = 20 * 1024 * 1024
-LLM_STATS_FETCH_CONCURRENCY = 8
 LLM_QUERY_MAX_CONTINUATIONS = 5
 LLM_MAX_MESSAGE_LENGTH = 2000
 
@@ -86,42 +52,15 @@ class LLMMixIn(RSCMixIn):
         log.debug("Initializing LLMMixIn")
         self.config.init_custom("LLM", 1)
         self.config.register_custom("LLM", **defaults_guild)
+        # Two identifiers: guild id, then user id (0 for the guild-wide total).
+        self.config.init_custom("LLMUsage", 2)
+        self.config.register_custom("LLMUsage", **defaults_usage)
+
+        # Cooldowns live for seconds, so memory is the right store; the daily
+        # caps in Config are what must survive a reload.
+        self._llm_cooldown = CooldownTracker(seconds=defaults_guild["LLMUserCooldown"])
+        self._llm_tool_cache = ToolCache()
         super().__init__()
-
-        # Start DB loop
-        if not self.weekly_llm_db_refresh.is_running():
-            self.weekly_llm_db_refresh.start()
-
-    # Tasks
-
-    @tasks.loop(time=LLM_DB_LOOP_TIME)
-    async def weekly_llm_db_refresh(self):
-        """Weekly refresh of the LLM Chroma DB"""
-        log.info("Starting weekly LLM Chroma DB refresh task.")
-        for guild in self.bot.guilds:
-            # Only run on Monday morning
-            tz = await self.timezone(guild)
-            now = datetime.now(tz)
-            if now.weekday() != 0:
-                log.info("Skipping LLM DB refresh, not Monday.", guild=guild)
-                continue
-
-            if not await self._get_llm_status(guild):
-                log.debug("LLM is not active, skipping DB refresh.", guild=guild)
-                continue
-
-            log.info("Refreshing LLM Chroma DB.", guild=guild)
-            try:
-                chunks = await self.create_chroma_db(guild)
-            except ValueError as exc:
-                log.error(f"Failed to refresh LLM Chroma DB: {exc}", exc_info=exc, guild=guild)
-                continue
-
-            log.info(f"Refreshed LLM Chroma DB with {chunks} chunks.", guild=guild)
-
-    @weekly_llm_db_refresh.before_loop
-    async def before_refresh(self):
-        await self.bot.wait_until_ready()
 
     # Listener
 
@@ -157,50 +96,111 @@ class LLMMixIn(RSCMixIn):
 
         log.debug("Received mention, generating LLM response.")
 
-        # Settings
-        count, threshold = await self.get_llm_default(guild)
-        org, key = await self.get_llm_credentials(guild)
-        if not (org and key):
-            log.warning("OpenAI Organization and or API key is not configured.", guild=guild)
+        question = await self.clean_question(message)
+        if not question:
             return
-
-        # Resolve user identity and clean the question
-        author = message.author
-        tz = await self.timezone(guild)
-        msg_datetime = message.created_at.astimezone(tz)
-        log.debug("Resolving user identity for LLM mention response.", guild=guild)
-        if isinstance(author, discord.Member):
-            user_identity = await self.resolve_user_identity(guild, author, current_datetime=msg_datetime)
-        else:
-            # Fallback for User (non-member)
-            user_identity = UserIdentity(name=author.display_name, current_datetime=msg_datetime)
-        question = await self.clean_question(message, user_identity)
 
         try:
-            response, _sources = await llm_query(
-                guild=guild,
-                org_name=org,
-                api_key=key,
-                question=question,
-                count=count,
-                threshold=threshold,
-                user_identity=user_identity,
-            )
-        except RuntimeError as exc:
-            log.error(str(exc), exc_info=exc)
+            # The agent makes several round trips, so this takes seconds rather
+            # than returning instantly. Without the indicator it reads as
+            # ignored. discord.py refreshes it past the 10s window.
+            async with message.channel.typing():
+                answer, _sources = await self.answer_with_agent(
+                    guild,
+                    message.author,
+                    question,
+                    surface="mention",
+                )
+        except PermissionError as exc:
+            # A quiet signal. Replying invites a follow-up, which is exactly
+            # what a rate limit is trying to avoid.
+            await self._react_rate_limited(message, str(exc))
+            return
+        except AgentError as exc:
+            log.warning(f"Agent could not answer: {exc}", guild=guild)
+            await message.reply(content=str(exc))
             return
 
-        if not response:
-            return await message.reply(content="I am unable to answer that question.")
-
         # Response may exceed the discord message length limit
-        pages = list(Pagify(text=str(response), page_length=LLM_MAX_MESSAGE_LENGTH))
+        pages = list(Pagify(text=str(answer), page_length=LLM_MAX_MESSAGE_LENGTH))
         if not pages:
             return
 
         await message.reply(content=pages[0])
         for page in pages[1:]:
             await message.channel.send(content=page)
+
+    @staticmethod
+    async def _react_rate_limited(message: discord.Message, reason: str) -> None:
+        emoji = "\N{HOURGLASS WITH FLOWING SAND}" if reason == "cooldown" else "\N{NO ENTRY SIGN}"
+        try:
+            await message.add_reaction(emoji)
+        except discord.HTTPException:
+            # Reacting is a courtesy; losing it is not worth logging loudly.
+            log.debug("Could not add rate limit reaction.", guild=message.guild)
+
+    # Public command
+
+    @app_commands.command(name="ask", description="Ask a question about RSC rules, players, teams or schedules")
+    @app_commands.describe(question="What do you want to know?")
+    @app_commands.guild_only
+    async def _llm_ask_cmd(self, interaction: discord.Interaction, question: str):
+        """Open to everyone. Spend is controlled by cooldown and daily caps, not permissions."""
+        guild = interaction.guild
+        if not guild:
+            return
+
+        if not await self._get_llm_status(guild):
+            return await interaction.response.send_message(
+                embed=ErrorEmbed(description="The RSC AI is not currently enabled."),
+                ephemeral=True,
+            )
+        if not await self._get_llm_public_ask(guild):
+            return await interaction.response.send_message(
+                embed=ErrorEmbed(description="`/ask` is disabled on this server."),
+                ephemeral=True,
+            )
+        if interaction.channel_id in await self._get_llm_channel_blacklist(guild):
+            return await interaction.response.send_message(
+                embed=ErrorEmbed(description="The RSC AI is not available in this channel."),
+                ephemeral=True,
+            )
+
+        await interaction.response.defer()
+
+        try:
+            answer, sources = await self.answer_with_agent(guild, interaction.user, question, surface="slash")
+        except PermissionError as exc:
+            return await interaction.followup.send(embed=self._budget_embed(str(exc)), ephemeral=True)
+        except AgentError as exc:
+            return await interaction.followup.send(embed=ErrorEmbed(description=str(exc)), ephemeral=True)
+
+        embeds = self._build_llm_query_embeds(
+            question=question,
+            response=answer,
+            sources=sources,
+            icon_url=guild.icon.url if guild.icon else None,
+        )
+        await interaction.followup.send(embed=embeds[0])
+        for extra in embeds[1:]:
+            await interaction.followup.send(embed=extra)
+
+    def _budget_embed(self, reason: str) -> discord.Embed:
+        """Explain a declined request without shaming the asker."""
+        if reason == "cooldown":
+            return YellowEmbed(
+                title="Slow down",
+                description="You have asked very recently. Give it a few seconds and try again.",
+            )
+        if reason == "user_cap":
+            return YellowEmbed(
+                title="Daily limit reached",
+                description="You have used all of your AI questions for today. It resets tomorrow.",
+            )
+        return YellowEmbed(
+            title="Daily limit reached",
+            description="The server has used all of its AI questions for today. It resets tomorrow.",
+        )
 
     # Top Level Group
 
@@ -230,8 +230,10 @@ class LLMMixIn(RSCMixIn):
         active = await self._get_llm_status(guild)
         openai_key = await self._get_openai_key(guild)
         openai_org = await self._get_openai_org(guild)
-        llm_threshold = await self._get_llm_threshold(guild)
-        llm_count = await self._get_llm_similarity_count(guild)
+        cooldown = await self._get_llm_cooldown(guild)
+        user_cap = await self._get_llm_user_daily_cap(guild)
+        guild_cap = await self._get_llm_guild_daily_cap(guild)
+        public_ask = await self._get_llm_public_ask(guild)
 
         # Format blacklist
         blacklist = await self._get_llm_channel_blacklist(guild)
@@ -257,8 +259,10 @@ class LLMMixIn(RSCMixIn):
             value="Configured" if openai_key else "Not Configured",
             inline=False,
         )
-        settings_embed.add_field(name="Similarity Count", value=str(llm_count), inline=False)
-        settings_embed.add_field(name="Similarity Threshold", value=str(llm_threshold), inline=False)
+        settings_embed.add_field(name="/ask enabled", value=str(public_ask), inline=False)
+        settings_embed.add_field(name="User Cooldown", value=f"{cooldown}s", inline=True)
+        settings_embed.add_field(name="Daily Cap (user)", value=str(user_cap or "unlimited"), inline=True)
+        settings_embed.add_field(name="Daily Cap (server)", value=str(guild_cap or "unlimited"), inline=True)
         settings_embed.add_field(name="LLM Channel Blacklist", value=blacklist_fmt, inline=False)
 
         await interaction.response.send_message(embed=settings_embed, ephemeral=True)
@@ -321,107 +325,71 @@ class LLMMixIn(RSCMixIn):
             ephemeral=True,
         )
 
-    @_llm_group.command(name="count", description="Configure the LLM max similarity count")
-    @app_commands.describe(count="Number of similarity matches to get from DB")
-    async def _llm_count_cmd(self, interaction: discord.Interaction, count: int):
-        """Configure LLM similarity count"""
+    @_llm_group.command(name="cooldown", description="Seconds a user must wait between AI questions")
+    @app_commands.describe(seconds="Cooldown in seconds (0 disables)")
+    async def _llm_cooldown_cmd(self, interaction: discord.Interaction, seconds: app_commands.Range[int, 0, 3600]):
         guild = interaction.guild
         if not guild:
             return
 
-        await self._set_llm_similarity_count(guild, count)
+        await self._set_llm_cooldown(guild, seconds)
+        self._llm_cooldown.seconds = seconds
         await interaction.response.send_message(
-            embed=discord.Embed(
-                title="Success",
-                description=f"Similarity count has been updated to **{count}**",
-                color=discord.Color.green(),
+            embed=SuccessEmbed(description=f"AI cooldown set to **{seconds}** seconds."),
+            ephemeral=True,
+        )
+
+    @_llm_group.command(name="dailycap", description="Daily AI question limits")
+    @app_commands.describe(
+        per_user="Questions per user per day (0 disables)",
+        per_guild="Questions across the server per day (0 disables)",
+    )
+    async def _llm_dailycap_cmd(
+        self,
+        interaction: discord.Interaction,
+        per_user: app_commands.Range[int, 0, 1000] | None = None,
+        per_guild: app_commands.Range[int, 0, 100000] | None = None,
+    ):
+        guild = interaction.guild
+        if not guild:
+            return
+
+        if per_user is not None:
+            await self._set_llm_user_daily_cap(guild, per_user)
+        if per_guild is not None:
+            await self._set_llm_guild_daily_cap(guild, per_guild)
+
+        await interaction.response.send_message(
+            embed=SuccessEmbed(
+                description=(
+                    f"Per user: **{await self._get_llm_user_daily_cap(guild)}**\n"
+                    f"Per server: **{await self._get_llm_guild_daily_cap(guild)}**\n\n"
+                    "Members with an elevated role are exempt from the per user cap."
+                )
             ),
             ephemeral=True,
         )
 
-    @_llm_group.command(name="threshold", description="Configure the LLM threshold")
-    @app_commands.describe(threshold="Float threshold for finding similarities (Default: 0.65)")
-    async def _llm_threshold_cmd(self, interaction: discord.Interaction, threshold: float):
-        """Configure LLM threshold"""
+    @_llm_group.command(name="usage", description="AI questions and tokens used today")
+    @app_commands.describe(member="Show one member's usage instead of the server total")
+    async def _llm_usage_cmd(self, interaction: discord.Interaction, member: discord.Member | None = None):
         guild = interaction.guild
         if not guild:
             return
-
-        await self._set_llm_threshold(guild, threshold)
-        await interaction.response.send_message(
-            embed=discord.Embed(
-                title="Success",
-                description=f"Threshold has been updated to **{threshold}**",
-                color=discord.Color.green(),
-            ),
-            ephemeral=True,
-        )
-
-    @_llm_group.command(name="query", description="Query the RSC LLM")
-    @app_commands.describe(question="Question to ask the RSC LLM")
-    async def _llm_query_cmd(self, interaction: discord.Interaction, question: str):
-        """Query the RSC LLM with a question"""
-        guild = interaction.guild
-        if not guild:
-            return
-
-        # Settings
-        count, threshold = await self.get_llm_default(guild)
-        org, key = await self.get_llm_credentials(guild)
-        if not (org and key):
-            return await interaction.response.send_message(
-                embed=ErrorEmbed(description="OpenAI organization and or API key has not been configured."),
-                ephemeral=True,
-            )
-
-        await interaction.response.defer()
-
-        # Resolve user identity and clean the question
-        member = interaction.user
-        if isinstance(member, discord.User):
-            # Convert User to Member if possible
-            member = guild.get_member(member.id) or member
 
         tz = await self.timezone(guild)
-        interaction_datetime = interaction.created_at.astimezone(tz)
-        user_identity = (
-            await self.resolve_user_identity(guild, member, current_datetime=interaction_datetime)
-            if isinstance(member, discord.Member)
-            else None
-        )
+        now = datetime.now(tz)
+        # User id 0 is the guild-wide bucket.
+        scope_id = member.id if member else 0
+        count, tokens = await usage_today(self, guild, scope_id, now)
+        cap = await self._get_llm_user_daily_cap(guild) if member else await self._get_llm_guild_daily_cap(guild)
 
-        log.debug(f"Original question: {question}", guild=guild)
-
-        try:
-            response, sources = await llm_query(
-                guild=guild,
-                org_name=org,
-                api_key=key,
-                question=question,
-                count=count,
-                threshold=threshold,
-                user_identity=user_identity,
-            )
-        except RuntimeError as exc:
-            return await interaction.followup.send(content=str(exc), ephemeral=True)
-
-        if not response:
-            response_fmt = "I am unable to answer that question."
-            source_fmt = None
-        else:
-            response_fmt = str(response)
-            source_fmt = await self.format_llm_sources(sources)
-
-        embeds = self._build_llm_query_embeds(
-            question=question,
-            response=response_fmt,
-            sources=source_fmt,
-            icon_url=guild.icon.url if guild.icon else None,
-        )
-
-        await interaction.followup.send(embed=embeds[0])
-        for extra in embeds[1:]:
-            await interaction.followup.send(embed=extra)
+        embed = BlueEmbed(title="RSC AI Usage")
+        embed.add_field(name="Scope", value=member.mention if member else guild.name, inline=True)
+        embed.add_field(name="Date", value=now.strftime("%Y-%m-%d"), inline=True)
+        embed.add_field(name="Questions", value=f"{count}" + (f" / {cap}" if cap else ""), inline=True)
+        embed.add_field(name="Tokens", value=f"{tokens:,}", inline=True)
+        await interaction.response.send_message(embed=embed, ephemeral=True)
 
     @_llm_group.command(name="summarize", description="Summarize a private ModMail ticket channel or thread")
     @app_commands.describe(
@@ -550,134 +518,6 @@ class LLMMixIn(RSCMixIn):
         embed.add_field(name="Messages", value=str(len(summary_messages)), inline=True)
         await interaction.followup.send(embed=embed, ephemeral=True)
 
-    @_llm_group.command(name="createdb", description="Create the LLM Chroma DB")
-    async def _llm_createdb_cmd(self, interaction: discord.Interaction):
-        """Create the LLM Chroma DB"""
-        guild = interaction.guild
-        if not guild:
-            return
-
-        # Settings
-        org, key = await self.get_llm_credentials(guild)
-        if not (org and key):
-            return await interaction.response.send_message(
-                embed=ErrorEmbed(description="OpenAI organization and or API key has not been configured."),
-                ephemeral=True,
-            )
-
-        await interaction.response.defer(ephemeral=True)
-
-        try:
-            chunks = await self.create_chroma_db(guild, interaction=interaction)
-        except ValueError as exc:
-            return await interaction.followup.send(content=str(exc), ephemeral=True)
-
-        await interaction.followup.send(
-            embed=BlueEmbed(title="Chroma DB", description=f"Saved {chunks} chunks to Chroma DB."),
-            ephemeral=True,
-        )
-
-    @_llm_group.command(name="refresh", description="Refresh a specific document source in the LLM Chroma DB")
-    @app_commands.describe(source="Document source to refresh")
-    @app_commands.choices(
-        source=[
-            app_commands.Choice(name="All Static Docs", value="static"),
-            app_commands.Choice(name="Rulebook", value="rulebook"),
-            app_commands.Choice(name="Glossary", value="glossary"),
-            app_commands.Choice(name="Dates", value="dates"),
-            app_commands.Choice(name="Help", value="help"),
-            app_commands.Choice(name="Funny", value="funny"),
-            app_commands.Choice(name="Franchises", value="franchises"),
-            app_commands.Choice(name="Players", value="players"),
-            app_commands.Choice(name="Player Stats", value="player_stats"),
-            app_commands.Choice(name="Matches", value="matches"),
-            app_commands.Choice(name="Teams", value="teams"),
-            app_commands.Choice(name="Team Stats", value="team_stats"),
-            app_commands.Choice(name="Standings", value="standings"),
-            app_commands.Choice(name="Season", value="season"),
-        ]
-    )
-    async def _llm_refresh_cmd(self, interaction: discord.Interaction, source: app_commands.Choice[str]):
-        """Refresh a specific document source in the LLM Chroma DB"""
-        guild = interaction.guild
-        if not guild:
-            return
-
-        # Settings
-        org, key = await self.get_llm_credentials(guild)
-        if not (org and key):
-            return await interaction.response.send_message(
-                embed=ErrorEmbed(description="OpenAI organization and or API key has not been configured."),
-                ephemeral=True,
-            )
-
-        await interaction.response.defer(ephemeral=True)
-
-        try:
-            if source.value == "static":
-                count = await self.refresh_static_document_sources(guild, interaction=interaction)
-            else:
-                document_source = DocumentSource(source.value)
-                count = await self.refresh_document_source(guild, document_source, interaction=interaction)
-        except ValueError as exc:
-            return await interaction.followup.send(content=str(exc), ephemeral=True)
-
-        await interaction.followup.send(
-            embed=GreenEmbed(
-                title="Documents Refreshed",
-                description=f"Refreshed **{source.name}** documents.\n\nSaved **{count}** chunks to Chroma DB.",
-            ),
-            ephemeral=True,
-        )
-
-    @_llm_group.command(name="resetdb", description="Reset the LLM Chroma DB (deletes all documents)")
-    async def _llm_resetdb_cmd(self, interaction: discord.Interaction):
-        """Reset the LLM Chroma DB by deleting all documents"""
-        guild = interaction.guild
-        if not guild:
-            return
-
-        await interaction.response.defer(ephemeral=True)
-
-        await reset_collection(guild)
-
-        await interaction.followup.send(
-            embed=GreenEmbed(
-                title="Database Reset",
-                description=(
-                    "The LLM Chroma DB has been reset. All documents have been deleted.\n\nRun `/llm createdb` to rebuild the database."
-                ),
-            ),
-            ephemeral=True,
-        )
-
-    @_llm_group.command(name="dbstats", description="Show LLM database statistics")
-    async def _llm_dbstats_cmd(self, interaction: discord.Interaction):
-        """Show LLM database statistics"""
-        guild = interaction.guild
-        if not guild:
-            return
-
-        await interaction.response.defer(ephemeral=True)
-
-        stats = await get_db_stats(guild)
-
-        if not stats["exists"]:
-            embed: discord.Embed = YellowEmbed(
-                title="LLM Database Stats",
-                description="No database found for this server. Run `/llm createdb` to create one.",
-            )
-        else:
-            embed: discord.Embed = BlueEmbed(
-                title="LLM Database Stats",
-                description="ChromaDB statistics for this server",
-            )
-            embed.add_field(name="Collection Name", value=stats["collection_name"], inline=False)
-            embed.add_field(name="Document Count", value=f"{stats['document_count']:,}", inline=False)
-            embed.add_field(name="Database Path", value=stats["db_path"], inline=False)
-
-        await interaction.followup.send(embed=embed, ephemeral=True)
-
     @_llm_blacklist_group.command(name="show", description="Display the LLM channel blacklist")
     async def _llm_blacklist_show_cmd(self, interaction: discord.Interaction):
         """Display the LLM channel blacklist"""
@@ -737,503 +577,7 @@ class LLMMixIn(RSCMixIn):
 
     # Helpers
 
-    async def create_chroma_db(self, guild: discord.Guild, interaction: discord.Interaction | None = None) -> int:
-        org, key = await self.get_llm_credentials(guild)
-        if not (org and key):
-            raise ValueError("OpenAI organization and or API key has not been configured.")
-
-        total_docs = 0
-
-        if interaction:
-            await interaction.edit_original_response(
-                embed=YellowEmbed(
-                    title="Creating Chroma DB",
-                    description="Resetting database collection.",
-                )
-            )
-
-        current_season = await self.current_season(guild)
-        if not current_season:
-            raise ValueError("Current season is not configured, cannot create LLM Chroma DB.")
-        if not current_season.number:
-            raise ValueError("Current season number is not set, cannot create LLM Chroma DB.")
-
-        # Reset the collection before adding new documents
-        await reset_collection(guild)
-
-        if interaction:
-            await interaction.edit_original_response(
-                embed=YellowEmbed(
-                    title="Creating Chroma DB",
-                    description="Loading documents from rules, API data, and match history.",
-                )
-            )
-
-        franchises_task = asyncio.create_task(self.franchises(guild))
-        doc_groups = await asyncio.gather(
-            self._build_rules_documents(guild),
-            self._build_current_season_documents(guild, current_season),
-            self._build_franchise_documents(guild, current_season.id, franchises=franchises_task),
-            self._build_player_documents(guild),
-            self._build_player_stats_documents(guild, current_season.number),
-            self._build_match_documents(guild, current_season.number),
-            self._build_team_documents(guild, franchises=franchises_task),
-            self._build_team_stats_documents(guild, current_season, franchises=franchises_task),
-            self._build_standings_documents(guild, current_season),
-        )
-        docs = [doc for group in doc_groups for doc in group]
-        total_docs = len(docs)
-
-        if interaction:
-            await interaction.edit_original_response(
-                embed=YellowEmbed(
-                    title="Creating Chroma DB",
-                    description=f"Saving {total_docs} documents to the database.",
-                )
-            )
-
-        await save_documents(guild, org, key, docs)
-
-        if interaction:
-            await interaction.edit_original_response(
-                embed=YellowEmbed(
-                    title="Creating Chroma DB",
-                    description="Database saved successfully.",
-                )
-            )
-
-        log.info(f"Chroma Document Total: {total_docs}")
-        log.info("Chroma database created")
-        return total_docs
-
-    async def _build_current_season_documents(self, guild: discord.Guild, current_season: Season | None = None) -> list[Document]:
-        """Build current season documents without saving them."""
-        season = current_season or await self.current_season(guild)
-        if not season:
-            log.warning("API returned no current season.", guild=guild)
-            return []
-        season_doc = await load_current_season_doc(season)
-        set_document_source(season_doc, DocumentSource.SEASON)
-        return [season_doc]
-
-    async def _build_rules_documents(self, guild: discord.Guild) -> list[Document]:
-        """Build rules, help, date, and funny documents without saving them."""
-        log.info("Creating rules/help/funny documents.", guild=guild)
-        doc_groups = await asyncio.gather(
-            self._build_dates_documents(guild),
-            self._build_rulebook_documents(guild),
-            self._build_glossary_documents(guild),
-            self._build_help_documents(guild),
-            self._build_funny_documents(guild),
-        )
-        return [doc for group in doc_groups for doc in group]
-
-    async def _build_dates_documents(self, guild: discord.Guild) -> list[Document]:
-        """Build dates corpus documents without saving them."""
-        dates = await self._get_dates(guild)
-        if dates:
-            date_doc = await string_to_doc(dates)
-            date_doc.metadata["source"] = "Dates"
-            set_document_source(date_doc, DocumentSource.DATES)
-            return [date_doc]
-        return []
-
-    async def _build_rulebook_documents(self, guild: discord.Guild) -> list[Document]:
-        """Build rulebook corpus documents without saving them."""
-        log.debug("Creating rule documents.", guild=guild)
-        rule_docs: list[Document] = []
-        rulepath = Path(__file__).parent.parent / "resources" / "rules"
-        rule_files = [rulepath / "RSC Rules.md"]
-        rule_groups = await asyncio.gather(*(load_rule_style_docs(fd) for fd in rule_files))
-        for rdocs in rule_groups:
-            for doc in rdocs:
-                set_document_source(doc, DocumentSource.RULEBOOK)
-            rule_docs.extend(rdocs)
-        return rule_docs
-
-    async def _build_glossary_documents(self, guild: discord.Guild) -> list[Document]:
-        """Build glossary corpus documents without saving them."""
-        log.debug("Creating glossary documents.", guild=guild)
-        rulepath = Path(__file__).parent.parent / "resources" / "rules" / "RSC Rules.md"
-        glossary_docs = await load_rule_glossary_docs(rulepath)
-        for doc in glossary_docs:
-            set_document_source(doc, DocumentSource.GLOSSARY)
-        return glossary_docs
-
-    async def _build_help_documents(self, guild: discord.Guild) -> list[Document]:
-        """Build help corpus documents without saving them."""
-        log.debug("Creating help documents.", guild=guild)
-        helpdocs = await load_help_docs()
-        help_md_docs = await markdown_to_documents(helpdocs)
-        for doc in help_md_docs:
-            set_document_source(doc, DocumentSource.HELP)
-        return help_md_docs
-
-    async def _build_funny_documents(self, guild: discord.Guild) -> list[Document]:
-        """Build funny corpus documents without saving them."""
-        log.debug("Creating funny documents.", guild=guild)
-        funnydocs = await load_funny_docs()
-        funny_md_docs = await markdown_to_documents(funnydocs)
-        for doc in funny_md_docs:
-            set_document_source(doc, DocumentSource.FUNNY)
-        return funny_md_docs
-
-    async def _resolve_franchises(
-        self,
-        guild: discord.Guild,
-        franchises: list[FranchiseList] | Awaitable[list[FranchiseList]] | None = None,
-    ) -> list[FranchiseList]:
-        if franchises is None:
-            return await self.franchises(guild)
-        if isinstance(franchises, list):
-            return cast("list[FranchiseList]", franchises)
-        return await franchises
-
-    async def _build_franchise_documents(
-        self,
-        guild: discord.Guild,
-        current_season: int | None = None,
-        franchises: list[FranchiseList] | Awaitable[list[FranchiseList]] | None = None,
-    ) -> list[Document]:
-        """Build franchise documents without saving them."""
-        log.info("Creating franchise documents.", guild=guild)
-        franchises = await self._resolve_franchises(guild, franchises)
-        if not franchises:
-            log.debug("No franchises found.", guild=guild)
-            return []
-
-        standings = None
-        if current_season:
-            standings = await self.franchise_standings(guild, season_id=current_season)
-
-        log.debug(f"Franchise Count: {len(franchises)}", guild=guild)
-        franchise_docs = await load_franchise_docs(franchises, standings=standings)
-        for doc in franchise_docs:
-            set_document_source(doc, DocumentSource.FRANCHISES)
-        return franchise_docs
-
-    async def _build_player_documents(self, guild: discord.Guild) -> list[Document]:
-        """Build player documents without saving them."""
-        log.info("Creating player documents.", guild=guild)
-        players = await utils.async_iter_gather(self.paged_players(guild))
-        log.debug(f"Total Players: {len(players)}", guild=guild)
-        player_docs = await load_player_docs(players)
-        for doc in player_docs:
-            set_document_source(doc, DocumentSource.PLAYERS)
-        return player_docs
-
-    async def _build_player_stats_documents(self, guild: discord.Guild, season_number: int) -> list[Document]:
-        """Build current-season player stats documents without saving them."""
-        log.info("Creating player stats documents.", guild=guild)
-        players = await utils.async_iter_gather(self.paged_players(guild))
-        semaphore = asyncio.Semaphore(LLM_STATS_FETCH_CONCURRENCY)
-
-        async def fetch_player_stats(player: LeaguePlayer) -> PlayerSeasonStats | None:
-            if not (player.player and player.player.discord_id):
-                return None
-            async with semaphore:
-                member = cast("discord.Member", guild.get_member(player.player.discord_id) or discord.Object(id=player.player.discord_id))
-                try:
-                    return await self.player_stats(guild, member, season=season_number)
-                except Exception as exc:
-                    log.debug(f"Unable to fetch player stats for {player.player.name}: {exc}", guild=guild)
-                    return None
-
-        stats_results = await asyncio.gather(*(fetch_player_stats(player) for player in players))
-        stats = [stats for stats in stats_results if stats]
-        log.debug(f"Player Stats Count: {len(stats)}", guild=guild)
-        player_stats_docs = await load_player_stats_docs(stats)
-        for doc in player_stats_docs:
-            set_document_source(doc, DocumentSource.PLAYER_STATS)
-        return player_stats_docs
-
-    async def _build_match_documents(self, guild: discord.Guild, season_number: int) -> list[Document]:
-        """Build match documents without saving them."""
-        log.info("Creating match documents.", guild=guild)
-
-        # Create a match fetcher that captures the guild
-        async def fetch_match(match_id: int):
-            log.debug(f"Fetching match results for ID: {match_id}", guild=guild)
-            return await self.match_results(guild, match_id)
-
-        matches = await utils.async_iter_gather(self.paged_matches(guild, season_number=season_number))
-        log.debug(f"Total Matches: {len(matches)}", guild=guild)
-        match_docs = await load_match_docs(matches, match_fetcher=fetch_match)
-        for doc in match_docs:
-            set_document_source(doc, DocumentSource.MATCHES)
-        return match_docs
-
-    async def _collect_franchise_teams(
-        self,
-        guild: discord.Guild,
-        franchises: list[FranchiseList] | Awaitable[list[FranchiseList]] | None = None,
-    ) -> list[Team]:
-        franchises = await self._resolve_franchises(guild, franchises)
-        teams: list[Team] = []
-
-        async def fetch_franchise_teams(f: FranchiseList) -> list[Team]:
-            if not (f.id and f.teams):
-                return []
-
-            fdata = await self.franchise_by_id(guild, id=f.id)
-            if not (fdata and fdata.teams):
-                return []
-
-            return list(fdata.teams)
-
-        franchise_team_groups = await asyncio.gather(*(fetch_franchise_teams(f) for f in franchises))
-        for group in franchise_team_groups:
-            teams.extend(group)
-
-        return teams
-
-    async def _build_team_documents(
-        self,
-        guild: discord.Guild,
-        franchises: list[FranchiseList] | Awaitable[list[FranchiseList]] | None = None,
-    ) -> list[Document]:
-        """Build team documents without saving them."""
-        log.info("Creating team documents.", guild=guild)
-        teams = await self._collect_franchise_teams(guild, franchises=franchises)
-
-        if not teams:
-            log.debug("No teams found.", guild=guild)
-            return []
-
-        log.debug(f"Team Count: {len(teams)}", guild=guild)
-        team_docs = await load_team_docs(teams)
-        for doc in team_docs:
-            set_document_source(doc, DocumentSource.TEAMS)
-        return team_docs
-
-    async def _build_team_stats_documents(
-        self,
-        guild: discord.Guild,
-        current_season: Season,
-        franchises: list[FranchiseList] | Awaitable[list[FranchiseList]] | None = None,
-    ) -> list[Document]:
-        """Build current-season team stats documents without saving them."""
-        log.info("Creating team stats documents.", guild=guild)
-        teams = await self._collect_franchise_teams(guild, franchises=franchises)
-        semaphore = asyncio.Semaphore(LLM_STATS_FETCH_CONCURRENCY)
-
-        async def fetch_team_stats(team: Team) -> TeamSeasonStats | None:
-            if not team.id:
-                return None
-            async with semaphore:
-                try:
-                    return await self.team_stats(guild, team_id=team.id, season=current_season.id)
-                except Exception as exc:
-                    log.debug(f"Unable to fetch team stats for {team.name}: {exc}", guild=guild)
-                    return None
-
-        stats_results = await asyncio.gather(*(fetch_team_stats(team) for team in teams))
-        stats = [stats for stats in stats_results if stats]
-        log.debug(f"Team Stats Count: {len(stats)}", guild=guild)
-        team_stats_docs = await load_team_stats_docs(stats, season_number=current_season.number)
-        for doc in team_stats_docs:
-            set_document_source(doc, DocumentSource.TEAM_STATS)
-        return team_stats_docs
-
-    async def _build_standings_documents(self, guild: discord.Guild, current_season: Season) -> list[Document]:
-        """Build current-season franchise and tier standings documents without saving them."""
-        log.info("Creating standings documents.", guild=guild)
-        franchise_standings = []
-        if current_season.id:
-            franchise_standings = await self.franchise_standings(guild, season_id=current_season.id)
-
-        tiers = await self.tiers(guild)
-        semaphore = asyncio.Semaphore(LLM_STATS_FETCH_CONCURRENCY)
-
-        async def fetch_tier_standings(tier: Tier):
-            if not (tier.id and current_season.number):
-                return []
-            async with semaphore:
-                try:
-                    return await self.tier_standings(guild, tier_id=tier.id, season=current_season.number)
-                except Exception as exc:
-                    log.debug(f"Unable to fetch standings for tier {tier.name}: {exc}", guild=guild)
-                    return []
-
-        team_standings_groups = await asyncio.gather(*(fetch_tier_standings(tier) for tier in tiers))
-        team_standings = [standing for group in team_standings_groups for standing in group]
-        log.debug(
-            f"Standings Count: {len(franchise_standings)} franchise, {len(team_standings)} team",
-            guild=guild,
-        )
-        standings_docs = await load_standings_docs(
-            franchise_standings=franchise_standings,
-            team_standings=team_standings,
-            season_number=current_season.number,
-        )
-        for doc in standings_docs:
-            set_document_source(doc, DocumentSource.STANDINGS)
-        return standings_docs
-
-    async def refresh_document_source(
-        self,
-        guild: discord.Guild,
-        source: DocumentSource,
-        interaction: discord.Interaction | None = None,
-    ) -> int:
-        """
-        Refresh only a specific document source in the ChromaDB.
-
-        Args:
-            guild: Discord guild
-            source: Source of documents to refresh
-            interaction: Optional interaction for progress updates
-
-        Returns:
-            Number of documents added
-        """
-        org, key = await self.get_llm_credentials(guild)
-        if not (org and key):
-            raise ValueError("OpenAI organization and or API key has not been configured.")
-
-        async def require_current_season() -> Season:
-            current_season = await self.current_season(guild)
-            if not current_season or not current_season.number:
-                raise ValueError("Current season is not configured.")
-            return current_season
-
-        async def require_season_number() -> int:
-            current_season = await require_current_season()
-            if current_season.number is None:
-                raise ValueError("Current season is not configured.")
-            return current_season.number
-
-        if interaction:
-            await interaction.edit_original_response(
-                embed=YellowEmbed(
-                    title="Refreshing Documents",
-                    description=f"Deleting existing {source.value} documents...",
-                )
-            )
-        deleted = await delete_documents_by_source(guild, source)
-        log.info(f"Deleted {deleted} existing {source.value} documents.", guild=guild)
-
-        if interaction:
-            await interaction.edit_original_response(
-                embed=YellowEmbed(
-                    title="Refreshing Documents",
-                    description=f"Loading new {source.value} documents...",
-                )
-            )
-
-        match source:
-            case DocumentSource.RULEBOOK:
-                docs = await self._build_rulebook_documents(guild)
-            case DocumentSource.GLOSSARY:
-                docs = await self._build_glossary_documents(guild)
-            case DocumentSource.DATES:
-                docs = await self._build_dates_documents(guild)
-            case DocumentSource.HELP:
-                docs = await self._build_help_documents(guild)
-            case DocumentSource.FUNNY:
-                docs = await self._build_funny_documents(guild)
-            case DocumentSource.FRANCHISES:
-                current_season = await require_current_season()
-                docs = await self._build_franchise_documents(guild, current_season.id)
-            case DocumentSource.PLAYERS:
-                docs = await self._build_player_documents(guild)
-            case DocumentSource.PLAYER_STATS:
-                docs = await self._build_player_stats_documents(guild, await require_season_number())
-            case DocumentSource.MATCHES:
-                docs = await self._build_match_documents(guild, await require_season_number())
-            case DocumentSource.TEAMS:
-                docs = await self._build_team_documents(guild)
-            case DocumentSource.TEAM_STATS:
-                current_season = await require_current_season()
-                docs = await self._build_team_stats_documents(guild, current_season)
-            case DocumentSource.STANDINGS:
-                current_season = await require_current_season()
-                docs = await self._build_standings_documents(guild, current_season)
-            case DocumentSource.SEASON:
-                current_season = await require_current_season()
-                docs = await self._build_current_season_documents(guild, current_season)
-
-        await save_documents(guild, org, key, docs)
-        log.info(f"Saved {len(docs)} {source.value} documents.", guild=guild)
-        return len(docs)
-
-    async def refresh_static_document_sources(
-        self,
-        guild: discord.Guild,
-        interaction: discord.Interaction | None = None,
-    ) -> int:
-        """Refresh all static document sources and save them in one Chroma write."""
-        org, key = await self.get_llm_credentials(guild)
-        if not (org and key):
-            raise ValueError("OpenAI organization and or API key has not been configured.")
-
-        for source in STATIC_DOCUMENT_SOURCES:
-            if interaction:
-                await interaction.edit_original_response(
-                    embed=YellowEmbed(
-                        title="Refreshing Documents",
-                        description=f"Deleting existing {source.value} documents...",
-                    )
-                )
-            deleted = await delete_documents_by_source(guild, source)
-            log.info(f"Deleted {deleted} existing {source.value} documents.", guild=guild)
-
-        if interaction:
-            await interaction.edit_original_response(
-                embed=YellowEmbed(
-                    title="Refreshing Documents",
-                    description="Loading new static documents...",
-                )
-            )
-
-        docs = await self._build_rules_documents(guild)
-        await save_documents(guild, org, key, docs)
-        log.info(f"Saved {len(docs)} static documents.", guild=guild)
-        return len(docs)
-
-    async def resolve_user_identity(
-        self,
-        guild: discord.Guild,
-        member: discord.Member,
-        current_datetime: datetime | None = None,
-    ) -> UserIdentity | None:
-        """
-        Resolve user identity from Discord member to league player data.
-
-        Args:
-            guild: Discord guild
-            member: Discord member to look up
-            current_datetime: Current datetime for time-aware queries
-
-        Returns:
-            UserIdentity with player data, or None if not found
-        """
-        try:
-            players = await self.players(guild, discord_id=member.id, limit=1)
-            if not players:
-                # Fall back to display name without prefix
-                no_prefix = await utils.remove_prefix(member)
-                return UserIdentity(name=no_prefix, current_datetime=current_datetime)
-
-            player = players[0]
-            return UserIdentity(
-                name=player.player.name if player.player else await utils.remove_prefix(member),
-                team=player.team.name if player.team else None,
-                franchise=player.team.franchise.name if player.team and player.team.franchise else None,
-                tier=player.tier.name if player.tier else None,
-                status=player.status,
-                current_datetime=current_datetime,
-            )
-        except Exception as exc:
-            log.warning(f"Failed to resolve user identity: {exc}", guild=guild)
-            no_prefix = await utils.remove_prefix(member)
-            return UserIdentity(name=no_prefix, current_datetime=current_datetime)
-
-    async def clean_question(
-        self,
-        message: discord.Message,
-        user_identity: UserIdentity | None = None,
-    ) -> str:
+    async def clean_question(self, message: discord.Message) -> str:
         if not message.guild:
             return message.clean_content
 
@@ -1282,28 +626,6 @@ class LLMMixIn(RSCMixIn):
             embeds[-1].add_long_field(name="Sources", value=sources, inline=False)
 
         return embeds
-
-    async def format_llm_sources(self, sources: list[dict[str, str | int | None]]) -> str:
-        """Format source metadata for display.
-
-        Args:
-            sources: List of metadata dicts with 'source', 'id', 'chunk_index' keys
-
-        Returns:
-            Formatted string of unique sources
-        """
-        results: list[str] = []
-        seen: set[str | int] = set()
-        for meta in sources:
-            source = meta.get("source")
-            doc_id = meta.get("id")
-            if source and source not in seen:
-                seen.add(source)
-                if doc_id:
-                    results.append(f"- {source} (ID: {doc_id})")
-                else:
-                    results.append(f"- {source}")
-        return "\n".join(results)
 
     def _is_private_ticket_channel(self, guild: discord.Guild, channel: discord.TextChannel | discord.Thread) -> tuple[bool, str]:
         """Validate channel privacy and audience size for ticket summarization."""
@@ -1440,10 +762,77 @@ class LLMMixIn(RSCMixIn):
         key = await self._get_openai_key(guild)
         return (org, key)
 
-    async def get_llm_default(self, guild: discord.Guild) -> tuple[int, float]:
-        count = await self._get_llm_similarity_count(guild)
-        threshold = await self._get_llm_threshold(guild)
-        return (count, threshold)
+    # Agent
+
+    async def answer_with_agent(
+        self,
+        guild: discord.Guild,
+        member: discord.Member | discord.User,
+        question: str,
+        *,
+        surface: str,
+    ) -> tuple[str, str | None]:
+        """Answer a question with the tool-calling agent.
+
+        Returns the answer and a sources line. Raises `AgentError` for failures
+        the asker should be told about, and `PermissionError` when the spend
+        controls decline the request.
+        """
+        org, key = await self.get_llm_credentials(guild)
+        if not key:
+            raise AgentError("The OpenAI API key is not configured for this server.")
+
+        tz = await self.timezone(guild)
+        now = datetime.now(tz)
+
+        verdict = await check_budget(
+            self,
+            guild,
+            member,
+            cooldown=self._llm_cooldown,
+            user_cap=await self._get_llm_user_daily_cap(guild),
+            guild_cap=await self._get_llm_guild_daily_cap(guild),
+            now=now,
+        )
+        if not verdict.allowed:
+            raise PermissionError(verdict.reason)
+
+        # Started before the call, so a slow answer does not let the same user
+        # queue several more behind it.
+        self._llm_cooldown.seconds = await self._get_llm_cooldown(guild)
+        self._llm_cooldown.start(guild.id, member.id)
+
+        ctx = await build_agent_context(
+            self,
+            guild,
+            member,
+            api_key=key,
+            org=org,
+            surface=surface,
+            cache=self._llm_tool_cache,
+            now=now,
+        )
+
+        try:
+            result = await run_agent(ctx, question)
+        except AgentError:
+            # The question never completed, so it should not burn the asker's
+            # cooldown.
+            self._llm_cooldown.clear(guild.id, member.id)
+            raise
+
+        await record_usage(self, guild, member.id, tokens=ctx.usage.total, now=now)
+        return (result.answer, self.format_agent_sources(result.tools_called, result.citations))
+
+    @staticmethod
+    def format_agent_sources(tools: list[str], citations: list[str]) -> str | None:
+        """What the answer was based on: tools consulted and rules cited."""
+        parts = []
+        if citations:
+            parts.append("Rules: " + ", ".join(citations[:6]))
+        if tools:
+            parts.append("Looked up: " + ", ".join(tools))
+        return " | ".join(parts) or None
 
     # Config
 
@@ -1471,21 +860,33 @@ class LLMMixIn(RSCMixIn):
         """Set OpenAI organization name"""
         await self.config.custom("LLM", str(guild.id)).OpenAIOrg.set(org)
 
-    async def _get_llm_similarity_count(self, guild: discord.Guild) -> int:
-        """Get similarity count for LLM queries"""
-        return await self.config.custom("LLM", str(guild.id)).SimilarityCount()
+    async def _get_llm_cooldown(self, guild: discord.Guild) -> int:
+        """Seconds a user must wait between questions"""
+        return await self.config.custom("LLM", str(guild.id)).LLMUserCooldown()
 
-    async def _set_llm_similarity_count(self, guild: discord.Guild, count: int):
-        """Set similarity count for LLM queries"""
-        await self.config.custom("LLM", str(guild.id)).SimilarityCount.set(count)
+    async def _set_llm_cooldown(self, guild: discord.Guild, seconds: int):
+        await self.config.custom("LLM", str(guild.id)).LLMUserCooldown.set(seconds)
 
-    async def _get_llm_threshold(self, guild: discord.Guild) -> float:
-        """Get similarity threshold for LLM queries"""
-        return await self.config.custom("LLM", str(guild.id)).SimilarityThreshold()
+    async def _get_llm_user_daily_cap(self, guild: discord.Guild) -> int:
+        """Questions per user per day. 0 disables the cap."""
+        return await self.config.custom("LLM", str(guild.id)).LLMUserDailyCap()
 
-    async def _set_llm_threshold(self, guild: discord.Guild, threshold: float):
-        """Set similarity threshold for LLM queries"""
-        await self.config.custom("LLM", str(guild.id)).SimilarityThreshold.set(threshold)
+    async def _set_llm_user_daily_cap(self, guild: discord.Guild, cap: int):
+        await self.config.custom("LLM", str(guild.id)).LLMUserDailyCap.set(cap)
+
+    async def _get_llm_guild_daily_cap(self, guild: discord.Guild) -> int:
+        """Questions across the whole guild per day. 0 disables the cap."""
+        return await self.config.custom("LLM", str(guild.id)).LLMGuildDailyCap()
+
+    async def _set_llm_guild_daily_cap(self, guild: discord.Guild, cap: int):
+        await self.config.custom("LLM", str(guild.id)).LLMGuildDailyCap.set(cap)
+
+    async def _get_llm_public_ask(self, guild: discord.Guild) -> bool:
+        """Whether /ask is available to everyone"""
+        return await self.config.custom("LLM", str(guild.id)).LLMPublicAsk()
+
+    async def _set_llm_public_ask(self, guild: discord.Guild, enabled: bool):
+        await self.config.custom("LLM", str(guild.id)).LLMPublicAsk.set(enabled)
 
     async def _get_llm_channel_blacklist(self, guild: discord.Guild) -> list[int]:
         """Get channel blacklist for LLM responses"""

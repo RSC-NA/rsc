@@ -41,6 +41,7 @@ from rsc.franchises import FranchiseMixIn
 from rsc.freeagents import FreeAgentMixIn
 from rsc.leagues import LeagueMixIn
 from rsc.llm import LLMMixIn
+from rsc.llm.rulebook import load_rulebooks
 from rsc.logs import GuildLogAdapter
 from rsc.matches import MatchMixIn
 from rsc.members import MemberMixIn
@@ -157,7 +158,6 @@ class RSC(
         self.expire_sub_contract_loop.cancel()
         self.expire_free_agent_checkins_loop.cancel()
         self.sync_discord_roles.cancel()
-        self.weekly_llm_db_refresh.cancel()
         # tasks.Loop.__get__ hands each cog instance its own copy, so a reloaded
         # cog sees is_running() == False and would start a second poller against
         # the same cursor. Cancelling here is mandatory, not tidiness.
@@ -194,6 +194,14 @@ class RSC(
             # guild's failure from aborting the others -- previously an error
             # type outside the except* handlers below unwound the whole loop and
             # every remaining guild was silently left with empty caches.
+            # Parse the rulebooks once, off the event loop, so the first rules
+            # question does not wait on it. Failure is not fatal: the agent
+            # rebuilds lazily, it just pays the cost on that first question.
+            try:
+                await load_rulebooks()
+            except OSError as exc:
+                log.error(f"Could not load rulebooks: {exc}", exc_info=exc)
+
             guilds = list(self.bot.guilds)
             results = await asyncio.gather(
                 *(self._setup_guild(guild) for guild in guilds),

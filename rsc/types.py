@@ -1,11 +1,8 @@
 from dataclasses import dataclass
 from typing import TypedDict
 
-import ballchasing
 import discord
 import math
-from rscapi.models.match import Match
-
 from rsc.const import DEV_LEAGUE_EMOJI, STAR_EMOJI, TROPHY_EMOJI, COOKIE_EMOJI, COMBINE_CUP_EMOJI
 
 
@@ -142,8 +139,25 @@ class LLMSettings(TypedDict):
     LLMBlacklist: list[discord.TextChannel] | None
     OpenAIKey: str | None
     OpenAIOrg: str | None
-    SimilarityCount: int
-    SimilarityThreshold: float
+    # Spend controls. The league is funded personally, so the agent is capped
+    # per user and per guild rather than left open-ended.
+    LLMUserCooldown: int
+    LLMUserDailyCap: int
+    LLMGuildDailyCap: int
+    LLMPublicAsk: bool
+
+
+class LLMUsageRecord(TypedDict):
+    """Per-day question and token counts, keyed by (guild id, user id).
+
+    Persisted rather than held in memory because an in-memory counter resets on
+    every cog reload, which is exactly when someone who had hit their cap would
+    try again.
+    """
+
+    day: str | None
+    count: int
+    tokens: int
 
 
 class TransactionSettings(TypedDict):
@@ -214,19 +228,3 @@ class ModThreadSettings(TypedDict):
 
 class NumbersSettings(TypedDict):
     NumbersRole: discord.Role | None
-
-
-class BallchasingResult(TypedDict):
-    valid: bool
-    away_wins: int
-    home_wins: int
-    match: Match
-    replays: set[ballchasing.models.Replay]
-    execution_time: float
-    link: str | None
-
-
-class BallchasingCollisions(TypedDict):
-    total_replays: int
-    unknown: set[ballchasing.models.Replay]
-    collisions: set[ballchasing.models.Replay]

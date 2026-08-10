@@ -31,6 +31,7 @@ from rscapi.models.match_results import MatchResults
 from rscapi.models.member import Member as RSCMember
 from rscapi.models.name_change_history import NameChangeHistory
 from rscapi.models.player_season_stats import PlayerSeasonStats
+from rscapi.models.player_season_stats_in_depth import PlayerSeasonStatsInDepth
 from rscapi.models.franchise_rebrand import FranchiseRebrand
 from rscapi.models.season import Season
 from rscapi.models.team import Team
@@ -54,6 +55,7 @@ from rsc.enums import (
     RegionPreference,
     Status,
     TrackerLinksStatus,
+    TransactionType,
 )
 
 if TYPE_CHECKING:
@@ -530,6 +532,16 @@ class RSCMixIn(ABC):
     async def elevated_positions(self, guild: discord.Guild, discord_id: int) -> frozenset[str]: ...
 
     @abstractmethod
+    async def league_elevated_roles(
+        self,
+        guild: discord.Guild,
+        agm: bool | None = None,
+        gm: bool | None = None,
+        position: str | None = None,
+        limit: int = 200,
+    ) -> list[ElevatedRole]: ...
+
+    @abstractmethod
     async def declare_intent(
         self,
         guild: discord.Guild,
@@ -643,6 +655,24 @@ class RSCMixIn(ABC):
 
     @abstractmethod
     async def tier_standings(self, guild: discord.Guild, tier_id: int, season: int) -> list[TeamStandings]: ...
+
+    @abstractmethod
+    async def tier_player_stats(
+        self,
+        guild: discord.Guild,
+        tier_id: int,
+        season: int | None = None,
+        name: str | None = None,
+    ) -> list[PlayerSeasonStatsInDepth]: ...
+
+    @abstractmethod
+    async def tier_team_stats(
+        self,
+        guild: discord.Guild,
+        tier_id: int,
+        season: int | None = None,
+        name: str | None = None,
+    ) -> list[TeamSeasonStats]: ...
 
     @abstractmethod
     async def season_matches(
@@ -778,6 +808,18 @@ class RSCMixIn(ABC):
 
     @abstractmethod
     async def transaction_history_by_id(self, guild: discord.Guild, transaction_id: int) -> TransactionResponse: ...
+
+    @abstractmethod
+    async def transaction_history(
+        self,
+        guild: discord.Guild,
+        player: discord.Member | None = None,
+        executor: discord.Member | None = None,
+        season: int | None = None,
+        trans_type: TransactionType | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[TransactionResponse]: ...
 
     @abstractmethod
     async def get_franchise_transaction_channel_name(self, franchise_name: str) -> str: ...

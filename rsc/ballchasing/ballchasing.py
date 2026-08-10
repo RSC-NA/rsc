@@ -1,20 +1,22 @@
+import asyncio
 import logging
-import random
 import math
-
-# import statistics
+import random
 import string
-from collections.abc import Sequence
+import time
+from collections.abc import AsyncIterator, Sequence
+from contextlib import asynccontextmanager
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from urllib.parse import urljoin
 
+import aiohttp
 import ballchasing
 import discord
-import trio
+from ballchasing.exceptions import BackoffLimitExceeded, BallchasingFault, DuplicateReplay, UserFault
 from redbot.core import app_commands
 from rscapi.models.match import Match
 from rscapi.models.match_results import MatchResults
-from ballchasing.exceptions import DuplicateReplay
 
 from rsc.abc import RSCMixIn
 from rsc.ballchasing import groups, process, validation
@@ -26,14 +28,12 @@ from rsc.embeds import (
     SuccessEmbed,
     YellowEmbed,
 )
-from rsc.enums import MatchType, PostSeasonType, MatchFormat
+from rsc.enums import MatchFormat, MatchType, PostSeasonType
 from rsc.exceptions import RscException
 from rsc.logs import GuildLogAdapter
 from rsc.teams import TeamMixIn
 from rsc.utils import utils
 from rsc.views import LinkButton
-
-# from rsc.views import LinkButton
 
 logger = logging.getLogger("red.rsc.ballchasing")
 log = GuildLogAdapter(logger)
@@ -43,20 +43,48 @@ defaults_guild = {
     "TopLevelGroup": None,
     "LogChannel": None,
     "ManagerRole": None,
-    "RscSteamId": None,
     "ReportCategory": None,
 }
 
-verify_timeout = 30
 BALLCHASING_URL = "https://ballchasing.com"
-DONE = "Done"
-WHITE_X_REACT = "\U0000274e"  # :negative_squared_cross_mark:
-WHITE_CHECK_REACT = "\U00002705"  # :white_check_mark:
-# RSC_STEAM_ID = 76561199096013422  # RSC Steam ID
-# RSC_STEAM_ID = 76561197960409023  # REMOVEME - my steam id for development
 
-LARGE_BATCH_SIZE = 10
-SMALL_BATCH_SIZE = 5
+# Upper bound on one match report. Ballchasing backs off cubically on 429 and can
+# stall for minutes; without a ceiling a wedged report holds the match lock until
+# the Discord interaction token expires.
+BC_REPORT_TIMEOUT = 300
+
+# How long we remember which games we pushed into a ballchasing group. Only
+# needs to outlive ballchasing's processing queue, since after that the group
+# listing carries the stats we fingerprint from.
+BC_LEDGER_TTL = 3600.0
+BC_LEDGER_MAX_GROUPS = 512
+
+
+@dataclass(slots=True)
+class _LockEntry:
+    lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+    refs: int = 0
+
+
+def normalize_scores(home: str, home_wins: int, away_wins: int, match: Match) -> tuple[int, int]:
+    """Orient the reported scores to the API's home/away, not the reporter's.
+
+    `get_match_from_list` accepts the teams in either order, so a reporter who
+    names the away team first would otherwise have the result recorded backwards.
+    """
+    away_name = (match.away_team.name or "").casefold()
+    if away_name and home.strip().casefold() == away_name:
+        return away_wins, home_wins
+    return home_wins, away_wins
+
+
+def upload_summary(upload: process.ReplayUploadResult) -> str:
+    parts = [f"Uploaded **{upload.uploaded}**"]
+    if upload.skipped:
+        parts.append(f"skipped **{upload.skipped}** duplicate(s)")
+    if upload.failed:
+        parts.append(f"failed **{upload.failed}**")
+    return " · ".join(parts)
 
 
 class BallchasingMixIn(RSCMixIn):
@@ -66,6 +94,18 @@ class BallchasingMixIn(RSCMixIn):
         self.config.init_custom("Ballchasing", 1)
         self.config.register_custom("Ballchasing", **defaults_guild)
         self._ballchasing_api: dict[int, ballchasing.Api] = {}
+
+        # Serializes the whole read-dedup-upload-report sequence per match, and
+        # group creation per guild. Match guard is always the outer lock.
+        self._bc_match_locks: dict[tuple[int, int], _LockEntry] = {}
+        self._bc_group_locks: dict[int, asyncio.Lock] = {}
+
+        # guild id -> resolved ballchasing group ids. Group ids are immutable, so
+        # this is only cleared when the API client is rebuilt.
+        self._bc_group_cache: dict[int, groups.GroupCache] = {}
+
+        # (guild id, group id) -> {game fingerprint: (replay id, monotonic timestamp)}
+        self._bc_upload_ledger: dict[tuple[int, str], dict[str, tuple[str, float]]] = {}
         super().__init__()
 
     # Setup
@@ -75,18 +115,75 @@ class BallchasingMixIn(RSCMixIn):
         log.debug("Preparing ballchasing API for guild", guild=guild)
         if not token:
             return
+        token = token.strip()
 
-        # setup() re-runs on every on_ready(). Api.create() builds a new
-        # ClientSession each time, so the previous one must be closed or it
-        # leaks a socket per reconnect.
-        stale = self._ballchasing_api.pop(guild.id, None)
-        if stale is not None:
+        # setup() re-runs on every on_ready(). Rebuilding unconditionally would
+        # close the ClientSession out from under an in-flight /reportmatch, so
+        # only do it when the token actually changed.
+        existing = self._ballchasing_api.get(guild.id)
+        if existing is not None and existing.auth_key == token:
+            log.debug("Ballchasing API already configured", guild=guild)
+            return
+
+        self._ballchasing_api[guild.id] = await ballchasing.Api.create(auth_key=token)
+        self._bc_group_cache.pop(guild.id, None)
+
+        if existing is not None:
             try:
-                await stale.close()
+                await existing.close()
             except Exception as exc:
                 log.warning(f"Error closing stale ballchasing session: {exc}", guild=guild)
 
-        self._ballchasing_api[guild.id] = await ballchasing.Api.create(auth_key=token.strip())
+    # Concurrency
+
+    @asynccontextmanager
+    async def bc_match_guard(self, guild: discord.Guild, match_id: int) -> AsyncIterator[_LockEntry]:
+        """Serialize match reporting so two reporters cannot duplicate each other's work."""
+        key = (guild.id, match_id)
+        entry = self._bc_match_locks.setdefault(key, _LockEntry())
+        # Refcount rather than checking lock.locked() on the way out: release()
+        # clears the flag before the woken waiter re-acquires, so a locked()
+        # check would drop the entry and hand the next caller a fresh lock.
+        entry.refs += 1
+        try:
+            async with entry.lock:
+                yield entry
+        finally:
+            entry.refs -= 1
+            if entry.refs == 0 and self._bc_match_locks.get(key) is entry:
+                del self._bc_match_locks[key]
+
+    # Upload ledger
+
+    def _ledger_record(self, guild: discord.Guild, group: str, fingerprint: str, replay_id: str) -> None:
+        bucket = self._bc_upload_ledger.setdefault((guild.id, group), {})
+        bucket[fingerprint] = (replay_id, time.monotonic())
+        if len(self._bc_upload_ledger) > BC_LEDGER_MAX_GROUPS:
+            self._ledger_sweep()
+
+    def _ledger_read(self, guild: discord.Guild, group: str) -> dict[str, str]:
+        """Live fingerprint -> replay id entries for a group, pruning expired ones."""
+        key = (guild.id, group)
+        bucket = self._bc_upload_ledger.get(key)
+        if not bucket:
+            return {}
+
+        cutoff = time.monotonic() - BC_LEDGER_TTL
+        for stale in [f for f, (_, ts) in bucket.items() if ts < cutoff]:
+            del bucket[stale]
+        if not bucket:
+            del self._bc_upload_ledger[key]
+            return {}
+        return {fingerprint: replay_id for fingerprint, (replay_id, _) in bucket.items()}
+
+    def _ledger_sweep(self) -> None:
+        cutoff = time.monotonic() - BC_LEDGER_TTL
+        for key in list(self._bc_upload_ledger):
+            bucket = self._bc_upload_ledger[key]
+            for stale in [f for f, (_, ts) in bucket.items() if ts < cutoff]:
+                del bucket[stale]
+            if not bucket:
+                del self._bc_upload_ledger[key]
 
     # Settings
 
@@ -346,13 +443,33 @@ class BallchasingMixIn(RSCMixIn):
                 )
         log.debug(f"Replay Count: {len(replay_files)}")
 
-        # Check for duplicates
+        # Read and parse every replay once. Everything downstream works off these
+        # bytes instead of re-fetching the attachment.
+        try:
+            candidates = await process.build_candidates(replay_files)
+        except process.ReplayParseError as exc:
+            return await interaction.followup.send(
+                embed=ErrorEmbed(description=str(exc)),
+                ephemeral=True,
+            )
+        except Exception as exc:
+            log.exception(f"Error reading submitted replays: {exc}", exc_info=exc, guild=guild)
+            return await interaction.followup.send(
+                embed=ExceptionErrorEmbed(exc_message=str(exc)),
+                ephemeral=True,
+            )
+
+        # Check for duplicates within this submission
         log.debug("Checking for duplicate replays")
-        if await validation.duplicate_replay_hashes(replay_files):
+        repeated = process.duplicate_in_batch(candidates)
+        if repeated:
             return await interaction.followup.send(
                 embed=ErrorEmbed(
                     title="Duplicate Replays Found",
-                    description="Duplicate replays found. Please make sure you have the correct files attached.",
+                    description=(
+                        f"`{repeated.label}` is the same game as another replay you attached. "
+                        "Please make sure you have the correct files attached."
+                    ),
                 ),
                 ephemeral=True,
             )
@@ -428,13 +545,8 @@ class BallchasingMixIn(RSCMixIn):
                         ephemeral=True,
                     )
 
-        # Reporter swapped home and away team names
-        # Swap the scores so they don't report it wrong
-        if home.lower().strip() == match.away_team.name.lower():
-            home_wins = away_wins
-
-        if away.lower().strip() == match.home_team.name.lower():
-            away_wins = home_wins
+        # Reporter may have swapped home and away team names
+        home_wins, away_wins = normalize_scores(home, home_wins, away_wins, match)
 
         # Only GMs and team members can report a match by default
         try:
@@ -464,47 +576,67 @@ class BallchasingMixIn(RSCMixIn):
             )
 
         # Send "working" message
+        queued = self.bc_match_report_in_progress(guild, match.id)
         embed = YellowEmbed(
             title="Processing Match",
-            description=f"Processing replays for match **{home}** vs **{away}**.",
+            description=(
+                f"Another report for **{home}** vs **{away}** is in progress. Waiting for it to finish."
+                if queued
+                else f"Processing replays for match **{home}** vs **{away}**."
+            ),
         )
         await interaction.followup.send(embed=embed, ephemeral=True)
 
+        # One reporter at a time per match. Two teammates reporting the same match
+        # concurrently would otherwise both find an empty group and both upload.
         try:
-            bc_group = await self.process_match_replays(guild, match=match, replays=replay_files)
-        except Exception as exc:
-            log.exception(f"Error processing match replays: {exc}", exc_info=exc, guild=guild, match=match)
-            return await interaction.edit_original_response(embed=ExceptionErrorEmbed(exc_message=str(exc)))
+            async with self.bc_match_guard(guild, match.id), asyncio.timeout(BC_REPORT_TIMEOUT):
+                try:
+                    upload = await self.process_match_replays(guild, match=match, candidates=candidates)
+                except Exception as exc:
+                    log.exception(f"Error processing match replays: {exc}", exc_info=exc, guild=guild, match=match)
+                    return await interaction.edit_original_response(embed=ExceptionErrorEmbed(exc_message=str(exc)))
 
-        try:
-            match_result = await self.report_match(
-                guild,
-                match_id=match.id,
-                ballchasing_group=bc_group,
-                home_score=home_wins,
-                away_score=away_wins,
-                executor=member,
-                override=override,
-            )
-            log.debug(f"Match Result: {match_result}", match=match)
-        except RscException as exc:
-            if hasattr(exc, "status") and exc.status == 500:
-                # Match already reported
-                return await interaction.edit_original_response(
-                    embed=YellowEmbed(
-                        title="Match Reported",
-                        description="This match has already been reported but all additional replays have been uploaded.",
+                try:
+                    match_result = await self.report_match(
+                        guild,
+                        match_id=match.id,
+                        ballchasing_group=upload.group,
+                        home_score=home_wins,
+                        away_score=away_wins,
+                        executor=member,
+                        override=override,
                     )
+                    log.debug(f"Match Result: {match_result}", match=match)
+                except RscException as exc:
+                    await self.report_upload_failures(guild, match=match, upload=upload)
+                    if hasattr(exc, "status") and exc.status == 500:
+                        # Match already reported
+                        return await interaction.edit_original_response(
+                            embed=YellowEmbed(
+                                title="Match Reported",
+                                description="This match has already been reported but all additional replays have been uploaded.",
+                            )
+                        )
+                    else:
+                        return await interaction.edit_original_response(embed=ApiExceptionErrorEmbed(exc))
+        except TimeoutError:
+            log.error(f"Timed out reporting match {match.id}", guild=guild, match=match)
+            return await interaction.edit_original_response(
+                embed=ErrorEmbed(
+                    title="Report Timed Out",
+                    description="Ballchasing did not respond in time. Please try again in a few minutes.",
                 )
-            else:
-                return await interaction.edit_original_response(embed=ApiExceptionErrorEmbed(exc))
+            )
+
+        await self.report_upload_failures(guild, match=match, upload=upload)
 
         # Final embed
         result_embed, result_view = await self.build_match_result_embed(
             guild,
             match=match,
             result=match_result,
-            link=await self.bc_group_full_url(bc_group),
+            link=await self.bc_group_full_url(upload.group),
         )
 
         # Try to get GMs
@@ -523,7 +655,8 @@ class BallchasingMixIn(RSCMixIn):
         if gms:
             gm_fmt = " ".join(gms)
 
-        # Announce to score reporting
+        # Announce to score reporting. The public embed stays clean, upload
+        # accounting is only useful to the person who submitted the files.
         await self.announce_to_score_reporting(
             guild,
             tier=match.home_team.tier,
@@ -532,19 +665,35 @@ class BallchasingMixIn(RSCMixIn):
             content=gm_fmt,
         )
 
+        reporter_embed = result_embed.copy()
+        reporter_embed.add_field(name="Replays", value=upload_summary(upload), inline=False)
+
         # Send to user
         try:
-            await interaction.edit_original_response(embed=result_embed, view=result_view)
+            await interaction.edit_original_response(embed=reporter_embed, view=result_view)
         except discord.errors.NotFound:
             # Original message not found, send a new one
             if result_view:
-                await interaction.followup.send(embed=result_embed, view=result_view, ephemeral=True)
+                await interaction.followup.send(embed=reporter_embed, view=result_view, ephemeral=True)
             else:
-                await interaction.followup.send(embed=result_embed, ephemeral=True)
+                await interaction.followup.send(embed=reporter_embed, ephemeral=True)
 
     # Functions
 
-    async def process_match_replays(self, guild: discord.Guild, match: Match, replays: Sequence[discord.Attachment | str | bytes]):
+    def bc_match_report_in_progress(self, guild: discord.Guild, match_id: int) -> bool:
+        """Whether someone else is already reporting this match."""
+        entry = self._bc_match_locks.get((guild.id, match_id))
+        return bool(entry and entry.lock.locked())
+
+    async def process_match_replays(
+        self, guild: discord.Guild, match: Match, candidates: Sequence[process.ReplayCandidate]
+    ) -> process.ReplayUploadResult:
+        """Resolve the match's ballchasing group and upload whatever is missing from it.
+
+        The caller must hold `bc_match_guard` for this match. Group resolution and
+        the duplicate check are both read-then-write against ballchasing, so
+        concurrent callers would duplicate each other's work.
+        """
         log.debug(
             f"Processing match: {match.home_team.name} vs {match.away_team.name}",
             guild=guild,
@@ -557,18 +706,21 @@ class BallchasingMixIn(RSCMixIn):
             raise ValueError("Top level ballchasing group is not configured in guild.")
 
         # Get ballchasing API
-        log.debug("Initializing ballchasing API...", guild=guild, match=match)
         bapi = self._ballchasing_api.get(guild.id)
         if not bapi:
             raise ValueError("Ballchasing API is not configured in guild.")
-        log.debug("Ballchasing API initialized", guild=guild, match=match)
 
         # Create or find RSC match group ID
         log.debug("Finding or creating match group in ballchasing", guild=guild, match=match)
-        match_group_id = await groups.rsc_match_bc_group(bapi=bapi, guild=guild, tlg=tlg, match=match)
+        async with self._bc_group_locks.setdefault(guild.id, asyncio.Lock()):
+            match_group_id = await groups.rsc_match_bc_group(
+                bapi=bapi,
+                guild=guild,
+                tlg=tlg,
+                match=match,
+                cache=self._bc_group_cache.setdefault(guild.id, {}),
+            )
         log.debug(f"Match Group ID: {match_group_id}", guild=guild, match=match)
-        if not match_group_id:
-            raise RuntimeError("Unable to find or create ballchasing match group.")
 
         # Get replays from group if any
         log.debug(f"Getting existing replays from {match_group_id}", guild=guild, match=match)
@@ -578,24 +730,34 @@ class BallchasingMixIn(RSCMixIn):
         log.debug(f"Existing Replay Count: {len(bc_replays)}", guild=guild, match=match)
 
         # Check for collisions in ballchasing (duplicate replays)
-        collisions = await process.replay_group_collisions(replay_files=replays, bc_replays=bc_replays)
-        log.debug(f"Replay Collisions: {collisions}", guild=guild, match=match)
+        collisions = await process.replay_group_collisions(
+            candidates=candidates,
+            bc_replays=bc_replays,
+            ledger=self._ledger_read(guild, match_group_id),
+        )
+        log.debug(f"Duplicate replays skipped: {len(collisions.duplicates)}", guild=guild, match=match)
 
-        # Remove collisions from upload list
-        pending = [r for r in replays if r not in collisions]
+        result = process.ReplayUploadResult(group=match_group_id)
+        for candidate, replay_id in collisions.duplicates:
+            result.outcomes.append(process.UploadOutcome(candidate=candidate, replay_id=replay_id, duplicate=True))
 
         # Upload replays (only if we need to)
-        if pending:
-            await self.upload_replays(guild, group=match_group_id, replays=pending, match=match)
+        if collisions.upload:
+            await self.upload_replays(guild, group=match_group_id, candidates=collisions.upload, result=result, match=match)
         else:
             log.debug("No new replays to upload", guild=guild, match=match)
 
-        return match_group_id
+        return result
 
     async def upload_replays(
-        self, guild: discord.Guild, group: str, replays: Sequence[discord.Attachment | str | bytes], match: Match | None = None
-    ) -> list[str]:
-        if not replays:
+        self,
+        guild: discord.Guild,
+        group: str,
+        candidates: Sequence[process.ReplayCandidate],
+        result: process.ReplayUploadResult | None = None,
+        match: Match | None = None,
+    ) -> process.ReplayUploadResult:
+        if not candidates:
             raise ValueError("No replays provided for upload to ballchasing.")
 
         # Get ballchasing API
@@ -603,62 +765,85 @@ class BallchasingMixIn(RSCMixIn):
         if not bapi:
             raise ValueError("Ballchasing API is not configured in guild.")
 
-        # Upload replays
-        log.debug(f"Uploading replays to group: {group}", guild=guild, match=match)
-        replay_ids = []
-        for replay in replays:
-            generated_name = "".join(random.choices(string.ascii_letters + string.digits, k=64))  # noqa: S311
-            rname = f"{generated_name}.replay"
-            try:
-                if isinstance(replay, discord.Attachment):
-                    rdata = await replay.read()
-                elif isinstance(replay, bytes):
-                    rdata = replay
-                elif isinstance(replay, str):
-                    # Read bytes from file. trio declares its Path methods as plain
-                    # `Callable` attributes, which do not bind `self` under the typing
-                    # spec, so ty sees the call as missing an argument.
-                    fdata = await trio.Path(replay).read_bytes()  # ty: ignore[missing-argument]
-                    rdata = fdata
+        if result is None:
+            result = process.ReplayUploadResult(group=group)
 
-                # Upload to ballchasing group
+        log.debug(f"Uploading replays to group: {group}", guild=guild, match=match)
+        pending = list(candidates)
+        while pending:
+            candidate = pending.pop(0)
+            outcome = process.UploadOutcome(candidate=candidate)
+            result.outcomes.append(outcome)
+
+            generated_name = "".join(random.choices(string.ascii_letters + string.digits, k=64))  # noqa: S311
+            try:
                 resp = await bapi.upload_replay_from_bytes(
-                    name=rname,
-                    replay_data=rdata,
+                    name=f"{generated_name}.replay",
+                    replay_data=candidate.data,
                     visibility=ballchasing.Visibility.PUBLIC,
                     group=group,
                 )
-                if resp:
-                    replay_ids.append(resp.id)
-            except ValueError as exc:
-                log.debug(exc)
-                err = exc.args[0]
-                if err.status == 409:
-                    # duplicate replay. patch it under the BC group
-                    err_info = await err.json()
-                    log.debug(
-                        f"Error uploading replay. {err.status} -- {err_info}",
-                        guild=guild,
-                        match=match,
-                    )
-                    r_id = err_info.get("id")
-                    if r_id:
-                        log.debug("Patching replay under correct group", guild=guild, match=match)
-                        await bapi.patch_replay(r_id, group=group)
-                        replay_ids.append(r_id)
+                outcome.replay_id = resp.id
             except DuplicateReplay as exc:
-                # duplicate replay. patch it under the BC group
-                log.debug(
-                    str(exc),
-                    guild=guild,
-                    match=match,
-                )
-                if exc.id:
-                    log.debug(f"Patching replay {exc.id} under correct group", guild=guild, match=match)
-                    await bapi.patch_replay(exc.id, group=group)
-                    replay_ids.append(exc.id)
-        log.debug(f"Ballchasing IDs: {replay_ids}", guild=guild, match=match)
-        return replay_ids
+                # Ballchasing already has these exact bytes. Move it into our group.
+                log.debug(f"Duplicate replay on ballchasing: {exc}", guild=guild, match=match)
+                if not exc.id:
+                    outcome.error = "Ballchasing reported a duplicate replay but did not say which one."
+                else:
+                    outcome.duplicate = True
+                    outcome.replay_id = exc.id
+                    try:
+                        await bapi.patch_replay(exc.id, group=group)
+                    except Exception as patch_exc:
+                        log.warning(f"Unable to move replay {exc.id} into {group}: {patch_exc}", guild=guild, match=match)
+                        outcome.error = f"Could not move the existing replay into the match group: {patch_exc}"
+            except BallchasingFault as exc:
+                log.warning(f"Ballchasing failed to accept {candidate.label}: {exc}", guild=guild, match=match)
+                outcome.error = "Ballchasing could not process this replay."
+            except UserFault as exc:
+                log.warning(f"Ballchasing rejected {candidate.label}: {exc}", guild=guild, match=match)
+                outcome.error = str(exc)
+            except BackoffLimitExceeded as exc:
+                # Continuing guarantees more 429s and burns minutes of backoff
+                # while holding the match lock. Fail the rest of the batch now.
+                log.warning(f"Ballchasing rate limit exhausted: {exc}", guild=guild, match=match)
+                outcome.error = "Ballchasing is rate limiting us. Please try again later."
+                for skipped in pending:
+                    result.outcomes.append(
+                        process.UploadOutcome(candidate=skipped, error="Skipped after ballchasing rate limit was exhausted.")
+                    )
+                pending.clear()
+            except (TimeoutError, aiohttp.ClientError) as exc:
+                log.warning(f"Network error uploading {candidate.label}: {exc}", guild=guild, match=match)
+                outcome.error = f"Network error while uploading: {exc}"
+
+            # Record what we put in the group so the next reporter can dedup against
+            # it even while ballchasing is still processing the upload.
+            if outcome.replay_id and candidate.fingerprint:
+                self._ledger_record(guild, group=group, fingerprint=candidate.fingerprint, replay_id=outcome.replay_id)
+
+        log.debug(f"Ballchasing IDs: {result.replay_ids}", guild=guild, match=match)
+        return result
+
+    async def report_upload_failures(self, guild: discord.Guild, match: Match, upload: process.ReplayUploadResult) -> None:
+        """Send replay upload failures to the stats committee log channel."""
+        if not upload.failed:
+            return
+
+        embed = ErrorEmbed(
+            title="Replay Upload Failures",
+            description=(
+                f"**{match.home_team.name}** vs **{match.away_team.name}** was reported but "
+                f"{upload.failed} replay(s) did not make it into the group."
+            ),
+        )
+        embed.add_field(
+            name="Failures",
+            value="\n".join(f"`{o.candidate.label}` — {o.error}" for o in upload.errors)[:1024],
+            inline=False,
+        )
+        embed.add_field(name="Group", value=await self.bc_group_full_url(upload.group), inline=False)
+        await self.announce_to_stats_committee(guild, embed=embed)
 
     async def build_match_result_embed(
         self,
@@ -805,18 +990,6 @@ class BallchasingMixIn(RSCMixIn):
                 await bapi.close()
             except Exception as exc:
                 log.warning(f"Error closing ballchasing session for guild {guild_id}: {exc}")
-
-    async def ballchasing_init(self, guild: discord.Guild) -> ballchasing.Api:
-        token = await self._get_bc_auth_token(guild)
-        if not token:
-            raise ValueError("Ballchasing API token is not configured in guild.")
-
-        bapi = ballchasing.Api(auth_key=token)
-        # Validate
-        ping = await bapi.ping()
-        if not ping:
-            raise RuntimeError("Ping to ballchasing API failed.")
-        return bapi
 
     # Config
 

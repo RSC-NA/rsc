@@ -4,7 +4,7 @@ from typing import cast
 
 import discord
 from redbot.core import app_commands, commands
-from rscapi import MembersApi
+from rscapi import ElevatedRolesApi, MembersApi
 from rscapi.exceptions import ApiException
 from rscapi.models.activity_request import ActivityRequest
 from rscapi.models.activity_check import ActivityCheck
@@ -1046,6 +1046,36 @@ class MemberMixIn(RSCMixIn):
                 )
             except ApiException as exc:
                 raise RscException(exc)
+
+    async def league_elevated_roles(
+        self,
+        guild: discord.Guild,
+        agm: bool | None = None,
+        gm: bool | None = None,
+        position: str | None = None,
+        limit: int = 200,
+    ) -> list[ElevatedRole]:
+        """Every elevated role in this guild's league, in a single request.
+
+        `member_elevated_roles` answers "what does this one person hold?". This
+        answers "who holds this across the league?", which is the only way to
+        get AGMs in bulk: `FranchiseList` has no `agms` field, so the
+        alternative is one `franchises_retrieve` per franchise. Join the result
+        on `ElevatedRole.franchise_id`.
+        """
+        async with self.api_client(guild) as client:
+            api = ElevatedRolesApi(client)
+            try:
+                roles = await api.elevated_roles_list(
+                    agm=agm,
+                    gm=gm,
+                    league=self._league[guild.id],
+                    position=position,
+                    limit=limit,
+                )
+            except ApiException as exc:
+                raise RscException(exc)
+            return roles.results or []
 
     async def signup(
         self,

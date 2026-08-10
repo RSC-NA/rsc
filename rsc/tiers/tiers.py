@@ -5,7 +5,9 @@ import discord
 from redbot.core import app_commands
 from rscapi import TiersApi
 from rscapi.exceptions import ApiException
+from rscapi.models.player_season_stats_in_depth import PlayerSeasonStatsInDepth
 from rscapi.models.tier import Tier
+from rscapi.models.team_season_stats import TeamSeasonStats
 from rscapi.models.team_standings import TeamStandings
 
 from rsc.abc import RSCMixIn
@@ -146,6 +148,52 @@ class TierMixIn(RSCMixIn):
                 standings: list[TeamStandings] = await api.tiers_standings_list(id=tier_id, season=season)
                 standings.sort(key=lambda t: (t.rank, t.team))
                 return standings
+            except ApiException as exc:
+                raise RscException(response=exc)
+
+    async def tier_player_stats(
+        self,
+        guild: discord.Guild,
+        tier_id: int,
+        season: int | None = None,
+        name: str | None = None,
+    ) -> list[PlayerSeasonStatsInDepth]:
+        """Season stats for every player in a tier, in a single request.
+
+        Each record carries server-computed ranks (`goals_rank`, `points_rank`,
+        ...), so leaderboards need no client side sorting pass over the league.
+        """
+        async with self.api_client(guild) as client:
+            api = TiersApi(client)
+            try:
+                return await api.tiers_player_stats_list(
+                    id=tier_id,
+                    league=self._league[guild.id],
+                    name=name,
+                    season=season,
+                    _request_timeout=API_TIMEOUT,
+                )
+            except ApiException as exc:
+                raise RscException(response=exc)
+
+    async def tier_team_stats(
+        self,
+        guild: discord.Guild,
+        tier_id: int,
+        season: int | None = None,
+        name: str | None = None,
+    ) -> list[TeamSeasonStats]:
+        """Season stats for every team in a tier, in a single request."""
+        async with self.api_client(guild) as client:
+            api = TiersApi(client)
+            try:
+                return await api.tiers_team_stats_list(
+                    id=tier_id,
+                    league=self._league[guild.id],
+                    name=name,
+                    season=season,
+                    _request_timeout=API_TIMEOUT,
+                )
             except ApiException as exc:
                 raise RscException(response=exc)
 

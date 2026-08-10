@@ -5,13 +5,25 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import aiofiles
-from langchain_core.document_loaders import BaseLoader
-from langchain_core.documents import Document
 
 log = logging.getLogger("red.rsc.llm.loaders.ruleloader")
 
 RULE_LINE_RE = re.compile(r"^(?:#{1,10}\s+)?(?:[-*+]\s+)?\**(?P<number>\d+(?:\.\d+)*)(?:\.)?\**\s*(?P<text>.*)$")
 GLOSSARY_ENTRY_RE = re.compile(r'(?P<terms>(?:"[^"]+"(?:,\s*)?)+)\s*-\s*(?P<definition>.+)')
+HEADING_PREFIX_RE = re.compile(r"^(#{1,10})\s+")
+
+
+@dataclass(slots=True)
+class RuleDocument:
+    """A parsed rule or glossary entry.
+
+    Structurally compatible with the `langchain_core` `Document` this loader
+    used to emit, so consumers only touching `.page_content` / `.metadata` are
+    unaffected.
+    """
+
+    page_content: str
+    metadata: dict[str, int | str]
 
 
 @dataclass
@@ -20,6 +32,11 @@ class RuleNode:
     title: str
     lines: list[str]
     order: int
+    # Markdown heading depth of the line that introduced this rule, or 0 when it
+    # was a plain body line. Only heading nodes are real section titles, which
+    # is what a table of contents needs -- depth alone is not a proxy for it,
+    # since some books number ordinary prose sentences several levels deep.
+    heading_level: int = 0
 
 
 @dataclass
@@ -29,7 +46,7 @@ class GlossaryEntry:
     order: int
 
 
-class RuleDocumentLoader(BaseLoader):
+class RuleDocumentLoader:
     """RSC Rule Document style loader"""
 
     def __init__(self, file_path: str) -> None:
@@ -82,6 +99,20 @@ class RuleDocumentLoader(BaseLoader):
         text = match.group("text").strip().strip("*").strip()
         return number, text
 
+    @staticmethod
+    def _heading_level(line: str) -> int:
+        """Markdown heading depth of a line, or 0 if it is not a heading."""
+        match = HEADING_PREFIX_RE.match(RuleDocumentLoader._normalize_line(line))
+        return len(match.group(1)) if match else 0
+
+    def parse_rule_nodes(self, data: str) -> list[RuleNode]:
+        """Parse rule text into ordered nodes.
+
+        Public so callers building their own index (rather than documents) do
+        not have to reach for the private parser.
+        """
+        return self._parse_rule_nodes(data)
+
     def _parse_rule_nodes(self, data: str) -> list[RuleNode]:
         nodes: dict[str, RuleNode] = {}
         current_number = ""
@@ -97,14 +128,26 @@ class RuleDocumentLoader(BaseLoader):
             matched_rule = self._match_rule_line(normalized)
             if matched_rule:
                 number, title = matched_rule
+                heading_level = self._heading_level(normalized)
                 started_rules = True
                 current_number = number
                 if number not in nodes:
-                    nodes[number] = RuleNode(number=number, title=title, lines=[normalized], order=len(nodes))
+                    nodes[number] = RuleNode(
+                        number=number,
+                        title=title,
+                        lines=[normalized],
+                        order=len(nodes),
+                        heading_level=heading_level,
+                    )
                 else:
                     nodes[number].lines.append(normalized)
                     if title and not nodes[number].title:
                         nodes[number].title = title
+                    # A rule can recur as both a heading and a body reference.
+                    # Keep the shallowest heading seen so the TOC reflects the
+                    # real section level rather than whichever line came last.
+                    if heading_level and (not nodes[number].heading_level or heading_level < nodes[number].heading_level):
+                        nodes[number].heading_level = heading_level
                 continue
 
             if started_rules and current_number:
@@ -151,7 +194,7 @@ class RuleDocumentLoader(BaseLoader):
 
         return "\n".join(content_parts)
 
-    def _parse_content(self, data: str) -> Iterator[Document]:
+    def _parse_content(self, data: str) -> Iterator[RuleDocument]:
         """Parse RSC Rule document content and yield Documents."""
         nodes = self._parse_rule_nodes(data)
         nodes_by_number = {node.number: node for node in nodes}
@@ -171,7 +214,7 @@ class RuleDocumentLoader(BaseLoader):
                 "rule_title": node.title,
                 "rule_path": self._rule_path(node, nodes_by_number),
             }
-            yield Document(
+            yield RuleDocument(
                 page_content=self._build_rule_content(node, nodes, nodes_by_number),
                 metadata=metadata,
             )
@@ -210,7 +253,7 @@ class RuleDocumentLoader(BaseLoader):
 
         return entries
 
-    def _parse_glossary_content(self, data: str) -> Iterator[Document]:
+    def _parse_glossary_content(self, data: str) -> Iterator[RuleDocument]:
         for entry in self._parse_glossary_entries(data):
             term = entry.terms[0]
             aliases = entry.terms[1:]
@@ -229,24 +272,24 @@ class RuleDocumentLoader(BaseLoader):
                 "term": term,
                 "aliases": "|".join(aliases),
             }
-            yield Document(page_content="\n".join(content_parts), metadata=metadata)
+            yield RuleDocument(page_content="\n".join(content_parts), metadata=metadata)
 
-    def lazy_load(self) -> Iterator[Document]:
+    def lazy_load(self) -> Iterator[RuleDocument]:
         """A lazy loader that reads RSC Rule style documents."""
         yield from self._parse_content(self._read_file())
 
-    def lazy_load_glossary(self) -> Iterator[Document]:
+    def lazy_load_glossary(self) -> Iterator[RuleDocument]:
         """A lazy loader that reads glossary definitions from an RSC rule document."""
         yield from self._parse_glossary_content(self._read_file())
 
-    async def alazy_load(self) -> AsyncIterator[Document]:
+    async def alazy_load(self) -> AsyncIterator[RuleDocument]:
         """An async lazy loader for RSC Rule document style files."""
         async with aiofiles.open(self.file_path, encoding="utf-8") as fd:
             data = await fd.read()
         for doc in self._parse_content(data):
             yield doc
 
-    async def alazy_load_glossary(self) -> AsyncIterator[Document]:
+    async def alazy_load_glossary(self) -> AsyncIterator[RuleDocument]:
         """An async lazy loader for glossary definitions in an RSC rule document."""
         async with aiofiles.open(self.file_path, encoding="utf-8") as fd:
             data = await fd.read()

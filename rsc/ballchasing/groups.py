@@ -11,6 +11,9 @@ from rsc.logs import GuildLogAdapter
 logger = logging.getLogger("red.rsc.ballchasing.groups")
 log = GuildLogAdapter(logger)
 
+# (parent group id, casefolded group name) -> group id
+GroupCache = dict[tuple[str, str], str]
+
 
 async def purge_ballchasing_group(bapi: ballchasing.Api, guild: discord.Guild, group: str):
     """Remove all replays from a ballchasing group (CAUTION: DESTRUCTIVE)"""
@@ -24,161 +27,110 @@ async def purge_ballchasing_group(bapi: ballchasing.Api, guild: discord.Guild, g
             raise err
 
 
-async def season_bc_group(bapi: ballchasing.Api, guild: discord.Guild, tlg: str, match: Match) -> str | None:
-    """Get season group ID and or create it"""
-    sname = f"Season {match.home_team.latest_season}"
-    season_group = None
-
-    # Find relevant season group
-    async for g in bapi.get_groups(group=tlg):
-        if g.name.lower() == sname.lower():
-            log.debug(f"Found existing ballchasing season group: {g.id}", guild=guild, match=match)
-            season_group = g.id
-            break
-
-    # Create group if not found
-    if not season_group:
-        log.debug(f"Creating ballchasing season group: {sname}", guild=guild, match=match)
-        result = await bapi.create_group(
-            name=sname,
-            parent=tlg,
-            player_identification=ballchasing.PlayerIdentificationBy.ID,
-            team_identification=ballchasing.TeamIdentificationBy.CLUSTERS,
-        )
-        season_group = result.id
-    return season_group
-
-
-async def match_type_group(bapi: ballchasing.Api, guild: discord.Guild, tlg: str, match: Match) -> str | None:
-    """Get tier group ID and or create it"""
-    season_group = await season_bc_group(bapi=bapi, guild=guild, tlg=tlg, match=match)
-    if not season_group:
-        return None
-
-    if not match.match_type:
+def match_day_name(match: Match) -> str:
+    """Ballchasing group name for a match's match day."""
+    if match.match_type is None:
         raise ValueError("API match does not have a match type (Ex: Regular Season)")
 
-    tname = MatchType(match.match_type).full_name
-    match_type_group = None
+    # Match day 0 is valid. PostSeasonType.PLAYOFF is 0 and regular season
+    # schedules have used day 0 as a placeholder, so only None is an error.
+    if match.day is None:
+        raise ValueError("API match does not have a match day value")
 
-    # Find relevant server group
-    async for g in bapi.get_groups(group=season_group):
-        if g.name.lower() == tname.lower():
-            log.debug(f"Found existing ballchasing match type group: {g.id}", guild=guild, match=match)
-            match_type_group = g.id
-            break
+    if match.match_type == MatchType.POSTSEASON:
+        return PostSeasonType(match.day).name.capitalize()
+    return f"Match Day {match.day:02d}"
 
-    # Create group if not found
-    if not match_type_group:
-        log.debug(f"Creating ballchasing match type group: {tname}", guild=guild, match=match)
+
+async def find_or_create_group(
+    bapi: ballchasing.Api,
+    *,
+    name: str,
+    parent: str,
+    cache: GroupCache | None = None,
+    guild: discord.Guild | None = None,
+) -> str:
+    """Resolve a ballchasing group by name under `parent`, creating it if absent.
+
+    Callers must serialize this against themselves per guild. Ballchasing has no
+    atomic find-or-create, so two concurrent callers would both miss the lookup
+    and create duplicate identically named siblings.
+    """
+    key = (parent, name.casefold())
+    if cache is not None:
+        cached = cache.get(key)
+        if cached:
+            return cached
+
+    # Narrow the listing server side. The filter's matching semantics are not
+    # documented, so the exact comparison below is what actually decides.
+    group_id = await _search_children(bapi, parent=parent, name=name, server_filter=True)
+
+    if not group_id:
+        # The name filter may be exact and case sensitive. Before creating a
+        # duplicate, pay for one unfiltered listing and compare ourselves.
+        group_id = await _search_children(bapi, parent=parent, name=name, server_filter=False)
+
+    if group_id:
+        log.debug(f"Found existing ballchasing group '{name}': {group_id}", guild=guild)
+    else:
+        log.debug(f"Creating ballchasing group: {name}", guild=guild)
         result = await bapi.create_group(
-            name=tname,
-            parent=season_group,
+            name=name,
+            parent=parent,
             player_identification=ballchasing.PlayerIdentificationBy.ID,
             team_identification=ballchasing.TeamIdentificationBy.CLUSTERS,
         )
-        match_type_group = result.id
-    return match_type_group
+        group_id = result.id
+
+    if cache is not None:
+        cache[key] = group_id
+    return group_id
 
 
-async def tier_bc_group(bapi: ballchasing.Api, guild: discord.Guild, tlg: str, match: Match) -> str | None:
-    """Get tier group ID and or create it"""
-    mtype_group = await match_type_group(bapi=bapi, guild=guild, tlg=tlg, match=match)
-    if not mtype_group:
-        return None
+async def _search_children(bapi: ballchasing.Api, parent: str, name: str, server_filter: bool) -> str | None:
+    target = name.casefold()
+    async for g in bapi.get_groups(group=parent, name=name if server_filter else None):
+        if g.name.casefold() == target:
+            return g.id
+    return None
+
+
+async def rsc_match_bc_group(
+    bapi: ballchasing.Api,
+    guild: discord.Guild,
+    tlg: str,
+    match: Match,
+    cache: GroupCache | None = None,
+) -> str:
+    """Resolve the ballchasing group for a match, creating the ladder as needed.
+
+    Ladder: top level group -> season -> match type -> tier -> match day -> match.
+    Callers must hold the guild's group lock.
+    """
+    # Already reported. The API stores the group we used, so there is nothing to
+    # look up and nothing to race.
+    if match.results and (existing := (match.results.ballchasing_group or "").strip()):
+        log.debug(f"Reusing reported ballchasing group: {existing}", guild=guild, match=match)
+        return existing
 
     if not match.home_team.tier:
         raise ValueError("API match does not have tier information for home team")
 
-    tname = match.home_team.tier
-    tier_group = None
-
-    # Find relevant server group
-    async for g in bapi.get_groups(group=mtype_group):
-        if g.name.lower() == tname.lower():
-            log.debug(f"Found existing ballchasing tier group: {g.id}", guild=guild, match=match)
-            tier_group = g.id
-            break
-
-    # Create group if not found
-    if not tier_group:
-        log.debug(f"Creating ballchasing tier group: {tname}", guild=guild, match=match)
-        result = await bapi.create_group(
-            name=tname,
-            parent=mtype_group,
-            player_identification=ballchasing.PlayerIdentificationBy.ID,
-            team_identification=ballchasing.TeamIdentificationBy.CLUSTERS,
-        )
-        tier_group = result.id
-    return tier_group
-
-
-async def match_day_bc_group(bapi: ballchasing.Api, guild: discord.Guild, tlg: str, match: Match) -> str | None:
-    """Get match group ID and or create it"""
-    log.debug(f"Getting match day group for: {match.home_team.name} vs {match.away_team.name}", guild=guild)
-    tier_group = await tier_bc_group(bapi=bapi, guild=guild, tlg=tlg, match=match)
-    if not tier_group:
-        return None
-
-    if not match.match_type:
+    if match.match_type is None:
         raise ValueError("API match does not have a match type (Ex: Regular Season)")
 
-    if not match.day:
-        raise ValueError("API match does not have a match day value")
+    names = [
+        f"Season {match.home_team.latest_season}",
+        MatchType(match.match_type).full_name,
+        match.home_team.tier,
+        match_day_name(match),
+        f"{match.home_team.name} vs {match.away_team.name}",
+    ]
 
-    if match.match_type == MatchType.POSTSEASON:
-        playoff_round = PostSeasonType(match.day)
-        mdname = playoff_round.name.capitalize()
-    else:
-        mdname = f"Match Day {match.day:02d}"
+    group = tlg
+    for name in names:
+        group = await find_or_create_group(bapi, name=name, parent=group, cache=cache, guild=guild)
 
-    # Find relevant server group
-    md_group = None
-    async for g in bapi.get_groups(group=tier_group):
-        if g.name.lower() == mdname.lower():
-            log.debug(f"Found existing ballchasing match day group: {g.id}", guild=guild, match=match)
-            md_group = g.id
-            break
-
-    # Create group if not found
-    if not md_group:
-        log.debug(f"Creating match day ballchasing group: {mdname}", guild=guild, match=match)
-        result = await bapi.create_group(
-            name=mdname,
-            parent=tier_group,
-            player_identification=ballchasing.PlayerIdentificationBy.ID,
-            team_identification=ballchasing.TeamIdentificationBy.CLUSTERS,
-        )
-        md_group = result.id
-    return md_group
-
-
-async def rsc_match_bc_group(bapi: ballchasing.Api, guild: discord.Guild, tlg: str, match: Match) -> str | None:
-    """Get match group ID and or create it starting with top level group (tlg)"""
-    md_group = await match_day_bc_group(bapi=bapi, guild=guild, tlg=tlg, match=match)
-    if not md_group:
-        return None
-    log.debug(f"RSC Match BC Group: {md_group}", guild=guild, match=match)
-
-    mname = f"{match.home_team.name} vs {match.away_team.name}"
-    match_group = None
-
-    # Find relevant server group
-    async for g in bapi.get_groups(group=md_group):
-        if g.name.lower() == mname.lower():
-            log.debug(f"Found existing ballchasing match group: {g.id}", guild=guild, match=match)
-            match_group = g.id
-            break
-
-    # Create group if not found
-    if not match_group:
-        log.debug(f"Creating match ballchasing group: {mname}", guild=guild, match=match)
-        result = await bapi.create_group(
-            name=mname,
-            parent=md_group,
-            player_identification=ballchasing.PlayerIdentificationBy.ID,
-            team_identification=ballchasing.TeamIdentificationBy.CLUSTERS,
-        )
-        match_group = result.id
-    log.debug(f"Resulting match group ID: {match_group}", guild=guild, match=match)
-    return match_group
+    log.debug(f"Resulting match group ID: {group}", guild=guild, match=match)
+    return group
