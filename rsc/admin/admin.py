@@ -8,7 +8,16 @@ from redbot.core.app_commands import Transform
 
 from rsc.abc import RSCMixIn
 from rsc.admin.modals import BulkRetireModal, LeagueDatesModal
-from rsc.embeds import ApiExceptionErrorEmbed, BlueEmbed, ErrorEmbed, GreenEmbed, OrangeEmbed, SuccessEmbed, YellowEmbed
+from rsc.embeds import (
+    ApiExceptionErrorEmbed,
+    BlueEmbed,
+    ErrorEmbed,
+    ExceptionErrorEmbed,
+    GreenEmbed,
+    OrangeEmbed,
+    SuccessEmbed,
+    YellowEmbed,
+)
 from rsc.exceptions import MalformedTransactionResponse, RscException
 from rsc.logs import GuildLogAdapter
 from rsc.transactions.roles import update_nonplaying_discord
@@ -203,8 +212,12 @@ class AdminMixIn(RSCMixIn):
         try:
             tiers = await self.tiers(guild=guild)
             default_roles = await self._get_welcome_roles(guild)
+            # Fetched once for the batch rather than per retiree.
+            agm_map = await self.agm_franchise_map(guild)
         except RscException as exc:
             return await modal_interaction.followup.send(embed=ApiExceptionErrorEmbed(exc), ephemeral=True)
+        except RuntimeError as exc:
+            return await modal_interaction.followup.send(embed=ExceptionErrorEmbed(exc_message=str(exc)), ephemeral=True)
 
         transactions = cast("TransactionMixIn", self)
         retired_players: list[str] = []
@@ -243,6 +256,7 @@ class AdminMixIn(RSCMixIn):
                         member=member,
                         tiers=tiers,
                         default_roles=default_roles,
+                        agm_franchise=agm_map.get(member.id),
                     )
 
                 embed, files = await transactions.build_transaction_embed(

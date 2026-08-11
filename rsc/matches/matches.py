@@ -7,6 +7,7 @@ import discord
 from redbot.core import app_commands
 from rscapi import MatchesApi, TeamsApi
 from rscapi.exceptions import ApiException
+from rscapi.models.franchise_list import FranchiseList
 from rscapi.models.match import Match
 from rscapi.models.match_list import MatchList
 from rscapi.models.match_results import MatchResults
@@ -26,7 +27,6 @@ from rsc.enums import (
 from rsc.exceptions import RscException
 from rsc.logs import GuildLogAdapter
 from rsc.teams import TeamMixIn
-from rsc.utils import utils
 from rsc.utils.utils import tier_color_by_name
 
 if TYPE_CHECKING:
@@ -253,10 +253,17 @@ class MatchMixIn(RSCMixIn):
                 ephemeral=True,
             )
 
+        # Resolved once and reused below, so the command makes a single AGM
+        # lookup instead of one per check.
+        try:
+            agm_franchise = await self.agm_franchise_of(guild, interaction.user.id)
+        except RscException as exc:
+            return await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc, title="Match Info"), ephemeral=True)
+
         # If team was specified, user must be GM or admin
         if team and not (
             await self.is_match_franchise_gm(member=interaction.user, match=match)
-            or await self.is_match_franchise_agm(member=interaction.user, match=match)
+            or await self.is_match_franchise_agm(member=interaction.user, match=match, agm_franchise=agm_franchise)
             or interaction.user.guild_permissions.manage_guild
         ):
             return await interaction.followup.send(
@@ -270,7 +277,7 @@ class MatchMixIn(RSCMixIn):
 
         # Is interaction user away/home
         try:
-            user_team = await self.match_team_by_user(match, interaction.user)
+            user_team = await self.match_team_by_user(match, interaction.user, agm_franchise=agm_franchise)
             embed = await self.build_match_embed(guild, match, user_team=user_team, with_gm=True)
         except ValueError as exc:
             return await interaction.followup.send(embed=ExceptionErrorEmbed(str(exc)))
@@ -327,7 +334,12 @@ class MatchMixIn(RSCMixIn):
     async def matches_from_match_list(self, match_list: list[MatchList]) -> None:
         pass
 
-    async def match_team_by_user(self, match: Match, member: discord.Member) -> MatchTeamEnum:
+    async def match_team_by_user(
+        self,
+        match: Match,
+        member: discord.Member,
+        agm_franchise: FranchiseList | None = None,
+    ) -> MatchTeamEnum:
         """Determine if the user is on the home or away team"""
         # Check if GM of team
         if match.home_team.gm and match.home_team.gm.discord_id == member.id:
@@ -347,18 +359,16 @@ class MatchMixIn(RSCMixIn):
                 if p.discord_id == member.id:
                     return MatchTeamEnum.AWAY
 
+        # Check AGM. Ahead of the admin fallback below, so an admin who is also
+        # the away franchise's AGM gets AWAY rather than a blanket HOME.
+        agm_team = await self.match_franchise_agm_team(member, match, agm_franchise)
+        if agm_team:
+            return agm_team
+
         # As a final check, we need to return a value to admins running the command.
         # Without this, we block the use of commands that validate players.
         if member.guild_permissions.manage_guild:
             return MatchTeamEnum.HOME
-
-        # Check AGM
-        if await self.is_match_franchise_agm(member, match):
-            for role in member.roles:
-                if match.home_team.franchise and match.home_team.franchise.lower() in role.name.lower():
-                    return MatchTeamEnum.HOME
-                if match.away_team.franchise and match.away_team.franchise.lower() in role.name.lower():
-                    return MatchTeamEnum.AWAY
 
         raise ValueError(f"{member.display_name} is not a valid player in this match")
 
@@ -548,33 +558,45 @@ class MatchMixIn(RSCMixIn):
             raise AttributeError("Match is missing GM Discord IDs.")
         return member.id in (match.home_team.gm.discord_id, match.away_team.gm.discord_id)
 
-    async def is_match_franchise_agm(self, member: discord.Member, match: Match) -> bool:
+    async def match_franchise_agm_team(
+        self,
+        member: discord.Member,
+        match: Match,
+        agm_franchise: FranchiseList | None = None,
+    ) -> MatchTeamEnum | None:
+        """Which side of this match the member is an AGM of, or `None`.
+
+        Asks the API, the same way `is_match_franchise_gm` reads GM discord IDs
+        straight off the match. The old answer came from discord: it required a
+        role named "Assistant GM" and then substring matched the franchise name
+        against every role the member held, so an AGM of "Eagles" also passed for
+        a match involving "Eagles Nest".
+
+        Pass `agm_franchise` when the caller has already resolved it, so a single
+        command does not ask twice.
+        """
         guild = member.guild
-        agm_role = await utils.get_agm_role(guild)
-        if agm_role not in member.roles:
-            log.debug("Member is not AGM", guild=guild)
-            return False
+        franchise = agm_franchise if agm_franchise is not None else await self.agm_franchise_of(guild, member.id)
+        if not (franchise and franchise.name):
+            log.debug("Member is not an AGM", guild=guild)
+            return None
 
-        hfranchise = None
-        if match.home_team.franchise:
-            hfranchise = match.home_team.franchise.lower()
+        fname = franchise.name.casefold()
+        log.debug(f"AGM of {franchise.name}. Home: {match.home_team.franchise} Away: {match.away_team.franchise}", guild=guild)
 
-        afranchise = None
-        if match.away_team.franchise:
-            afranchise = match.away_team.franchise.lower()
+        if match.home_team.franchise and match.home_team.franchise.casefold() == fname:
+            return MatchTeamEnum.HOME
+        if match.away_team.franchise and match.away_team.franchise.casefold() == fname:
+            return MatchTeamEnum.AWAY
+        return None
 
-        log.debug(f"Home Franchise: {hfranchise} Away Franchise: {afranchise}", guild=guild)
-        matching_franchise = False
-        for role in member.roles:
-            log.debug(f"Checking for franchise role: {role.name}", guild=guild)
-            if hfranchise and hfranchise in role.name.lower():
-                matching_franchise = True
-                break
-            if afranchise and afranchise in role.name.lower():
-                matching_franchise = True
-                break
-
-        return matching_franchise
+    async def is_match_franchise_agm(
+        self,
+        member: discord.Member,
+        match: Match,
+        agm_franchise: FranchiseList | None = None,
+    ) -> bool:
+        return await self.match_franchise_agm_team(member, match, agm_franchise) is not None
 
     async def is_future_match_date(self, guild: discord.Guild, match: Match | MatchList) -> bool:
         tz = await self.timezone(guild=guild)

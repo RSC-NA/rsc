@@ -177,35 +177,77 @@ class TestIsMatchFranchiseGm:
 # --- is_match_franchise_agm ---
 
 
+def _agm_of(name):
+    """A `FranchiseList` as `agm_franchise_of` returns it.
+
+    `name` cannot go through the MagicMock constructor -- it configures the mock
+    rather than setting the attribute.
+    """
+    f = MagicMock()
+    f.name = name
+    return f
+
+
 class TestIsMatchFranchiseAgm:
-    async def test_not_agm_role(self, mock_member, mock_guild):
+    """AGM membership comes from the API, never from discord role names.
+
+    The old check required a role literally named "Assistant GM" and then
+    substring matched the franchise name against every role the member held.
+    """
+
+    async def test_not_an_agm(self, mock_member, mock_guild):
         match = _make_match(home_franchise="Eagles", away_franchise="Hawks")
-        mixin = _create_mixin()
+        mixin = _create_mixin(agm_franchise_of=AsyncMock(return_value=None))
 
-        with patch("rsc.matches.matches.utils.get_agm_role") as mock_get_agm:
-            agm_role = MagicMock(spec=discord.Role)
-            agm_role.id = 777
-            mock_get_agm.return_value = agm_role
-            # mock_member doesn't have AGM role
-            mock_member.roles = []
+        assert await mixin.is_match_franchise_agm(mock_member, match) is False
 
-            result = await mixin.is_match_franchise_agm(mock_member, match)
-        assert result is False
-
-    async def test_agm_with_franchise_role(self, mock_member, mock_guild):
+    async def test_agm_of_home_franchise(self, mock_member, mock_guild):
         match = _make_match(home_franchise="Eagles", away_franchise="Hawks")
-        mixin = _create_mixin()
+        mixin = _create_mixin(agm_franchise_of=AsyncMock(return_value=_agm_of("Eagles")))
 
-        agm_role = MagicMock(spec=discord.Role)
-        agm_role.id = 777
-        agm_role.name = "AGM"
-        franchise_role = MagicMock(spec=discord.Role)
-        franchise_role.name = "Eagles"
-        mock_member.roles = [agm_role, franchise_role]
+        assert await mixin.is_match_franchise_agm(mock_member, match) is True
+        assert await mixin.match_franchise_agm_team(mock_member, match) is MatchTeamEnum.HOME
 
-        with patch("rsc.matches.matches.utils.get_agm_role", return_value=agm_role):
-            result = await mixin.is_match_franchise_agm(mock_member, match)
+    async def test_agm_of_away_franchise(self, mock_member, mock_guild):
+        match = _make_match(home_franchise="Eagles", away_franchise="Hawks")
+        mixin = _create_mixin(agm_franchise_of=AsyncMock(return_value=_agm_of("Hawks")))
+
+        assert await mixin.is_match_franchise_agm(mock_member, match) is True
+        assert await mixin.match_franchise_agm_team(mock_member, match) is MatchTeamEnum.AWAY
+
+    async def test_agm_of_uninvolved_franchise(self, mock_member, mock_guild):
+        match = _make_match(home_franchise="Eagles", away_franchise="Hawks")
+        mixin = _create_mixin(agm_franchise_of=AsyncMock(return_value=_agm_of("Sharks")))
+
+        assert await mixin.is_match_franchise_agm(mock_member, match) is False
+
+    async def test_case_insensitive(self, mock_member, mock_guild):
+        match = _make_match(home_franchise="Eagles", away_franchise="Hawks")
+        mixin = _create_mixin(agm_franchise_of=AsyncMock(return_value=_agm_of("eAgLeS")))
+
+        assert await mixin.is_match_franchise_agm(mock_member, match) is True
+
+    async def test_substring_franchise_does_not_match(self, mock_member, mock_guild):
+        """Regression: names are compared for equality, not containment.
+
+        The previous implementation scanned role names with `in`, so an AGM of
+        "Eagles Nest" passed for any match involving "Eagles".
+        """
+        match = _make_match(home_franchise="Eagles", away_franchise="Hawks")
+        mixin = _create_mixin(agm_franchise_of=AsyncMock(return_value=_agm_of("Eagles Nest")))
+
+        assert await mixin.is_match_franchise_agm(mock_member, match) is False
+
+    async def test_prefetched_franchise_skips_the_lookup(self, mock_member, mock_guild):
+        """`/match` resolves the AGM once and reuses it across both checks."""
+        match = _make_match(home_franchise="Eagles", away_franchise="Hawks")
+        lookup = AsyncMock(return_value=None)
+        mixin = _create_mixin(agm_franchise_of=lookup)
+
+        result = await mixin.is_match_franchise_agm(mock_member, match, agm_franchise=_agm_of("Eagles"))
+
         assert result is True
+        lookup.assert_not_awaited()
 
 
 # --- is_future_match_date ---
@@ -270,9 +312,27 @@ class TestMatchTeamByUser:
         result = await mixin.match_team_by_user(match, mock_member)
         assert result == MatchTeamEnum.AWAY
 
+    async def test_home_agm(self, mock_member):
+        match = _make_match(
+            home_gm_id=999, away_gm_id=888, home_players=[], away_players=[], home_franchise="Eagles", away_franchise="Hawks"
+        )
+        mixin = _create_mixin(agm_franchise_of=AsyncMock(return_value=_agm_of("Eagles")))
+        type(mock_member).guild_permissions = PropertyMock(return_value=discord.Permissions())
+
+        assert await mixin.match_team_by_user(match, mock_member) == MatchTeamEnum.HOME
+
+    async def test_away_agm(self, mock_member):
+        match = _make_match(
+            home_gm_id=999, away_gm_id=888, home_players=[], away_players=[], home_franchise="Eagles", away_franchise="Hawks"
+        )
+        mixin = _create_mixin(agm_franchise_of=AsyncMock(return_value=_agm_of("Hawks")))
+        type(mock_member).guild_permissions = PropertyMock(return_value=discord.Permissions())
+
+        assert await mixin.match_team_by_user(match, mock_member) == MatchTeamEnum.AWAY
+
     async def test_admin_gets_home(self, mock_member):
         match = _make_match(home_gm_id=999, away_gm_id=888, home_players=[], away_players=[])
-        mixin = _create_mixin()
+        mixin = _create_mixin(agm_franchise_of=AsyncMock(return_value=None))
         # Give manage_guild permission
         perms = discord.Permissions(manage_guild=True)
         type(mock_member).guild_permissions = PropertyMock(return_value=perms)
@@ -280,10 +340,20 @@ class TestMatchTeamByUser:
         result = await mixin.match_team_by_user(match, mock_member)
         assert result == MatchTeamEnum.HOME
 
+    async def test_admin_who_is_the_away_agm_gets_away(self, mock_member):
+        """The AGM check runs ahead of the admin fallback, so an admin who
+        actually staffs the away franchise is not flattened to HOME."""
+        match = _make_match(
+            home_gm_id=999, away_gm_id=888, home_players=[], away_players=[], home_franchise="Eagles", away_franchise="Hawks"
+        )
+        mixin = _create_mixin(agm_franchise_of=AsyncMock(return_value=_agm_of("Hawks")))
+        type(mock_member).guild_permissions = PropertyMock(return_value=discord.Permissions(manage_guild=True))
+
+        assert await mixin.match_team_by_user(match, mock_member) == MatchTeamEnum.AWAY
+
     async def test_raises_when_not_in_match(self, mock_member):
         match = _make_match(home_gm_id=999, away_gm_id=888, home_players=[], away_players=[])
-        mixin = _create_mixin()
-        mixin.is_match_franchise_agm = AsyncMock(return_value=False)
+        mixin = _create_mixin(agm_franchise_of=AsyncMock(return_value=None))
         perms = discord.Permissions()
         type(mock_member).guild_permissions = PropertyMock(return_value=perms)
 

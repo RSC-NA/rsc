@@ -823,3 +823,82 @@ class TestFranchisesAgmOf:
         await mixin.franchises_agm_of(mock_guild, 111)
 
         assert mixin.franchises.await_count == 1
+
+
+class TestAgmFranchiseOf:
+    async def test_returns_the_single_franchise(self, mock_guild):
+        f = _franchise_with_agms(7, "The Ocean", 111)
+        mixin = _create_mixin()
+        mixin.franchises = AsyncMock(return_value=[f, _franchise_with_agms(9, "The Desert", 222)])
+
+        assert await mixin.agm_franchise_of(mock_guild, 111) is f
+
+    async def test_returns_none_when_not_an_agm(self, mock_guild):
+        mixin = _create_mixin()
+        mixin.franchises = AsyncMock(return_value=[_franchise_with_agms(7, "The Ocean", 111)])
+
+        assert await mixin.agm_franchise_of(mock_guild, 999) is None
+
+    async def test_duplicate_records_pick_the_first_and_warn(self, mock_guild, caplog):
+        """`/admin agm add` drops the old record when an AGM moves, so two
+        records is a data error. Callers need one answer, not a guess."""
+        first = _franchise_with_agms(7, "The Ocean", 111)
+        mixin = _create_mixin()
+        mixin.franchises = AsyncMock(return_value=[first, _franchise_with_agms(9, "The Desert", 111)])
+
+        with caplog.at_level("WARNING"):
+            assert await mixin.agm_franchise_of(mock_guild, 111) is first
+
+        assert "multiple franchises" in caplog.text
+
+
+class TestAgmFranchiseMap:
+    async def test_keys_every_agm_by_discord_id(self, mock_guild):
+        ocean = _franchise_with_agms(7, "The Ocean", 111, 222)
+        desert = _franchise_with_agms(9, "The Desert", 333)
+        mixin = _create_mixin()
+        mixin.franchises = AsyncMock(return_value=[ocean, desert])
+
+        assert await mixin.agm_franchise_map(mock_guild) == {111: ocean, 222: ocean, 333: desert}
+
+    async def test_uses_a_single_list_call(self, mock_guild):
+        """The reason this exists. Bulk syncs loop over hundreds of members, and
+        `_franchise_cache` only holds names, so a per-member lookup would be one
+        full franchise list per member."""
+        mixin = _create_mixin()
+        mixin.franchises = AsyncMock(return_value=[_franchise_with_agms(i, f"F{i}", i) for i in range(1, 31)])
+
+        result = await mixin.agm_franchise_map(mock_guild)
+
+        assert mixin.franchises.await_count == 1
+        assert len(result) == 30
+
+    async def test_tolerates_null_agms(self, mock_guild):
+        f = MagicMock(spec=FranchiseList)
+        f.id = 7
+        f.name = "The Ocean"
+        f.agms = None
+        mixin = _create_mixin()
+        mixin.franchises = AsyncMock(return_value=[f])
+
+        assert await mixin.agm_franchise_map(mock_guild) == {}
+
+    async def test_duplicate_records_keep_the_first_and_warn(self, mock_guild, caplog):
+        ocean = _franchise_with_agms(7, "The Ocean", 111)
+        mixin = _create_mixin()
+        mixin.franchises = AsyncMock(return_value=[ocean, _franchise_with_agms(9, "The Desert", 111)])
+
+        with caplog.at_level("WARNING"):
+            result = await mixin.agm_franchise_map(mock_guild)
+
+        assert result == {111: ocean}
+        assert "multiple franchises" in caplog.text
+
+    async def test_empty_franchise_list_raises(self, mock_guild):
+        """Callers read a missing key as "not an AGM". Answering {} for a bad
+        response would strip every AGM in the guild in one bulk sync."""
+        mixin = _create_mixin()
+        mixin.franchises = AsyncMock(return_value=[])
+
+        with pytest.raises(RuntimeError, match="Refusing to build an AGM map"):
+            await mixin.agm_franchise_map(mock_guild)

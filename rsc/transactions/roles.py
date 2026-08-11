@@ -107,7 +107,7 @@ async def update_signed_player_discord(
         log.debug(f"Removing roles: {roles_to_remove}", guild=guild)
         await player.remove_roles(*roles_to_remove)
     if roles_to_add:
-        log.debug(f"Adding roles: {roles_to_remove}", guild=guild)
+        log.debug(f"Adding roles: {roles_to_add}", guild=guild)
         await player.add_roles(*roles_to_add)
 
     # Update player prefix
@@ -235,23 +235,139 @@ async def update_team_captain_discord(
             await m.remove_roles(cpt_role)
 
 
+def agm_rsc_name(member: discord.Member, franchise: Franchise | FranchiseList) -> str:
+    """The RSC name to write into an AGM's nickname.
+
+    Prefers the name the API has on the `agms` entry, the same way the
+    non-playing GM sync prefers `franchise.gm.rsc_name`. Falls back to what the
+    current nickname implies, since `rsc_name` is optional on `FranchiseGM` and
+    a missing one is no reason to skip the prefix restore.
+    """
+    for agm in franchise.agms or []:
+        if agm.discord_id == member.id and agm.rsc_name:
+            return agm.rsc_name
+    return utils.rsc_name_from_member(member)
+
+
+async def agm_franchise_role(guild: discord.Guild, franchise: Franchise | FranchiseList) -> discord.Role | None:
+    """The franchise role for an AGM's franchise, or `None` if it cannot be found.
+
+    Franchise roles are named `"<Franchise> (<GM>)"`, so a franchise between GMs
+    has no role name to build. Fall back to matching on the franchise name
+    alone, and answer `None` rather than raising: an AGM whose role cannot be
+    resolved should keep whatever they have, not be stripped bare.
+    """
+    try:
+        return await utils.franchise_role_from_model(guild, franchise=franchise)
+    except (AttributeError, ValueError):
+        log.warning(f"Unable to resolve franchise role for {franchise.name} by GM name. Falling back to name match.", guild=guild)
+
+    if not franchise.name:
+        return None
+    return await utils.franchise_role_from_name(guild, franchise.name)
+
+
+async def apply_agm_role_updates(
+    guild: discord.Guild,
+    member: discord.Member,
+    agm_franchise: Franchise | FranchiseList | None,
+    roles_to_add: list[discord.Role],
+    roles_to_remove: list[discord.Role],
+    manage_franchise_roles: bool = True,
+) -> discord.Role | None:
+    """Fold the AGM reconcile into a caller's pending role batch.
+
+    The API is authoritative in both directions: an AGM who lost the role gets
+    it back, and a member the API no longer lists loses it. Merging into the
+    caller's lists rather than writing directly keeps this to the one bulk
+    add/remove pair every sync helper already makes.
+
+    `manage_franchise_roles` is False on the rostered path, where the roster --
+    not franchise staff -- owns the franchise role and the nickname prefix.
+
+    Returns the AGM's franchise role when one was resolved.
+    """
+    agm_role = await utils.get_agm_role(guild)
+
+    if not agm_franchise:
+        if agm_role in member.roles:
+            roles_to_remove.append(agm_role)
+        return None
+
+    if agm_role not in member.roles and agm_role not in roles_to_add:
+        roles_to_add.append(agm_role)
+
+    # Added here rather than left to the caller's role sweep: those sweeps only
+    # iterate roles the member already has, so an AGM who lost the league role
+    # would never get it back.
+    league_role = await utils.get_league_role(guild)
+    if league_role not in member.roles and league_role not in roles_to_add:
+        roles_to_add.append(league_role)
+
+    if not manage_franchise_roles:
+        return None
+
+    # Resolved before anything is stripped so a lookup failure leaves the
+    # member's existing franchise roles alone instead of orphaning them.
+    agm_frole = await agm_franchise_role(guild, agm_franchise)
+    if not agm_frole:
+        log.error(
+            f"Unable to find franchise role for AGM {member.display_name} ({member.id}) on {agm_franchise.name}. "
+            "Leaving their existing franchise roles in place.",
+            guild=guild,
+        )
+        return None
+
+    if agm_frole not in member.roles and agm_frole not in roles_to_add:
+        roles_to_add.append(agm_frole)
+
+    # An AGM keeps the one franchise role the API gives them and loses every other.
+    for r in await utils.franchise_role_list_from_disord_member(member):
+        if r != agm_frole and r not in roles_to_remove:
+            roles_to_remove.append(r)
+
+    return agm_frole
+
+
 async def update_nonplaying_discord(
     guild: discord.Guild,
     member: discord.Member,
     tiers: list[Tier],
     default_roles: list[discord.Role] | None = None,
+    *,
+    agm_franchise: Franchise | FranchiseList | None,
 ):
+    """Sync a member who is not playing in the league.
+
+    `agm_franchise` is the franchise the API says this member is an AGM of, or
+    `None`. It is the *only* AGM signal used here. Reading it off the discord
+    "Assistant GM" role instead -- which is what this did before -- is circular:
+    once that role goes missing the sync decides they were never an AGM, strips
+    the franchise role and prefix, and nothing can put them back. A non-playing
+    AGM has no `LeaguePlayer` at all, so this function is the only thing that
+    ever sees them.
+
+    Keyword only and deliberately not defaulted: a call site that forgets it
+    should fail loudly rather than quietly strip someone's AGM state.
+    """
     # Bulk remove/add to help avoid rate limit
     roles_to_remove: list[discord.Role] = []
     roles_to_add: list[discord.Role] = []
 
-    # Need to do some special handling for non-playing AGMs
-    is_agm = await utils.has_agm_role(member)
+    is_agm = agm_franchise is not None
 
-    # Remove any old franchise role if it exists
-    old_froles = await utils.franchise_role_list_from_disord_member(member)
-    if old_froles and not is_agm:
-        roles_to_remove.extend(old_froles)
+    await apply_agm_role_updates(
+        guild=guild,
+        member=member,
+        agm_franchise=agm_franchise,
+        roles_to_add=roles_to_add,
+        roles_to_remove=roles_to_remove,
+    )
+
+    # Remove any old franchise role if it exists. The AGM case is handled above,
+    # which keeps the one franchise role the API gives them.
+    if not is_agm:
+        roles_to_remove.extend(await utils.franchise_role_list_from_disord_member(member))
 
     for r in member.roles:
         # Find tier roles
@@ -265,11 +381,10 @@ async def update_nonplaying_discord(
         # All player roles
         match r.name:
             case const.LEAGUE_ROLE:
-                # Don't remove league role if AGM
+                # Don't remove league role if AGM. The add case is handled above
+                # so that an AGM missing the role also gets it back.
                 if not is_agm:
                     roles_to_remove.append(r)
-                elif const.LEAGUE_ROLE not in roles_to_add:
-                    roles_to_add.append(r)
             case const.FREE_AGENT_ROLE:
                 roles_to_remove.append(r)
             case const.IR_ROLE:
@@ -298,30 +413,46 @@ async def update_nonplaying_discord(
         log.debug(f"Removing roles ({member.id}): {roles_to_remove}", guild=guild)
         await member.remove_roles(*roles_to_remove)
 
-    # Determine Former Player by prefix
-    if await utils.get_prefix(member):
+    # Determine Former Player by prefix. An AGM keeps a franchise prefix as
+    # staff, not as a leftover from playing, so it says nothing about them.
+    if not is_agm and await utils.get_prefix(member):
         former_player_role = await utils.get_former_player_role(guild)
         if former_player_role not in member.roles:
             roles_to_add.append(former_player_role)
 
-    # Update nickname (Leave prefix if AGM)
-    if is_agm:
-        new_nick = member.display_name
+    # Update nickname
+    if agm_franchise:
+        # Restore the franchise prefix rather than merely leaving it alone: an
+        # AGM whose prefix was stripped has no other path back to it.
+        #
+        # ValueError is swallowed alongside Forbidden because the roles above are
+        # already written. `/transactions retire` does not wrap this call, so
+        # letting a 32 character nickname raise would report the whole retire as
+        # failed after the API mutation had gone through.
+        try:
+            log.debug(f"Restoring AGM prefix ({member.id}): {agm_franchise.prefix}", guild=guild)
+            await utils.update_discord_name(
+                member=member,
+                name=agm_rsc_name(member, agm_franchise),
+                prefix=agm_franchise.prefix,
+            )
+        except (discord.Forbidden, ValueError) as exc:
+            log.error(f"Unable to restore AGM nickname {member.display_name} ({member.id}): {exc}", guild=guild)
     else:
         new_nick = await utils.remove_prefix(member)
 
-    if new_nick != member.display_name:
-        try:
-            log.debug(f"Updating nickname ({member.id}): {new_nick}", guild=guild)
+        if new_nick != member.display_name:
+            try:
+                log.debug(f"Updating nickname ({member.id}): {new_nick}", guild=guild)
 
-            if len(new_nick) > 32:
-                raise ValueError(f"Discord name is too long: {len(new_nick)} characters")
+                if len(new_nick) > 32:
+                    raise ValueError(f"Discord name is too long: {len(new_nick)} characters")
 
-            if not new_nick or len(new_nick) < 1:
-                raise ValueError(f"Error changing name. Empty or <1 characters: {member.mention}")
-            await member.edit(nick=new_nick)
-        except discord.Forbidden as exc:
-            log.warning(f"Unable to update nickname {member.display_name} ({member.id}): {exc}")
+                if not new_nick or len(new_nick) < 1:
+                    raise ValueError(f"Error changing name. Empty or <1 characters: {member.mention}")
+                await member.edit(nick=new_nick)
+            except discord.Forbidden as exc:
+                log.warning(f"Unable to update nickname {member.display_name} ({member.id}): {exc}")
 
     # Add Roles
     if roles_to_add:
@@ -388,6 +519,12 @@ async def update_nonplaying_gm_discord(
     captain_role = await utils.get_captain_role(guild)
     if captain_role in player.roles:
         roles_to_remove.append(captain_role)
+
+    # A franchise's GM cannot also be one of its AGMs -- the API rejects it -- so
+    # a leftover AGM role here is stale.
+    agm_role = await utils.get_agm_role(guild)
+    if agm_role in player.roles:
+        roles_to_remove.append(agm_role)
 
     # Add franchise role
     frole = await utils.franchise_role_from_model(guild, franchise=franchise)
@@ -533,6 +670,8 @@ async def update_rostered_discord(
     player: discord.Member,
     league_player: LeaguePlayer,
     tiers: list[Tier],
+    *,
+    agm_franchise: Franchise | FranchiseList | None = None,
 ):
     if league_player.status not in (Status.ROSTERED, Status.RENEWED, Status.IR, Status.AGMIR):
         raise ValueError(f"{player.display_name} ({player.id}) is not rostered.")
@@ -552,6 +691,18 @@ async def update_rostered_discord(
 
     roles_to_remove: list[discord.Role] = []
     roles_to_add: list[discord.Role] = []
+
+    # AGM role only. The roster owns the franchise role and the prefix here, so
+    # a rostered AGM already has both -- but the AGM role itself still has to
+    # track the API, since nothing else reconciles it for a rostered member.
+    await apply_agm_role_updates(
+        guild=guild,
+        member=player,
+        agm_franchise=agm_franchise,
+        roles_to_add=roles_to_add,
+        roles_to_remove=roles_to_remove,
+        manage_franchise_roles=False,
+    )
 
     # Remove old tier roles and tier FA role on discord.Member
     if tiers:
@@ -579,8 +730,13 @@ async def update_rostered_discord(
         roles_to_remove.append(permfa_role)
 
     # IR
+    #
+    # `league_player.status`, not `player.status`: `player` is a discord.Member,
+    # whose `status` is online/idle/offline and never equals a league Status. As
+    # written before, the IR role was never added and always removed -- which hit
+    # AGM IR members in particular.
     ir_role = await utils.get_ir_role(guild)
-    if player.status in [Status.IR, Status.AGMIR] and ir_role not in player.roles:
+    if league_player.status in [Status.IR, Status.AGMIR] and ir_role not in player.roles:
         roles_to_add.append(ir_role)
     elif ir_role in player.roles:
         roles_to_remove.append(ir_role)
@@ -943,19 +1099,54 @@ async def update_league_player_discord(
     franchise: Franchise | FranchiseList | None = None,
     default_roles: list[discord.Role] | None = None,
     devleague: bool = False,
+    *,
+    agm_franchise: Franchise | FranchiseList | None,
 ):
+    """Sync a member's discord state to whatever the API says about them.
+
+    `agm_franchise` is the franchise the API lists this member as an AGM of, or
+    `None`. Callers resolve it with `FranchiseMixIn.agm_franchise_of` (or, in a
+    loop, `agm_franchise_map`), since these are module level functions with no
+    cog to ask.
+
+    Keyword only and deliberately not defaulted: forgetting it at a call site
+    would silently strip an AGM's role, franchise role and prefix, which is the
+    exact failure this parameter exists to stop.
+    """
     if not tiers:
         tiers = []
 
     if not league_player:
-        return await update_nonplaying_discord(guild=guild, member=player, tiers=tiers, default_roles=default_roles)
+        return await update_nonplaying_discord(
+            guild=guild, member=player, tiers=tiers, default_roles=default_roles, agm_franchise=agm_franchise
+        )
 
     if not league_player.status:
         raise ValueError("API returned league player with no status value")
 
+    # An AGM cannot be a free agent or draft eligible -- they sign with the
+    # franchise they staff or they do not play. Reaching here means the API's
+    # two records disagree, and following either one silently would hide it.
+    if agm_franchise and league_player.status in (
+        Status.FREE_AGENT,
+        Status.PERM_FA,
+        Status.PERMFA_W,
+        Status.DRAFT_ELIGIBLE,
+        Status.WAIVERS,
+        Status.WAIVER_RELEASE,
+        Status.WAIVER_CLAIM,
+    ):
+        log.warning(
+            f"{player.display_name} ({player.id}) is an AGM of {agm_franchise.name} but has league player status "
+            f"{league_player.status}. Syncing by status; the API records need to be reconciled by hand.",
+            guild=guild,
+        )
+
     match league_player.status:
         case Status.ROSTERED | Status.RENEWED | Status.AGMIR | Status.IR:
-            return await update_rostered_discord(guild=guild, player=player, league_player=league_player, tiers=tiers)
+            return await update_rostered_discord(
+                guild=guild, player=player, league_player=league_player, tiers=tiers, agm_franchise=agm_franchise
+            )
         case Status.DRAFT_ELIGIBLE:
             return await update_draft_eligible_discord(
                 guild=guild, player=player, league_player=league_player, tiers=tiers, devleague=devleague
@@ -971,7 +1162,9 @@ async def update_league_player_discord(
                 guild=guild, player=player, league_player=league_player, franchise=franchise, tiers=tiers
             )
         case Status.DROPPED | Status.FORMER | Status.BANNED:
-            return await update_nonplaying_discord(guild=guild, member=player, tiers=tiers, default_roles=default_roles)
+            return await update_nonplaying_discord(
+                guild=guild, member=player, tiers=tiers, default_roles=default_roles, agm_franchise=agm_franchise
+            )
         case Status.PERMFA_W:
             return await update_permfa_waiting_discord(guild=guild, player=player, league_player=league_player, tiers=tiers)
         case _:

@@ -1688,6 +1688,9 @@ class TransactionMixIn(RSCMixIn):
             )
             log.debug(f"Retire Result: {result}", guild=guild)
             tiers = await self.tiers(guild=guild)
+            # A retiring AGM keeps their staff role and franchise prefix: they
+            # stopped playing, not staffing. `/admin agm remove` is what ends it.
+            agm_franchise = await self.agm_franchise_of(guild, player.id)
         except RscException as exc:
             await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc), ephemeral=True)
             return
@@ -1705,7 +1708,7 @@ class TransactionMixIn(RSCMixIn):
             )
 
         default_roles = await self._get_welcome_roles(guild)
-        await update_nonplaying_discord(guild=guild, member=player, tiers=tiers, default_roles=default_roles)
+        await update_nonplaying_discord(guild=guild, member=player, tiers=tiers, default_roles=default_roles, agm_franchise=agm_franchise)
 
         # Announce to Transaction channel
         if announce:

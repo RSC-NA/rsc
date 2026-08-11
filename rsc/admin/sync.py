@@ -67,6 +67,15 @@ class AdminSyncMixIn(AdminMixIn):
             except RscException as exc:
                 log.exception("Error fetching tiers", guild=guild, exc=exc)
 
+            # One request answers AGM membership for the whole league. Resolving
+            # it per member would be a full franchise list each time.
+            try:
+                log.debug("Fetching AGMs", guild=guild)
+                agm_map = await self.agm_franchise_map(guild)
+            except (RscException, RuntimeError) as exc:
+                log.exception("Error fetching AGMs. Skipping guild.", guild=guild, exc=exc)
+                continue
+
             log.debug("Fetching league players", guild=guild)
             total = 0
             synced = 0
@@ -104,7 +113,13 @@ class AdminSyncMixIn(AdminMixIn):
                 synced += 1
                 try:
                     await update_league_player_discord(
-                        guild=guild, player=m, league_player=api_player, franchise=franchise, tiers=tiers, devleague=add_devleague_role
+                        guild=guild,
+                        player=m,
+                        league_player=api_player,
+                        franchise=franchise,
+                        tiers=tiers,
+                        devleague=add_devleague_role,
+                        agm_franchise=agm_map.get(m.id),
                     )
                 except (ValueError, AttributeError) as exc:
                     log.exception("Error syncing player: %s (%d)", m.display_name, m.id, guild=guild, exc_info=exc)
@@ -713,9 +728,23 @@ class AdminSyncMixIn(AdminMixIn):
 
         default_roles = await self._get_welcome_roles(guild)
 
+        # Fetched once for the whole run. Non-playing AGMs are the population
+        # this command exists to get right, and they have no league player to
+        # read a franchise off.
+        try:
+            log.debug("Fetching AGMs", guild=guild)
+            agm_map = await self.agm_franchise_map(guild)
+        except RscException as exc:
+            return await interaction.edit_original_response(embed=ApiExceptionErrorEmbed(exc))
+        except RuntimeError as exc:
+            return await interaction.edit_original_response(embed=ExceptionErrorEmbed(exc_message=str(exc)))
+
         log.debug("Fetching all members", guild=guild)
         total = 0
         synced = 0
+        # Members the loop below already reconciled, so the reverse sweep does
+        # not spend a second Discord call removing a role it just removed.
+        reconciled: set[int] = set()
         api_member: RSCMember
         async for api_member in self.paged_members(guild=guild, per_page=250):
             total += 1
@@ -735,7 +764,10 @@ class AdminSyncMixIn(AdminMixIn):
 
             if not dryrun:
                 try:
-                    await update_nonplaying_discord(guild=guild, member=m, tiers=tiers, default_roles=default_roles)
+                    await update_nonplaying_discord(
+                        guild=guild, member=m, tiers=tiers, default_roles=default_roles, agm_franchise=agm_map.get(m.id)
+                    )
+                    reconciled.add(m.id)
                 except (ValueError, AttributeError) as exc:
                     await interaction.followup.send(content=str(exc), ephemeral=True)
             synced += 1
@@ -743,10 +775,45 @@ class AdminSyncMixIn(AdminMixIn):
         log.debug("Total Members: %d", total, guild=guild)
         log.debug("Total Synced: %d", synced, guild=guild)
 
+        # Reverse sweep.
+        #
+        # The loop above can only reconcile members the API returns. Someone
+        # holding the Assistant GM role who has no member record at all -- they
+        # left the league, or predate the API -- is invisible to it, and the role
+        # is the one piece of AGM state nothing else would ever take back.
+        #
+        # Only the role comes off here. A stale AGM who is still a rostered
+        # player legitimately keeps their franchise role and prefix; `/admin sync
+        # players` owns the rest of their state.
+        stale_agms: list[discord.Member] = []
+        try:
+            agm_role = await utils.get_agm_role(guild)
+        except ValueError as exc:
+            log.warning(f"Skipping stale AGM sweep: {exc}", guild=guild)
+        else:
+            for m in agm_role.members:
+                if m.id in agm_map or m.id in reconciled:
+                    continue
+                log.info("Removing stale AGM role: %s (%d)", m.display_name, m.id, guild=guild)
+                stale_agms.append(m)
+                if not dryrun:
+                    await m.remove_roles(agm_role, reason="API has no AGM record for this member")
+
         embed = BlueEmbed(
             title="Non-Playing Sync",
             description="All non-playing RSC members have been synced.",
         )
+        if stale_agms:
+            verb = "Would remove" if dryrun else "Removed"
+            # Capped so a large sweep cannot blow the 1024 character field limit.
+            listed = "\n".join(m.mention for m in stale_agms[:20])
+            if len(stale_agms) > 20:
+                listed += f"\n...and {len(stale_agms) - 20} more"
+            embed.add_field(
+                name=f"Stale AGM Roles ({len(stale_agms)})",
+                value=f"{verb} the AGM role from:\n{listed}",
+                inline=False,
+            )
         embed.set_footer(text=f"Synced {synced}/{total} RSC member(s).")
         await interaction.edit_original_response(embed=embed)
 
@@ -774,6 +841,15 @@ class AdminSyncMixIn(AdminMixIn):
 
         if not sync_view.result:
             return
+
+        # One request for the whole run, not one per player.
+        try:
+            log.debug("Fetching AGMs", guild=guild)
+            agm_map = await self.agm_franchise_map(guild)
+        except RscException as exc:
+            return await interaction.edit_original_response(embed=ApiExceptionErrorEmbed(exc))
+        except RuntimeError as exc:
+            return await interaction.edit_original_response(embed=ExceptionErrorEmbed(exc_message=str(exc)))
 
         log.debug("Fetching all rostered players", guild=guild)
         total = 0
@@ -820,7 +896,14 @@ class AdminSyncMixIn(AdminMixIn):
             synced += 1
             if not dryrun:
                 try:
-                    await update_league_player_discord(guild=guild, player=m, league_player=api_player, franchise=franchise, tiers=tiers)
+                    await update_league_player_discord(
+                        guild=guild,
+                        player=m,
+                        league_player=api_player,
+                        franchise=franchise,
+                        tiers=tiers,
+                        agm_franchise=agm_map.get(m.id),
+                    )
                 except (ValueError, AttributeError) as exc:
                     await interaction.followup.send(content=str(exc), ephemeral=True)
 
@@ -850,13 +933,18 @@ class AdminSyncMixIn(AdminMixIn):
             default_roles = await self._get_welcome_roles(guild=guild)
             plist = await self.players(guild, discord_id=member.id, limit=1)
             tiers = await self.tiers(guild)
+            # One list answers both "are they a GM" and "are they an AGM".
+            all_franchises = await self.franchises(guild=guild)
         except RscException as exc:
             return await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc), ephemeral=False)
 
+        agm_franchise = next(
+            (f for f in all_franchises if any(a.discord_id == member.id for a in (f.agms or []))),
+            None,
+        )
+
         if not plist:
             # Check if player is a non-playing GM
-            all_franchises = await self.franchises(guild=guild)
-
             gm = False
             franchise = None
             for f in all_franchises:
@@ -869,7 +957,9 @@ class AdminSyncMixIn(AdminMixIn):
                 if gm and franchise:
                     await update_nonplaying_gm_discord(guild=guild, player=member, franchise=franchise, tiers=tiers)
                 else:
-                    await update_nonplaying_discord(guild=guild, member=member, tiers=tiers, default_roles=default_roles)
+                    await update_nonplaying_discord(
+                        guild=guild, member=member, tiers=tiers, default_roles=default_roles, agm_franchise=agm_franchise
+                    )
             except (ValueError, AttributeError) as exc:
                 return await interaction.followup.send(embed=ExceptionErrorEmbed(exc_message=str(exc)))
         else:
@@ -897,12 +987,15 @@ class AdminSyncMixIn(AdminMixIn):
                         franchise=franchise,
                         default_roles=default_roles,
                         devleague=add_devleague_role,
+                        agm_franchise=agm_franchise,
                     )
                 except (ValueError, AttributeError) as exc:
                     return await interaction.followup.send(embed=ExceptionErrorEmbed(exc_message=str(exc)))
             else:
                 try:
-                    await update_league_player_discord(guild=guild, player=member, league_player=lp, tiers=tiers)
+                    await update_league_player_discord(
+                        guild=guild, player=member, league_player=lp, tiers=tiers, agm_franchise=agm_franchise
+                    )
                 except (ValueError, AttributeError) as exc:
                     return await interaction.followup.send(embed=ExceptionErrorEmbed(exc_message=str(exc)))
 

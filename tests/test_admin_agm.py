@@ -74,7 +74,9 @@ def _base_mixin(guild, channel, **overrides):
     """A mixin with every collaborator of the AGM commands stubbed out."""
     attrs = {
         "players": AsyncMock(return_value=[]),
+        "tiers": AsyncMock(return_value=[]),
         "_get_agm_message": AsyncMock(return_value="Welcome aboard!"),
+        "_get_welcome_roles": AsyncMock(return_value=[]),
         "get_franchise_transaction_channel": AsyncMock(return_value=channel),
         "fetch_franchise": AsyncMock(return_value=MagicMock(id=FRANCHISE_ID, prefix="OCE")),
         "franchises_agm_of": AsyncMock(return_value=[]),
@@ -83,6 +85,17 @@ def _base_mixin(guild, channel, **overrides):
     }
     attrs.update(overrides)
     return _create_mixin(**attrs)
+
+
+@pytest.fixture
+def agm_sync():
+    """`/admin agm remove` hands the discord cleanup to the role sync helper.
+
+    Patched out so these tests stay about the command's API behaviour; the
+    helper itself is covered in `test_transaction_roles.py`.
+    """
+    with patch("rsc.admin.agm.update_league_player_discord", new=AsyncMock()) as mock:
+        yield mock
 
 
 def _patch_utils():
@@ -285,7 +298,7 @@ class TestAgmAddCommand:
 
 
 class TestAgmRemoveCommand:
-    async def test_removes_agm_from_franchise(self, mock_guild, agm_utils):
+    async def test_removes_agm_from_franchise(self, mock_guild, agm_utils, agm_sync):
         channel = _mock_channel()
         mixin = _base_mixin(
             mock_guild,
@@ -298,13 +311,13 @@ class TestAgmRemoveCommand:
         await CMD_REMOVE(mixin, interaction, FRANCHISE, agm)
 
         mixin.remove_agm.assert_awaited_once_with(mock_guild, FRANCHISE_ID, agm=agm, executor=interaction.user)
-        agm.remove_roles.assert_awaited_once()
+        assert agm_sync.await_args.kwargs["agm_franchise"] is None
         channel.set_permissions.assert_awaited_once()
         embed = _sent_embed(interaction)
         assert embed.title == "AGM Removed"
         assert ("API Records Removed", "1") in [(f.name, f.value) for f in embed.fields]
 
-    async def test_no_record_still_cleans_up_discord(self, mock_guild, agm_utils):
+    async def test_no_record_still_cleans_up_discord(self, mock_guild, agm_utils, agm_sync):
         """Legacy AGMs predate the API record. Hard failing would strand them
         with the role forever."""
         channel = _mock_channel()
@@ -315,12 +328,12 @@ class TestAgmRemoveCommand:
         await CMD_REMOVE(mixin, interaction, FRANCHISE, agm)
 
         mixin.remove_agm.assert_not_awaited()
-        agm.remove_roles.assert_awaited_once()
+        assert agm_sync.await_args.kwargs["agm_franchise"] is None
         embed = _sent_embed(interaction)
         assert embed.title == "AGM Removed"
         assert "No API AGM record was found" in embed.footer.text
 
-    async def test_mismatched_franchise_aborts_without_removing(self, mock_guild, agm_utils):
+    async def test_mismatched_franchise_aborts_without_removing(self, mock_guild, agm_utils, agm_sync):
         """A mis-typed franchise argument must not destroy another franchise's
         record, so refuse and leave Discord alone too.
 
@@ -339,11 +352,11 @@ class TestAgmRemoveCommand:
         await CMD_REMOVE(mixin, interaction, FRANCHISE, agm)
 
         mixin.remove_agm.assert_not_awaited()
-        agm.remove_roles.assert_not_awaited()
+        agm_sync.assert_not_awaited()
         channel.set_permissions.assert_not_awaited()
         assert OTHER_FRANCHISE in _sent_embed(interaction).description
 
-    async def test_mixed_records_remove_only_the_named_franchise(self, mock_guild, agm_utils):
+    async def test_mixed_records_remove_only_the_named_franchise(self, mock_guild, agm_utils, agm_sync):
         channel = _mock_channel()
         mixin = _base_mixin(
             mock_guild,
@@ -356,9 +369,9 @@ class TestAgmRemoveCommand:
         await CMD_REMOVE(mixin, interaction, FRANCHISE, agm)
 
         mixin.remove_agm.assert_awaited_once_with(mock_guild, FRANCHISE_ID, agm=agm, executor=interaction.user)
-        agm.remove_roles.assert_awaited_once()
+        assert agm_sync.await_args.kwargs["agm_franchise"] is None
 
-    async def test_remove_404_is_treated_as_already_removed(self, mock_guild, agm_utils):
+    async def test_remove_404_is_treated_as_already_removed(self, mock_guild, agm_utils, agm_sync):
         channel = _mock_channel()
         mixin = _base_mixin(
             mock_guild,
@@ -371,7 +384,7 @@ class TestAgmRemoveCommand:
 
         await CMD_REMOVE(mixin, interaction, FRANCHISE, agm)
 
-        agm.remove_roles.assert_awaited_once()
+        assert agm_sync.await_args.kwargs["agm_franchise"] is None
         embed = _sent_embed(interaction)
         assert embed.title == "AGM Removed"
         assert ("API Records Removed", "0") in [(f.name, f.value) for f in embed.fields]
@@ -393,7 +406,7 @@ class TestAgmRemoveCommand:
         channel.set_permissions.assert_not_awaited()
         assert _sent_embed(interaction).title == "API Error"
 
-    async def test_lookup_failure_aborts_before_role_changes(self, mock_guild, agm_utils):
+    async def test_lookup_failure_aborts_before_role_changes(self, mock_guild, agm_utils, agm_sync):
         channel = _mock_channel()
         mixin = _base_mixin(
             mock_guild,
@@ -406,5 +419,5 @@ class TestAgmRemoveCommand:
         await CMD_REMOVE(mixin, interaction, FRANCHISE, agm)
 
         mixin.remove_agm.assert_not_awaited()
-        agm.remove_roles.assert_not_awaited()
+        agm_sync.assert_not_awaited()
         assert _sent_embed(interaction).title == "API Error"

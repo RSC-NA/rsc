@@ -286,6 +286,12 @@ class RSCMixIn(ABC):
     @abstractmethod
     async def franchises_agm_of(self, guild: discord.Guild, discord_id: int) -> list[FranchiseList]: ...
 
+    @abstractmethod
+    async def agm_franchise_of(self, guild: discord.Guild, discord_id: int) -> FranchiseList | None: ...
+
+    @abstractmethod
+    async def agm_franchise_map(self, guild: discord.Guild) -> dict[int, FranchiseList]: ...
+
     # League
 
     @abstractmethod
@@ -421,6 +427,14 @@ class RSCMixIn(ABC):
 
     @abstractmethod
     async def is_match_franchise_gm(self, member: discord.Member, match: Match) -> bool: ...
+
+    @abstractmethod
+    async def is_match_franchise_agm(self, member: discord.Member, match: Match, agm_franchise: FranchiseList | None = None) -> bool: ...
+
+    @abstractmethod
+    async def match_franchise_agm_team(
+        self, member: discord.Member, match: Match, agm_franchise: FranchiseList | None = None
+    ) -> MatchTeamEnum | None: ...
 
     @abstractmethod
     async def discord_member_in_match(self, member: discord.Member, match: Match) -> bool: ...

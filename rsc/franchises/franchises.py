@@ -342,6 +342,57 @@ class FranchiseMixIn(RSCMixIn):
         flist = await self.franchises(guild)
         return [f for f in flist if any(a.discord_id == discord_id for a in (f.agms or []))]
 
+    async def agm_franchise_of(self, guild: discord.Guild, discord_id: int) -> FranchiseList | None:
+        """The single franchise this member is an AGM of, or `None`.
+
+        The AGM answer every caller actually wants: role sync and `/match` need
+        one franchise, not a list. Holding AGM records on two franchises is a
+        data error -- `/admin agm add` drops the old record when an AGM moves --
+        so first in list order wins and the collision is logged rather than
+        silently picked.
+        """
+        memberships = await self.franchises_agm_of(guild, discord_id)
+        if not memberships:
+            return None
+
+        if len(memberships) > 1:
+            names = ", ".join(f.name or str(f.id) for f in memberships)
+            log.warning(f"[{guild.name}] {discord_id} is an AGM of multiple franchises: {names}. Using {memberships[0].name}.")
+
+        return memberships[0]
+
+    async def agm_franchise_map(self, guild: discord.Guild) -> dict[int, FranchiseList]:
+        """Every AGM in the league, keyed by discord ID.
+
+        One request answers the whole league because `FranchiseList` carries
+        `agms` inline. Bulk syncs must use this instead of calling
+        `agm_franchise_of` per member: `_franchise_cache` only holds franchise
+        *names*, so `franchises()` is a live request every time and a per-member
+        lookup is one full franchise list per member.
+
+        Raises `RuntimeError` if the API returns no franchises at all. Callers
+        read a missing key as "not an AGM", so an empty answer would strip every
+        AGM in the guild in a single bulk sync. A league always has franchises.
+        """
+        flist = await self.franchises(guild)
+        if not flist:
+            raise RuntimeError(f"[{guild.name}] API returned no franchises. Refusing to build an AGM map.")
+
+        result: dict[int, FranchiseList] = {}
+        for f in flist:
+            for agm in f.agms or []:
+                if not agm.discord_id:
+                    continue
+                existing = result.get(agm.discord_id)
+                if existing is not None:
+                    log.warning(
+                        f"[{guild.name}] {agm.discord_id} is an AGM of multiple franchises: "
+                        f"{existing.name}, {f.name}. Using {existing.name}."
+                    )
+                    continue
+                result[agm.discord_id] = f
+        return result
+
     async def franchise_logo(self, guild: discord.Guild, id: int) -> str | None:
         host = await self._get_api_url(guild)
         if not host:

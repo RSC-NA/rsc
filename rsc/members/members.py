@@ -595,12 +595,16 @@ class MemberMixIn(RSCMixIn):
         add_devleague_role = await self.should_get_devleague_role(interaction.user)
         log.debug(f"Add Dev League Role: {add_devleague_role}")
 
-        # Sync roles and name in discord
+        # Sync roles and name in discord.
+        #
+        # A signup lands as DE or PermFA, neither of which an AGM can hold, so
+        # there is no franchise staff record to preserve here.
         await update_league_player_discord(
             guild=guild,
             player=interaction.user,
             league_player=result,
             devleague=add_devleague_role,
+            agm_franchise=None,
         )
 
         await interaction.edit_original_response(
@@ -702,12 +706,16 @@ class MemberMixIn(RSCMixIn):
         add_devleague_role = await self.should_get_devleague_role(interaction.user)
         log.debug(f"Add Dev League Role: {add_devleague_role}")
 
-        # Sync roles and name in discord
+        # Sync roles and name in discord.
+        #
+        # A signup lands as DE or PermFA, neither of which an AGM can hold, so
+        # there is no franchise staff record to preserve here.
         await update_league_player_discord(
             guild=guild,
             player=interaction.user,
             league_player=result,
             devleague=add_devleague_role,
+            agm_franchise=None,
         )
 
         await interaction.edit_original_response(

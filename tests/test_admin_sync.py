@@ -126,3 +126,169 @@ class TestTransactionChannelSync:
         embed = interaction.edit_original_response.await_args.kwargs["embed"]
         deleted_field = next(field for field in embed.fields if field.name == "Deleted")
         assert deleted_field.value == "old-transactions"
+
+
+class TestNonPlayingSyncAgmSweep:
+    """`/admin sync nonplaying` reconciles AGM state against the API.
+
+    The per-member loop can only reach members the API returns. The reverse
+    sweep is what catches someone still holding the Assistant GM role who has no
+    member record at all -- the role is the one piece of AGM state that nothing
+    else would ever take back.
+    """
+
+    @pytest.fixture
+    def interaction(self, mock_guild):
+        interaction = MagicMock(spec=discord.Interaction)
+        interaction.guild = mock_guild
+        interaction.edit_original_response = AsyncMock()
+        interaction.followup = MagicMock()
+        interaction.followup.send = AsyncMock()
+        return interaction
+
+    @staticmethod
+    def _member(discord_id, name="someone"):
+        m = MagicMock(spec=discord.Member)
+        m.id = discord_id
+        m.display_name = name
+        m.mention = f"<@{discord_id}>"
+        m.roles = []
+        m.remove_roles = AsyncMock()
+        return m
+
+    @staticmethod
+    async def _no_members():
+        """`paged_members` yields nothing: this suite is about the sweep."""
+        return
+        yield  # pragma: no cover - makes this an async generator
+
+    @pytest.fixture
+    def agm_role(self):
+        role = MagicMock(spec=discord.Role)
+        role.name = "Assistant GM"
+        role.members = []
+        return role
+
+    @pytest.fixture
+    def mixin(self, agm_franchise_map):
+        mixin = _create_mixin()
+        mixin.tiers = AsyncMock(return_value=[])
+        mixin._get_welcome_roles = AsyncMock(return_value=[])
+        mixin.agm_franchise_map = AsyncMock(return_value=agm_franchise_map)
+        mixin.paged_members = MagicMock(return_value=self._no_members())
+        mixin.league_player_from_member = AsyncMock(return_value=None)
+        return mixin
+
+    @pytest.fixture
+    def agm_franchise_map(self):
+        return {}
+
+    async def _run(self, mixin, interaction, agm_role, dryrun=False):
+        with (
+            patch("rsc.admin.sync.ConfirmSyncView") as view_cls,
+            patch("rsc.admin.sync.utils.get_agm_role", AsyncMock(return_value=agm_role)),
+        ):
+            view = MagicMock()
+            view.prompt = AsyncMock()
+            view.wait = AsyncMock()
+            view.result = True
+            view_cls.return_value = view
+
+            await AdminSyncMixIn._sync_nonplaying_cmd.callback(mixin, interaction, dryrun)
+        return interaction.edit_original_response.await_args.kwargs["embed"]
+
+    async def test_strips_the_role_from_a_member_the_api_does_not_list(self, mixin, interaction, agm_role):
+        stale = self._member(111)
+        agm_role.members = [stale]
+
+        embed = await self._run(mixin, interaction, agm_role)
+
+        stale.remove_roles.assert_awaited_once_with(agm_role, reason="API has no AGM record for this member")
+        assert "Stale AGM Roles (1)" in [f.name for f in embed.fields]
+
+    async def test_leaves_a_real_agm_alone(self, mixin, interaction, agm_role):
+        real = self._member(111)
+        agm_role.members = [real]
+        mixin.agm_franchise_map = AsyncMock(return_value={111: MagicMock()})
+
+        embed = await self._run(mixin, interaction, agm_role)
+
+        real.remove_roles.assert_not_awaited()
+        assert not [f for f in embed.fields if f.name.startswith("Stale AGM Roles")]
+
+    async def test_dryrun_reports_without_removing(self, mixin, interaction, agm_role):
+        """This is the first sync that can remove the role at scale, so the
+        rehearsal has to show exactly what a live run would do."""
+        stale = self._member(111)
+        agm_role.members = [stale]
+
+        embed = await self._run(mixin, interaction, agm_role, dryrun=True)
+
+        stale.remove_roles.assert_not_awaited()
+        field = next(f for f in embed.fields if f.name.startswith("Stale AGM Roles"))
+        assert "Would remove" in field.value
+        assert stale.mention in field.value
+
+    async def test_long_sweep_is_truncated_for_the_embed_field(self, mixin, interaction, agm_role):
+        """Discord caps a field value at 1024 characters."""
+        agm_role.members = [self._member(i) for i in range(1, 26)]
+
+        embed = await self._run(mixin, interaction, agm_role)
+
+        field = next(f for f in embed.fields if f.name.startswith("Stale AGM Roles"))
+        assert "Stale AGM Roles (25)" == field.name
+        assert "...and 5 more" in field.value
+        assert len(field.value) <= 1024
+
+    async def test_missing_agm_role_skips_the_sweep(self, mixin, interaction, agm_role):
+        """A guild without the role configured must still finish the sync."""
+        with (
+            patch("rsc.admin.sync.ConfirmSyncView") as view_cls,
+            patch("rsc.admin.sync.utils.get_agm_role", AsyncMock(side_effect=ValueError("no role"))),
+        ):
+            view = MagicMock()
+            view.prompt = AsyncMock()
+            view.wait = AsyncMock()
+            view.result = True
+            view_cls.return_value = view
+
+            await AdminSyncMixIn._sync_nonplaying_cmd.callback(mixin, interaction, False)
+
+        embed = interaction.edit_original_response.await_args.kwargs["embed"]
+        assert embed.title == "Non-Playing Sync"
+
+    async def test_empty_franchise_list_aborts_before_touching_anyone(self, mixin, interaction, agm_role):
+        """`agm_franchise_map` raises rather than answering {}. Otherwise one bad
+        response would strip every AGM in the guild in a single run."""
+        stale = self._member(111)
+        agm_role.members = [stale]
+        mixin.agm_franchise_map = AsyncMock(side_effect=RuntimeError("Refusing to build an AGM map"))
+
+        embed = await self._run(mixin, interaction, agm_role)
+
+        stale.remove_roles.assert_not_awaited()
+        assert "Refusing to build an AGM map" in embed.description
+
+    async def test_does_not_double_remove_a_member_the_loop_handled(self, mixin, interaction, agm_role):
+        """`update_nonplaying_discord` already strips the role for members the
+        API returns. Discord's role cache lags a removal, so without this the
+        sweep would spend a second call on the same member."""
+        stale = self._member(111)
+        agm_role.members = [stale]
+
+        api_member = MagicMock()
+        api_member.discord_id = 111
+
+        async def _one_member():
+            yield api_member
+
+        mixin.paged_members = MagicMock(return_value=_one_member())
+        interaction.guild.get_member = MagicMock(return_value=stale)
+
+        with patch("rsc.admin.sync.update_nonplaying_discord", AsyncMock()) as sync:
+            embed = await self._run(mixin, interaction, agm_role)
+
+        sync.assert_awaited_once()
+        assert sync.await_args.kwargs["agm_franchise"] is None
+        stale.remove_roles.assert_not_awaited()
+        assert not [f for f in embed.fields if f.name.startswith("Stale AGM Roles")]

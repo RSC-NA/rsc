@@ -174,6 +174,8 @@ class AdminMembersMixIn(AdminMixIn):
             # whether this member is one. Ask the franchise endpoint once and
             # reuse the answer for both the unsigned GM path and the role rename.
             gm_of = await self.franchises(guild, gm_discord_id=member.id)
+            # A rename must not cost a non-playing AGM their franchise prefix.
+            agm_franchise = await self.agm_franchise_of(guild, member.id)
         except RscException as exc:
             return await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc), ephemeral=False)
 
@@ -198,10 +200,17 @@ class AdminMembersMixIn(AdminMixIn):
                             )
                         )
                     await update_league_player_discord(
-                        guild=guild, player=member, league_player=lplayer, tiers=tier_list, franchise=flist.pop(0)
+                        guild=guild,
+                        player=member,
+                        league_player=lplayer,
+                        tiers=tier_list,
+                        franchise=flist.pop(0),
+                        agm_franchise=agm_franchise,
                     )
                 else:
-                    await update_league_player_discord(guild=guild, player=member, league_player=lplayer, tiers=tier_list)
+                    await update_league_player_discord(
+                        guild=guild, player=member, league_player=lplayer, tiers=tier_list, agm_franchise=agm_franchise
+                    )
         except RscException as exc:
             return await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc), ephemeral=False)
         except (ValueError, AttributeError) as exc:
@@ -354,6 +363,7 @@ class AdminMembersMixIn(AdminMixIn):
         try:
             log.debug("Updating player in discord")
             lplayer = plist.pop(0)
+            agm_franchise = await self.agm_franchise_of(guild, player.id)
             if lplayer.status == Status.UNSIGNED_GM:
                 # Need to pull franchise information for unsigned GMs
                 # Data not available in `LeaguePlayer`
@@ -367,11 +377,22 @@ class AdminMembersMixIn(AdminMixIn):
                         embed=ErrorEmbed(description="Multiple franchises found for un-signed GM in API.")
                     )
                 franchise = flist.pop(0)
-                await update_league_player_discord(guild=guild, player=player, league_player=lplayer, tiers=tier_list, franchise=franchise)
+                await update_league_player_discord(
+                    guild=guild,
+                    player=player,
+                    league_player=lplayer,
+                    tiers=tier_list,
+                    franchise=franchise,
+                    agm_franchise=agm_franchise,
+                )
             else:
-                await update_league_player_discord(guild=guild, player=player, league_player=lplayer, tiers=tier_list)
+                await update_league_player_discord(
+                    guild=guild, player=player, league_player=lplayer, tiers=tier_list, agm_franchise=agm_franchise
+                )
         except (ValueError, AttributeError) as exc:
             return await interaction.followup.send(embed=ExceptionErrorEmbed(exc_message=str(exc)))
+        except RscException as exc:
+            return await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc), ephemeral=True)
 
         # Craft embed
         embed = BlueEmbed(title="League Player Updated")
@@ -584,12 +605,16 @@ class AdminMembersMixIn(AdminMixIn):
         add_devleague_role = await self.should_get_devleague_role(member)
         log.debug(f"Add Dev League Role: {add_devleague_role}")
 
-        # Sync roles and name in discord
+        # Sync roles and name in discord.
+        #
+        # A fresh signup lands as DE or PermFA, neither of which an AGM can hold,
+        # so there is no franchise staff record to preserve here.
         await update_league_player_discord(
             guild=interaction.guild,
             player=member,
             league_player=lplayer,
             devleague=add_devleague_role,
+            agm_franchise=None,
         )
 
         await interaction.followup.send(

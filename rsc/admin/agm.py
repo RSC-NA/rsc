@@ -10,6 +10,7 @@ from rsc.enums import Status
 from rsc.exceptions import RscException
 from rsc.franchises import FranchiseMixIn
 from rsc.logs import GuildLogAdapter
+from rsc.transactions.roles import update_league_player_discord
 from rsc.utils import utils
 
 logger = logging.getLogger("red.rsc.admin.agm")
@@ -254,8 +255,34 @@ class AdminAGMMixIn(AdminMixIn):
                 else:
                     return await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc), ephemeral=True)
 
-        # Remove AGM role from player
-        await agm.remove_roles(agm_role)
+        # Reconcile the rest of their discord state against the API, which now
+        # has no AGM record for them. Removing only the AGM role would leave a
+        # non-playing AGM holding a franchise role and a franchise prefix until
+        # someone happened to run a sync.
+        sync_failed: str | None = None
+        try:
+            plist = await self.players(guild, discord_id=agm.id, limit=1)
+            tiers = await self.tiers(guild)
+            default_roles = await self._get_welcome_roles(guild)
+        except RscException as exc:
+            return await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc), ephemeral=True)
+
+        try:
+            await update_league_player_discord(
+                guild=guild,
+                player=agm,
+                league_player=plist[0] if plist else None,
+                tiers=tiers,
+                default_roles=default_roles,
+                agm_franchise=None,
+            )
+        except (ValueError, AttributeError) as exc:
+            # The API record is already gone, so report rather than abort: the
+            # AGM role still has to come off.
+            log.warning(f"Unable to fully sync {agm.id} after AGM removal: {exc}", guild=guild)
+            sync_failed = str(exc)
+            if agm_role in agm.roles:
+                await agm.remove_roles(agm_role, reason="Removed as AGM")
 
         await tchannel.set_permissions(agm, overwrite=None, reason="Player was removed from AGM")
 
@@ -264,6 +291,9 @@ class AdminAGMMixIn(AdminMixIn):
         embed.add_field(name="Franchise", value=franchise, inline=False)
         embed.add_field(name="Transaction Channel", value=tchannel.mention, inline=False)
         embed.add_field(name="API Records Removed", value=str(deleted), inline=False)
+
+        if sync_failed:
+            embed.add_field(name="Discord Sync", value=f"AGM role removed, but a full sync failed: `{sync_failed}`", inline=False)
 
         if not matched:
             embed.set_footer(text="No API AGM record was found. Discord roles were cleaned up anyway.")
