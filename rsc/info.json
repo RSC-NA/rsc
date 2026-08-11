@@ -1,0 +1,26 @@
+{
+    "author": ["nickm"],
+    "description": "Discord cog used to run and operate leagues related to RSC (Rocket Soccar Confederation)",
+    "short": "RSC Discord Bot",
+    "type": "COG",
+    "tags": ["RSC", "rocket league", "esports"],
+    "min_bot_version": "3.5.24",
+    "min_python_version": [3, 12, 0],
+    "hidden": false,
+    "disabled": false,
+    "required_cogs": {},
+    "requirements": [
+        "rscapi@git+https://github.com/RSC-NA/rsc-api-client.git",
+        "python-ballchasing@git+https://github.com/xentrick/python-ballchasing.git",
+        "replay-parser@git+https://github.com/xentrick/python-replay-parser.git",
+        "aiofiles>=24.1.0",
+        "aiohttp-retry>=2.9.1",
+        "httpx>=0.28.1",
+        "openai>=2.28.0",
+        "pillow>=12.3.0",
+        "pydantic>=2.11.10",
+        "pytz>=2026.1.post1",
+        "validators>=0.35.0"
+    ],
+    "end_user_data_statement": "This cog does not persistently store data or metadata about users. Discord user identifiers and display names are transmitted to the RSC API (configured per-guild) to look up and manage league membership, and are stored by that external service. When the LLM assistant is used, the invoking user's message content is transmitted to OpenAI for processing. This cog does not support data requests and will not accept deletion requests for data held by those external services."
+}

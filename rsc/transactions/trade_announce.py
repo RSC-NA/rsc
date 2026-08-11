@@ -90,6 +90,10 @@ async def _franchise_label(guild: discord.Guild, franchise: TradeFranchise) -> s
     """`Franchise (GM Name)`, preferring the live member's display name."""
     name = franchise.name or "Unknown Franchise"
 
+    # A franchise between GMs has no gm at all.
+    if not franchise.gm:
+        return name
+
     member = guild.get_member(franchise.gm.discord_id)
     if member:
         gm_name = await utils.remove_prefix(member)
@@ -120,7 +124,13 @@ async def build_trade_embed_from_response(
     franchises: dict[int, TradeFranchise] = {}
     ping_ids: list[int] = []
 
-    def _register(franchise: TradeFranchise) -> int:
+    def _register(franchise: TradeFranchise) -> int | None:
+        # Grouping and pinging are both keyed on the GM's discord id, so a
+        # franchise sitting without a GM cannot participate in either.
+        if not franchise.gm:
+            log.warning(f"Trade franchise {franchise.name} has no GM. Skipping.", guild=guild)
+            return None
+
         gm_id = franchise.gm.discord_id
         # Prefer whichever shape actually carries a name; it is required on
         # TransactionFranchise but nullable on PlayerFranchise.
@@ -145,6 +155,8 @@ async def build_trade_embed_from_response(
             log.warning("Trade player update has no destination franchise", guild=guild)
             continue
         gm_id = _register(team.franchise)
+        if gm_id is None:
+            continue
 
         discord_id = ptu.player.player.discord_id if ptu.player and ptu.player.player else None
         if discord_id:
@@ -167,6 +179,8 @@ async def build_trade_embed_from_response(
             log.warning("Trade pick update has no destination franchise", guild=guild)
             continue
         gm_id = _register(pick_update.destination)
+        if gm_id is None:
+            continue
 
         # Show the source whenever it differs from the destination. The original
         # builder used a `len(groups) > 2` heuristic, which counts groupby runs
@@ -174,7 +188,7 @@ async def build_trade_embed_from_response(
         prefix = ""
         if pick_update.source is not None:
             source_id = _register(pick_update.source)
-            if source_id != gm_id:
+            if source_id is not None and source_id != gm_id:
                 prefix = f"<@!{source_id}> "
 
         round_fmt = _ordinal(pick.round)

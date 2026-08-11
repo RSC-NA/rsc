@@ -4,15 +4,19 @@ version = "1.0.0"
 requires-python = ">3.11"
 dependencies = [
     "aiofiles>=24.1.0",
+    "aiohttp-retry>=2.9.1",
+    "httpx>=0.28.1",
     "openai>=2.28.0",
     "pandas>=3.0.2",
-    "pillow>=12.1.1",
-    "pip>=26.0.1",
+    "pillow>=12.3.0",
+    "pip>=26.1.2",
+    "pydantic>=2.11.10",
     "python-ballchasing",
     "pytz>=2026.1.post1",
     "red-discordbot==3.5.24",
     "replay-parser",
     "rich>=14.2.0",
+    "rscapi",
     "trio>=0.33.0",
     "validators>=0.35.0",
 ]
@@ -159,4 +163,6 @@ extra-paths = [
 [tool.uv.sources]
 replay-parser = { git = "https://github.com/xentrick/python-replay-parser.git" }
 python-ballchasing = { git = "https://github.com/xentrick/python-ballchasing.git" }
-rsc-api-client = { git = "https://github.com/RSC-NA/rsc-api-client.git" }
+# The rsc-api-client repo publishes a distribution named "rscapi" (see its
+# pyproject `name`). Keying this on the repo name meant nothing ever resolved it.
+rscapi = { git = "https://github.com/RSC-NA/rsc-api-client.git" }

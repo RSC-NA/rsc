@@ -31,15 +31,12 @@ def _mock_interaction(guild):
     return interaction
 
 
-def _role(position, *, id=1, gm=False, agm=False, arbiter=False, project_role="", franchise_id=None):
+def _role(position, *, id=1, arbiter=False, project_role=""):
     r = MagicMock()
     r.id = id
     r.position = position
-    r.gm = gm
-    r.agm = agm
     r.arbiter = arbiter
     r.project_role = project_role
-    r.franchise_id = franchise_id
     r.league = MagicMock()
     r.league.name = "RSC 3v3"
     return r
@@ -62,7 +59,7 @@ class TestAdminElevatedRolesCommand:
     async def test_displays_each_role_as_a_field(self, mock_guild, mock_member):
         roles = [
             _role("NUMS", id=7, project_role="Numbers Cruncher"),
-            _role("ADM", id=9, gm=True, franchise_id=3),
+            _role("ADM", id=9, arbiter=True),
         ]
         mixin = _create_mixin(member_elevated_roles=AsyncMock(return_value=roles))
         interaction = _mock_interaction(mock_guild)
@@ -77,9 +74,10 @@ class TestAdminElevatedRolesCommand:
         numbers, admin = embed.fields
         assert "**Role ID:** 7" in numbers.value
         assert "**Project Role:** Numbers Cruncher" in numbers.value
-        assert "**GM:** No" in numbers.value
-        assert "**GM:** Yes" in admin.value
-        assert "**Franchise ID:** 3" in admin.value
+        assert "**Arbiter:** No" in numbers.value
+        assert "**Arbiter:** Yes" in admin.value
+        # GM/AGM are FranchiseStaff now and must not be reported here
+        assert "GM" not in numbers.value
 
     async def test_no_roles_reports_empty(self, mock_guild, mock_member):
         mixin = _create_mixin(member_elevated_roles=AsyncMock(return_value=[]))

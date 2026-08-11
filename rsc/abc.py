@@ -53,6 +53,7 @@ from rsc.enums import (
     PlayerType,
     Referrer,
     RegionPreference,
+    StaffPositions,
     Status,
     TrackerLinksStatus,
     TransactionType,
@@ -263,6 +264,27 @@ class RSCMixIn(ABC):
 
     @abstractmethod
     async def fetch_franchise(self, guild: discord.Guild, name: str) -> FranchiseList | None: ...
+
+    @abstractmethod
+    async def add_agm(
+        self,
+        guild: discord.Guild,
+        id: int,
+        agm: discord.Member | discord.User | int,
+        executor: discord.Member | discord.User | int,
+    ) -> Franchise: ...
+
+    @abstractmethod
+    async def remove_agm(
+        self,
+        guild: discord.Guild,
+        id: int,
+        agm: discord.Member | discord.User | int,
+        executor: discord.Member | discord.User | int,
+    ) -> Franchise: ...
+
+    @abstractmethod
+    async def franchises_agm_of(self, guild: discord.Guild, discord_id: int) -> list[FranchiseList]: ...
 
     # League
 
@@ -529,14 +551,27 @@ class RSCMixIn(ABC):
     ) -> list[ElevatedRole]: ...
 
     @abstractmethod
+    async def create_elevated_role(
+        self,
+        guild: discord.Guild,
+        member: discord.Member | discord.User | int,
+        executor: discord.Member | discord.User | int,
+        position: StaffPositions,
+    ) -> RSCMember: ...
+
+    @abstractmethod
+    async def delete_elevated_role(self, guild: discord.Guild, discord_id: int, role_id: int) -> None: ...
+
+    @abstractmethod
+    def invalidate_elevated_role_cache(self, guild: discord.Guild, discord_id: int | None = None) -> None: ...
+
+    @abstractmethod
     async def elevated_positions(self, guild: discord.Guild, discord_id: int) -> frozenset[str]: ...
 
     @abstractmethod
     async def league_elevated_roles(
         self,
         guild: discord.Guild,
-        agm: bool | None = None,
-        gm: bool | None = None,
         position: str | None = None,
         limit: int = 200,
     ) -> list[ElevatedRole]: ...

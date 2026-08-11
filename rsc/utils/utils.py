@@ -96,7 +96,8 @@ async def update_discord_name(member: discord.Member, name: str, prefix: str | N
 
 async def resize_image(img_data: bytes, height: int, width: int, imgtype: str):
     img = Image.open(io.BytesIO(img_data))
-    img.resize((height, width))
+    # Image.resize() returns a new image, it does not resize in place.
+    img = img.resize((width, height))
 
     log.debug(f"Image Mode: {img.mode}")
     if img.mode == "RGBA" and imgtype == "JPEG":
@@ -110,7 +111,9 @@ async def resize_image(img_data: bytes, height: int, width: int, imgtype: str):
 
 async def img_to_thumbnail(img_data: bytes, height: int, width: int, imgtype: str):
     img = Image.open(io.BytesIO(img_data))
-    img.thumbnail(size=(128, 128))
+    # Unlike resize(), thumbnail() is in place. It preserves aspect ratio and
+    # only ever shrinks, so the result fits within the box but may not fill it.
+    img.thumbnail(size=(width, height))
     with io.BytesIO() as buf:
         img.save(buf, format=imgtype)
         return buf.getvalue()
@@ -477,6 +480,11 @@ async def franchise_role_from_league_player(guild: discord.Guild, player: League
     """Return a franchise discord.Role from `LeaguePlayer` object"""
     if not (player.team and player.team.franchise):
         raise AttributeError(f"{player.player.name} LeaguePlayer object has no team or franchise data.")
+
+    # The franchise role name embeds the GM name, so a franchise between GMs has
+    # no role name to look up.
+    if not player.team.franchise.gm:
+        raise AttributeError(f"Franchise {player.team.franchise.name} has no GM. Unable to determine franchise role name.")
 
     rname = f"{player.team.franchise.name} ({player.team.franchise.gm.rsc_name})"
     r = discord.utils.get(guild.roles, name=rname)

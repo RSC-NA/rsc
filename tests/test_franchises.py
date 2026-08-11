@@ -683,3 +683,143 @@ class TestFranchiseLogoApi:
             with patch("rsc.franchises.franchises.FranchisesApi", return_value=mock_api):
                 with pytest.raises(RscException):
                     await mixin.franchise_logo(mock_guild, 1)
+
+
+# --- AGM management ---
+
+
+def _agm_member(discord_id):
+    a = MagicMock(spec=FranchiseGM)
+    a.discord_id = discord_id
+    return a
+
+
+def _franchise_with_agms(id, name, *agm_ids):
+    f = MagicMock(spec=FranchiseList)
+    f.id = id
+    f.name = name
+    f.agms = [_agm_member(i) for i in agm_ids]
+    return f
+
+
+class TestAddAgmApi:
+    async def test_posts_discord_ids_for_both_members(self, mock_guild, mock_member):
+        """Both members are addressed by discord ID, not database ID. Sending a
+        database ID would resolve to the wrong member or 404."""
+        f = MagicMock(spec=Franchise)
+        executor = MagicMock(spec=discord.Member)
+        executor.id = 222
+        mixin = _create_mixin(_api_conf={mock_guild.id: MagicMock()}, _league={mock_guild.id: 1})
+
+        with patch("rsc.abc.ApiClient") as mock_client:
+            mock_api = AsyncMock()
+            mock_api.franchises_add_agm_update.return_value = f
+            mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
+            mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
+            with patch("rsc.franchises.franchises.FranchisesApi", return_value=mock_api):
+                result = await mixin.add_agm(mock_guild, 7, agm=mock_member, executor=executor)
+
+        assert result is f
+        kwargs = mock_api.franchises_add_agm_update.await_args.kwargs
+        assert kwargs["id"] == 7
+        assert kwargs["franchise_agm_request"].to_dict() == {"agm": mock_member.id, "executor": 222}
+
+    async def test_accepts_raw_discord_ids(self, mock_guild):
+        mixin = _create_mixin(_api_conf={mock_guild.id: MagicMock()}, _league={mock_guild.id: 1})
+
+        with patch("rsc.abc.ApiClient") as mock_client:
+            mock_api = AsyncMock()
+            mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
+            mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
+            with patch("rsc.franchises.franchises.FranchisesApi", return_value=mock_api):
+                await mixin.add_agm(mock_guild, 7, agm=111, executor=222)
+
+        body = mock_api.franchises_add_agm_update.await_args.kwargs["franchise_agm_request"]
+        assert (body.agm, body.executor) == (111, 222)
+
+    async def test_raises_rsc_exception_on_api_error(self, mock_guild, mock_member):
+        mixin = _create_mixin(_api_conf={mock_guild.id: MagicMock()}, _league={mock_guild.id: 1})
+
+        with patch("rsc.abc.ApiClient") as mock_client:
+            mock_api = AsyncMock()
+            mock_api.franchises_add_agm_update.side_effect = ApiException(status=403, reason="Forbidden")
+            mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
+            mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
+            with patch("rsc.franchises.franchises.FranchisesApi", return_value=mock_api):
+                with pytest.raises(RscException):
+                    await mixin.add_agm(mock_guild, 7, agm=mock_member, executor=222)
+
+
+class TestRemoveAgmApi:
+    async def test_posts_discord_ids_for_both_members(self, mock_guild, mock_member):
+        f = MagicMock(spec=Franchise)
+        mixin = _create_mixin(_api_conf={mock_guild.id: MagicMock()}, _league={mock_guild.id: 1})
+
+        with patch("rsc.abc.ApiClient") as mock_client:
+            mock_api = AsyncMock()
+            mock_api.franchises_remove_agm_update.return_value = f
+            mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
+            mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
+            with patch("rsc.franchises.franchises.FranchisesApi", return_value=mock_api):
+                result = await mixin.remove_agm(mock_guild, 7, agm=mock_member, executor=222)
+
+        assert result is f
+        kwargs = mock_api.franchises_remove_agm_update.await_args.kwargs
+        assert kwargs["id"] == 7
+        assert kwargs["franchise_agm_request"].to_dict() == {"agm": mock_member.id, "executor": 222}
+
+    async def test_raises_rsc_exception_with_status_on_404(self, mock_guild, mock_member):
+        """`/admin agm remove` keys "already gone" off the 404 status, so it has
+        to survive the wrapper."""
+        mixin = _create_mixin(_api_conf={mock_guild.id: MagicMock()}, _league={mock_guild.id: 1})
+
+        with patch("rsc.abc.ApiClient") as mock_client:
+            mock_api = AsyncMock()
+            mock_api.franchises_remove_agm_update.side_effect = ApiException(status=404, reason="Not Found")
+            mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
+            mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
+            with patch("rsc.franchises.franchises.FranchisesApi", return_value=mock_api):
+                with pytest.raises(RscException) as exc:
+                    await mixin.remove_agm(mock_guild, 7, agm=mock_member, executor=222)
+
+        assert exc.value.status == 404
+
+
+class TestFranchisesAgmOf:
+    async def test_finds_every_franchise_listing_the_member(self, mock_guild):
+        """The API has no reverse lookup for franchise staff, so this is a scan
+        of the list endpoint's inline `agms`."""
+        mine = _franchise_with_agms(7, "The Ocean", 111, 222)
+        other = _franchise_with_agms(9, "The Desert", 222)
+        mixin = _create_mixin()
+        mixin.franchises = AsyncMock(return_value=[mine, other])
+
+        assert await mixin.franchises_agm_of(mock_guild, 111) == [mine]
+        assert await mixin.franchises_agm_of(mock_guild, 222) == [mine, other]
+
+    async def test_returns_empty_when_member_is_not_an_agm(self, mock_guild):
+        mixin = _create_mixin()
+        mixin.franchises = AsyncMock(return_value=[_franchise_with_agms(7, "The Ocean", 111)])
+
+        assert await mixin.franchises_agm_of(mock_guild, 999) == []
+
+    async def test_tolerates_null_agms(self, mock_guild):
+        """`agms` is Optional on the model even though the server sends []."""
+        f = MagicMock(spec=FranchiseList)
+        f.id = 7
+        f.name = "The Ocean"
+        f.agms = None
+        mixin = _create_mixin()
+        mixin.franchises = AsyncMock(return_value=[f])
+
+        assert await mixin.franchises_agm_of(mock_guild, 111) == []
+
+    async def test_uses_a_single_list_call(self, mock_guild):
+        """One request for the whole league. A detail fetch per franchise would
+        be ~30 round trips for one question."""
+        mixin = _create_mixin()
+        mixin.franchises = AsyncMock(return_value=[_franchise_with_agms(i, f"F{i}") for i in range(30)])
+
+        await mixin.franchises_agm_of(mock_guild, 111)
+
+        assert mixin.franchises.await_count == 1

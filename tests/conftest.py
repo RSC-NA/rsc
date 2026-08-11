@@ -24,8 +24,15 @@ sys.path.insert(0, str(project_root))
 
 GUILD_ID = 395806681994493964  # RSC 3v3
 NICKM_ID = 138778232802508801  # nickm discord ID
-STAGING_URL = "https://staging-api.rscna.com/api/v1/"
-# STAGING_URL = "http://127.0.0.1:8000/api/v1/"
+# Defaults to staging. Override to run against a local API instance, which is
+# how you test changes that have not been deployed to staging yet:
+#   RSC_TEST_API_URL=http://127.0.0.1:8000/api/v1 uv run pytest -m integration
+#
+# The trailing slash is stripped deliberately. The generated client joins paths
+# as `host + "/tiers/"`, so a host ending in "/" requests `/api/v1//tiers/`.
+# Staging redirects that away; Django's dev server answers 404, which surfaces
+# as every single integration test failing at once.
+STAGING_URL = os.getenv("RSC_TEST_API_URL", "https://staging-api.rscna.com/api/v1").rstrip("/")
 LEAGUE_ID = 1
 
 # Live API calls need far more headroom than the 10s default used by unit tests.

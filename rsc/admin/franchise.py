@@ -36,6 +36,7 @@ from rsc.views import LinkButton
 
 if TYPE_CHECKING:
     from rscapi.models.franchise import Franchise
+    from rscapi.models.franchise_gm import FranchiseGM
 
 logger = logging.getLogger("red.rsc.admin.franchise")
 log = GuildLogAdapter(logger)
@@ -464,6 +465,12 @@ class AdminFranchiseMixIn(AdminMixIn):
             )
 
         # Update franchise role
+        if not new_fdata.gm:
+            return await interaction.followup.send(
+                content=f"Franchise was rebranded but **{rebrand_modal.name}** has no GM. Franchise role must be renamed manually.",
+                ephemeral=True,
+            )
+
         await frole.edit(name=f"{rebrand_modal.name} ({new_fdata.gm.rsc_name})")
 
         # Update all prefix
@@ -569,7 +576,7 @@ class AdminFranchiseMixIn(AdminMixIn):
 
         # Edit GM
         gm = None
-        if fdata.gm.discord_id:
+        if fdata.gm and fdata.gm.discord_id:
             gm = guild.get_member(fdata.gm.discord_id)
         if gm:
             await gm.remove_roles(gm_role)
@@ -660,11 +667,20 @@ class AdminFranchiseMixIn(AdminMixIn):
             return
 
         # Create franchise role
+        if not f.gm:
+            await interaction.edit_original_response(
+                embed=ErrorEmbed(
+                    description=f"Franchise **{name}** was created but the API returned no GM. Franchise role was not created."
+                ),
+                view=None,
+            )
+            return
+
         frole_name = f"{name} ({f.gm.rsc_name})"
         existing_frole = discord.utils.get(guild.roles, name=frole_name)
         if not existing_frole:
             log.debug(f"Creating new franchise role: {frole_name}")
-            frole = await guild.create_role(name=f"{name} ({f.gm.rsc_name})", reason="New franchise created")
+            frole = await guild.create_role(name=frole_name, reason="New franchise created")
         else:
             log.debug("Franchise role already exists")
 
@@ -678,6 +694,51 @@ class AdminFranchiseMixIn(AdminMixIn):
         embed.add_field(name="Name", value=name, inline=True)
         embed.add_field(name="GM", value=gm.mention, inline=True)
         await interaction.edit_original_response(embed=embed, view=None)
+
+    async def _clear_former_agms(
+        self,
+        guild: discord.Guild,
+        agms: list["FranchiseGM"],
+        *,
+        agm_role: discord.Role,
+        tchannel: discord.TextChannel | None,
+        exclude: set[int],
+    ) -> tuple[list[discord.Member], list["FranchiseGM"]]:
+        """Strip Discord AGM state for members the API just removed.
+
+        `transfer_franchise` clears a franchise's AGMs server side -- an AGM is
+        the outgoing GM's appointee, and carrying them over would hand the
+        incoming GM a front office they did not pick. The API has no Discord
+        side effects at all now, so the bot owns the other half of that.
+
+        Mirrors `/admin agm remove`: the AGM role and the transaction channel
+        overwrite go, and nothing else. Franchise role and prefix are roster
+        state, which a transfer does not change -- an AGM who is also rostered
+        keeps both, and one who is not is left for the operator to look at.
+
+        Returns `(cleared, unresolved)`, where `unresolved` are entries that no
+        longer map to a guild member.
+        """
+        cleared: list[discord.Member] = []
+        unresolved: list[FranchiseGM] = []
+
+        for entry in agms:
+            if entry.discord_id in exclude:
+                continue
+
+            member = guild.get_member(entry.discord_id)
+            if not member:
+                log.warning(f"Former AGM {entry.discord_id} is no longer in the guild. Skipping.", guild=guild)
+                unresolved.append(entry)
+                continue
+
+            log.info(f"Clearing AGM discord state for {member.id} after franchise transfer", guild=guild)
+            await member.remove_roles(agm_role, reason="Franchise was transferred to a new GM")
+            if tchannel:
+                await tchannel.set_permissions(member, overwrite=None, reason="Franchise was transferred to a new GM")
+            cleared.append(member)
+
+        return cleared, unresolved
 
     @_franchise.command(name="transfer", description="Transfer ownership of a franchise")
     @app_commands.describe(franchise="Franchise name", gm="General Manager")
@@ -726,6 +787,10 @@ class AdminFranchiseMixIn(AdminMixIn):
                 embed=ErrorEmbed(description="API did not return a franchise ID attached to franchise data.")
             )
 
+        # Captured before the transfer: the API clears these server side, so the
+        # response can no longer tell us who they were.
+        former_agms = list(fdata.agms or [])
+
         try:
             log.debug(f"Transferring {franchise} to {gm.id}")
             f: Franchise = await self.transfer_franchise(guild, fdata.id, gm)
@@ -772,6 +837,10 @@ class AdminFranchiseMixIn(AdminMixIn):
 
         # Update franchise role to new GM
         log.debug("Updating Franchise Role")
+        if not f.gm:
+            msg = f"Franchise was transferred to {gm.mention} but the API returned no GM. Franchise role must be renamed manually."
+            return await interaction.edit_original_response(embed=ErrorEmbed(description=msg))
+
         await frole.edit(name=f"{f.name} ({f.gm.rsc_name})")
 
         # Remove old franchise role from new GM if it exist
@@ -823,10 +892,25 @@ class AdminFranchiseMixIn(AdminMixIn):
                     await old_gm.add_roles(old_gm_tierfa_role, reason="Removed from GM")
 
         tchannel = await self.get_franchise_transaction_channel(guild, franchise)
+
+        # The API dropped the franchise's AGMs as part of the transfer, so clear
+        # the matching discord state. The new GM is excluded: their AGM role is
+        # already handled above, and their channel overwrite is set below.
+        cleared_agms, unresolved_agms = await self._clear_former_agms(
+            guild,
+            former_agms,
+            agm_role=agm_role,
+            tchannel=tchannel,
+            exclude={gm.id},
+        )
+
         if not tchannel:
             return await interaction.followup.send(
                 embed=OrangeEmbed(
-                    description=f"**{franchise}** has been transferred to {gm.mention} but could not find transaction channel."
+                    description=(
+                        f"**{franchise}** has been transferred to {gm.mention} but could not find transaction channel. "
+                        "AGM roles were removed, but their channel permissions must be cleared manually."
+                    )
                 )
             )
 
@@ -847,7 +931,21 @@ class AdminFranchiseMixIn(AdminMixIn):
         if old_gm:
             await tchannel.set_permissions(old_gm, overwrite=None)
 
-        await interaction.edit_original_response(
-            embed=SuccessEmbed(description=f"**{franchise}** has been transferred to {gm.mention}"),
-            view=None,
-        )
+        embed = SuccessEmbed(description=f"**{franchise}** has been transferred to {gm.mention}")
+
+        # Surface the AGMs, since the incoming GM has to decide who to re-appoint
+        # and a non-playing former AGM may still be carrying a franchise prefix.
+        if cleared_agms:
+            embed.add_field(
+                name="AGMs Removed",
+                value="\n".join(f"- {m.mention}" for m in cleared_agms),
+                inline=False,
+            )
+        if unresolved_agms:
+            embed.add_field(
+                name="AGMs Removed (not in server)",
+                value="\n".join(f"- `{a.discord_id}` ({a.rsc_name or 'Unknown'})" for a in unresolved_agms),
+                inline=False,
+            )
+
+        await interaction.edit_original_response(embed=embed, view=None)

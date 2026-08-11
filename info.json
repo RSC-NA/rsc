@@ -1,12 +1,6 @@
 {
-    "author" : ["nickm"],
-    "description" : "Discord COG used to run and operate leagues related to RSC (Rocket Soccar Confederation)",
-    "short" : "RSC Discord Bot",
-    "requirements" : [
-        "rscapi",
-        "python-ballchasing"
-    ],
-    "permissions" : [],
-    "tags" : ["RSC"],
-    "min_python_version": [3, 11, 0]
+    "author": ["nickm"],
+    "description": "Red-DiscordBot cog repository for RSC (Rocket Soccar Confederation) league operations.",
+    "short": "RSC Discord Bot",
+    "install_msg": "Thanks for installing the RSC cog. Configure it with `/rsc key`, `/rsc url`, and `/rsc league` before use."
 }

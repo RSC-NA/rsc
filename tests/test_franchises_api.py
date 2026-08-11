@@ -29,6 +29,8 @@ class TestFranchisesApiContract:
         "franchises_rebrand_update",
         "franchises_transfer_franchise_update",
         "franchises_logo_retrieve",
+        "franchises_add_agm_update",
+        "franchises_remove_agm_update",
     ]
 
     @pytest.mark.parametrize("method_name", EXPECTED_METHODS)
@@ -202,6 +204,9 @@ class TestFranchisesApiDataStructures:
         assert hasattr(franchise, "name"), "Franchise should have 'name' attribute"
         assert hasattr(franchise, "prefix"), "Franchise should have 'prefix' attribute"
         assert hasattr(franchise, "gm"), "Franchise should have 'gm' attribute"
+        # The bot's only bulk source of AGMs now that they are FranchiseStaff.
+        assert hasattr(franchise, "agms"), "FranchiseList must carry agms inline"
+        assert isinstance(franchise.agms, list), f"agms should be a list, got {type(franchise.agms)}"
         print(f"✓ Franchise structure valid - ID: {franchise.id}, Name: {franchise.name}")
 
 

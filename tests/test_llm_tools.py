@@ -25,24 +25,22 @@ def fn_call(name: str, args: dict) -> SimpleNamespace:
     return SimpleNamespace(type="function_call", name=name, arguments=json.dumps(args), call_id="call_1")
 
 
-def franchise(id_: int, name: str, prefix: str, gm: str, tiers: tuple[str, ...] = ("Master",)) -> SimpleNamespace:
+def franchise(
+    id_: int,
+    name: str,
+    prefix: str,
+    gm: str | None,
+    tiers: tuple[str, ...] = ("Master",),
+    agms: tuple[str, ...] = (),
+) -> SimpleNamespace:
     return SimpleNamespace(
         id=id_,
         name=name,
         prefix=prefix,
-        gm=SimpleNamespace(rsc_name=gm, discord_id=1000 + id_),
+        gm=SimpleNamespace(rsc_name=gm, discord_id=1000 + id_) if gm else None,
+        agms=[SimpleNamespace(rsc_name=a, discord_id=2000 + i) for i, a in enumerate(agms)],
         tiers=[SimpleNamespace(name=tier) for tier in tiers],
         teams=[],
-    )
-
-
-def elevated(member: str, franchise_id: int) -> SimpleNamespace:
-    return SimpleNamespace(
-        member=SimpleNamespace(rsc_name=member),
-        franchise_id=franchise_id,
-        agm=True,
-        gm=False,
-        position=None,
     )
 
 
@@ -112,30 +110,44 @@ async def test_list_franchises_returns_every_franchise(ctx, cog):
 
 
 async def test_list_franchises_fetches_agms_in_a_single_call(ctx, cog):
-    """AGMs must cost one league-wide sweep, not one call per franchise.
+    """AGMs must cost no extra round trip.
 
-    `FranchiseList` has no `agms` field, so the naive implementation is a detail
-    fetch per franchise -- thirty round trips for one question.
+    `FranchiseList` carries `agms` inline and prefetched, so the franchise list
+    already answers this. Reaching for elevated roles would be both a second
+    call and the wrong source -- AGMs are FranchiseStaff now.
     """
-    cog.franchises.return_value = [franchise(i, f"Franchise {i}", f"F{i}", f"GM{i}") for i in range(30)]
-    cog.league_elevated_roles.return_value = [elevated("Assistant0", 0), elevated("Assistant1", 1)]
+    cog.franchises.return_value = [
+        franchise(i, f"Franchise {i}", f"F{i}", f"GM{i}", agms=("Assistant0",) if i == 0 else ())
+        for i in range(30)
+    ]
 
     result = await list_franchises(ctx, include_agms=True)
 
-    assert cog.league_elevated_roles.await_count == 1
-    assert cog.league_elevated_roles.await_args.kwargs["agm"] is True
+    assert cog.franchises.await_count == 1
+    assert cog.league_elevated_roles.await_count == 0
     assert "Assistant0" in result
     # A franchise with no AGM must still render, rather than being dropped.
     assert "AGMs: none" in result
 
 
 async def test_list_franchises_omits_agms_when_not_asked(ctx, cog):
-    cog.franchises.return_value = [franchise(1, "One", "O", "GM1")]
+    cog.franchises.return_value = [franchise(1, "One", "O", "GM1", agms=("Assistant0",))]
 
     result = await list_franchises(ctx)
 
-    assert cog.league_elevated_roles.await_count == 0
     assert "AGMs" not in result
+    assert "Assistant0" not in result
+
+
+async def test_list_franchises_renders_franchise_without_a_gm(ctx, cog):
+    """`Franchise.gm` is nullable now -- a franchise between GMs must not crash
+    or vanish from the list."""
+    cog.franchises.return_value = [franchise(1, "One", "O", None)]
+
+    result = await list_franchises(ctx)
+
+    assert "GM: None" in result
+    assert "One" in result
 
 
 async def test_get_franchise_reports_missing_franchise(ctx, cog):

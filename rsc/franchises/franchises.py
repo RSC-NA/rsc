@@ -9,6 +9,7 @@ from redbot.core import app_commands
 from rscapi import FranchisesApi
 from rscapi.exceptions import ApiException, NotFoundException
 from rscapi.models.franchise import Franchise
+from rscapi.models.franchise_agm_request import FranchiseAGMRequest
 from rscapi.models.franchise_gm import FranchiseGM
 from rscapi.models.franchise_league import FranchiseLeague
 from rscapi.models.franchise_list import FranchiseList
@@ -283,6 +284,63 @@ class FranchiseMixIn(RSCMixIn):
                 return await api.franchises_transfer_franchise_update(id, data)
             except ApiException as exc:
                 raise RscException(response=exc)
+
+    async def add_agm(
+        self, guild: discord.Guild, id: int, agm: discord.Member | discord.User | int, executor: discord.Member | discord.User | int
+    ) -> Franchise:
+        """Add an AGM to a franchise.
+
+        Both members are addressed by discord ID, not database ID. `executor`
+        must hold the Admin elevated role in the franchise's league or the API
+        answers 403. Idempotent: re-adding an existing AGM is a no-op that still
+        returns 202 with the franchise.
+
+        Returns the refreshed `Franchise`, so callers do not need to re-fetch to
+        see the new `agms` list.
+        """
+        agm_id = agm if isinstance(agm, int) else agm.id
+        executor_id = executor if isinstance(executor, int) else executor.id
+
+        async with self.api_client(guild) as client:
+            api = FranchisesApi(client)
+            try:
+                data = FranchiseAGMRequest(agm=agm_id, executor=executor_id)
+                log.debug(f"Add AGM Params: franchise={id} {data}")
+                return await api.franchises_add_agm_update(id=id, franchise_agm_request=data)
+            except ApiException as exc:
+                raise RscException(response=exc)
+
+    async def remove_agm(
+        self, guild: discord.Guild, id: int, agm: discord.Member | discord.User | int, executor: discord.Member | discord.User | int
+    ) -> Franchise:
+        """Remove an AGM from a franchise.
+
+        Mirrors `add_agm`. Answers 404 if the member is not an AGM of this
+        franchise, so callers that treat "already gone" as success must check
+        `RscException.status`.
+        """
+        agm_id = agm if isinstance(agm, int) else agm.id
+        executor_id = executor if isinstance(executor, int) else executor.id
+
+        async with self.api_client(guild) as client:
+            api = FranchisesApi(client)
+            try:
+                data = FranchiseAGMRequest(agm=agm_id, executor=executor_id)
+                log.debug(f"Remove AGM Params: franchise={id} {data}")
+                return await api.franchises_remove_agm_update(id=id, franchise_agm_request=data)
+            except ApiException as exc:
+                raise RscException(response=exc)
+
+    async def franchises_agm_of(self, guild: discord.Guild, discord_id: int) -> list[FranchiseList]:
+        """Every franchise in this league that lists `discord_id` as an AGM.
+
+        The API has no reverse lookup for franchise staff, but `franchises_list`
+        returns `agms` inline and prefetched, so one request answers it. Used to
+        find records left behind when an AGM moves between franchises, and to
+        explain a removal that names the wrong franchise.
+        """
+        flist = await self.franchises(guild)
+        return [f for f in flist if any(a.discord_id == discord_id for a in (f.agms or []))]
 
     async def franchise_logo(self, guild: discord.Guild, id: int) -> str | None:
         host = await self._get_api_url(guild)

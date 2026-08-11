@@ -5,8 +5,9 @@ from redbot.core import app_commands
 
 from rsc.admin import AdminMixIn
 from rsc.admin.modals import AgmMessageModal
-from rsc.embeds import BlueEmbed, ErrorEmbed
+from rsc.embeds import ApiExceptionErrorEmbed, BlueEmbed, ErrorEmbed
 from rsc.enums import Status
+from rsc.exceptions import RscException
 from rsc.franchises import FranchiseMixIn
 from rsc.logs import GuildLogAdapter
 from rsc.utils import utils
@@ -85,6 +86,9 @@ class AdminAGMMixIn(AdminMixIn):
         if not fdata:
             return await interaction.followup.send(embed=ErrorEmbed(description=f"Unable to find franchise **{franchise}**"))
 
+        if not fdata.id:
+            return await interaction.followup.send(embed=ErrorEmbed(description=f"API did not return an ID for franchise **{franchise}**"))
+
         # Get AGM role
         agm_role = await utils.get_agm_role(guild)
         league_role = await utils.get_league_role(guild)
@@ -94,6 +98,34 @@ class AdminAGMMixIn(AdminMixIn):
 
         if not (agm_role and league_role and new_franchise_role):
             return await interaction.followup.send(embed=ErrorEmbed(description="Unable to find AGM role, league role, or franchise role."))
+
+        # Sync the API before touching Discord. Everything above this point is
+        # read only, so a failure here leaves the member untouched and the
+        # operator can simply rerun the command.
+        try:
+            memberships = await self.franchises_agm_of(guild, agm.id)
+        except RscException as exc:
+            return await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc), ephemeral=True)
+
+        already_agm = any(f.id == fdata.id for f in memberships)
+        stale = [f for f in memberships if f.id != fdata.id]
+
+        try:
+            # An AGM moving between franchises stays on the old franchise's
+            # staff. This command already swaps the franchise role below, so
+            # drop the record too rather than leaving them an AGM of two.
+            for f in stale:
+                if f.id is None:
+                    log.warning(f"Franchise {f.name} has no ID. Skipping stale AGM removal for {agm.id}.", guild=guild)
+                    continue
+                log.info(f"Removing stale AGM record for {agm.id} on franchise {f.name} ({f.id})", guild=guild)
+                await self.remove_agm(guild, f.id, agm=agm, executor=interaction.user)
+
+            # add_agm is idempotent, so calling it unconditionally costs nothing
+            # and repairs a state where Discord and the API had drifted apart.
+            await self.add_agm(guild, fdata.id, agm=agm, executor=interaction.user)
+        except RscException as exc:
+            return await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc), ephemeral=True)
 
         # Remove old franchise role (Edge case for when transactions hasn't opened yet)
         if old_franchise_role:
@@ -145,6 +177,15 @@ class AdminAGMMixIn(AdminMixIn):
         embed.add_field(name="Franchise", value=franchise, inline=False)
         embed.add_field(name="Transaction Channel", value=tchannel.mention, inline=False)
 
+        if already_agm:
+            embed.add_field(name="API Record", value="Already existed.", inline=False)
+        if stale:
+            embed.add_field(
+                name="Removed Stale API Records",
+                value="\n".join(f"- {f.name} (ID `{f.id}`)" for f in stale),
+                inline=False,
+            )
+
         await interaction.followup.send(embed=embed, ephemeral=True)
 
     @_agm.command(name="remove", description="Remove an Assistant GM from a franchise")
@@ -170,7 +211,50 @@ class AdminAGMMixIn(AdminMixIn):
         if not tchannel:
             return await interaction.followup.send(embed=ErrorEmbed(description=f"Unable to find transaction channel for **{franchise}**"))
 
-        # Add AGM role to player
+        # Get Franchise from API
+        fdata = await self.fetch_franchise(guild=guild, name=franchise)
+        if not fdata or not fdata.id:
+            return await interaction.followup.send(embed=ErrorEmbed(description=f"Unable to find franchise **{franchise}**"))
+
+        try:
+            memberships = await self.franchises_agm_of(guild, agm.id)
+        except RscException as exc:
+            return await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc), ephemeral=True)
+
+        matched = any(f.id == fdata.id for f in memberships)
+        mismatched = [f for f in memberships if f.id != fdata.id]
+
+        # Refuse to silently act on another franchise's record. Either the
+        # operator named the wrong franchise or the data has drifted, and both
+        # want a human to look before anything is destroyed. The scan above is
+        # what lets us say which franchise instead of surfacing a bare 404.
+        if mismatched and not matched:
+            names = ", ".join(f"**{f.name}**" for f in mismatched)
+            return await interaction.followup.send(
+                embed=ErrorEmbed(
+                    description=(
+                        f"{agm.mention} is not an AGM of **{franchise}** according to the API. "
+                        f"They are an AGM of: {names}. "
+                        "Rerun the command against the correct franchise."
+                    )
+                ),
+                ephemeral=True,
+            )
+
+        deleted = 0
+        if matched:
+            try:
+                await self.remove_agm(guild, fdata.id, agm=agm, executor=interaction.user)
+                deleted = 1
+            except RscException as exc:
+                # Already gone is the outcome we wanted. Anything else aborts
+                # before Discord is touched so the two stay consistent.
+                if exc.status == 404:
+                    log.warning(f"AGM record for {agm.id} on franchise {fdata.id} was already removed.", guild=guild)
+                else:
+                    return await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc), ephemeral=True)
+
+        # Remove AGM role from player
         await agm.remove_roles(agm_role)
 
         await tchannel.set_permissions(agm, overwrite=None, reason="Player was removed from AGM")
@@ -179,5 +263,9 @@ class AdminAGMMixIn(AdminMixIn):
 
         embed.add_field(name="Franchise", value=franchise, inline=False)
         embed.add_field(name="Transaction Channel", value=tchannel.mention, inline=False)
+        embed.add_field(name="API Records Removed", value=str(deleted), inline=False)
+
+        if not matched:
+            embed.set_footer(text="No API AGM record was found. Discord roles were cleaned up anyway.")
 
         await interaction.followup.send(embed=embed, ephemeral=True)

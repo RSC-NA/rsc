@@ -12,6 +12,7 @@ from rscapi.models.create_member_input import CreateMemberInput
 from rscapi.models.deleted import Deleted
 from rscapi.models.drop_a_player_from_a_league import DropAPlayerFromALeague
 from rscapi.models.elevated_role import ElevatedRole
+from rscapi.models.elevated_role_input import ElevatedRoleInput
 from rscapi.models.intent_to_play_request import IntentToPlayRequest
 from rscapi.models.league_player import LeaguePlayer
 from rscapi.models.league_player_patch import LeaguePlayerPatch
@@ -25,9 +26,11 @@ from rscapi.models.patched_member_name_change_request import PatchedMemberNameCh
 from rscapi.models.perm_fa_signup_details import PermFASignupDetails
 from rscapi.models.platform_enum import PlatformEnum
 from rscapi.models.player_season_stats import PlayerSeasonStats
+from rscapi.models.position_enum import PositionEnum
 from rscapi.models.referrer_enum import ReferrerEnum
 from rscapi.models.region_preference_enum import RegionPreferenceEnum
 from rscapi.models.signup_details_request import SignupDetailsRequest
+from rscapi.models.stats_type_enum import StatsTypeEnum
 
 from rsc.abc import RSCMixIn
 from rsc.embeds import (
@@ -947,12 +950,10 @@ class MemberMixIn(RSCMixIn):
 
         # The API returns display labels ("Numbers"), not codes ("NUMS"), so
         # normalize before handing these to any check keyed off StaffPositions.
-        # The API returns display labels ("Numbers"), not codes ("NUMS"), so
-        # normalize before handing these to any check keyed off StaffPositions.
         found: set[str] = set()
         for r in roles:
             if not r.position:
-                continue  # GM/AGM rows carry no staff position
+                continue  # Arbiter and project_role rows carry no staff position
             parsed = StaffPositions.parse(r.position)
             if parsed is None:
                 log.warning(f"Unrecognized elevated role position from API: {r.position!r}", guild=guild)
@@ -963,6 +964,29 @@ class MemberMixIn(RSCMixIn):
         log.debug(f"Fetched elevated roles for {discord_id}: {sorted(positions)}", guild=guild)
         gcache[discord_id] = (time.monotonic() + ELEVATED_ROLE_TTL, positions)
         return positions
+
+    def invalidate_elevated_role_cache(self, guild: discord.Guild, discord_id: int | None = None) -> None:
+        """Drop cached elevated positions after a mutation.
+
+        Without this, a staff position grant or revocation leaves a stale
+        permission answer for up to `ELEVATED_ROLE_TTL` seconds, and that
+        failure is silent.
+
+        AGM changes do not need it: AGMs are `FranchiseStaff` rows now and never
+        enter this cache at all.
+        """
+        # Lazily initialized: a mixin used standalone has not run MemberMixIn.__init__.
+        cache = getattr(self, "_elevated_role_cache", None)
+        if cache is None:
+            return
+
+        if discord_id is None:
+            cache.pop(guild.id, None)
+            return
+
+        gcache = cache.get(guild.id)
+        if gcache:
+            gcache.pop(discord_id, None)
 
     # API
 
@@ -1034,41 +1058,88 @@ class MemberMixIn(RSCMixIn):
     ) -> list[ElevatedRole]:
         """Elevated roles held by a member in this guild's league.
 
+        Staff positions only. GMs and AGMs are `FranchiseStaff` now and never
+        appear here: read them off `Franchise.gm` / `Franchise.agms` instead.
+
         Returns a bare list, not a paginated wrapper.
         """
         async with self.api_client(guild) as client:
             api = MembersApi(client)
             try:
                 return await api.members_elevated_roles_list(
-                    id=discord_id,
+                    member_id=discord_id,
                     league=self._league[guild.id],
                     position=position,
                 )
             except ApiException as exc:
                 raise RscException(exc)
 
+    async def create_elevated_role(
+        self,
+        guild: discord.Guild,
+        member: discord.Member | discord.User | int,
+        executor: discord.Member | discord.User | int,
+        position: StaffPositions,
+    ) -> Member:
+        """Attach a staff position to a member in this guild's league.
+
+        `position` is required: the API no longer accepts a position-less grant,
+        which is what GM/AGM rows used to be.
+        """
+        discord_id = member if isinstance(member, int) else member.id
+        executor_id = executor if isinstance(executor, int) else executor.id
+
+        data = ElevatedRoleInput(
+            league=self._league[guild.id],
+            position=PositionEnum(position.value),
+            executor=executor_id,
+        )
+
+        async with self.api_client(guild) as client:
+            api = MembersApi(client)
+            try:
+                log.debug(f"Creating elevated role for {discord_id}: {data}", guild=guild)
+                result = await api.members_elevated_roles_create(member_id=discord_id, elevated_role_input=data)
+            except ApiException as exc:
+                raise RscException(exc)
+
+        self.invalidate_elevated_role_cache(guild, discord_id)
+        return result
+
+    async def delete_elevated_role(self, guild: discord.Guild, discord_id: int, role_id: int) -> None:
+        """Delete one elevated role record.
+
+        Both IDs are passed by keyword on purpose. The generated parameter order
+        is `(id, member_id)`, which reads backwards and is easy to transpose.
+        """
+        async with self.api_client(guild) as client:
+            api = MembersApi(client)
+            try:
+                log.debug(f"Deleting elevated role {role_id} for {discord_id}", guild=guild)
+                await api.members_elevated_roles_destroy(member_id=discord_id, id=role_id)
+            except ApiException as exc:
+                raise RscException(exc)
+
+        self.invalidate_elevated_role_cache(guild, discord_id)
+
     async def league_elevated_roles(
         self,
         guild: discord.Guild,
-        agm: bool | None = None,
-        gm: bool | None = None,
         position: str | None = None,
         limit: int = 200,
     ) -> list[ElevatedRole]:
         """Every elevated role in this guild's league, in a single request.
 
         `member_elevated_roles` answers "what does this one person hold?". This
-        answers "who holds this across the league?", which is the only way to
-        get AGMs in bulk: `FranchiseList` has no `agms` field, so the
-        alternative is one `franchises_retrieve` per franchise. Join the result
-        on `ElevatedRole.franchise_id`.
+        answers "who holds this across the league?".
+
+        Staff positions only. For AGMs in bulk, list franchises and read their
+        `agms` field: see `FranchiseMixIn.franchises_agm_of`.
         """
         async with self.api_client(guild) as client:
             api = ElevatedRolesApi(client)
             try:
                 roles = await api.elevated_roles_list(
-                    agm=agm,
-                    gm=gm,
                     league=self._league[guild.id],
                     position=position,
                     limit=limit,
@@ -1170,10 +1241,15 @@ class MemberMixIn(RSCMixIn):
         async with self.api_client(guild) as client:
             api = MembersApi(client)
             try:
-                if postseason:
-                    return await api.members_postseason_stats_retrieve(player.id, self._league[guild.id], season=season)
-                else:
-                    return await api.members_stats_retrieve(player.id, self._league[guild.id], season=season)
+                # `members_postseason_stats_retrieve` is deprecated in favour of
+                # the `stats_type` discriminator on the regular stats endpoint.
+                stats_type = StatsTypeEnum.PST if postseason else StatsTypeEnum.REG
+                return await api.members_stats_retrieve(
+                    player.id,
+                    self._league[guild.id],
+                    season=season,
+                    stats_type=stats_type.value,
+                )
             except ApiException as exc:
                 raise RscException(response=exc)
 

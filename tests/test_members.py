@@ -4,7 +4,7 @@ import pytest
 from rscapi.exceptions import ApiException
 from rscapi.models.member import Member
 
-from rsc.enums import Platform, PlayerType, Referrer, RegionPreference
+from rsc.enums import Platform, PlayerType, Referrer, RegionPreference, StaffPositions
 from rsc.exceptions import RscException
 from rsc.members.members import MemberMixIn
 
@@ -275,13 +275,17 @@ class TestPlayerStatsApi:
 
         with patch("rsc.abc.ApiClient") as mock_client:
             mock_api = AsyncMock()
-            mock_api.members_postseason_stats_retrieve.return_value = stats
+            mock_api.members_stats_retrieve.return_value = stats
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
             with patch("rsc.members.members.MembersApi", return_value=mock_api):
                 result = await mixin.player_stats(mock_guild, player=mock_member, postseason=True)
 
         assert result is stats
+        # The dedicated postseason endpoint is deprecated; postseason is now a
+        # discriminator on the regular one.
+        mock_api.members_postseason_stats_retrieve.assert_not_awaited()
+        assert mock_api.members_stats_retrieve.await_args.kwargs["stats_type"] == "PST"
 
 
 # --- declare_intent API ---
@@ -477,3 +481,231 @@ class TestDropPlayerFromLeagueApi:
             with patch("rsc.members.members.MembersApi", return_value=mock_api):
                 with pytest.raises(RscException):
                     await mixin.drop_player_from_league(mock_guild, member=mock_member)
+
+
+# --- elevated role helpers ---
+
+
+def _elevated_role(*, id=1, position=None, franchise_id=None):
+    r = MagicMock()
+    r.id = id
+    r.position = position
+    r.franchise_id = franchise_id
+    return r
+
+
+class TestMemberElevatedRolesApi:
+    async def test_passes_member_id_and_filters(self, mock_guild):
+        """2.0.0 renamed the path param `id` -> `member_id`. Passing the old
+        name raises a pydantic ValidationError, not an ApiException, so it
+        escapes the wrapper's error handling entirely."""
+        roles = [_elevated_role(position="NUMS")]
+        mixin = _create_mixin(_api_conf={mock_guild.id: MagicMock()}, _league={mock_guild.id: 42})
+
+        with patch("rsc.abc.ApiClient") as mock_client:
+            mock_api = AsyncMock()
+            mock_api.members_elevated_roles_list.return_value = roles
+            mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
+            mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
+            with patch("rsc.members.members.MembersApi", return_value=mock_api):
+                result = await mixin.member_elevated_roles(mock_guild, 1234, position="NUMS")
+
+        assert result is roles
+        mock_api.members_elevated_roles_list.assert_awaited_once_with(member_id=1234, league=42, position="NUMS")
+
+    async def test_rejects_removed_agm_filter(self, mock_guild):
+        """`agm`/`gm` moved to FranchiseStaff and the query params are gone. The
+        server ignores unknown params and answers 200 with the *unfiltered*
+        list, so a leftover caller would silently get every staff row back.
+        Keeping the kwarg off the signature turns that into a TypeError here."""
+        mixin = _create_mixin(_api_conf={mock_guild.id: MagicMock()}, _league={mock_guild.id: 42})
+
+        with pytest.raises(TypeError):
+            await mixin.member_elevated_roles(mock_guild, 1234, agm=True)
+
+    async def test_raises_rsc_exception_on_api_error(self, mock_guild):
+        mixin = _create_mixin(_api_conf={mock_guild.id: MagicMock()}, _league={mock_guild.id: 42})
+
+        with patch("rsc.abc.ApiClient") as mock_client:
+            mock_api = AsyncMock()
+            mock_api.members_elevated_roles_list.side_effect = ApiException(status=500, reason="Error")
+            mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
+            mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
+            with patch("rsc.members.members.MembersApi", return_value=mock_api):
+                with pytest.raises(RscException):
+                    await mixin.member_elevated_roles(mock_guild, 1234)
+
+
+class TestCreateElevatedRoleApi:
+    async def test_creates_staff_position(self, mock_guild, mock_member, mock_executor):
+        """`position` is required now: the API dropped the position-less grant
+        that GM/AGM rows used to be."""
+        created = MagicMock(spec=Member)
+        mixin = _create_mixin(
+            _api_conf={mock_guild.id: MagicMock()},
+            _league={mock_guild.id: 1},
+            _elevated_role_cache={},
+        )
+
+        with patch("rsc.abc.ApiClient") as mock_client:
+            mock_api = AsyncMock()
+            mock_api.members_elevated_roles_create.return_value = created
+            mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
+            mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
+            with patch("rsc.members.members.MembersApi", return_value=mock_api):
+                result = await mixin.create_elevated_role(
+                    mock_guild, member=mock_member, executor=mock_executor, position=StaffPositions.NUMBERS
+                )
+
+        assert result is created
+        kwargs = mock_api.members_elevated_roles_create.await_args.kwargs
+        assert kwargs["member_id"] == mock_member.id
+        assert kwargs["elevated_role_input"].to_dict() == {
+            "league": 1,
+            "position": "NUMS",
+            "executor": mock_executor.id,
+        }
+
+    async def test_rejects_removed_agm_arguments(self, mock_guild, mock_member, mock_executor):
+        """Pydantic silently discards unknown kwargs on the input model, so an
+        `agm=True` left behind would post a bare staff grant instead of failing."""
+        mixin = _create_mixin(_league={mock_guild.id: 1})
+
+        with pytest.raises(TypeError):
+            await mixin.create_elevated_role(
+                mock_guild, member=mock_member, executor=mock_executor, position=StaffPositions.NUMBERS, agm=True
+            )
+
+    async def test_sends_position_code_when_provided(self, mock_guild, mock_member, mock_executor):
+        mixin = _create_mixin(
+            _api_conf={mock_guild.id: MagicMock()},
+            _league={mock_guild.id: 1},
+            _elevated_role_cache={},
+        )
+
+        with patch("rsc.abc.ApiClient") as mock_client:
+            mock_api = AsyncMock()
+            mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
+            mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
+            with patch("rsc.members.members.MembersApi", return_value=mock_api):
+                await mixin.create_elevated_role(
+                    mock_guild, member=mock_member, executor=mock_executor, position=StaffPositions.NUMBERS
+                )
+
+        body = mock_api.members_elevated_roles_create.await_args.kwargs["elevated_role_input"].to_dict()
+        assert body["position"] == "NUMS"
+
+    async def test_accepts_raw_discord_ids(self, mock_guild):
+        mixin = _create_mixin(
+            _api_conf={mock_guild.id: MagicMock()},
+            _league={mock_guild.id: 1},
+            _elevated_role_cache={},
+        )
+
+        with patch("rsc.abc.ApiClient") as mock_client:
+            mock_api = AsyncMock()
+            mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
+            mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
+            with patch("rsc.members.members.MembersApi", return_value=mock_api):
+                await mixin.create_elevated_role(mock_guild, member=111, executor=222, position=StaffPositions.NUMBERS)
+
+        kwargs = mock_api.members_elevated_roles_create.await_args.kwargs
+        assert kwargs["member_id"] == 111
+        assert kwargs["elevated_role_input"].executor == 222
+
+    async def test_invalidates_elevated_role_cache(self, mock_guild, mock_member, mock_executor):
+        cache = {mock_guild.id: {mock_member.id: (9e9, frozenset({"NUMS"})), 999: (9e9, frozenset())}}
+        mixin = _create_mixin(
+            _api_conf={mock_guild.id: MagicMock()},
+            _league={mock_guild.id: 1},
+            _elevated_role_cache=cache,
+        )
+
+        with patch("rsc.abc.ApiClient") as mock_client:
+            mock_api = AsyncMock()
+            mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
+            mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
+            with patch("rsc.members.members.MembersApi", return_value=mock_api):
+                await mixin.create_elevated_role(
+                    mock_guild, member=mock_member, executor=mock_executor, position=StaffPositions.NUMBERS
+                )
+
+        assert mock_member.id not in cache[mock_guild.id]
+        assert 999 in cache[mock_guild.id]
+
+    async def test_raises_rsc_exception_on_api_error(self, mock_guild, mock_member, mock_executor):
+        mixin = _create_mixin(
+            _api_conf={mock_guild.id: MagicMock()},
+            _league={mock_guild.id: 1},
+            _elevated_role_cache={},
+        )
+
+        with patch("rsc.abc.ApiClient") as mock_client:
+            mock_api = AsyncMock()
+            mock_api.members_elevated_roles_create.side_effect = ApiException(status=403, reason="Forbidden")
+            mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
+            mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
+            with patch("rsc.members.members.MembersApi", return_value=mock_api):
+                with pytest.raises(RscException):
+                    await mixin.create_elevated_role(
+                    mock_guild, member=mock_member, executor=mock_executor, position=StaffPositions.NUMBERS
+                )
+
+
+class TestDeleteElevatedRoleApi:
+    async def test_passes_member_and_role_ids_separately(self, mock_guild):
+        """The generated parameter order is (id, member_id), which reads
+        backwards. Transposing them hits /members/<role_id>/elevated_roles/<discord_id>/,
+        which the server answers with a 404 or a 500 rather than an error the
+        bot can explain."""
+        mixin = _create_mixin(_api_conf={mock_guild.id: MagicMock()}, _elevated_role_cache={})
+
+        with patch("rsc.abc.ApiClient") as mock_client:
+            mock_api = AsyncMock()
+            mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
+            mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
+            with patch("rsc.members.members.MembersApi", return_value=mock_api):
+                await mixin.delete_elevated_role(mock_guild, discord_id=138778232802508801, role_id=9)
+
+        mock_api.members_elevated_roles_destroy.assert_awaited_once_with(member_id=138778232802508801, id=9)
+
+    async def test_invalidates_elevated_role_cache(self, mock_guild):
+        cache = {mock_guild.id: {555: (9e9, frozenset({"NUMS"}))}}
+        mixin = _create_mixin(_api_conf={mock_guild.id: MagicMock()}, _elevated_role_cache=cache)
+
+        with patch("rsc.abc.ApiClient") as mock_client:
+            mock_api = AsyncMock()
+            mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
+            mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
+            with patch("rsc.members.members.MembersApi", return_value=mock_api):
+                await mixin.delete_elevated_role(mock_guild, discord_id=555, role_id=9)
+
+        assert 555 not in cache[mock_guild.id]
+
+    async def test_raises_rsc_exception_on_api_error(self, mock_guild):
+        mixin = _create_mixin(_api_conf={mock_guild.id: MagicMock()}, _elevated_role_cache={})
+
+        with patch("rsc.abc.ApiClient") as mock_client:
+            mock_api = AsyncMock()
+            mock_api.members_elevated_roles_destroy.side_effect = ApiException(status=404, reason="Not Found")
+            mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
+            mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
+            with patch("rsc.members.members.MembersApi", return_value=mock_api):
+                with pytest.raises(RscException):
+                    await mixin.delete_elevated_role(mock_guild, discord_id=555, role_id=9)
+
+
+class TestInvalidateElevatedRoleCache:
+    def test_no_op_when_cache_absent(self, mock_guild):
+        """Mixins built by tests and MockBot never ran __init__."""
+        mixin = _create_mixin()
+        mixin.invalidate_elevated_role_cache(mock_guild, 1234)
+
+    def test_clears_whole_guild_when_no_member_given(self, mock_guild):
+        cache = {mock_guild.id: {1: (9e9, frozenset())}, 999: {2: (9e9, frozenset())}}
+        mixin = _create_mixin(_elevated_role_cache=cache)
+
+        mixin.invalidate_elevated_role_cache(mock_guild)
+
+        assert mock_guild.id not in cache
+        assert 999 in cache

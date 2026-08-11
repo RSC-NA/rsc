@@ -26,6 +26,7 @@ from rscapi.models.trade_item import TradeItem
 from rscapi.models.trade_object import TradeObject
 from rscapi.models.trade_player import TradePlayer
 from rscapi.models.trade_transaction import TradeTransaction
+from rscapi.models.transaction_franchise import TransactionFranchise
 from rscapi.models.transaction_response import TransactionResponse
 
 from rsc.abc import RSCMixIn
@@ -92,6 +93,17 @@ defaults = TransactionSettings(
 # Noon - Eastern (-5) - Not DST aware
 # Have to use UTC for loop. TZ aware object causes issues with clock drift calculations
 SUB_LOOP_TIME = time(hour=17)
+
+
+def gm_discord_id(franchise: TransactionFranchise | None) -> int | None:
+    """Discord ID of a franchise's GM, or `None` if it has neither.
+
+    GMs are `FranchiseStaff` rows now and a franchise between GMs simply has
+    none, so every read of `franchise.gm` has to tolerate a null.
+    """
+    if not (franchise and franchise.gm):
+        return None
+    return franchise.gm.discord_id
 
 
 class TransactionMixIn(RSCMixIn):
@@ -284,7 +296,8 @@ class TransactionMixIn(RSCMixIn):
             return
 
         fname = player_before_retire.team.franchise.name or "**Unknown Franchise**"
-        gm_id = player_before_retire.team.franchise.gm.discord_id or 0  # Has to be a better solution
+        retire_gm = player_before_retire.team.franchise.gm
+        gm_id = (retire_gm.discord_id if retire_gm else None) or 0  # Has to be a better solution
 
         match player_before_retire.status:
             case Status.ROSTERED | Status.IR | Status.AGMIR | Status.RENEWED:
@@ -750,7 +763,7 @@ class TransactionMixIn(RSCMixIn):
                 embed=embed,
                 files=files,
                 player=player,
-                gm=result.first_franchise.gm.discord_id,
+                gm=gm_discord_id(result.first_franchise),
             )
         elif not override:
             await interaction.followup.send(
@@ -856,7 +869,7 @@ class TransactionMixIn(RSCMixIn):
                 embed=embed,
                 files=files,
                 player=player,
-                gm=result.second_franchise.gm.discord_id,
+                gm=gm_discord_id(result.second_franchise),
             )
         else:
             await interaction.followup.send(
@@ -1047,7 +1060,8 @@ class TransactionMixIn(RSCMixIn):
                 )
             )
 
-        if not result.second_franchise.gm.discord_id:
+        sub_gm_id = gm_discord_id(result.second_franchise)
+        if not sub_gm_id:
             return await interaction.followup.send(
                 embed=ErrorEmbed(
                     description="Substitution was processed but no second franchise data has no GM. **Announcement was not sent.**"
@@ -1069,7 +1083,7 @@ class TransactionMixIn(RSCMixIn):
             embed=embed,
             files=files,
             player=player_in,
-            gm=result.second_franchise.gm.discord_id,
+            gm=sub_gm_id,
         )
 
         # Save sub for expiration later
@@ -1079,7 +1093,7 @@ class TransactionMixIn(RSCMixIn):
             player_in=player_in.id,
             player_out=player_out.id,
             team=ptu_in.new_team.name,
-            gm=result.second_franchise.gm.discord_id,
+            gm=sub_gm_id,
             tier=ptu_in.new_team.tier,
             franchise=result.second_franchise.name,
         )
@@ -1617,13 +1631,14 @@ class TransactionMixIn(RSCMixIn):
             )
 
         if announce:
-            if result.first_franchise and result.first_franchise.gm.discord_id:
+            ir_gm_id = gm_discord_id(result.first_franchise)
+            if ir_gm_id:
                 await self.announce_transaction(
                     guild=guild,
                     embed=embed,
                     files=files,
                     player=player,
-                    gm=result.first_franchise.gm.discord_id,
+                    gm=ir_gm_id,
                 )
             else:
                 await interaction.followup.send(
@@ -2244,7 +2259,7 @@ class TransactionMixIn(RSCMixIn):
                 author_fmt = f"{ptu_in.player.player.name} has been released by {ptu_in.old_team.name} ({tier})"
 
                 franchise = response.first_franchise.name
-                gm_id = response.first_franchise.gm.discord_id
+                gm_id = gm_discord_id(response.first_franchise)
 
                 embed.set_footer(text=f"Discord ID: {player_in.id}")
             case TransactionType.PICKUP:
@@ -2257,7 +2272,7 @@ class TransactionMixIn(RSCMixIn):
                 author_fmt = f"{ptu_in.player.player.name} has been signed by {ptu_in.new_team.name} ({tier})"
 
                 franchise = response.second_franchise.name
-                gm_id = response.second_franchise.gm.discord_id
+                gm_id = gm_discord_id(response.second_franchise)
                 embed.set_footer(text=f"Discord ID: {player_in.id}")
             case TransactionType.RESIGN:
                 if not (ptu_in.new_team and response.second_franchise and response.second_franchise.id):
@@ -2269,7 +2284,7 @@ class TransactionMixIn(RSCMixIn):
                 author_fmt = f"{ptu_in.player.player.name} has been re-signed by {ptu_in.new_team.name} ({tier})"
 
                 franchise = response.second_franchise.name
-                gm_id = response.second_franchise.gm.discord_id
+                gm_id = gm_discord_id(response.second_franchise)
                 embed.set_footer(text=f"Discord ID: {player_in.id}")
             case TransactionType.TEMP_FA | TransactionType.SUBSTITUTION:
                 if not (ptu_in.new_team and response.second_franchise and response.second_franchise.id):
@@ -2292,7 +2307,7 @@ class TransactionMixIn(RSCMixIn):
 
                 if response.first_franchise:
                     franchise = response.first_franchise.name
-                    gm_id = response.first_franchise.gm.discord_id
+                    gm_id = gm_discord_id(response.first_franchise)
 
             case TransactionType.INACTIVE_RESERVE:
                 if not (ptu_in.old_team and response.first_franchise and response.first_franchise.id):
@@ -2306,7 +2321,7 @@ class TransactionMixIn(RSCMixIn):
                 author_fmt = f"{pname} has been moved to Inactive Reserve by {pteam} ({tier})"
 
                 franchise = response.first_franchise.name
-                gm_id = response.first_franchise.gm.discord_id
+                gm_id = gm_discord_id(response.first_franchise)
                 embed.set_footer(text=f"Discord ID: {player_in.id}")
             case TransactionType.IR_RETURN:
                 if not (ptu_in.old_team and response.first_franchise and response.first_franchise.id):
@@ -2320,7 +2335,7 @@ class TransactionMixIn(RSCMixIn):
                 author_fmt = f"{pname} has been removed from Inactive Reserve by {pteam} ({tier})"
 
                 franchise = response.first_franchise.name
-                gm_id = response.first_franchise.gm.discord_id
+                gm_id = gm_discord_id(response.first_franchise)
                 embed.set_footer(text=f"Discord ID: {player_in.id}")
             case _:
                 raise NotImplementedError

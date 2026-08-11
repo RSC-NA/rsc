@@ -129,11 +129,8 @@ class AdminMembersMixIn(AdminMixIn):
                 f"- **Role ID:** {r.id}",
                 # Show the code too, since that is what permission checks match on
                 f"- **Position:** {r.position or 'None'} (`{parsed.value if parsed else '?'}`)",
-                f"- **GM:** {'Yes' if r.gm else 'No'}",
-                f"- **AGM:** {'Yes' if r.agm else 'No'}",
                 f"- **Arbiter:** {'Yes' if r.arbiter else 'No'}",
                 f"- **Project Role:** {r.project_role or 'None'}",
-                f"- **Franchise ID:** {r.franchise_id if r.franchise_id is not None else 'None'}",
             ]
             embed.add_field(name=name, value="\n".join(details), inline=True)
 
@@ -164,7 +161,7 @@ class AdminMembersMixIn(AdminMixIn):
         try:
             if tracker:
                 await self.add_tracker(guild, member, tracker)
-            mdata = await self.change_member_name(guild, id=member.id, name=name, override=override)
+            await self.change_member_name(guild, id=member.id, name=name, override=override)
         except RscException as exc:
             await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc), ephemeral=False)
             return
@@ -173,6 +170,10 @@ class AdminMembersMixIn(AdminMixIn):
         try:
             plist = await self.players(guild, discord_id=member.id, limit=1)
             tier_list = await self.tiers(guild)
+            # GMs are FranchiseStaff now, so the rename response no longer says
+            # whether this member is one. Ask the franchise endpoint once and
+            # reuse the answer for both the unsigned GM path and the role rename.
+            gm_of = await self.franchises(guild, gm_discord_id=member.id)
         except RscException as exc:
             return await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc), ephemeral=False)
 
@@ -186,7 +187,7 @@ class AdminMembersMixIn(AdminMixIn):
                 if lplayer.status == Status.UNSIGNED_GM:
                     # Need to pull franchise information for unsigned GMs
                     # Data not available in `LeaguePlayer`
-                    flist = await self.franchises(guild, gm_discord_id=member.id)
+                    flist = list(gm_of)
                     if len(flist) != 1:
                         return await interaction.followup.send(
                             embed=ErrorEmbed(
@@ -209,29 +210,27 @@ class AdminMembersMixIn(AdminMixIn):
             await interaction.followup.send(content=f"Unable to update nickname {member.mention}: {exc}")
 
         # Update franchise role if player is GM
-        if mdata.elevated_roles:
-            for elevated in mdata.elevated_roles:
-                if elevated.gm and elevated.league.id == self._league[guild.id]:
-                    frole = await utils.franchise_role_from_disord_member(member)
-                    if not frole:
-                        return await interaction.followup.send(
-                            embed=ErrorEmbed(
-                                description=(
-                                    f"Name change was successful but could not find {member.mention} franchise role. "
-                                    "Unable to update GM name in role, Please open a modmail ticket."
-                                )
-                            )
+        if gm_of:
+            frole = await utils.franchise_role_from_disord_member(member)
+            if not frole:
+                return await interaction.followup.send(
+                    embed=ErrorEmbed(
+                        description=(
+                            f"Name change was successful but could not find {member.mention} franchise role. "
+                            "Unable to update GM name in role, Please open a modmail ticket."
                         )
+                    )
+                )
 
-                    fsplit = frole.name.split("(", maxsplit=1)
-                    if len(fsplit) != 2:
-                        return await interaction.followup.send(
-                            embed=ErrorEmbed(description=f"Error updating franchise role {frole.mention}. Unable to parse name and GM.")
-                        )
+            fsplit = frole.name.split("(", maxsplit=1)
+            if len(fsplit) != 2:
+                return await interaction.followup.send(
+                    embed=ErrorEmbed(description=f"Error updating franchise role {frole.mention}. Unable to parse name and GM.")
+                )
 
-                    log.debug("Updating Franchise Role")
-                    fname = fsplit[0].strip()
-                    await frole.edit(name=f"{fname} ({name})")
+            log.debug("Updating Franchise Role")
+            fname = fsplit[0].strip()
+            await frole.edit(name=f"{fname} ({name})")
 
         await interaction.followup.send(embed=SuccessEmbed(description=f"Player RSC name has been updated to {member.mention}"))
 

@@ -208,7 +208,7 @@ class TestElevatedPositionsCache:
         assert mock_api.members_elevated_roles_list.await_count == 2
 
     async def test_drops_null_positions(self, mock_guild):
-        """GM/AGM rows carry position=None and must not blow up normalization."""
+        """Arbiter and project_role rows carry position=None and must not blow up normalization."""
         mixin = _create_mixin(_api_conf={mock_guild.id: MagicMock()}, _league={mock_guild.id: 1})
         good, bad = MagicMock(), MagicMock()
         good.position = "Numbers Head"
@@ -292,7 +292,7 @@ class TestElevatedPositionsCache:
             with patch("rsc.members.members.MembersApi", return_value=mock_api):
                 await mixin.elevated_positions(mock_guild, 1234)
 
-        mock_api.members_elevated_roles_list.assert_awaited_once_with(id=1234, league=42, position=None)
+        mock_api.members_elevated_roles_list.assert_awaited_once_with(member_id=1234, league=42, position=None)
 
     async def test_api_exception_becomes_rsc_exception(self, mock_guild):
         mixin = _create_mixin(_api_conf={mock_guild.id: MagicMock()}, _league={mock_guild.id: 1})

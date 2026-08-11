@@ -12,7 +12,7 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 from rsc.core import RSC
-from rsc.enums import Platform, PlayerType, Referrer, RegionPreference
+from rsc.enums import Platform, PlayerType, Referrer, RegionPreference, StaffPositions
 from rsc.exceptions import RscException
 from rscapi import MembersApi
 
@@ -41,6 +41,8 @@ class TestMembersApiContract:
         "members_make_player_create",
         "members_member_league_drop_create",
         "members_elevated_roles_list",
+        "members_elevated_roles_create",
+        "members_elevated_roles_destroy",
     ]
 
     @pytest.mark.parametrize("method_name", EXPECTED_METHODS)
@@ -71,7 +73,8 @@ class TestMembersApiCalls:
         for r in result:
             assert hasattr(r, "position"), "ElevatedRole should have 'position' attribute"
             assert hasattr(r, "league"), "ElevatedRole should have 'league' attribute"
-            assert hasattr(r, "gm"), "ElevatedRole should have 'gm' attribute"
+            assert not hasattr(r, "gm"), "GM moved to FranchiseStaff and must be gone from ElevatedRole"
+            assert not hasattr(r, "agm"), "AGM moved to FranchiseStaff and must be gone from ElevatedRole"
 
     @pytest.mark.asyncio
     async def test_every_api_position_resolves_to_enum(self, rsc_bot: RSC, mock_guild):
@@ -94,6 +97,60 @@ class TestMembersApiCalls:
 
         unresolved = sorted(p for p in seen if StaffPositions.parse(p) is None)
         assert not unresolved, f"API positions not resolvable by StaffPositions.parse: {unresolved}"
+
+    @pytest.mark.asyncio
+    async def test_agm_add_and_remove_round_trip(self, rsc_bot: RSC, mock_guild, generated_discord_member):
+        """Add, read back and remove an AGM against the real server.
+
+        Unit tests mock FranchisesApi, so they cannot catch a renamed kwarg or a
+        rejected body. This covers what only the wire proves: the franchise
+        endpoints accept discord IDs for both members, the response carries the
+        refreshed `agms`, and `franchises_list` really does return `agms` inline
+        (the bot's only bulk source for them now).
+        """
+        franchises = await rsc_bot.franchises(mock_guild)
+        if not franchises:
+            pytest.skip("No franchises on the API")
+        franchise_id = franchises[0].id
+
+        # The server checks the executor, not just the API key: a member with no
+        # ADM row gets "Executor cannot modify staff roles for this league."
+        admins = await rsc_bot.league_elevated_roles(mock_guild, position=StaffPositions.ADMIN.value)
+        executor_id = next((r.member.discord_id for r in admins if r.member and r.member.discord_id), None)
+        if not executor_id:
+            pytest.skip("No league admin on the API to act as executor")
+
+        await rsc_bot.create_member(guild=mock_guild, member=generated_discord_member, rsc_name=generated_discord_member.name)
+        try:
+            result = await rsc_bot.add_agm(mock_guild, franchise_id, agm=generated_discord_member, executor=executor_id)
+            agm_ids = [a.discord_id for a in (result.agms or [])]
+            assert generated_discord_member.id in agm_ids, f"add_agm response did not list the new AGM: {agm_ids}"
+            print(f"✓ added AGM to franchise {franchise_id}")
+
+            # The reverse lookup the bot relies on, straight off the list endpoint.
+            memberships = await rsc_bot.franchises_agm_of(mock_guild, generated_discord_member.id)
+            assert [f.id for f in memberships] == [franchise_id], f"Expected exactly one AGM franchise, got {memberships}"
+
+            await rsc_bot.remove_agm(mock_guild, franchise_id, agm=generated_discord_member, executor=executor_id)
+
+            remaining = await rsc_bot.franchises_agm_of(mock_guild, generated_discord_member.id)
+            assert remaining == [], f"AGM survived removal: {remaining}"
+            print("✓ removed AGM")
+        finally:
+            await rsc_bot.delete_member(guild=mock_guild, member=generated_discord_member)
+
+    @pytest.mark.asyncio
+    async def test_removing_a_non_agm_is_a_404(self, rsc_bot: RSC, mock_guild, mock_member):
+        """`/admin agm remove` treats 404 as "already gone". If the API ever
+        answered 200 instead, that branch would go untested and a real failure
+        would read as success."""
+        franchises = await rsc_bot.franchises(mock_guild)
+        if not franchises:
+            pytest.skip("No franchises on the API")
+
+        with pytest.raises(RscException) as exc:
+            await rsc_bot.remove_agm(mock_guild, franchises[0].id, agm=mock_member, executor=mock_member)
+        assert exc.value.status in (403, 404), f"Unexpected status for a non-AGM removal: {exc.value.status}"
 
     @pytest.mark.asyncio
     async def test_elevated_positions_api_call(self, rsc_bot: RSC, mock_guild, mock_member):

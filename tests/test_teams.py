@@ -3,6 +3,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import discord
 import pytest
 from rscapi.exceptions import ApiException, NotFoundException
+from rscapi.models.franchise_list import FranchiseList
 from rscapi.models.team import Team
 from rscapi.models.team_list import TeamList
 
@@ -38,6 +39,14 @@ def _make_team_list(id=1, name="Team Alpha", tier_name="Premier", tier_pos=1, fr
     t.franchise.gm = MagicMock()
     t.franchise.gm.discord_id = gm_discord_id
     return t
+
+
+def _make_franchise_list(id=10, name="Eagles", agm_discord_ids=()):
+    f = MagicMock(spec=FranchiseList)
+    f.id = id
+    f.name = name
+    f.agms = [MagicMock(discord_id=i) for i in agm_discord_ids]
+    return f
 
 
 def _make_league_player(discord_id=111, name="Player1", team_name="Team Alpha", tier_name="Premier", tier_pos=1, captain=False, status=Status.ROSTERED, sub_status=None, franchise_name="Eagles", franchise_id=10, gm_discord_id=999, gm_name="TestGM", tier_id=1):
@@ -334,10 +343,38 @@ class TestBuildFranchiseTeamsEmbed:
         t2 = _make_team_list(name="Team B", tier_name="Master", tier_pos=1)
         mixin = _create_mixin()
         mixin.franchise_logo = AsyncMock(return_value=None)
+        mixin.fetch_franchise = AsyncMock(return_value=_make_franchise_list())
 
         embed = await mixin.build_franchise_teams_embed(mock_guild, [t1, t2])
         assert isinstance(embed, discord.Embed)
         assert "Eagles" in embed.title
+
+    async def test_description_includes_gm_and_agms(self, mock_guild):
+        t = _make_team_list(gm_discord_id=999)
+        mixin = _create_mixin()
+        mixin.franchise_logo = AsyncMock(return_value=None)
+        mixin.fetch_franchise = AsyncMock(return_value=_make_franchise_list(agm_discord_ids=[111, 222]))
+
+        embed = await mixin.build_franchise_teams_embed(mock_guild, [t])
+        assert embed.description == "GM: <@!999>\nAGM: <@!111>, <@!222>"
+
+    async def test_description_omits_agm_line_when_franchise_has_none(self, mock_guild):
+        t = _make_team_list(gm_discord_id=999)
+        mixin = _create_mixin()
+        mixin.franchise_logo = AsyncMock(return_value=None)
+        mixin.fetch_franchise = AsyncMock(return_value=_make_franchise_list())
+
+        embed = await mixin.build_franchise_teams_embed(mock_guild, [t])
+        assert embed.description == "GM: <@!999>"
+
+    async def test_agm_lookup_failure_does_not_break_embed(self, mock_guild):
+        t = _make_team_list(gm_discord_id=999)
+        mixin = _create_mixin()
+        mixin.franchise_logo = AsyncMock(return_value=None)
+        mixin.fetch_franchise = AsyncMock(side_effect=RscException(response="boom"))
+
+        embed = await mixin.build_franchise_teams_embed(mock_guild, [t])
+        assert embed.description == "GM: <@!999>"
 
     async def test_raises_on_empty_teams(self, mock_guild):
         mixin = _create_mixin()

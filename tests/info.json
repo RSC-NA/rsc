@@ -1,0 +1,6 @@
+{
+    "description": "Test suite for the RSC cog. Not an installable cog -- disabled so Red's Downloader does not list or install it.",
+    "short": "RSC cog test suite",
+    "disabled": true,
+    "hidden": true
+}

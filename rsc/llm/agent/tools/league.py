@@ -20,26 +20,17 @@ TIER_PARAM = {"type": "string", "description": "Tier name, e.g. Master, Elite, R
     cacheable=True,
 )
 async def list_franchises(ctx: AgentContext, include_agms: bool = False, tier: str | None = None) -> str:
+    # `FranchiseList` carries `agms` inline and prefetched, so AGMs cost no
+    # extra round trip.
     franchises = await ctx.cog.franchises(ctx.guild, tier_name=tier)
-
-    agms: dict[int, list[str]] = {}
-    if include_agms:
-        # One league-wide sweep. `FranchiseList` carries no `agms` field, so the
-        # alternative is a detail fetch per franchise -- ~30 round trips.
-        for role in await ctx.cog.league_elevated_roles(ctx.guild, agm=True):
-            if role.franchise_id is None:
-                continue
-            agms.setdefault(role.franchise_id, []).append(name_of(role.member))
 
     rows = []
     for franchise in franchises:
-        gm = name_of(franchise.gm) or "None"
+        gm = name_of(franchise.gm) if franchise.gm else None
         tiers = ",".join(name_of(t) for t in (franchise.tiers or []))
-        row = f"{franchise.prefix} | {franchise.name} | GM: {gm}"
+        row = f"{franchise.prefix} | {franchise.name} | GM: {gm or 'None'}"
         if include_agms:
-            # `franchise.id or -1` would be wrong: id 0 is falsy and would miss
-            # its own AGMs.
-            assistants = ", ".join(sorted(agms.get(franchise.id, []))) if franchise.id is not None else []
+            assistants = ", ".join(sorted(name_of(a) for a in (franchise.agms or [])))
             row = f"{row} | AGMs: {assistants or 'none'}"
         rows.append(f"{row} | tiers: {tiers}")
 

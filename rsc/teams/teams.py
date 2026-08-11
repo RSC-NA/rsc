@@ -358,7 +358,7 @@ class TeamMixIn(RSCMixIn):
         frole = await utils.franchise_role_from_name(guild, captains[0].team.franchise.name)
 
         gm = None
-        if captains[0].team.franchise.gm.discord_id:
+        if captains[0].team.franchise.gm and captains[0].team.franchise.gm.discord_id:
             gm = guild.get_member(captains[0].team.franchise.gm.discord_id)
 
         embed = BlueEmbed(title=f"{franchise} Captains")
@@ -470,12 +470,25 @@ class TeamMixIn(RSCMixIn):
             if not t.tier.position:
                 raise AttributeError(f"`Team {t.id}` has no tier position. Please open a modmail ticket")
 
-        if teams[0].franchise and teams[0].franchise.gm:
-            gm_id = teams[0].franchise.gm.discord_id
+        gm_id = teams[0].franchise.gm.discord_id if teams[0].franchise.gm else None
+
+        # `TeamList` only carries the GM, so the franchise has to be fetched for
+        # the AGM list. A failure here should not cost the user the whole embed.
+        agm_ids: list[int] = []
+        try:
+            franchise = await self.fetch_franchise(guild, teams[0].franchise.name)
+            if franchise:
+                agm_ids = [a.discord_id for a in (franchise.agms or []) if a.discord_id]
+        except (RscException, ValueError) as exc:
+            log.warning(f"Unable to fetch AGMs for {teams[0].franchise.name}: {exc}", guild=guild)
 
         teams.sort(key=lambda t: cast("str", t.tier.position), reverse=True)
 
-        embed = BlueEmbed(description=f"GM: <@!{gm_id}>")
+        desc = f"GM: {f'<@!{gm_id}>' if gm_id else 'None'}"
+        if agm_ids:
+            desc += f"\nAGM: {', '.join(f'<@!{i}>' for i in agm_ids)}"
+
+        embed = BlueEmbed(description=desc)
         embed.title = f"{teams[0].franchise.name}"
         embed.add_field(
             name="Team",
@@ -508,8 +521,9 @@ class TeamMixIn(RSCMixIn):
         if not (players[0].tier and players[0].tier.name):
             raise AttributeError(f"{players[0].player.name} has no tier information.")
 
-        gm_id = players[0].team.franchise.gm.discord_id or "None"
-        gm_name = players[0].team.franchise.gm.rsc_name or "None"
+        franchise_gm = players[0].team.franchise.gm
+        gm_id = (franchise_gm.discord_id if franchise_gm else None) or "None"
+        gm_name = (franchise_gm.rsc_name if franchise_gm else None) or "None"
         franchise = players[0].team.franchise.name or "Error"
 
         roster = []

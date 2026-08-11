@@ -25,11 +25,23 @@ repos:
       - id: ty
 
   - repo: https://github.com/astral-sh/uv-pre-commit
-    rev: 0.11.25
+    rev: 0.12.3
     hooks:
       # Keep uv.lock in sync with pyproject.toml
       - id: uv-lock
-      # Flag known CVEs in locked dependencies
-      - id: uv-audit
+      # uv-audit is intentionally not run here: Red-DiscordBot pins aiohttp, click,
+      # idna, markdown, orjson and pygments with `==`, so the audit can never pass.
+      # Run `uv audit` by hand to re-check whether Red has relaxed those pins.
+      #
       # Re-sync the venv after checkout/pull/rebase
       - id: uv-sync
+      # Mirror uv.lock into requirements.txt as a backup install source
+      - id: uv-export
+        name: uv-export (runtime)
+        alias: uv-export
+        args: ["--frozen", "--no-dev", "--output-file=requirements.txt", "--quiet"]
+      # Same, but including the dev dependency group
+      - id: uv-export
+        name: uv-export (dev)
+        alias: uv-export-dev
+        args: ["--frozen", "--output-file=requirements-dev.txt", "--quiet"]
