@@ -46,8 +46,10 @@ class MassTrophyModal(discord.ui.Modal, title="Mass Accolade Assignment"):
 
         self.interaction = interaction
 
-        # Defer for processing
-        await interaction.response.defer(ephemeral=True)
+        # Defer for processing. `thinking=True` is required: without it a modal
+        # submit is acknowledged with a message *update*, which creates no
+        # message for the caller to edit progress into.
+        await interaction.response.defer(ephemeral=True, thinking=True)
 
     async def get_members(self, guild: discord.Guild) -> tuple[list[discord.Member], list[str]]:
         """Resolve the submitted Discord IDs to guild members.
