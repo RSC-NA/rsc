@@ -56,10 +56,19 @@ class DeveloperMixIn(RSCMixIn):
             return
 
         async with aiofiles.open(log_file, mode="rb") as fd:
-            await fd.seek((-1 * BUFMAX), os.SEEK_END)
+            # A freshly rotated log can be shorter than BUFMAX, so clamp the
+            # offset instead of seeking to a negative absolute position.
+            size = await fd.seek(0, os.SEEK_END)
+            await fd.seek(max(0, size - BUFMAX))
             data = await fd.read(BUFMAX)
 
-        await interaction.response.send_message(content=f"```\n{data.decode('utf-8')}\n```", ephemeral=True)
+        if not data:
+            await interaction.response.send_message(embed=ErrorEmbed(description=f"Log file is empty: {log_file}"), ephemeral=True)
+            return
+
+        # The offset can land mid-character, so don't let a partial UTF-8
+        # sequence at the head of the buffer blow up the whole command.
+        await interaction.response.send_message(content=f"```\n{data.decode('utf-8', errors='replace')}\n```", ephemeral=True)
 
     # Functions
 
