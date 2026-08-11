@@ -4,7 +4,7 @@ from redbot.core import app_commands
 
 from rsc.abc import RSCMixIn
 from rsc import const
-from rsc.embeds import ErrorEmbed, ExceptionErrorEmbed
+from rsc.embeds import BetterEmbed, ErrorEmbed, ExceptionErrorEmbed, SuccessEmbed, YellowEmbed
 from rsc.types import Accolades
 from rsc.logs import GuildLogAdapter
 from rsc.utils import utils
@@ -12,6 +12,9 @@ from rsc.utils.views.mass_trophy import MassTrophyModal
 
 logger = logging.getLogger("red.rsc.trophy")
 log = GuildLogAdapter(logger)
+
+# How often to refresh the progress embed during a mass assignment
+PROGRESS_INTERVAL = 10
 
 
 class TrophyMixIn(RSCMixIn):
@@ -115,18 +118,37 @@ class TrophyMixIn(RSCMixIn):
         if not guild:
             return
 
+        # Validate up front. Doing this inside the loop would abort a batch
+        # halfway through after some members were already updated.
+        if trophy not in (const.TROPHY_EMOJI, const.STAR_EMOJI, const.DEV_LEAGUE_EMOJI, const.COMBINE_CUP_EMOJI):
+            return await interaction.response.send_message(embed=ErrorEmbed(description="Invalid trophy type."), ephemeral=True)
+
         # Show modal to collect trophy type and discord IDs
         trophy_modal = MassTrophyModal()
         await interaction.response.send_modal(trophy_modal)
-        await trophy_modal.wait()
+        if await trophy_modal.wait():
+            log.debug("Mass trophy modal timed out", guild=guild)
+            return
         trophy_modal.stop()
 
         try:
-            members = await trophy_modal.get_members(guild)
+            members, errors = await trophy_modal.get_members(guild)
         except ValueError as exc:
-            return await interaction.followup.send(embed=ExceptionErrorEmbed(exc_message=str(exc)))
+            return await interaction.followup.send(embed=ExceptionErrorEmbed(exc_message=str(exc)), ephemeral=True)
 
-        for member in members:
+        # The modal deferred its own response. Report against it so the caller
+        # isn't left staring at a "thinking" spinner for the whole run.
+        modal_interaction = trophy_modal.interaction
+
+        total = len(members)
+        status = YellowEmbed(title="Processing", description=f"Applying {trophy!s} to {total} member(s). This may take a moment...")
+        if modal_interaction:
+            await modal_interaction.edit_original_response(embed=status)
+        else:
+            await interaction.followup.send(embed=status, ephemeral=True)
+
+        applied = 0
+        for idx, member in enumerate(members, start=1):
             accolades = await utils.member_accolades(member)
 
             match trophy:
@@ -138,16 +160,47 @@ class TrophyMixIn(RSCMixIn):
                     accolades.devleague += 1
                 case const.COMBINE_CUP_EMOJI:
                     accolades.combine_cup += 1
-                case _:
-                    return await interaction.followup.send(embed=ErrorEmbed("Invalid trophy type."))
 
+            # A failure on one member must not abandon the rest of the batch.
             try:
                 new_nick = await self.format_nickname(member, accolades)
                 await member.edit(nick=new_nick)
-            except ValueError as e:
-                return await interaction.followup.send(embed=ExceptionErrorEmbed(exc_message=str(e)))
+                applied += 1
+            except ValueError as exc:
+                errors.append(f"{member.mention}: {exc}")
+            except discord.Forbidden:
+                errors.append(f"{member.mention}: Missing permission to change nickname (role hierarchy or server owner)")
+            except discord.HTTPException as exc:
+                log.warning(f"Error updating nickname for {member.id}: {exc}", guild=guild)
+                errors.append(f"{member.mention}: Discord API error ({exc.text or exc.status})")
 
-        return await interaction.followup.send(f"Added {trophy!s} for {len(members)} players.", ephemeral=True)
+            if modal_interaction and idx % PROGRESS_INTERVAL == 0 and idx != total:
+                await modal_interaction.edit_original_response(
+                    embed=YellowEmbed(
+                        title="Processing",
+                        description=f"Applying {trophy!s}... {idx}/{total} processed ({len(errors)} error(s))",
+                    )
+                )
+
+        summary = f"Added {trophy!s} for **{applied}/{total}** member(s)."
+        result: BetterEmbed = (
+            SuccessEmbed(title="Mass Trophy Applied", description=summary)
+            if applied
+            else ErrorEmbed(title="Mass Trophy Failed", description=summary)
+        )
+        if errors:
+            # The full list goes to the log. A long batch can produce more
+            # errors than an embed can hold, so say so rather than truncating
+            # quietly.
+            error_text = "\n".join(errors)
+            log.warning(f"Mass trophy finished with {len(errors)} error(s):\n{error_text}", guild=guild)
+            leftover = result.add_long_field(name=f"Errors ({len(errors)})", value=error_text)
+            if leftover:
+                result.set_footer(text="Some errors were too long to display. See the bot logs for the full list.")
+
+        if modal_interaction:
+            return await modal_interaction.edit_original_response(embed=result)
+        return await interaction.followup.send(embed=result, ephemeral=True)
 
     # Helper Functions
 

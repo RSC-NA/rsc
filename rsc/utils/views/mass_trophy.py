@@ -1,5 +1,10 @@
+import logging
+
 import discord
+
 from rsc import const
+
+log = logging.getLogger("red.rsc.utils.views")
 
 TROPHY_OPTIONS = [
     discord.SelectOption(label=f"Trophy {const.TROPHY_EMOJI}", value=const.TROPHY_EMOJI, description="Add a championship trophy"),
@@ -8,6 +13,10 @@ TROPHY_OPTIONS = [
         label=f"Dev League {const.DEV_LEAGUE_EMOJI}", value=const.DEV_LEAGUE_EMOJI, description="Add a dev league championship trophy"
     ),
 ]
+
+# A mass assignment can run for a while. Give the operator plenty of time to
+# paste a list, but don't wait forever if they dismiss the modal.
+MODAL_TIMEOUT = 600.0
 
 
 class MassTrophyModal(discord.ui.Modal, title="Mass Accolade Assignment"):
@@ -20,6 +29,12 @@ class MassTrophyModal(discord.ui.Modal, title="Mass Accolade Assignment"):
         required=True,
     )
 
+    def __init__(self, timeout: float | None = MODAL_TIMEOUT):
+        super().__init__(timeout=timeout)
+        # Submit interaction, stored so the caller can report progress against
+        # the response deferred below instead of leaving it spinning forever.
+        self.interaction: discord.Interaction | None = None
+
     async def on_submit(self, interaction: discord.Interaction):
         """When the modal is submitted, store the trophy count and stop the view"""
 
@@ -29,25 +44,56 @@ class MassTrophyModal(discord.ui.Modal, title="Mass Accolade Assignment"):
         if not self.member_input.value:
             raise ValueError("Please fill in all fields.")
 
+        self.interaction = interaction
+
         # Defer for processing
         await interaction.response.defer(ephemeral=True)
 
-    async def get_members(self, guild: discord.Guild) -> list[discord.Member]:
-        """Parse the member input into a list of Discord IDs"""
+    async def get_members(self, guild: discord.Guild) -> tuple[list[discord.Member], list[str]]:
+        """Resolve the submitted Discord IDs to guild members.
 
-        members = []
+        Unresolvable lines are collected and returned instead of raised so that
+        one bad ID does not discard the rest of the batch.
+
+        Returns:
+            A tuple of (resolved members, error messages).
+
+        Raises:
+            ValueError: No Discord IDs were submitted at all.
+        """
+
+        members: list[discord.Member] = []
+        errors: list[str] = []
+
         for line in self.member_input.value.splitlines():
             discord_id = line.strip()
+            if not discord_id:
+                continue
+
             if not discord_id.isdigit():
-                raise ValueError(f"Discord ID is not a number: {discord_id.strip()}")
+                errors.append(f"Not a valid Discord ID: `{discord_id}`")
+                continue
 
             member = guild.get_member(int(discord_id))
-            if not member:
-                raise ValueError(f"Member not found for Discord ID: {discord_id.strip()}")
+            if member:
+                members.append(member)
+                continue
+
+            # `get_member()` only reads the cache. Fall back to the API so an
+            # uncached member isn't mistaken for one who isn't in the guild.
+            try:
+                member = await guild.fetch_member(int(discord_id))
+            except discord.NotFound:
+                errors.append(f"Member not found in guild: `{discord_id}`")
+                continue
+            except discord.HTTPException as exc:
+                log.warning(f"Error fetching member {discord_id}: {exc}")
+                errors.append(f"Error fetching member `{discord_id}`: {exc.text or exc.status}")
+                continue
 
             members.append(member)
 
-        if not members:
-            raise ValueError("No valid members found.")
+        if not members and not errors:
+            raise ValueError("No Discord IDs were submitted.")
 
-        return members
+        return members, errors
