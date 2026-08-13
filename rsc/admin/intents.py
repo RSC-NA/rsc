@@ -1,4 +1,3 @@
-import asyncio
 import logging
 from datetime import UTC, datetime
 
@@ -8,7 +7,7 @@ from rscapi.models.season import Season
 
 from rsc.admin import AdminMixIn
 from rsc.admin.modals import IntentMissingModal
-from rsc.admin.views import IntentDMConfirmView, build_intent_dm_view
+from rsc.admin.views import DMConfirmView, build_intent_dm_view
 from rsc.embeds import (
     ApiExceptionErrorEmbed,
     BlueEmbed,
@@ -23,16 +22,6 @@ from rsc.logs import GuildLogAdapter
 
 logger = logging.getLogger("red.rsc.admin.intents")
 log = GuildLogAdapter(logger)
-
-# Ceiling on individual member fetches after chunking. Chunking should resolve
-# almost everyone, so exceeding this means something is wrong and we would rather
-# report it than serialize hundreds of HTTP calls inside a slash command.
-MEMBER_FETCH_LIMIT = 25
-
-# `guild.chunk()` awaits a gateway reply with no timeout of its own, so a dropped
-# websocket or resuming shard would hang this command until the interaction token
-# expires. Bound it and fall through to the capped per-member fetch instead.
-CHUNK_TIMEOUT = 30.0
 
 
 class AdminIntentsMixIn(AdminMixIn):
@@ -370,71 +359,18 @@ class AdminIntentsMixIn(AdminMixIn):
         return embed
 
     async def _resolve_missing_members(self, guild: discord.Guild, season_id: int) -> tuple[list[discord.Member], list[int], list[int]]:
-        """Split missing intents into DM-able members, players who left, and lookup failures.
-
-        `get_member` is a free cache read but returns None on a cold or partial
-        member cache, which would silently drop players who should be DMed. The
-        `fetch_member` fallback only costs HTTP on an actual miss, and its
-        NotFound cleanly means "left the guild".
-        """
+        """Split missing intents into DM-able members, players who left, and lookup failures."""
         intents = await self.player_intents(guild, season_id=season_id, missing=True)
 
-        # A cold cache misses for everyone, which would turn the fallback below into
-        # one serialized HTTP call per player. Chunking is a single gateway operation
-        # that populates the whole cache, so the fallback only handles stragglers.
-        if not guild.chunked:
-            log.debug("Member cache is not chunked. Chunking before resolving intents.", guild=guild)
-            try:
-                await asyncio.wait_for(guild.chunk(), timeout=CHUNK_TIMEOUT)
-            except TimeoutError:
-                log.warning(f"Chunking timed out after {CHUNK_TIMEOUT}s. Falling back to individual fetches.", guild=guild)
-            except discord.ClientException as exc:
-                log.warning(f"Unable to chunk guild members: {exc}", guild=guild)
-
-        to_dm: list[discord.Member] = []
-        left_guild: list[int] = []
-        lookup_failed: list[int] = []
-        fetched = 0
-        overflow = 0
-
+        ids: list[int] = []
         for i in intents:
             if not (i.player and i.player.player):
                 continue
-
             pid = i.player.player.discord_id
-            if not pid:
-                continue
+            if pid:
+                ids.append(pid)
 
-            member = guild.get_member(pid)
-            if member:
-                to_dm.append(member)
-                continue
-
-            # Bound the per-player HTTP fallback. Anything past the cap is reported
-            # as a lookup failure rather than silently dropped.
-            if fetched >= MEMBER_FETCH_LIMIT:
-                overflow += 1
-                lookup_failed.append(pid)
-                continue
-
-            fetched += 1
-            try:
-                to_dm.append(await guild.fetch_member(pid))
-            except discord.NotFound:
-                left_guild.append(pid)
-            except discord.HTTPException as exc:
-                log.warning(f"Unable to fetch member {pid}: {exc}", guild=guild)
-                lookup_failed.append(pid)
-
-        # Only warn when the cap actually cost us something. Hitting it exactly,
-        # with nothing left over, degraded nothing.
-        if overflow:
-            log.warning(
-                f"Hit the member fetch limit ({MEMBER_FETCH_LIMIT}). {overflow} cache miss(es) reported as lookup failures.",
-                guild=guild,
-            )
-
-        return to_dm, left_guild, lookup_failed
+        return await self._resolve_members_by_id(guild, ids)
 
     async def _dm_single_player(
         self,
@@ -596,7 +532,7 @@ class AdminIntentsMixIn(AdminMixIn):
             inline=False,
         )
 
-        confirm_view = IntentDMConfirmView(interaction, confirm_embed)
+        confirm_view = DMConfirmView(interaction, confirm_embed, loading_title="Queueing Intent DMs")
         await confirm_view.prompt()
         await confirm_view.wait()
 

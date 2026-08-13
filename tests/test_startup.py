@@ -11,6 +11,7 @@ from aiohttp import (
     ServerTimeoutError,
 )
 
+from rsc.admin.views import ActivityCheckDMButton, IntentDMButton
 from rsc.core import RSC
 from rsc.tiers.tiers import TierMixIn
 
@@ -305,7 +306,9 @@ class TestSetupIsolation:
         await cog.setup()
 
         assert prepared == [1, 3]
-        bot.add_dynamic_items.assert_called_once()
+        # Both DM button templates must register, or clicks on those DMs die
+        # silently after a restart.
+        bot.add_dynamic_items.assert_called_once_with(IntentDMButton, ActivityCheckDMButton)
 
     async def test_prepares_guilds_concurrently(self):
         """Startup latency should be the slowest guild, not the sum."""

@@ -1,11 +1,13 @@
 import logging
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 import discord
 from redbot.core import app_commands
+from rscapi.models.activity_check import ActivityCheck
 
 from rsc.admin import AdminMixIn
-from rsc.admin.views import InactiveCheckView
+from rsc.admin.views import DMConfirmView, InactiveCheckView, build_activity_check_dm_view
 from rsc.embeds import (
     ApiExceptionErrorEmbed,
     BlueEmbed,
@@ -289,6 +291,30 @@ class AdminInactivityMixIn(AdminMixIn):
             ephemeral=True,
         )
 
+    async def _fetch_missing_activity_checks(self, guild: discord.Guild, season_id: int) -> list[ActivityCheck]:
+        """Fetch the players who still owe an activity check this season.
+
+        `missing=True` alone is not the outstanding set. The API auto-creates an
+        ActivityCheck record for every active league player in the current
+        season, and that record keeps `missing=True` after the player completes
+        it - it only gains `completed=True`. Filtering on `missing` by itself
+        therefore matches the whole active roster. `completed=False` is what
+        narrows it to who has actually not responded.
+
+        Every caller must go through here so `populate`, `ping`, and `dm` cannot
+        drift apart again.
+        """
+        checks = await self.season_activity_checks(
+            guild,
+            season_id=season_id,
+            completed=False,
+            missing=True,
+            limit=10000,
+        )
+        # Belt and braces. Records carry both flags, so a regression in the
+        # server side filter cannot silently re-widen the set.
+        return [c for c in checks if not c.completed]
+
     async def _populate_activity_check_role(
         self, guild: discord.Guild, missing_role: discord.Role
     ) -> tuple[list[discord.Member], list[discord.Member], int]:
@@ -303,13 +329,7 @@ class AdminInactivityMixIn(AdminMixIn):
             return [], [], 0
 
         # Fetch all missing activity checks for the current season
-        missing_checks = await self.season_activity_checks(
-            guild,
-            season_id=season.id,
-            completed=False,
-            missing=True,
-            limit=10000,
-        )
+        missing_checks = await self._fetch_missing_activity_checks(guild, season.id)
         log.debug("Found %d missing activity checks for season %s", len(missing_checks), season.number)
 
         # Build set of discord IDs that should have the role
@@ -461,28 +481,35 @@ class AdminInactivityMixIn(AdminMixIn):
             ephemeral=True,
         )
 
-    def _build_activity_check_dm_embed(
-        self,
-        guild: discord.Guild,
-        msg_id: int,
-        custom_message: str | None = None,
-    ) -> discord.Embed:
-        """Build the DM embed for the activity check reminder."""
+    async def _build_activity_check_dm_embed(self, guild: discord.Guild, msg_id: int) -> discord.Embed:
+        """Build the DM embed for the activity check reminder.
+
+        The buttons are the way to respond. The channel link is only a fallback
+        for clients that fail to render the components, so it is demoted to
+        subtext rather than presented as the call to action.
+        """
         inactive_channel = discord.utils.get(guild.channels, name="inactivity-check")
         jump_url = None
         if inactive_channel:
             jump_url = f"https://discord.com/channels/{guild.id}/{inactive_channel.id}/{msg_id}"
 
-        default_msg = (
-            "You have **not** completed your activity check. Please do this as soon as possible "
-            "or you will be **unable to play** in the upcoming season."
+        body = (
+            f"You have **not** completed your activity check for **{guild.name}**.\n\n"
+            "**Use the buttons below** to tell us whether you still want to play in the upcoming "
+            "season. You will be **unable to play** until you respond.\n\n"
+            "**I'm active** \N{EM DASH} I want to play this season\n"
+            "**Withdraw** \N{EM DASH} I do not want to play this season"
         )
+
         if jump_url:
-            default_msg += f"\n\n**[Click here to complete your activity check]({jump_url})**"
+            body += f"\n\n-# Buttons not working? [Respond in the server instead]({jump_url})"
+
+        modmail_id = await self._get_modmail_bot(guild)
+        body += f"\n-# Need help? Message <@{modmail_id}> to open a ticket."
 
         embed = YellowEmbed(
             title="Activity Check Reminder",
-            description=custom_message or default_msg,
+            description=body,
         )
         if guild.icon:
             embed.set_thumbnail(url=guild.icon.url)
@@ -490,11 +517,9 @@ class AdminInactivityMixIn(AdminMixIn):
         return embed
 
     @_inactive.command(name="testmsg", description="Preview the activity check DM by sending it to yourself")
-    @app_commands.describe(message="Custom message to include in the DM (optional)")
     async def _admin_inactive_check_testmsg_cmd(
         self,
         interaction: discord.Interaction,
-        message: str | None = None,
     ):
         guild = interaction.guild
         if not guild or not isinstance(interaction.user, discord.Member):
@@ -507,27 +532,54 @@ class AdminInactivityMixIn(AdminMixIn):
                 ephemeral=True,
             )
 
-        embed = self._build_activity_check_dm_embed(guild, msg_id, custom_message=message)
+        await interaction.response.defer(ephemeral=True)
+
+        season = await self.current_season(guild)
+        if not (season and season.number):
+            return await interaction.followup.send(
+                embed=ErrorEmbed(description="Unable to determine the current season."),
+                ephemeral=True,
+            )
+
+        embed = await self._build_activity_check_dm_embed(guild, msg_id)
 
         try:
-            await interaction.user.send(embed=embed)
+            # Preview must match what players receive, buttons included.
+            await interaction.user.send(embed=embed, view=build_activity_check_dm_view(guild.id, season.number))
         except discord.Forbidden:
-            return await interaction.response.send_message(
+            return await interaction.followup.send(
                 embed=ErrorEmbed(description="Unable to DM you. Check your DM settings."),
                 ephemeral=True,
             )
 
-        await interaction.response.send_message(
+        await interaction.followup.send(
             embed=GreenEmbed(description="Test DM sent. Check your direct messages."),
             ephemeral=True,
         )
 
+    def _still_missing_activity_check(self, guild: discord.Guild, season_id: int, member: discord.Member):
+        """Build a send-time check that the player still has not responded.
+
+        A batch takes minutes to drain, so a player may complete their check
+        between queueing and delivery. Cheaper than a redundant DM.
+        """
+
+        async def check() -> bool:
+            checks = await self.season_activity_checks(
+                guild,
+                season_id=season_id,
+                discord_id=member.id,
+                completed=False,
+                missing=True,
+            )
+            return any(not c.completed for c in checks)
+
+        return check
+
     @_inactive.command(name="dm", description="DM players who have not completed the activity check")
-    @app_commands.describe(message="Custom message to include in the DM (optional)")
     async def _admin_inactive_check_dm_cmd(
         self,
         interaction: discord.Interaction,
-        message: str | None = None,
     ):
         guild = interaction.guild
         if not guild:
@@ -545,24 +597,23 @@ class AdminInactivityMixIn(AdminMixIn):
 
         # Get current season
         season = await self.current_season(guild)
-        if not (season and season.id):
+        if not (season and season.id and season.number):
             return await interaction.followup.send(
                 embed=ErrorEmbed(description="Unable to determine the current season."),
                 ephemeral=True,
             )
 
-        # Fetch missing activity checks
+        # Fetch missing activity checks. Same helper `populate` uses, so the
+        # number quoted below always reconciles with what `populate` reports.
         try:
-            missing_checks = await self.season_activity_checks(
-                guild,
-                season_id=season.id,
-                missing=True,
-                limit=10000,
+            missing_checks = await self._fetch_missing_activity_checks(guild, season.id)
+            to_dm, left_guild, lookup_failed = await self._resolve_members_by_id(
+                guild, [c.discord_id for c in missing_checks if c.discord_id]
             )
         except RscException as exc:
             return await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc), ephemeral=True)
 
-        if not missing_checks:
+        if not (to_dm or left_guild or lookup_failed):
             return await interaction.followup.send(
                 embed=GreenEmbed(
                     title="Activity Check",
@@ -571,23 +622,74 @@ class AdminInactivityMixIn(AdminMixIn):
                 ephemeral=True,
             )
 
+        if not to_dm:
+            return await interaction.followup.send(
+                embed=YellowEmbed(
+                    title="Nobody To DM",
+                    description=(
+                        f"All **{len(left_guild) + len(lookup_failed)}** player(s) missing an activity check "
+                        "are unreachable. They have left the server or could not be looked up."
+                    ),
+                ),
+                ephemeral=True,
+            )
+
+        # Confirmation gate. Nothing is queued until Confirm is pressed.
+        desc = (
+            f"About to DM **{len(to_dm)}** player(s) who have not completed the activity check "
+            f"for **Season {season.number}**.\n\n"
+            f"Skipped (left the server): **{len(left_guild)}**\n"
+            f"Skipped (lookup failed): **{len(lookup_failed)}**"
+        )
+        last_season, last_run, last_executor = await self._get_activity_check_dm_last_run(guild)
+        if last_season == season.number and last_run:
+            # <t:...:F> renders in each admin's own timezone
+            by = f" by <@{last_executor}>" if last_executor else ""
+            desc += f"\n\n\N{WARNING SIGN} Activity check DMs were already sent for this season on <t:{last_run}:F>{by}."
+
+        confirm_embed = BlueEmbed(title="Confirm Activity Check DMs", description=desc)
+        # Show who, not just how many. Truncates to the embed field limit.
+        confirm_embed.add_field(
+            name="Recipients",
+            value=self._format_truncated_list([m.mention for m in to_dm]),
+            inline=False,
+        )
+
+        confirm_view = DMConfirmView(interaction, confirm_embed, loading_title="Queueing Activity Check DMs")
+        await confirm_view.prompt()
+        await confirm_view.wait()
+
+        if not confirm_view.result:
+            return
+
+        # Claim the run before queueing so a second admin confirming concurrently
+        # sees the warning rather than double DMing everyone.
+        await self._set_activity_check_dm_last_run(guild, season.number, int(datetime.now(UTC).timestamp()), interaction.user.id)
+        log.info(f"{interaction.user} queued activity check DMs for {len(to_dm)} player(s) in S{season.number}", guild=guild)
+
         # Build embed for the DM
-        dm_embed = self._build_activity_check_dm_embed(guild, msg_id, custom_message=message)
+        dm_embed = await self._build_activity_check_dm_embed(guild, msg_id)
 
         # Queue DMs via the shared rate-limited helper
         queued = 0
-        for check in missing_checks:
-            if not check.discord_id:
-                continue
-            member = guild.get_member(check.discord_id)
-            if not member:
-                continue
-            await self._dm_helper.enqueue(member, embed=dm_embed)
+        for member in to_dm:
+            # A fresh view per DM. `send()` stores the view against the message id,
+            # so a shared instance would have its cache key rewritten on every send.
+            await self._dm_helper.enqueue(
+                member,
+                embed=dm_embed,
+                view=build_activity_check_dm_view(guild.id, season.number),
+                precheck=self._still_missing_activity_check(guild, season.id, member),
+            )
             queued += 1
 
-        desc = f"**{queued}** DMs queued. Use `/admin dmstatus` to track progress."
+        result = f"**{queued}** DMs queued. Use `/admin dmstatus` to track progress, `/admin dmcancel` to abort."
+        if left_guild:
+            result += f"\n\nSkipped **{len(left_guild)}** player(s) who left the server."
+        if lookup_failed:
+            result += f"\nSkipped **{len(lookup_failed)}** player(s) that could not be looked up."
 
-        await interaction.followup.send(
-            embed=GreenEmbed(title="Activity Check DMs Queued", description=desc),
-            ephemeral=True,
+        await interaction.edit_original_response(
+            embed=GreenEmbed(title="Activity Check DMs Queued", description=result),
+            view=None,
         )

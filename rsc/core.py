@@ -26,7 +26,7 @@ from rsc.admin.members import AdminMembersMixIn
 # from rsc.admin.permfa import AdminPermFAMixIn
 from rsc.admin.stats import AdminStatsMixIn
 from rsc.admin.sync import AdminSyncMixIn
-from rsc.admin.views import IntentDMButton
+from rsc.admin.views import ActivityCheckDMButton, IntentDMButton
 from rsc.ballchasing import BallchasingMixIn
 from rsc.combines import CombineMixIn
 from rsc.developer import DeveloperMixIn
@@ -180,12 +180,12 @@ class RSC(
             # Start runners
             await self.start_webapp()
 
-            # Intent to Play DM buttons.
+            # Intent to Play and activity check DM buttons.
             #
             # Registered once globally, not per guild and not per message. The guild
             # and season live in the custom_id and are matched by regex, so buttons
             # from any season keep dispatching after a restart instead of dying.
-            self.bot.add_dynamic_items(IntentDMButton)
+            self.bot.add_dynamic_items(IntentDMButton, ActivityCheckDMButton)
 
             # Per guild setup.
             #

@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, cast
@@ -30,9 +31,22 @@ if TYPE_CHECKING:
 logger = logging.getLogger("red.rsc.admin")
 log = GuildLogAdapter(logger)
 
+# Ceiling on individual member fetches after chunking. Chunking should resolve
+# almost everyone, so exceeding this means something is wrong and we would rather
+# report it than serialize hundreds of HTTP calls inside a slash command.
+MEMBER_FETCH_LIMIT = 25
+
+# `guild.chunk()` awaits a gateway reply with no timeout of its own, so a dropped
+# websocket or resuming shard would hang this command until the interaction token
+# expires. Bound it and fall through to the capped per-member fetch instead.
+CHUNK_TIMEOUT = 30.0
+
 defaults_guild = AdminSettings(
     ActivityCheckMissingRole=None,
     ActivityCheckMsgId=None,
+    ActivityCheckDmLastSeason=None,
+    ActivityCheckDmLastRun=None,
+    ActivityCheckDmLastExecutor=None,
     AgmMessage=None,
     Dates=None,
     IntentChannel=None,
@@ -406,6 +420,78 @@ class AdminMixIn(RSCMixIn):
         """Season, unix timestamp, and executor of the last `/admin intents dm` run."""
         conf = self.config.custom("Admin", str(guild.id))
         return await conf.IntentDmLastSeason(), await conf.IntentDmLastRun(), await conf.IntentDmLastExecutor()
+
+    async def _set_activity_check_dm_last_run(self, guild: discord.Guild, season: int, timestamp: int, executor: int):
+        await self.config.custom("Admin", str(guild.id)).ActivityCheckDmLastSeason.set(season)
+        await self.config.custom("Admin", str(guild.id)).ActivityCheckDmLastRun.set(timestamp)
+        await self.config.custom("Admin", str(guild.id)).ActivityCheckDmLastExecutor.set(executor)
+
+    async def _get_activity_check_dm_last_run(self, guild: discord.Guild) -> tuple[int | None, int | None, int | None]:
+        """Season, unix timestamp, and executor of the last `/admin inactivecheck dm` run."""
+        conf = self.config.custom("Admin", str(guild.id))
+        return (
+            await conf.ActivityCheckDmLastSeason(),
+            await conf.ActivityCheckDmLastRun(),
+            await conf.ActivityCheckDmLastExecutor(),
+        )
+
+    async def _resolve_members_by_id(self, guild: discord.Guild, ids: list[int]) -> tuple[list[discord.Member], list[int], list[int]]:
+        """Split discord IDs into DM-able members, players who left, and lookup failures.
+
+        `get_member` is a free cache read but returns None on a cold or partial
+        member cache, which would silently drop players who should be DMed. The
+        `fetch_member` fallback only costs HTTP on an actual miss, and its
+        NotFound cleanly means "left the guild".
+        """
+        # A cold cache misses for everyone, which would turn the fallback below into
+        # one serialized HTTP call per player. Chunking is a single gateway operation
+        # that populates the whole cache, so the fallback only handles stragglers.
+        if not guild.chunked:
+            log.debug("Member cache is not chunked. Chunking before resolving members.", guild=guild)
+            try:
+                await asyncio.wait_for(guild.chunk(), timeout=CHUNK_TIMEOUT)
+            except TimeoutError:
+                log.warning(f"Chunking timed out after {CHUNK_TIMEOUT}s. Falling back to individual fetches.", guild=guild)
+            except discord.ClientException as exc:
+                log.warning(f"Unable to chunk guild members: {exc}", guild=guild)
+
+        found: list[discord.Member] = []
+        left_guild: list[int] = []
+        lookup_failed: list[int] = []
+        fetched = 0
+        overflow = 0
+
+        for pid in ids:
+            member = guild.get_member(pid)
+            if member:
+                found.append(member)
+                continue
+
+            # Bound the per-player HTTP fallback. Anything past the cap is reported
+            # as a lookup failure rather than silently dropped.
+            if fetched >= MEMBER_FETCH_LIMIT:
+                overflow += 1
+                lookup_failed.append(pid)
+                continue
+
+            fetched += 1
+            try:
+                found.append(await guild.fetch_member(pid))
+            except discord.NotFound:
+                left_guild.append(pid)
+            except discord.HTTPException as exc:
+                log.warning(f"Unable to fetch member {pid}: {exc}", guild=guild)
+                lookup_failed.append(pid)
+
+        # Only warn when the cap actually cost us something. Hitting it exactly,
+        # with nothing left over, degraded nothing.
+        if overflow:
+            log.warning(
+                f"Hit the member fetch limit ({MEMBER_FETCH_LIMIT}). {overflow} cache miss(es) reported as lookup failures.",
+                guild=guild,
+            )
+
+        return found, left_guild, lookup_failed
 
     async def _set_activity_check_missing_role(self, guild: discord.Guild, role_id: int | None):
         await self.config.custom("Admin", str(guild.id)).ActivityCheckMissingRole.set(role_id)

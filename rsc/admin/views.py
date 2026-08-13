@@ -35,6 +35,10 @@ if TYPE_CHECKING:
 
     from rsc.abc import RSCMixIn
 
+    # Activity check config accessors live on AdminMixIn, not the ABC. Type-only
+    # import: a runtime one would be circular via `rsc.admin`.
+    from rsc.admin.admin import AdminMixIn
+
 log = logging.getLogger("red.rsc.admin.views")
 
 
@@ -347,22 +351,254 @@ def build_intent_dm_view(guild_id: int, season: int) -> discord.ui.View:
     return view
 
 
-class IntentDMConfirmView(AuthorOnlyView):
-    """Confirmation gate shown before mass DMing players with missing intents.
+ACTIVITY_DM_TEMPLATE = r"activity_dm:(?P<guild>\d+):(?P<season>\d+):(?P<active>yes|no)"
+
+
+class ActivityCheckDMButton(discord.ui.DynamicItem[discord.ui.Button], template=ACTIVITY_DM_TEMPLATE):
+    """Complete the activity check directly from a DM button.
+
+    The same question `InactiveCheckView` asks in the channel, but that view
+    cannot be reused here: it is registered per message id via `add_view()`,
+    and DM message ids are never recorded. It also guards on
+    `isinstance(interaction.user, discord.Member)`, which is False in a DM, so
+    both of its handlers would silently no-op.
+
+    Registered once globally with `bot.add_dynamic_items()`. The guild and
+    season ride inside the custom_id, so a click resolves without persisting
+    anything per message, and buttons survive a restart.
+
+    The season in the custom_id does NOT decide whether the check is still
+    running - it only identifies which prompt was clicked. `ActivityCheckMsgId`
+    is the authority on that.
+    """
+
+    def __init__(self, guild_id: int, season: int, active: bool):
+        self.guild_id = guild_id
+        self.season = season
+        self.active = active
+        # Set once the API has accepted the submission, so the catch-all can tell
+        # "we never recorded it" apart from "recorded, but the reply failed".
+        self.submitted = False
+        super().__init__(
+            discord.ui.Button(
+                label="I'm active" if active else "Withdraw",
+                style=discord.ButtonStyle.green if active else discord.ButtonStyle.red,
+                custom_id=f"activity_dm:{guild_id}:{season}:{'yes' if active else 'no'}",
+            )
+        )
+
+    @classmethod
+    async def from_custom_id(
+        cls,
+        interaction: discord.Interaction,
+        item: discord.ui.Item[Any],
+        match: re.Match[str],
+        /,
+    ) -> "ActivityCheckDMButton":
+        # Parsing only. This runs inside the same 3 second budget as the callback
+        # and any exception raised here is logged then swallowed, which would
+        # leave the player staring at a dead button.
+        return cls(
+            guild_id=int(match["guild"]),
+            season=int(match["season"]),
+            active=match["active"] == "yes",
+        )
+
+    async def callback(self, interaction: discord.Interaction):
+        # Acknowledge before anything else. Every branch below hits the RSC API,
+        # which can easily exceed the 3 second initial response deadline.
+        await interaction.response.defer()
+
+        # discord.py swallows anything raised out of a dynamic item callback, and
+        # a type 6 deferral leaves the message untouched. Without this catch-all an
+        # escaping error looks to the player like a click that silently did nothing.
+        try:
+            await self._submit(interaction)
+        except Exception:
+            log.exception(f"[Activity DM] Unhandled error handling click from {interaction.user.id}")
+            with contextlib.suppress(discord.HTTPException):
+                await self._retry(interaction, self._late_error() if self.submitted else self._player_error())
+
+    async def _submit(self, interaction: discord.Interaction):
+        bot = cast("Red", interaction.client)
+        raw_cog = bot.get_cog(RSC_COG_NAME)
+        guild = bot.get_guild(self.guild_id)
+        if not (raw_cog and guild):
+            log.warning(f"[Activity DM] Unable to resolve guild {self.guild_id} or {RSC_COG_NAME} cog")
+            return await self._retry(interaction, self._player_error())
+
+        cog = cast("AdminMixIn", raw_cog)
+        # Reads config only, so it is safe before the API readiness check below
+        modmail = modmail_reference(await cog._get_modmail_bot(guild))
+
+        # The API wrappers index `_api_conf`/`_league` directly, so an unconfigured
+        # guild - or one clicked before `setup()` finished after a restart - would
+        # raise KeyError rather than RscException. Same guard as `rsc.decorator.apicall`.
+        if not (cog._api_conf.get(guild.id) and cog._league.get(guild.id)):
+            log.warning(f"[{guild.name}] [Activity DM] Guild is not configured for API access")
+            return await self._retry(interaction, self._player_error(modmail))
+
+        # An ended check clears the stored message id. That, not the season in the
+        # custom_id, is what says whether submissions are still accepted.
+        if not await cog._get_activity_check_msg_id(guild):
+            return await self._finish(
+                interaction,
+                OrangeEmbed(
+                    title="Activity Check Has Ended",
+                    description=(
+                        f"The activity check for **{guild.name}** has ended, so it can no longer be completed here.\n\n"
+                        f"If you still need to respond, please message {modmail} to open a ticket."
+                    ),
+                ),
+            )
+
+        try:
+            season = await cog.current_season(guild)
+        except RscException as exc:
+            log.warning(f"[{guild.name}] [Activity DM] Error fetching current season: {exc.reason}")
+            return await self._retry(interaction, self._player_error(modmail))
+
+        if not (season and season.id and season.number):
+            return await self._retry(interaction, self._player_error(modmail))
+
+        # The DM belongs to an older season than the one now running
+        if season.number != self.season:
+            return await self._finish(
+                interaction,
+                YellowEmbed(
+                    title="This Message Is Out Of Date",
+                    description=(
+                        f"This message asked about **Season {self.season}**, but the activity check is now running for "
+                        f"**Season {season.number}**.\n\n"
+                        f"Please complete the current activity check in **{guild.name}**."
+                    ),
+                ),
+            )
+
+        try:
+            result = await cog.activity_check(guild, interaction.user.id, returning_status=self.active)
+            self.submitted = True
+            log.debug(f"[{guild.name}] [Activity DM] Result for {interaction.user.id}: {result}")
+        except RscException as exc:
+            # This endpoint has no 409, so a duplicate submission cannot be told
+            # apart from a real failure by status code. Ask the API who is still
+            # missing instead of guessing: an empty result means they are already
+            # recorded and there is nothing to retry.
+            if not await self._still_missing(cog, guild, season.id, interaction.user.id):
+                return await self._finish(
+                    interaction,
+                    YellowEmbed(
+                        title="Activity Check",
+                        description="You have already completed your activity check for this season.",
+                    ),
+                )
+            log.warning(f"[{guild.name}] [Activity DM] Error submitting activity check: {exc.reason}")
+            return await self._retry(interaction, self._player_error(modmail))
+
+        if self.active:
+            embed = GreenEmbed(
+                title="Marked Active",
+                description=f"You are marked as **active** for Season {season.number} of **{guild.name}**.",
+            )
+        else:
+            embed = RedEmbed(
+                title="Marked In-Active",
+                description=(
+                    f"You are marked as **inactive** for Season {season.number} of **{guild.name}**.\n\n"
+                    "**You will be removed from playing this season.**"
+                ),
+            )
+        await self._finish(interaction, embed)
+
+    @staticmethod
+    async def _still_missing(cog: "AdminMixIn", guild: discord.Guild, season_id: int, player_id: int) -> bool:
+        """Whether the player still owes a check. Fails open, so a lookup error
+        is reported as a retryable failure rather than a false "already done"."""
+        try:
+            checks = await cog.season_activity_checks(
+                guild,
+                season_id=season_id,
+                discord_id=player_id,
+                completed=False,
+                missing=True,
+            )
+        except RscException:
+            return True
+        return any(not c.completed for c in checks)
+
+    @staticmethod
+    def _late_error() -> discord.Embed:
+        """The submission landed but the reply did not.
+
+        Must not tell the player to try again - the check is already recorded.
+        """
+        return YellowEmbed(
+            title="Activity Check Recorded",
+            description=("Your activity check was recorded, but we could not update this message.\n\nNo further action is needed."),
+        )
+
+    @staticmethod
+    def _player_error(modmail: str | None = None) -> discord.Embed:
+        """Player facing error. The technical detail goes to the log, not the DM.
+
+        `modmail` is optional so the catch-all in `callback` can still produce a
+        useful message when the failure happened before the guild's configured
+        ModMail bot could be resolved.
+        """
+        return RedEmbed(
+            title="Something Went Wrong",
+            description=(
+                "We could not record your activity check right now. Please try the buttons again in a few minutes.\n\n"
+                f"If it keeps failing, message {modmail or modmail_reference(DEFAULT_MODMAIL_BOT_ID)} to open a ticket."
+            ),
+        )
+
+    async def _finish(self, interaction: discord.Interaction, embed: discord.Embed):
+        """Terminal outcome. Replace the DM body and strip the buttons.
+
+        Never call `self.stop()` or mutate the buttons here - a dynamic item is
+        reconstructed per click, but the underlying view belongs to the message.
+        """
+        await interaction.edit_original_response(embed=embed, view=None)
+
+    async def _retry(self, interaction: discord.Interaction, embed: discord.Embed):
+        """Transient failure. Leave the buttons in place so the player can retry."""
+        await interaction.followup.send(embed=embed, ephemeral=True)
+
+
+def build_activity_check_dm_view(guild_id: int, season: int) -> discord.ui.View:
+    """Build the button pair sent in an activity check DM.
+
+    Deliberately not registered with `add_view()`. Dispatch happens through the
+    `ActivityCheckDMButton` template registered once via `add_dynamic_items()`.
+    """
+    view = discord.ui.View(timeout=None)
+    view.add_item(ActivityCheckDMButton(guild_id=guild_id, season=season, active=True))
+    view.add_item(ActivityCheckDMButton(guild_id=guild_id, season=season, active=False))
+    return view
+
+
+class DMConfirmView(AuthorOnlyView):
+    """Confirmation gate shown before mass DMing players.
 
     Assumes the invoking interaction was already deferred, so the prompt edits
     the original response rather than sending a followup. That keeps the
     confirm/decline edits pointed at the same message.
+
+    `result` stays False unless Confirm is pressed, so a decline or a timeout
+    both mean "queue nothing".
     """
 
     def __init__(
         self,
         interaction: discord.Interaction,
         prompt_embed: discord.Embed,
+        loading_title: str = "Queueing DMs",
         timeout: float = DEFAULT_TIMEOUT,
     ):
         super().__init__(interaction=interaction, timeout=timeout)
         self.prompt_embed = prompt_embed
+        self.loading_title = loading_title
         self.result = False
         self.add_item(ConfirmButton())
         self.add_item(CancelButton())
@@ -374,7 +610,7 @@ class IntentDMConfirmView(AuthorOnlyView):
         self.result = True
         await interaction.response.defer(ephemeral=True)
         await self.interaction.edit_original_response(
-            embed=LoadingEmbed(title="Queueing Intent DMs"),
+            embed=LoadingEmbed(title=self.loading_title),
             view=None,
         )
         self.stop()

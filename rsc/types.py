@@ -116,6 +116,9 @@ class Accolades:
 class AdminSettings(TypedDict):
     ActivityCheckMissingRole: discord.Role | None
     ActivityCheckMsgId: int | None
+    ActivityCheckDmLastSeason: int | None
+    ActivityCheckDmLastRun: int | None  # unix timestamp, rendered with discord <t:> markup
+    ActivityCheckDmLastExecutor: int | None
     AgmMessage: str | None
     Dates: str | None
     IntentChannel: discord.TextChannel | None

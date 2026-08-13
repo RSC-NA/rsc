@@ -1,11 +1,13 @@
 import asyncio
 import logging
+from functools import partial
 from unittest.mock import AsyncMock, MagicMock, create_autospec
 
 import discord
 import pytest
 
-from rsc.admin.intents import MEMBER_FETCH_LIMIT, AdminIntentsMixIn
+from rsc.admin.admin import MEMBER_FETCH_LIMIT, AdminMixIn
+from rsc.admin.intents import AdminIntentsMixIn
 from rsc.admin.views import INTENT_DM_TEMPLATE, IntentDMButton, build_intent_dm_view, modmail_reference
 from rsc.core import RSC
 from rsc.exceptions import RscException
@@ -226,6 +228,10 @@ def _mock_resolve_guild(cached=(), chunked=True):
 def _stub_cog(intents):
     cog = _autospec_cog()
     cog.player_intents.return_value = intents
+    # Resolution lives on AdminMixIn now and `_resolve_missing_members` only
+    # extracts ids and delegates. Bind the real implementation so these tests
+    # still exercise the cache/fetch logic rather than an autospec stub.
+    cog._resolve_members_by_id = partial(AdminMixIn._resolve_members_by_id, cog)
     return cog
 
 
@@ -353,7 +359,7 @@ class TestResolveMissingMembers:
 
     async def test_chunk_timeout_falls_through_to_fetch(self, monkeypatch):
         """`guild.chunk()` has no timeout of its own and can hang forever."""
-        monkeypatch.setattr("rsc.admin.intents.CHUNK_TIMEOUT", 0.01)
+        monkeypatch.setattr("rsc.admin.admin.CHUNK_TIMEOUT", 0.01)
 
         async def never_returns(*args, **kwargs):
             await asyncio.sleep(30)

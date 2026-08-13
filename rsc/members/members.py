@@ -1346,22 +1346,32 @@ class MemberMixIn(RSCMixIn):
     async def activity_check(
         self,
         guild: discord.Guild,
-        player: discord.Member,
+        player: discord.Member | int,
         returning_status: bool,
-        executor: discord.Member,
+        executor: discord.Member | int | None = None,
         override: bool = False,
     ) -> ActivityCheck:
+        """Submit an activity check for a player.
+
+        `player` and `executor` accept a raw ID because a DM interaction yields
+        a `discord.User`, not a `Member`. `executor` defaults to 0, the existing
+        convention for a player submitting their own check.
+        """
         async with self.api_client(guild) as client:
             api = MembersApi(client)
+            # Coerce on "is it already an int" rather than "is it a Member", so a
+            # `discord.User` from a DM interaction resolves to its id too.
+            executor_id = executor if isinstance(executor, int) else (executor.id if executor else 0)
+            player_id = player if isinstance(player, int) else player.id
             data = ActivityRequest(
                 league=self._league[guild.id],
                 returning_status=returning_status,
-                executor=executor.id,
+                executor=executor_id,
                 admin_override=override,
             )
             try:
-                log.debug(f"[{player.id}] Activity Check: {data}")
-                return await api.members_activity_check_create(player.id, data)
+                log.debug(f"[{player_id}] Activity Check: {data}")
+                return await api.members_activity_check_create(player_id, data)
             except ApiException as exc:
                 raise RscException(response=exc)
 

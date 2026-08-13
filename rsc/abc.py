@@ -645,9 +645,9 @@ class RSCMixIn(ABC):
     async def activity_check(
         self,
         guild: discord.Guild,
-        player: discord.Member,
+        player: discord.Member | int,
         returning_status: bool,
-        executor: discord.Member,
+        executor: discord.Member | int | None = None,
         override: bool = False,
     ) -> ActivityCheck: ...
 
