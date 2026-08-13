@@ -232,6 +232,9 @@ def _stub_cog(intents):
     # extracts ids and delegates. Bind the real implementation so these tests
     # still exercise the cache/fetch logic rather than an autospec stub.
     cog._resolve_members_by_id = partial(AdminMixIn._resolve_members_by_id, cog)
+    # Chunking lives in its own helper now. Bind it too, otherwise the autospec stub
+    # swallows the call and the cache/fetch assertions below test nothing.
+    cog._ensure_chunked = partial(AdminMixIn._ensure_chunked, cog)
     return cog
 
 

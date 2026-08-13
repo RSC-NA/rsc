@@ -19,6 +19,7 @@ This module is designed for RSC admins to perform day to day league management.
 - `/admin members create` - Create a new RSC member in API
 - `/admin members delete` - Permanently delete an RSC member from our database
 - `/admin members list` - List RSC members based on search criteria
+- `/admin members notinserver` - Report current season league players who are no longer in the discord server. Read only; retire them with `/admin bulkretire`.
 
 ### Sync Group
 

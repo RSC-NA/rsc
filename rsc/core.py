@@ -20,6 +20,7 @@ from rsc.admin.audit import AdminAuditMixIn
 from rsc.admin.franchise import AdminFranchiseMixIn
 from rsc.admin.inactivity import AdminInactivityMixIn
 from rsc.admin.intents import AdminIntentsMixIn
+from rsc.admin.retire import AdminRetireMixIn
 from rsc.admin.match import AdminMatchMixIn
 from rsc.admin.members import AdminMembersMixIn
 
@@ -83,6 +84,7 @@ class RSC(
     AdminMatchMixIn,
     AdminMembersMixIn,
     # AdminPermFAMixIn,
+    AdminRetireMixIn,
     AdminStatsMixIn,
     AdminSyncMixIn,
     BallchasingMixIn,
@@ -162,6 +164,7 @@ class RSC(
         # cog sees is_running() == False and would start a second poller against
         # the same cursor. Cancelling here is mandatory, not tidiness.
         self.rsc_events_loop.cancel()
+        self.retire_audit_loop.cancel()
         # Discard rather than drain. Draining sends one DM per `rate` seconds, so a
         # large queued batch would block the reload for many minutes.
         await self._dm_helper.stop(drain=False)

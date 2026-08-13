@@ -1,3 +1,4 @@
+import asyncio
 import itertools
 import logging
 import re
@@ -40,7 +41,11 @@ from rsc.embeds import (
 )
 from rsc.enums import Status, TransactionType
 from rsc.exceptions import (
+    BadGateway,
+    InternalServerError,
     MalformedTransactionResponse,
+    MemberDoesNotExist,
+    NotLeaguePlayer,
     RscException,
     TradeParserException,
     translate_api_error,
@@ -93,6 +98,20 @@ defaults = TransactionSettings(
 # Noon - Eastern (-5) - Not DST aware
 # Have to use UTC for loop. TZ aware object causes issues with clock drift calculations
 SUB_LOOP_TIME = time(hour=17)
+
+
+# Auto retire on leave.
+#
+# `rscapi.rest.ALLOW_RETRY_METHODS` excludes POST, so the aiohttp retry layer
+# configured in `core.prepare_api` never replays a retire. This loop is the only
+# retry that exists for it.
+RETIRE_MAX_ATTEMPTS = 3
+RETIRE_BACKOFF = (2.0, 5.0)  # Seconds to sleep before attempt 2 and 3.
+RETRYABLE_RETIRE_STATUS = frozenset({408, 425, 429, 500, 502, 503, 504})
+
+# Single prefix on every outcome of the leave handler so the whole flow can be
+# grepped out of the bot logs with one string.
+RETIRE_LOG_PREFIX = "auto-retire:"
 
 
 def gm_discord_id(franchise: TransactionFranchise | None) -> int | None:
@@ -216,73 +235,95 @@ class TransactionMixIn(RSCMixIn):
 
     @commands.Cog.listener("on_raw_member_remove")
     async def _transactions_on_member_remove(self, event: discord.RawMemberRemoveEvent):
+        """Retire a league player who left the server.
+
+        Nothing but a catch-all wrapper. An exception escaping here would be
+        swallowed by discord.py's dispatcher and logged under `discord.client`
+        rather than `red.rsc.transactions`, which is exactly how a missed
+        retirement becomes invisible.
+        """
+        try:
+            await self._handle_member_remove(event)
+        except Exception as exc:
+            logger.error(
+                f"{RETIRE_LOG_PREFIX} leave handler crashed for {event.user.id} in guild {event.guild_id}",
+                exc_info=exc,
+            )
+
+    async def _handle_member_remove(self, event: discord.RawMemberRemoveEvent):
         """Check if a rostered player has left the server and report to transaction log channel. Retire player"""
         guild = self.bot.get_guild(event.guild_id)
         member = event.user
 
         if not guild:
-            log.info(f"Member left server but is not in a related guild. {member.id}")
+            log.warning(f"{RETIRE_LOG_PREFIX} member {member.id} left unknown guild {event.guild_id}. No action taken.")
             return
 
-        players = await self.players(guild, discord_id=member.id, limit=1)
+        # Listeners dispatch before `on_ready` finishes `_setup_guild`, and both
+        # dicts are indexed bare downstream. Without this the retire dies on a
+        # KeyError inside `api_client()`.
+        if not (self._api_conf.get(guild.id) and self._league.get(guild.id)):
+            log.error(
+                f"{RETIRE_LOG_PREFIX} guild is not prepared yet. Retirement skipped for {member.display_name} ({member.id}).",
+                guild=guild,
+            )
+            await self._report_retire_failure(guild, member, reason="Guild API/league configuration was not ready.")
+            return
+
+        # A lookup failure must never be mistaken for "not a league player".
+        try:
+            players = await self.players(guild, discord_id=member.id, limit=1)
+        except Exception as exc:
+            log.error(
+                f"{RETIRE_LOG_PREFIX} pre-retire lookup failed for {member.display_name} ({member.id}). Retirement skipped.",
+                guild=guild,
+                exc_info=exc,
+            )
+            await self._report_retire_failure(guild, member, reason=f"Player lookup failed: {exc}")
+            return
 
         if not players:
             # Member is not a league player, do nothing
             log.info(
-                f"{member.display_name} ({member.id}) has left the server but is not on a league player. No action taken.",
+                f"{RETIRE_LOG_PREFIX} {member.display_name} ({member.id}) left but has no league player record. No action taken.",
                 guild=guild,
             )
             return
 
         player_before_retire = players[0]
 
-        retire_verified = False
-        for attempt in range(1, 3):
-            try:
-                result = await self.retire(
-                    guild,
-                    player=member,
-                    executor=guild.me,
-                    notes="Player left the RSC discord server",
-                    override=True,
-                )
-            except RscException as exc:
-                log.error(f"Error retiring player that left guild: {exc.reason}", guild=guild)
-                return
-
-            verification_error = await self._retire_response_error(result, player=member)
-            if verification_error is None:
-                retire_verified = True
-                break
-
+        verified, failure_reason = await self._attempt_retire(guild, member)
+        if not verified:
             log.error(
-                f"Retire transaction for member {member.id} did not verify on attempt {attempt}/2: {verification_error}",
+                f"{RETIRE_LOG_PREFIX} unable to retire {member.display_name} ({member.id}) "
+                f"after {RETIRE_MAX_ATTEMPTS} attempt(s). Player may still be active in API. Reason: {failure_reason}",
                 guild=guild,
             )
-
-        if not retire_verified:
-            member_fmt = f"{member.display_name} ({member.id})"
-            log.error(
-                f"Unable to verify retirement for member {member_fmt} after retry. Player may still be active in API.",
-                guild=guild,
-            )
+            await self._report_retire_failure(guild, member, reason=failure_reason)
             return
 
-        # Check if user was forcibly removed from server
+        # Check if user was forcibly removed from server. `get_audit_log_reason`
+        # accepts a bare ID, so this works for an uncached `discord.User` too --
+        # gating it on `isinstance(member, discord.Member)` meant the "Kicked by"
+        # field was never populated after a restart.
         perp = None
         reason = None
-        if isinstance(member, discord.Member):
-            perp, reason = await utils.get_audit_log_reason(guild, member, discord.AuditLogAction.kick)
+        try:
+            perp, reason = await utils.get_audit_log_reason(guild, member.id, discord.AuditLogAction.kick)
+        except discord.HTTPException as exc:
+            log.warning(f"{RETIRE_LOG_PREFIX} unable to read audit log for {member.id}: {exc}", guild=guild)
 
         log.info(
-            f"{member.display_name} ({member.id}) has left the server. Player retirement verified. Reason: {reason}",
+            f"{RETIRE_LOG_PREFIX} {member.display_name} ({member.id}) has left the server. Retirement verified. Reason: {reason}",
             guild=guild,
         )
 
-        # Check if notifications are enabled
+        # Check if notifications are enabled. These gate two different channels,
+        # so they have to be evaluated independently -- an AND here meant turning
+        # off GM notifications also silenced the transaction committee.
         tm_notify = await self._notifications_enabled(guild)
         gm_notify = await self._gm_notifications_enabled(guild)
-        if not (tm_notify and gm_notify):
+        if not (tm_notify or gm_notify):
             return
 
         tz = await self.timezone(guild)
@@ -333,17 +374,22 @@ class TransactionMixIn(RSCMixIn):
         )
         log_embed.set_thumbnail(url=member.display_avatar)
 
-        # Return if transaction log channel is not configured
-        log_channel = await self._trans_log_channel(guild)
-        if not log_channel:
-            return
-
-        # Ping Transaction Committee if role is configured and send embed to log channel
-        if log_channel and tm_notify:
-            await self.announce_to_transaction_committee(
-                guild=guild,
-                embed=log_embed,
-            )
+        # Ping Transaction Committee if role is configured and send embed to log
+        # channel. `announce_to_transaction_committee` already no-ops when the
+        # channel or role is unset, so there is no early return here -- bailing on
+        # a missing log channel also suppressed the franchise announcement below,
+        # which posts to an entirely different channel.
+        #
+        # A Discord failure must not look like a failed retirement. The API side
+        # is already done by this point.
+        if tm_notify:
+            try:
+                await self.announce_to_transaction_committee(
+                    guild=guild,
+                    embed=log_embed,
+                )
+            except discord.HTTPException as exc:
+                log.warning(f"{RETIRE_LOG_PREFIX} unable to notify transaction committee for {member.id}: {exc}", guild=guild)
 
         # Ping GM and AGM in franchise transaction channel.
         if not player_before_retire.team:
@@ -351,12 +397,15 @@ class TransactionMixIn(RSCMixIn):
             return
 
         if gm_notify:
-            await self.announce_to_franchise_transactions(
-                guild=guild,
-                franchise=fname,
-                gm=gm_id,
-                embed=log_embed,
-            )
+            try:
+                await self.announce_to_franchise_transactions(
+                    guild=guild,
+                    franchise=fname,
+                    gm=gm_id,
+                    embed=log_embed,
+                )
+            except discord.HTTPException as exc:
+                log.warning(f"{RETIRE_LOG_PREFIX} unable to notify {fname} transactions for {member.id}: {exc}", guild=guild)
 
     # Group
 
@@ -2421,6 +2470,145 @@ class TransactionMixIn(RSCMixIn):
             return f"transaction_id={transaction_id} returned_status={returned_status!r} expected_status={Status.FORMER.value}"
 
         return None
+
+    # Auto retire on leave
+
+    @staticmethod
+    def _retire_is_retryable(exc: RscException) -> bool:
+        """Whether a failed retire is worth trying again.
+
+        Fails open on a status of `None`, which is what a transport error or an
+        unparsable body produces. `RETIRE_MAX_ATTEMPTS` bounds the damage, and
+        giving up on a network blip is the failure mode we are trying to remove.
+        """
+        if isinstance(exc, InternalServerError | BadGateway):
+            return True
+        if exc.status is None:
+            return True
+        return exc.status in RETRYABLE_RETIRE_STATUS
+
+    async def _retire_error(self, exc: RscException) -> RscException:
+        """Refine a bare `RscException` from `retire()` into a specific subclass.
+
+        `retire()` raises `RscException(response=exc)` directly, so the API's
+        `detail` string is never mapped to the types in `rsc.exceptions`. Running
+        it through `translate_api_error` is what lets "not currently playing this
+        season" be recognised as success rather than an error.
+        """
+        if isinstance(exc.response, ApiException):
+            try:
+                return await translate_api_error(exc.response)
+            except Exception:  # Classification must never mask the original error.
+                return exc
+        return exc
+
+    async def _player_is_former(self, guild: discord.Guild, discord_id: int) -> bool:
+        """Read back whether the API already considers this player retired."""
+        try:
+            players = await self.players(guild, discord_id=discord_id, limit=1)
+        except Exception as exc:  # A failed read is simply "unknown", not "not retired".
+            log.warning(f"{RETIRE_LOG_PREFIX} unable to re-read status for {discord_id}: {exc}", guild=guild)
+            return False
+
+        if not players:
+            # No record for the current season means there is nothing to retire.
+            return True
+
+        status = getattr(players[0], "status", None)
+        return getattr(status, "value", status) == Status.FORMER.value
+
+    async def _attempt_retire(self, guild: discord.Guild, member: discord.Member | discord.User) -> tuple[bool, str | None]:
+        """Retire a member, retrying transient API failures. Returns (verified, failure_reason)."""
+        last_reason: str | None = None
+
+        for attempt in range(1, RETIRE_MAX_ATTEMPTS + 1):
+            try:
+                result = await self.retire(
+                    guild,
+                    player=member,
+                    executor=guild.me,
+                    notes="Player left the RSC discord server",
+                    override=True,
+                )
+            except RscException as exc:
+                translated = await self._retire_error(exc)
+
+                # Not playing is the desired end state, so this is a success.
+                if isinstance(translated, NotLeaguePlayer | MemberDoesNotExist):
+                    log.info(
+                        f"{RETIRE_LOG_PREFIX} {member.id} is already not playing this season. Nothing to retire.",
+                        guild=guild,
+                    )
+                    return True, None
+
+                last_reason = str(translated)
+                if not self._retire_is_retryable(translated):
+                    log.error(
+                        f"{RETIRE_LOG_PREFIX} retire rejected for {member.id} and will not be retried: {last_reason}",
+                        guild=guild,
+                        exc_info=exc,
+                    )
+                    return False, last_reason
+
+                log.warning(
+                    f"{RETIRE_LOG_PREFIX} retire attempt {attempt}/{RETIRE_MAX_ATTEMPTS} failed for {member.id}: {last_reason}",
+                    guild=guild,
+                    exc_info=exc,
+                )
+            else:
+                verification_error = await self._retire_response_error(result, player=member)
+                if verification_error is None:
+                    return True, None
+
+                # The POST returned 200. Re-read before issuing another one --
+                # blindly re-POSTing would create a duplicate transaction.
+                if await self._player_is_former(guild, member.id):
+                    log.warning(
+                        f"{RETIRE_LOG_PREFIX} retire response for {member.id} did not verify but the API "
+                        f"reports the player as retired. Accepting. {verification_error}",
+                        guild=guild,
+                    )
+                    return True, None
+
+                last_reason = verification_error
+                log.error(
+                    f"{RETIRE_LOG_PREFIX} retire response did not verify for {member.id} "
+                    f"on attempt {attempt}/{RETIRE_MAX_ATTEMPTS}: {verification_error}",
+                    guild=guild,
+                )
+
+            if attempt < RETIRE_MAX_ATTEMPTS:
+                await asyncio.sleep(RETIRE_BACKOFF[attempt - 1])
+
+        return False, last_reason
+
+    async def _report_retire_failure(
+        self,
+        guild: discord.Guild,
+        member: discord.Member | discord.User,
+        reason: str | None,
+    ) -> None:
+        """Surface a failed auto retirement to the league events channel.
+
+        A log line alone is not a report -- nobody reads them until something has
+        already gone wrong. `_try_post_embeds` no-ops without a configured channel
+        and clears a dead one, so this is safe to call unconditionally.
+        """
+        embed = ErrorEmbed(
+            title="Automatic Retirement Failed",
+            description=(
+                f"**{member.display_name}** left the server but could not be retired in the API.\n\n"
+                "They are still active in the league. Run `/admin retire departed` to retire them."
+            ),
+        )
+        embed.add_field(name="Member", value=f"<@{member.id}>", inline=True)
+        embed.add_field(name="Member ID", value=str(member.id), inline=True)
+        embed.add_field(name="Reason", value=str(reason or "Unknown"), inline=False)
+
+        try:
+            await self._try_post_embeds(guild, [embed])
+        except Exception as exc:  # Reporting must never mask the original failure.
+            log.warning(f"{RETIRE_LOG_PREFIX} unable to post failure report for {member.id}: {exc}", guild=guild)
 
     async def get_sub(self, member: discord.Member) -> Substitute | None:
         """Get sub from saved substitute list"""

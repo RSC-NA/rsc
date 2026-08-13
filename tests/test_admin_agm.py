@@ -107,6 +107,9 @@ def _patch_utils():
     mock.franchise_role_from_name = AsyncMock(return_value=MagicMock(spec=discord.Role))
     mock.franchise_role_from_disord_member = AsyncMock(return_value=None)
     mock.format_discord_prefix = AsyncMock(return_value="OCE | someagm")
+    # True == the deferral landed. Without this the patched `utils.safe_defer`
+    # returns a bare MagicMock, which the command cannot await.
+    mock.safe_defer = AsyncMock(return_value=True)
     return utils
 
 

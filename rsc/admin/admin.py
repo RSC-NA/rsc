@@ -9,6 +9,7 @@ from redbot.core.app_commands import Transform
 
 from rsc.abc import RSCMixIn
 from rsc.admin.modals import BulkRetireModal, LeagueDatesModal
+from rsc.admin.models import BulkRetireResult
 from rsc.embeds import (
     ApiExceptionErrorEmbed,
     BlueEmbed,
@@ -57,6 +58,7 @@ defaults_guild = AdminSettings(
     IntentDmLastExecutor=None,
     PermFAChannel=None,
     PermFAMsgIds=None,
+    RetireAuditEnabled=True,
 )
 
 
@@ -224,18 +226,43 @@ class AdminMixIn(RSCMixIn):
             )
 
         try:
-            tiers = await self.tiers(guild=guild)
-            default_roles = await self._get_welcome_roles(guild)
-            # Fetched once for the batch rather than per retiree.
-            agm_map = await self.agm_franchise_map(guild)
+            result = await self.bulk_retire_players(
+                guild,
+                executor=interaction.user,
+                discord_ids=discord_ids,
+                notes="Bulk retire",
+                skipped=[f"`{discord_id}` invalid ID" for discord_id in invalid_ids],
+            )
         except RscException as exc:
             return await modal_interaction.followup.send(embed=ApiExceptionErrorEmbed(exc), ephemeral=True)
         except RuntimeError as exc:
             return await modal_interaction.followup.send(embed=ExceptionErrorEmbed(exc_message=str(exc)), ephemeral=True)
 
+        await modal_interaction.followup.send(embed=self.build_bulk_retire_embed(result), ephemeral=True)
+
+    async def bulk_retire_players(
+        self,
+        guild: discord.Guild,
+        executor: discord.Member,
+        discord_ids: list[int],
+        notes: str,
+        skipped: list[str] | None = None,
+    ) -> BulkRetireResult:
+        """Retire a batch of players by discord ID, announcing and syncing roles for each.
+
+        Shared by `/admin bulkretire` and the departed player reconciliation in
+        `rsc.admin.retire`. Raises `RscException`/`RuntimeError` only from the
+        one-time setup below; per-player failures are collected, not raised, so a
+        single bad player cannot abort the batch.
+        """
+        # Fetched once for the batch rather than per retiree.
+        tiers = await self.tiers(guild=guild)
+        default_roles = await self._get_welcome_roles(guild)
+        agm_map = await self.agm_franchise_map(guild)
+
         transactions = cast("TransactionMixIn", self)
         retired_players: list[str] = []
-        skipped_players = [f"`{discord_id}` invalid ID" for discord_id in invalid_ids]
+        skipped_players = list(skipped or [])
         failed_players: list[str] = []
 
         for discord_id in discord_ids:
@@ -258,8 +285,8 @@ class AdminMixIn(RSCMixIn):
                 result = await transactions.retire(
                     guild,
                     player=player,
-                    executor=interaction.user,
-                    notes="Bulk retire",
+                    executor=executor,
+                    notes=notes,
                     override=True,
                 )
                 log.debug(f"Bulk Retire Result: {result}", guild=guild)
@@ -291,18 +318,21 @@ class AdminMixIn(RSCMixIn):
 
             retired_players.append(player.mention)
 
-        description = f"**Retired:** {len(retired_players)}\n**Skipped:** {len(skipped_players)}\n**Failed:** {len(failed_players)}"
-        embed_cls = SuccessEmbed if retired_players and not skipped_players and not failed_players else YellowEmbed
-        embed = embed_cls(title="Bulk Retire Complete", description=description)
+        return BulkRetireResult(retired=retired_players, skipped=skipped_players, failed=failed_players)
 
-        if retired_players:
-            embed.add_field(name="Retired", value=self._format_truncated_list(retired_players), inline=False)
-        if skipped_players:
-            embed.add_field(name="Skipped", value=self._format_truncated_list(skipped_players), inline=False)
-        if failed_players:
-            embed.add_field(name="Failed", value=self._format_truncated_list(failed_players), inline=False)
+    def build_bulk_retire_embed(self, result: BulkRetireResult, title: str = "Bulk Retire Complete") -> discord.Embed:
+        description = f"**Retired:** {len(result.retired)}\n**Skipped:** {len(result.skipped)}\n**Failed:** {len(result.failed)}"
+        embed_cls = SuccessEmbed if result.retired and not result.skipped and not result.failed else YellowEmbed
+        embed = embed_cls(title=title, description=description)
 
-        await modal_interaction.followup.send(embed=embed, ephemeral=True)
+        if result.retired:
+            embed.add_field(name="Retired", value=self._format_truncated_list(result.retired), inline=False)
+        if result.skipped:
+            embed.add_field(name="Skipped", value=self._format_truncated_list(result.skipped), inline=False)
+        if result.failed:
+            embed.add_field(name="Failed", value=self._format_truncated_list(result.failed), inline=False)
+
+        return embed
 
     @_admin.command(name="directmessage", description="Send a direct message to a user")
     @app_commands.describe(
@@ -435,25 +465,48 @@ class AdminMixIn(RSCMixIn):
             await conf.ActivityCheckDmLastExecutor(),
         )
 
-    async def _resolve_members_by_id(self, guild: discord.Guild, ids: list[int]) -> tuple[list[discord.Member], list[int], list[int]]:
+    async def _ensure_chunked(self, guild: discord.Guild) -> bool:
+        """Populate the member cache, returning whether it can be trusted.
+
+        A cold cache misses for everyone, which turns any `get_member` sweep into
+        either one serialized HTTP call per player or a pile of false "not in the
+        server" results. Chunking is a single gateway operation that populates the
+        whole cache, so callers only have to handle stragglers.
+        """
+        if guild.chunked:
+            return True
+
+        log.debug("Member cache is not chunked. Chunking before resolving members.", guild=guild)
+        try:
+            await asyncio.wait_for(guild.chunk(), timeout=CHUNK_TIMEOUT)
+        except TimeoutError:
+            log.warning(f"Chunking timed out after {CHUNK_TIMEOUT}s.", guild=guild)
+            return False
+        except discord.ClientException as exc:
+            log.warning(f"Unable to chunk guild members: {exc}", guild=guild)
+            return False
+        return True
+
+    async def _resolve_members_by_id(
+        self,
+        guild: discord.Guild,
+        ids: list[int],
+        fetch_limit: int = MEMBER_FETCH_LIMIT,
+    ) -> tuple[list[discord.Member], list[int], list[int]]:
         """Split discord IDs into DM-able members, players who left, and lookup failures.
 
         `get_member` is a free cache read but returns None on a cold or partial
         member cache, which would silently drop players who should be DMed. The
         `fetch_member` fallback only costs HTTP on an actual miss, and its
         NotFound cleanly means "left the guild".
+
+        `fetch_limit` bounds the HTTP fallback. The default is sized for a DM
+        batch inside a slash command; a league-wide sweep passes a larger cap
+        because every genuine departure is necessarily a cache miss.
         """
-        # A cold cache misses for everyone, which would turn the fallback below into
-        # one serialized HTTP call per player. Chunking is a single gateway operation
-        # that populates the whole cache, so the fallback only handles stragglers.
-        if not guild.chunked:
-            log.debug("Member cache is not chunked. Chunking before resolving members.", guild=guild)
-            try:
-                await asyncio.wait_for(guild.chunk(), timeout=CHUNK_TIMEOUT)
-            except TimeoutError:
-                log.warning(f"Chunking timed out after {CHUNK_TIMEOUT}s. Falling back to individual fetches.", guild=guild)
-            except discord.ClientException as exc:
-                log.warning(f"Unable to chunk guild members: {exc}", guild=guild)
+        # A failed chunk is not fatal here: the per-player `fetch_member` fallback
+        # below still resolves everyone, it just costs HTTP instead of a cache read.
+        await self._ensure_chunked(guild)
 
         found: list[discord.Member] = []
         left_guild: list[int] = []
@@ -469,7 +522,7 @@ class AdminMixIn(RSCMixIn):
 
             # Bound the per-player HTTP fallback. Anything past the cap is reported
             # as a lookup failure rather than silently dropped.
-            if fetched >= MEMBER_FETCH_LIMIT:
+            if fetched >= fetch_limit:
                 overflow += 1
                 lookup_failed.append(pid)
                 continue
@@ -487,7 +540,7 @@ class AdminMixIn(RSCMixIn):
         # with nothing left over, degraded nothing.
         if overflow:
             log.warning(
-                f"Hit the member fetch limit ({MEMBER_FETCH_LIMIT}). {overflow} cache miss(es) reported as lookup failures.",
+                f"Hit the member fetch limit ({fetch_limit}). {overflow} cache miss(es) reported as lookup failures.",
                 guild=guild,
             )
 

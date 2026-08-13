@@ -129,6 +129,7 @@ class AdminSettings(TypedDict):
     IntentDmLastExecutor: int | None
     PermFAChannel: int | None
     PermFAMsgIds: list[int] | None
+    RetireAuditEnabled: bool
 
 
 class CombineSettings(TypedDict):

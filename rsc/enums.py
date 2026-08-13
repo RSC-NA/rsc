@@ -354,6 +354,15 @@ class Status(StrEnum):
                 return "Unknown"
 
 
+#: Statuses that mean the player is no longer participating in the league.
+INACTIVE_STATUSES: frozenset[Status] = frozenset({Status.FORMER, Status.BANNED, Status.DROPPED})
+
+#: Everything else counts as an active league player. Derived by subtraction so a new
+#: status added to the enum defaults to "active" -- over-reporting a player who should
+#: be checked is recoverable, silently skipping one who left the server is not.
+ACTIVE_STATUSES: frozenset[Status] = frozenset(Status) - INACTIVE_STATUSES
+
+
 class TransactionWeek(StrEnum):
     OFFSEASON = "OFF"  # Offseason
     PRESEASON = "PRE"  # Preseason

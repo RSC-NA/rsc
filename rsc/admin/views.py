@@ -670,6 +670,55 @@ class ConfirmSyncView(AuthorOnlyView):
         self.stop()
 
 
+class ConfirmRetireView(AuthorOnlyView):
+    """Confirmation gate for retiring a batch of departed players.
+
+    The interaction is already deferred by the caller (the audit takes long
+    enough to need it), so this follows up rather than responding.
+    """
+
+    def __init__(
+        self,
+        interaction: discord.Interaction,
+        count: int,
+        timeout: float = DEFAULT_TIMEOUT,
+    ):
+        super().__init__(interaction=interaction, timeout=timeout)
+        self.add_item(ConfirmButton())
+        self.add_item(DeclineButton())
+        self.count = count
+        self.result = False
+
+    async def prompt(self, embed: discord.Embed | None = None):
+        """Note: The prompt does not call wait()"""
+        prompt = OrangeEmbed(
+            title="Retire Departed Players",
+            description=(
+                f"You are about to retire **{self.count}** player(s) in the API because they are no "
+                "longer in this server. Each will be announced in the transaction channel.\n\n"
+                "**Are you sure you want to do this?**"
+            ),
+        )
+        embeds = [embed, prompt] if embed else [prompt]
+        await self.interaction.followup.send(embeds=embeds, view=self, ephemeral=True)
+
+    async def confirm(self, interaction: discord.Interaction):
+        self.result = True
+        await interaction.response.edit_message(
+            embeds=[LoadingEmbed(title=f"Retiring {self.count} Player(s)")],
+            view=None,
+        )
+        self.stop()
+
+    async def decline(self, interaction: discord.Interaction):
+        self.result = False
+        await interaction.response.edit_message(
+            embeds=[RedEmbed(title="Retirement Cancelled", description="No players were retired.")],
+            view=None,
+        )
+        self.stop()
+
+
 class RebrandFranchiseView(AuthorOnlyView):
     def __init__(
         self,

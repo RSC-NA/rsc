@@ -4,6 +4,7 @@ from datetime import datetime
 import discord
 from redbot.core import app_commands
 from redbot.core.app_commands import Transform
+from rscapi.models.league_player import LeaguePlayer
 
 from rsc.admin import AdminMixIn
 from rsc.embeds import (
@@ -17,7 +18,7 @@ from rsc.embeds import (
     GreenEmbed,
     OrangeEmbed,
 )
-from rsc.enums import Platform, PlayerType, Referrer, RegionPreference, StaffPositions, Status
+from rsc.enums import ACTIVE_STATUSES, Platform, PlayerType, Referrer, RegionPreference, StaffPositions, Status
 from rsc.exceptions import DiscordNameTooLong, RscException, LeagueNotConfigured
 from rsc.logs import GuildLogAdapter
 from rsc.teams import TeamMixIn
@@ -25,9 +26,15 @@ from rsc.tiers import TierMixIn
 from rsc.transactions.roles import update_league_player_discord
 from rsc.transformers import DateTransformer
 from rsc.utils import utils
+from rsc.utils.pagify import Pagify
 
 logger = logging.getLogger("red.rsc.admin.members")
 log = GuildLogAdapter(logger)
+
+# Cache misses are confirmed over HTTP one at a time. The cap keeps a badly stale
+# cache from turning the report into hundreds of serialized requests.
+NOTINSERVER_VERIFY_LIMIT = 100
+NOTINSERVER_PROGRESS_INTERVAL = 100
 
 
 class AdminMembersMixIn(AdminMixIn):
@@ -747,35 +754,183 @@ class AdminMembersMixIn(AdminMixIn):
             )
         )
 
-    @_members.command(name="notinserver", description="Find API league players not in the server")
+    @_members.command(
+        name="notinserver",
+        description="Report current season league players who are no longer in the discord server",
+    )
     @app_commands.describe(
-        status="Only check league players with this status",
+        status="Only check league players with this status. Defaults to every status except Former, Banned, and Dropped.",
     )
     async def _admin_member_notinserver_cmd(self, interaction: discord.Interaction, status: Status | None = None):
         guild = interaction.guild
         if not guild:
             return
 
-        await interaction.response.defer()
+        if not await utils.safe_defer(interaction, ephemeral=True):
+            return
 
         try:
-            c = 0
-            results = []
-            async for lp in self.paged_players(guild=guild, status=status):
-                c += 1
-                if (c % 100) == 0:
-                    log.debug(f"Processed {c} players")
-
-                if not lp.player.discord_id:
-                    await interaction.followup.send(f"ERROR: No discord ID found for player: {lp.id}")
-                    continue
-                m = guild.get_member(lp.player.discord_id)
-                if not m:
-                    log.debug(f"Player {lp.player.name} ({lp.player.discord_id}) not in server")
-                    results.append(lp)
+            season = await self.current_season(guild)
         except RscException as exc:
             return await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc), ephemeral=True)
 
-        fmt_msg = "\n".join([f"{x.player.name} ({x.player.discord_id}) not in server" for x in results])
+        if not (season and season.id):
+            return await interaction.followup.send(
+                embed=ErrorEmbed(description="Unable to determine the current season from the API."),
+                ephemeral=True,
+            )
 
-        await interaction.followup.send(content=f"```\n{fmt_msg}```")
+        # Every miss below is read straight out of the member cache. On a cold cache
+        # that reads as "the entire league left the server", which is exactly the
+        # report an admin would act on. Refuse to guess.
+        if not await self._ensure_chunked(guild):
+            return await interaction.followup.send(
+                embed=ErrorEmbed(
+                    description=(
+                        "Unable to load the full member list from discord, so the results would not be trustworthy. "
+                        "Please try again in a moment."
+                    )
+                ),
+                ephemeral=True,
+            )
+
+        wanted = frozenset({status}) if status else ACTIVE_STATUSES
+
+        missing: list[LeaguePlayer] = []
+        no_discord_id: list[LeaguePlayer] = []
+        unverified: list[LeaguePlayer] = []
+        checked = 0
+        verified = 0
+        overflow = 0
+
+        try:
+            total = await self.total_players(guild, season=season.id)
+
+            # No status filter on the query itself. `paged_players` only accepts one
+            # status per call, so filtering server side would mean one full sweep per
+            # status. Every row carries its own status, so one sweep filtered locally
+            # is the same answer for a fraction of the requests.
+            async for lp in self.paged_players(guild=guild, season=season.id):
+                checked += 1
+                if lp.status is None or Status(lp.status) not in wanted:
+                    continue
+
+                if (checked % NOTINSERVER_PROGRESS_INTERVAL) == 0:
+                    await interaction.edit_original_response(
+                        embed=YellowEmbed(
+                            title="Checking League Players",
+                            description=f"Checked {checked}/{total} players. {len(missing)} not in server so far...",
+                        )
+                    )
+
+                if not lp.player.discord_id:
+                    no_discord_id.append(lp)
+                    continue
+
+                if guild.get_member(lp.player.discord_id):
+                    continue
+
+                # A chunked cache should not miss, but a member who joined mid-sweep
+                # or a partial chunk still can. Confirm every miss over HTTP rather
+                # than reporting someone as gone on the strength of a cache read.
+                if verified >= NOTINSERVER_VERIFY_LIMIT:
+                    overflow += 1
+                    unverified.append(lp)
+                    continue
+
+                verified += 1
+                try:
+                    await guild.fetch_member(lp.player.discord_id)
+                except discord.NotFound:
+                    log.debug(f"Player {lp.player.name} ({lp.player.discord_id}) is not in the server", guild=guild)
+                    missing.append(lp)
+                except discord.HTTPException as exc:
+                    log.warning(f"Unable to fetch member {lp.player.discord_id}: {exc}", guild=guild)
+                    unverified.append(lp)
+        except RscException as exc:
+            return await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc), ephemeral=True)
+
+        if overflow:
+            log.warning(
+                f"Hit the member verification limit ({NOTINSERVER_VERIFY_LIMIT}). {overflow} player(s) reported as unverified.",
+                guild=guild,
+            )
+
+        await self._send_notinserver_report(
+            interaction,
+            season_number=season.number,
+            status=status,
+            checked=checked,
+            missing=missing,
+            no_discord_id=no_discord_id,
+            unverified=unverified,
+        )
+
+    async def _send_notinserver_report(
+        self,
+        interaction: discord.Interaction,
+        season_number: int | None,
+        status: Status | None,
+        checked: int,
+        missing: list[LeaguePlayer],
+        no_discord_id: list[LeaguePlayer],
+        unverified: list[LeaguePlayer],
+    ):
+        """Report the `notinserver` sweep. Read only -- nothing is retired here."""
+        # Stable ordering so two runs of the same sweep are diffable by eye.
+        missing.sort(key=lambda lp: (str(lp.status), lp.player.name.lower()))
+
+        scope = Status(status).full_name if status else "Active"
+        embed_cls = BlueEmbed if missing else GreenEmbed
+        embed = embed_cls(
+            title="League Players Not In Server",
+            description=(
+                f"Checked **{checked}** league player(s) with a **{scope}** status in season "
+                f"**{season_number if season_number is not None else 'Unknown'}**."
+            ),
+        )
+        embed.add_field(name="Not In Server", value=str(len(missing)), inline=True)
+        embed.add_field(name="No Discord ID", value=str(len(no_discord_id)), inline=True)
+        embed.add_field(name="Unverified", value=str(len(unverified)), inline=True)
+
+        if missing:
+            counts: dict[str, int] = {}
+            for lp in missing:
+                counts[Status(lp.status).full_name] = counts.get(Status(lp.status).full_name, 0) + 1
+            breakdown = [f"{name}: {count}" for name, count in sorted(counts.items())]
+            embed.add_field(name="By Status", value=self._format_truncated_list(breakdown), inline=False)
+
+        if no_discord_id:
+            embed.add_field(
+                name="Missing Discord ID",
+                value=self._format_truncated_list([f"{lp.player.name} (league player {lp.id})" for lp in no_discord_id]),
+                inline=False,
+            )
+
+        if unverified:
+            embed.add_field(
+                name="Could Not Verify",
+                value=self._format_truncated_list([f"{lp.player.name} ({lp.player.discord_id})" for lp in unverified]),
+                inline=False,
+            )
+
+        embed.set_footer(text="No players were retired. Verify this list, then use /admin bulkretire to action it.")
+        await interaction.followup.send(embed=embed, ephemeral=True)
+
+        if not missing:
+            return
+
+        detail = "\n".join(
+            f"{lp.player.name} ({lp.player.discord_id}) - {Status(lp.status).full_name}"
+            f" | {lp.tier.name if lp.tier else 'No Tier'}"
+            f" | {lp.team.franchise.name if lp.team and lp.team.franchise else 'No Franchise'}"
+            for lp in missing
+        )
+        for page in Pagify(text=detail, page_length=1900):
+            await interaction.followup.send(content=f"```\n{page}\n```", ephemeral=True)
+
+        # Bare IDs on their own so an admin can paste the verified set straight into
+        # the /admin bulkretire modal without hand editing the report above.
+        ids = "\n".join(str(lp.player.discord_id) for lp in missing)
+        for page in Pagify(text=ids, page_length=1900):
+            await interaction.followup.send(content=f"Discord IDs for `/admin bulkretire`:\n```\n{page}\n```", ephemeral=True)
