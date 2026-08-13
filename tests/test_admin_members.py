@@ -3,9 +3,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import discord
 import pytest
 from rscapi.exceptions import ApiException
+from rscapi.models.league_player_status_enum import LeaguePlayerStatusEnum
 
 from rsc.admin.members import AdminMembersMixIn
-from rsc.enums import ACTIVE_STATUSES, INACTIVE_STATUSES, StaffPositions, Status
+from rsc.enums import ACTIVE_STATUSES, INACTIVE_STATUSES, StaffPositions, Status, is_inactive_status
 from rsc.exceptions import RscException
 
 
@@ -220,6 +221,16 @@ class TestActiveStatuses:
         assert Status.DRAFT_ELIGIBLE in ACTIVE_STATUSES
         assert Status.PERM_FA in ACTIVE_STATUSES
         assert Status.FORMER not in ACTIVE_STATUSES
+
+    @pytest.mark.parametrize("status", [*INACTIVE_STATUSES, *(s.value for s in INACTIVE_STATUSES), LeaguePlayerStatusEnum.DR])
+    def test_is_inactive_status_accepts_any_status_flavour(self, status):
+        """The API hands back its own enum, our mirror, or a bare string depending on the call."""
+        assert is_inactive_status(status)
+
+    @pytest.mark.parametrize("status", [Status.ROSTERED, Status.FREE_AGENT, "RO", None, "", "??"])
+    def test_is_inactive_status_rejects_active_and_unknown(self, status):
+        """An unknown status must never read as retired."""
+        assert not is_inactive_status(status)
 
 
 class TestAdminNotInServerCommand:

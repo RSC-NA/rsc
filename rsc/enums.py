@@ -362,6 +362,19 @@ INACTIVE_STATUSES: frozenset[Status] = frozenset({Status.FORMER, Status.BANNED, 
 #: be checked is recoverable, silently skipping one who left the server is not.
 ACTIVE_STATUSES: frozenset[Status] = frozenset(Status) - INACTIVE_STATUSES
 
+#: Raw values of `INACTIVE_STATUSES`, for comparing against an API enum or bare string.
+INACTIVE_STATUS_VALUES: frozenset[str] = frozenset(s.value for s in INACTIVE_STATUSES)
+
+
+def is_inactive_status(status: object) -> bool:
+    """Whether a status means the player is no longer playing.
+
+    Accepts a `Status`, the API's `LeaguePlayerStatusEnum`, a bare string, or
+    `None`. An unknown or missing status is *not* inactive -- treating one as
+    such would let a still-active player look retired.
+    """
+    return getattr(status, "value", status) in INACTIVE_STATUS_VALUES
+
 
 class TransactionWeek(StrEnum):
     OFFSEASON = "OFF"  # Offseason

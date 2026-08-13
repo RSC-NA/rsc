@@ -39,7 +39,7 @@ from rsc.embeds import (
     SuccessEmbed,
     YellowEmbed,
 )
-from rsc.enums import Status, TransactionType
+from rsc.enums import INACTIVE_STATUS_VALUES, Status, TransactionType, is_inactive_status
 from rsc.exceptions import (
     BadGateway,
     InternalServerError,
@@ -2470,10 +2470,14 @@ class TransactionMixIn(RSCMixIn):
         if not player_update:
             return f"transaction_id={transaction_id} validation_error=missing player update for discord_id={player.id}"
 
+        # A retire can land the player in any of the non-playing statuses -- the API
+        # returns DR (Dropped) as readily as FR (Former), and both mean the player is
+        # out of the league. Demanding FR alone reported successful retirements as
+        # failures and re-POSTed them, creating duplicate transactions.
         returned_status = getattr(player_update.player, "status", None)
-        returned_status_value = getattr(returned_status, "value", returned_status)
-        if returned_status_value != Status.FORMER.value:
-            return f"transaction_id={transaction_id} returned_status={returned_status!r} expected_status={Status.FORMER.value}"
+        if not is_inactive_status(returned_status):
+            expected = "/".join(sorted(INACTIVE_STATUS_VALUES))
+            return f"transaction_id={transaction_id} returned_status={returned_status!r} expected_status=one of {expected}"
 
         return None
 
@@ -2508,7 +2512,7 @@ class TransactionMixIn(RSCMixIn):
                 return exc
         return exc
 
-    async def _player_is_former(self, guild: discord.Guild, discord_id: int) -> bool:
+    async def _player_is_retired(self, guild: discord.Guild, discord_id: int) -> bool:
         """Read back whether the API already considers this player retired."""
         try:
             players = await self.players(guild, discord_id=discord_id, limit=1)
@@ -2520,8 +2524,7 @@ class TransactionMixIn(RSCMixIn):
             # No record for the current season means there is nothing to retire.
             return True
 
-        status = getattr(players[0], "status", None)
-        return getattr(status, "value", status) == Status.FORMER.value
+        return is_inactive_status(getattr(players[0], "status", None))
 
     async def _attempt_retire(self, guild: discord.Guild, member: discord.Member | discord.User) -> tuple[bool, str | None]:
         """Retire a member, retrying transient API failures. Returns (verified, failure_reason)."""
@@ -2568,7 +2571,7 @@ class TransactionMixIn(RSCMixIn):
 
                 # The POST returned 200. Re-read before issuing another one --
                 # blindly re-POSTing would create a duplicate transaction.
-                if await self._player_is_former(guild, member.id):
+                if await self._player_is_retired(guild, member.id):
                     log.warning(
                         f"{RETIRE_LOG_PREFIX} retire response for {member.id} did not verify but the API "
                         f"reports the player as retired. Accepting. {verification_error}",

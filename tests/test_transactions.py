@@ -284,11 +284,15 @@ class TestMemberRemoveListener:
         m._try_post_embeds = AsyncMock()
         return m
 
+    # Every non-playing status is a completed retirement. The API returns DR
+    # (Dropped) as readily as FR (Former); demanding FR alone reported successful
+    # retirements as failures and re-POSTed them.
+    @pytest.mark.parametrize("retired_status", [Status.FORMER, Status.DROPPED, Status.BANNED])
     @patch("rsc.transactions.transactions.utils.get_audit_log_reason", new_callable=AsyncMock)
-    async def test_verified_retire_sends_notifications(self, mock_audit_reason, mixin, mock_guild, mock_member):
+    async def test_verified_retire_sends_notifications(self, mock_audit_reason, retired_status, mixin, mock_guild, mock_member):
         mock_audit_reason.return_value = (None, "left")
         player_before_retire = _make_league_player(mock_member.id, status=Status.ROSTERED)
-        player_update = _make_ptu(mock_member.id, status=Status.FORMER)
+        player_update = _make_ptu(mock_member.id, status=retired_status)
         mixin.players.return_value = [player_before_retire]
         mixin.retire.return_value = _make_transaction_response(type=TransactionType.RETIRE, player_updates=[player_update])
 
@@ -306,14 +310,15 @@ class TestMemberRemoveListener:
         mixin.announce_to_franchise_transactions.assert_awaited_once()
         mixin._try_post_embeds.assert_not_awaited()
 
+    @pytest.mark.parametrize("readback_status", [Status.FORMER, Status.DROPPED])
     @patch("rsc.transactions.transactions.utils.get_audit_log_reason", new_callable=AsyncMock)
-    async def test_unverified_response_accepts_api_readback(self, mock_audit_reason, mixin, mock_guild, mock_member):
+    async def test_unverified_response_accepts_api_readback(self, mock_audit_reason, readback_status, mixin, mock_guild, mock_member):
         """A 200 whose payload does not verify must be re-read, not blindly re-POSTed."""
         mock_audit_reason.return_value = (None, None)
         bad_update = _make_ptu(mock_member.id, status=Status.FREE_AGENT)
         mixin.players.side_effect = [
             [_make_league_player(mock_member.id, status=Status.ROSTERED)],  # pre-retire lookup
-            [_make_league_player(mock_member.id, status=Status.FORMER)],  # read back after mismatch
+            [_make_league_player(mock_member.id, status=readback_status)],  # read back after mismatch
         ]
         mixin.retire.return_value = _make_transaction_response(type=TransactionType.RETIRE, player_updates=[bad_update], id=1)
 
