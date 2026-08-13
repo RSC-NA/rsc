@@ -42,7 +42,7 @@ from rsc.embeds import (
     YellowEmbed,
 )
 from rsc.enums import Platform, PlayerType, Referrer, RegionPreference, StaffPositions, Status
-from rsc.exceptions import LeagueNotConfigured, RscException
+from rsc.exceptions import DiscordNameTooLong, LeagueNotConfigured, RscException
 from rsc.franchises import FranchiseMixIn
 from rsc.logs import GuildLogAdapter
 from rsc.members.views.intent import IntentState, IntentToPlayView
@@ -59,6 +59,13 @@ log = GuildLogAdapter(logger)
 
 # Seconds an elevated role lookup stays cached before being refetched
 ELEVATED_ROLE_TTL = 300.0
+# Appended to a sign up confirmation when the member's RSC name and prefix do
+# not fit in a discord nickname. The sign up worked, the rename did not.
+NICKNAME_TOO_LONG_NOTE = (
+    "\n\nYour nickname could not be updated because your RSC name is too long "
+    f"for discord ({utils.NICKNAME_MAX_LENGTH} characters including the franchise prefix). "
+    "Please open a modmail ticket to have it shortened."
+)
 
 
 class MemberMixIn(RSCMixIn):
@@ -599,13 +606,20 @@ class MemberMixIn(RSCMixIn):
         #
         # A signup lands as DE or PermFA, neither of which an AGM can hold, so
         # there is no franchise staff record to preserve here.
-        await update_league_player_discord(
-            guild=guild,
-            player=interaction.user,
-            league_player=result,
-            devleague=add_devleague_role,
-            agm_franchise=None,
-        )
+        # The sign up itself is already recorded in the API, so a discord
+        # problem here must not be reported back as a failed sign up.
+        nickname_note = ""
+        try:
+            await update_league_player_discord(
+                guild=guild,
+                player=interaction.user,
+                league_player=result,
+                devleague=add_devleague_role,
+                agm_franchise=None,
+            )
+        except DiscordNameTooLong as exc:
+            log.warning(f"Unable to update nickname for {interaction.user.id}: {exc}", guild=guild)
+            nickname_note = NICKNAME_TOO_LONG_NOTE
 
         await interaction.edit_original_response(
             view=ResultView(
@@ -613,6 +627,7 @@ class MemberMixIn(RSCMixIn):
                 description=(
                     "You have successfully signed up for the next season of RSC!\n\n"
                     "Please keep up to date with league notices for information on the upcoming Draft and Combines."
+                    f"{nickname_note}"
                 ),
                 colour=discord.Colour.green(),
             )
@@ -710,19 +725,27 @@ class MemberMixIn(RSCMixIn):
         #
         # A signup lands as DE or PermFA, neither of which an AGM can hold, so
         # there is no franchise staff record to preserve here.
-        await update_league_player_discord(
-            guild=guild,
-            player=interaction.user,
-            league_player=result,
-            devleague=add_devleague_role,
-            agm_franchise=None,
-        )
+        # The sign up itself is already recorded in the API, so a discord
+        # problem here must not be reported back as a failed sign up.
+        nickname_note = ""
+        try:
+            await update_league_player_discord(
+                guild=guild,
+                player=interaction.user,
+                league_player=result,
+                devleague=add_devleague_role,
+                agm_franchise=None,
+            )
+        except DiscordNameTooLong as exc:
+            log.warning(f"Unable to update nickname for {interaction.user.id}: {exc}", guild=guild)
+            nickname_note = NICKNAME_TOO_LONG_NOTE
 
         await interaction.edit_original_response(
             view=ResultView(
                 title="PermFA Sign-Up Success",
                 description=(
                     "You have successfully signed up as a permenent free agent in RSC!\n\nPlease be patient while we process your request."
+                    f"{nickname_note}"
                 ),
                 colour=discord.Colour.green(),
             )

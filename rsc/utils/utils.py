@@ -23,6 +23,7 @@ from rsc.embeds import (
     SuccessEmbed,
 )
 from rsc.enums import BulkRoleAction, DiscordPermType, DiscordPermValue, TransactionType
+from rsc.exceptions import DiscordNameTooLong
 from rsc.logs import GuildLogAdapter
 from rsc.transformers import GreedyMemberTransformer
 from rsc.types import Accolades
@@ -46,6 +47,9 @@ ACCOLADE_EMOJI = (
 # Franchise prefixes are two or three characters in both leagues ("TQD", "50",
 # "<0>"). Allowing more would mangle RSC names that contain their own pipe.
 MAX_FRANCHISE_PREFIX_LEN = 3
+# Discord's hard cap on a nickname. Enforced here so a name that cannot fit is
+# reported instead of bouncing off the discord API as a 400.
+NICKNAME_MAX_LENGTH = 32
 EMOJI_REGEX = re.compile(
     "["
     "\U0001f600-\U0001f64f"  # emoticons
@@ -80,8 +84,8 @@ async def update_discord_name(member: discord.Member, name: str, prefix: str | N
     if prefix:
         final = f"{prefix} | {name} {accolades}".strip()
 
-    if len(final) > 32:
-        raise ValueError(f"Discord name is too long ({member.id}): {final}")
+    if len(final) > NICKNAME_MAX_LENGTH:
+        raise DiscordNameTooLong(member_id=member.id, nickname=final)
 
     if not final or len(final) < 1:
         raise ValueError(f"Error changing name. Empty or <1 characters: {member.mention}")
@@ -164,6 +168,31 @@ async def get_audit_log_reason(
                     reason = log.reason
                 break
     return perp, reason
+
+
+async def safe_defer(interaction: discord.Interaction, ephemeral: bool = False) -> bool:
+    """Defer an interaction, returning False if discord already discarded it.
+
+    Discord only accepts an acknowledgement within three seconds of the
+    interaction firing. If the bot is lagging behind the gateway the token is
+    already dead by the time the callback runs, and the deferral comes back as
+    a 404 (10062, unknown interaction). Nothing can be sent to the user at that
+    point, so the caller should simply stop rather than continue into work whose
+    result has nowhere to go.
+    """
+    try:
+        await interaction.response.defer(ephemeral=ephemeral)
+    except discord.NotFound:
+        cmd = interaction.command.qualified_name if interaction.command else "unknown"
+        log.warning(
+            f"Interaction for '{cmd}' expired before it could be deferred. (user={interaction.user.id})",
+            guild=interaction.guild,
+        )
+        return False
+    except discord.InteractionResponded:
+        # Already acknowledged elsewhere (e.g. a modal). Followups still work.
+        return True
+    return True
 
 
 async def not_implemented(interaction: discord.Interaction, followup: bool = False):

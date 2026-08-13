@@ -12,12 +12,13 @@ from rsc.embeds import (
     ErrorEmbed,
     ExceptionErrorEmbed,
     SuccessEmbed,
+    WarningEmbed,
     YellowEmbed,
     GreenEmbed,
     OrangeEmbed,
 )
 from rsc.enums import Platform, PlayerType, Referrer, RegionPreference, StaffPositions, Status
-from rsc.exceptions import RscException, LeagueNotConfigured
+from rsc.exceptions import DiscordNameTooLong, RscException, LeagueNotConfigured
 from rsc.logs import GuildLogAdapter
 from rsc.teams import TeamMixIn
 from rsc.tiers import TierMixIn
@@ -609,13 +610,29 @@ class AdminMembersMixIn(AdminMixIn):
         #
         # A fresh signup lands as DE or PermFA, neither of which an AGM can hold,
         # so there is no franchise staff record to preserve here.
-        await update_league_player_discord(
-            guild=interaction.guild,
-            player=member,
-            league_player=lplayer,
-            devleague=add_devleague_role,
-            agm_franchise=None,
-        )
+        # The sign up is already recorded in the API, so a nickname that cannot
+        # fit is reported to the executor rather than failing the command.
+        try:
+            await update_league_player_discord(
+                guild=interaction.guild,
+                player=member,
+                league_player=lplayer,
+                devleague=add_devleague_role,
+                agm_franchise=None,
+            )
+        except DiscordNameTooLong as exc:
+            log.warning(f"Unable to update nickname for {member.id}: {exc}", guild=interaction.guild)
+            return await interaction.followup.send(
+                embed=WarningEmbed(
+                    title="Nickname Too Long",
+                    description=(
+                        f"{member.mention} has been signed up for the latest season of RSC but their nickname "
+                        f"was not updated. `{exc.nickname}` is {len(exc.nickname)} characters and discord allows "
+                        f"{utils.NICKNAME_MAX_LENGTH}."
+                    ),
+                ),
+                ephemeral=True,
+            )
 
         await interaction.followup.send(
             embed=SuccessEmbed(description=f"{member.mention} has been signed up for the latest season of RSC.")

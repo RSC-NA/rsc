@@ -15,9 +15,10 @@ from rsc.embeds import (  # YellowEmbed,
     ErrorEmbed,
     ExceptionErrorEmbed,
     SuccessEmbed,
+    WarningEmbed,
 )
 from rsc.enums import Status
-from rsc.exceptions import RscException
+from rsc.exceptions import DiscordNameTooLong, RscException
 from rsc.logs import GuildLogAdapter
 from rsc.transactions.roles import (
     update_draft_eligible_discord,
@@ -120,6 +121,17 @@ class AdminSyncMixIn(AdminMixIn):
                         tiers=tiers,
                         devleague=add_devleague_role,
                         agm_franchise=agm_map.get(m.id),
+                    )
+                except DiscordNameTooLong as exc:
+                    # The roles are already applied at this point, only the
+                    # nickname was skipped. An API name nobody can fit in 32
+                    # characters is not a bug, so log it without a traceback.
+                    log.warning(
+                        "Unable to update nickname for %s (%d): %s",
+                        m.display_name,
+                        m.id,
+                        exc,
+                        guild=guild,
                     )
                 except (ValueError, AttributeError) as exc:
                     log.exception("Error syncing player: %s (%d)", m.display_name, m.id, guild=guild, exc_info=exc)
@@ -903,6 +915,21 @@ class AdminSyncMixIn(AdminMixIn):
                         franchise=franchise,
                         tiers=tiers,
                         agm_franchise=agm_map.get(m.id),
+                    )
+                except DiscordNameTooLong as exc:
+                    # Roles were applied, only the nickname was skipped. Report
+                    # it so an admin can shorten the name in the API.
+                    log.warning("Unable to update nickname for %s (%d): %s", m.display_name, m.id, exc, guild=guild)
+                    await interaction.followup.send(
+                        embed=WarningEmbed(
+                            title="Nickname Too Long",
+                            description=(
+                                f"{m.mention} was synced but their nickname was left alone. "
+                                f"`{exc.nickname}` is {len(exc.nickname)} characters and discord allows "
+                                f"{utils.NICKNAME_MAX_LENGTH}."
+                            ),
+                        ),
+                        ephemeral=True,
                     )
                 except (ValueError, AttributeError) as exc:
                     await interaction.followup.send(content=str(exc), ephemeral=True)

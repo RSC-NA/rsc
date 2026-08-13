@@ -152,6 +152,23 @@ class CombinesNotActive(RscException):
     """Combines returned error status message"""
 
 
+# Discord
+
+
+class DiscordNameTooLong(ValueError):  # noqa: N818
+    """A member's RSC name and prefix do not fit in a discord nickname.
+
+    A data problem (the API name is too long), not a bug, so callers can report
+    it and keep going instead of aborting a sync. Subclasses `ValueError` so the
+    existing `except ValueError` handling still catches it.
+    """
+
+    def __init__(self, member_id: int, nickname: str):
+        self.member_id = member_id
+        self.nickname = nickname
+        super().__init__(f"Discord name is too long ({member_id}): {nickname}")
+
+
 # Member
 
 

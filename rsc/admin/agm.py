@@ -55,7 +55,8 @@ class AdminAGMMixIn(AdminMixIn):
         if not guild:
             return
 
-        await interaction.response.defer(ephemeral=True)
+        if not await utils.safe_defer(interaction, ephemeral=True):
+            return
 
         # Check if player is on another franchise already
         players = await self.players(guild=guild, discord_id=agm.id, limit=1)
@@ -202,7 +203,8 @@ class AdminAGMMixIn(AdminMixIn):
         if not guild:
             return
 
-        await interaction.response.defer(ephemeral=True)
+        if not await utils.safe_defer(interaction, ephemeral=True):
+            return
 
         # Get AGM role
         agm_role = await utils.get_agm_role(guild)

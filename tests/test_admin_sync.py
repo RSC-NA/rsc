@@ -4,6 +4,8 @@ import discord
 import pytest
 
 from rsc.admin.sync import AdminSyncMixIn
+from rsc.enums import Status
+from rsc.exceptions import DiscordNameTooLong
 
 
 def _create_mixin(**attrs):
@@ -45,9 +47,7 @@ class TestTransactionChannelSync:
     def mixin(self, mock_guild):
         mixin = _create_mixin()
         mixin.franchises = AsyncMock(return_value=[_make_franchise("Active One"), _make_franchise("Active Two")])
-        mixin.get_franchise_transaction_channel_name = AsyncMock(
-            side_effect=lambda name: f"{name.lower().replace(' ', '-')}-transactions"
-        )
+        mixin.get_franchise_transaction_channel_name = AsyncMock(side_effect=lambda name: f"{name.lower().replace(' ', '-')}-transactions")
         mixin.get_franchise_transaction_channel = AsyncMock()
         mixin._trans_role = AsyncMock(return_value=None)
 
@@ -292,3 +292,91 @@ class TestNonPlayingSyncAgmSweep:
         assert sync.await_args.kwargs["agm_franchise"] is None
         stale.remove_roles.assert_not_awaited()
         assert not [f for f in embed.fields if f.name.startswith("Stale AGM Roles")]
+
+
+class TestPlayerSyncNicknameTooLong:
+    """`/admin sync players` walks the whole league in one command.
+
+    A member whose RSC name plus franchise prefix will not fit in a discord
+    nickname is a data problem, not a bug, and it turns up mid-run. Their roles
+    are applied before the rename is attempted, so the run has to report the
+    member and keep going rather than lose the rest of the league to it.
+    """
+
+    @pytest.fixture
+    def interaction(self, mock_guild):
+        interaction = MagicMock(spec=discord.Interaction)
+        interaction.guild = mock_guild
+        interaction.edit_original_response = AsyncMock()
+        interaction.followup = MagicMock()
+        interaction.followup.send = AsyncMock()
+        return interaction
+
+    @staticmethod
+    def _member(discord_id, name):
+        m = MagicMock(spec=discord.Member)
+        m.id = discord_id
+        m.display_name = name
+        m.mention = f"<@{discord_id}>"
+        return m
+
+    @staticmethod
+    def _api_player(discord_id, name):
+        p = MagicMock()
+        p.id = discord_id
+        p.status = Status.ROSTERED
+        p.player = MagicMock()
+        p.player.discord_id = discord_id
+        p.player.name = name
+        return p
+
+    @pytest.fixture
+    def members(self, mock_guild):
+        by_id = {
+            111: self._member(111, "cosmo6430"),
+            222: self._member(222, "someone"),
+        }
+        mock_guild.get_member = MagicMock(side_effect=by_id.get)
+        return by_id
+
+    @pytest.fixture
+    def mixin(self, members):
+        async def _players():
+            yield self._api_player(111, "cosmo6430 - INACTIVE USER - TRANSFER")
+            yield self._api_player(222, "someone")
+
+        mixin = _create_mixin()
+        mixin.tiers = AsyncMock(return_value=[])
+        mixin.agm_franchise_map = AsyncMock(return_value={})
+        mixin.paged_players = MagicMock(return_value=_players())
+        return mixin
+
+    async def _run(self, mixin, interaction, sync_mock):
+        with (
+            patch("rsc.admin.sync.ConfirmSyncView") as view_cls,
+            patch("rsc.admin.sync.update_league_player_discord", sync_mock),
+        ):
+            view = MagicMock()
+            view.prompt = AsyncMock()
+            view.wait = AsyncMock()
+            view.result = True
+            view_cls.return_value = view
+
+            await AdminSyncMixIn._sync_players_cmd.callback(mixin, interaction, False)
+
+    async def test_reports_the_member_and_finishes_the_run(self, mixin, interaction, members):
+        too_long = DiscordNameTooLong(member_id=111, nickname="COS | cosmo6430 - INACTIVE USER - TRANSFER")
+        sync_mock = AsyncMock(side_effect=[too_long, None])
+
+        await self._run(mixin, interaction, sync_mock)
+
+        # The second player still synced.
+        assert sync_mock.await_count == 2
+        assert sync_mock.await_args_list[1].kwargs["player"] is members[222]
+
+        embed = interaction.followup.send.await_args.kwargs["embed"]
+        assert embed.title == "Nickname Too Long"
+        assert members[111].mention in embed.description
+
+        # And the command reported success for the run as a whole.
+        assert interaction.edit_original_response.await_args.kwargs["embed"].title == "League Player Sync"
