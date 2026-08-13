@@ -231,6 +231,12 @@ class TransactionMixIn(RSCMixIn):
     async def before_expire_sub_contract_loop(self):
         await self.bot.wait_until_ready()
 
+    @expire_sub_contract_loop.error
+    async def expire_sub_contract_loop_error(self, exc: BaseException):
+        """Backstop. A loop that raises out of `_loop` never restarts on its own."""
+        logger.error("Substitute contract expiry loop crashed. Restarting.", exc_info=exc)
+        self.expire_sub_contract_loop.restart()
+
     # Listeners
 
     @commands.Cog.listener("on_raw_member_remove")

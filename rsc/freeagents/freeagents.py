@@ -79,6 +79,12 @@ class FreeAgentMixIn(RSCMixIn):
         await self.bot.wait_until_ready()
         log.debug("Bot is ready, starting expire FA check in loop.")
 
+    @expire_free_agent_checkins_loop.error
+    async def expire_free_agent_checkins_loop_error(self, exc: BaseException):
+        """Backstop. A loop that raises out of `_loop` never restarts on its own."""
+        log.error("Free agent check-in expiry loop crashed. Restarting.", exc_info=exc)
+        self.expire_free_agent_checkins_loop.restart()
+
     # Groups
 
     _free_agent_group = app_commands.Group(

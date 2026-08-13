@@ -66,7 +66,10 @@ class AdminSyncMixIn(AdminMixIn):
                 log.debug("Fetching tiers", guild=guild)
                 tiers: list[Tier] = await self.tiers(guild)
             except RscException as exc:
-                log.exception("Error fetching tiers", guild=guild, exc=exc)
+                # `tiers` is read unconditionally below, so this must skip the
+                # guild rather than fall through to an UnboundLocalError.
+                log.exception("Error fetching tiers. Skipping guild.", guild=guild, exc_info=exc)
+                continue
 
             # One request answers AGM membership for the whole league. Resolving
             # it per member would be a full franchise list each time.
@@ -74,7 +77,7 @@ class AdminSyncMixIn(AdminMixIn):
                 log.debug("Fetching AGMs", guild=guild)
                 agm_map = await self.agm_franchise_map(guild)
             except (RscException, RuntimeError) as exc:
-                log.exception("Error fetching AGMs. Skipping guild.", guild=guild, exc=exc)
+                log.exception("Error fetching AGMs. Skipping guild.", guild=guild, exc_info=exc)
                 continue
 
             log.debug("Fetching league players", guild=guild)
@@ -143,6 +146,12 @@ class AdminSyncMixIn(AdminMixIn):
     @sync_discord_roles.before_loop
     async def before_sync_discord_roles(self):
         await self.bot.wait_until_ready()
+
+    @sync_discord_roles.error
+    async def sync_discord_roles_error(self, exc: BaseException):
+        """Backstop. A loop that raises out of `_loop` never restarts on its own."""
+        logger.error("Discord role sync loop crashed. Restarting.", exc_info=exc)
+        self.sync_discord_roles.restart()
 
     _sync = app_commands.Group(
         name="sync",

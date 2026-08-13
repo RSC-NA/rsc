@@ -186,6 +186,7 @@ class ThreadMixIn(RSCMixIn):
     @app_commands.command(name="assign", description="Assign the current modmail to a specific group")
     @app_commands.describe(group="Assignable ModMail group name")
     @app_commands.autocomplete(group=thread_autocomplete)
+    @app_commands.checks.has_permissions(manage_channels=True)
     @app_commands.guild_only
     async def _thread_assign(self, interaction: discord.Interaction, group: str):
         channel = interaction.channel
@@ -194,6 +195,13 @@ class ThreadMixIn(RSCMixIn):
             return
 
         if not isinstance(channel, discord.TextChannel):
+            return
+
+        # `channel.move(sync_permissions=True)` below rewrites this channel's
+        # overwrites from the destination category. Without this guard the
+        # command would do that to any channel it was invoked in.
+        if not await self.is_modmail_channel(channel):
+            await interaction.response.send_message("Only allowed in a modmail thread.", ephemeral=True)
             return
 
         # Validate group exists
@@ -221,6 +229,7 @@ class ThreadMixIn(RSCMixIn):
         )
 
     @app_commands.command(name="unassign", description="Move thread back to the primary ModMail category")
+    @app_commands.checks.has_permissions(manage_channels=True)
     @app_commands.guild_only
     async def _thread_unassign(self, interaction: discord.Interaction):
         channel = interaction.channel
@@ -262,6 +271,7 @@ class ThreadMixIn(RSCMixIn):
         )
 
     @app_commands.command(name="resolve", description="Send resolved message to a modmail thread")
+    @app_commands.checks.has_permissions(manage_messages=True)
     @app_commands.guild_only
     async def _thread_resolve(self, interaction: discord.Interaction):
         guild = interaction.guild
@@ -312,6 +322,23 @@ class ThreadMixIn(RSCMixIn):
                 log.debug(f"Valid modmail thread: {channel}")
                 return True
         return False
+
+    async def is_modmail_channel(self, channel: discord.TextChannel) -> bool:
+        """Whether `channel` is a modmail ticket, assigned or not.
+
+        `is_modmail_thread` only matches the group categories, which is correct
+        for `/unassign` - a ticket being handed back is by definition already in
+        one. `/assign` moves a ticket the other way, so an unassigned ticket
+        sitting in the primary category has to count too.
+        """
+        if not channel.category_id:
+            return False
+
+        primary = await self._get_primary_category(channel.guild)
+        if primary and primary.id == channel.category_id:
+            return True
+
+        return await self.is_modmail_thread(channel)
 
     # region jsondb
     async def _unset_group(
