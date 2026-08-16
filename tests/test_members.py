@@ -256,6 +256,8 @@ class TestChangeMemberNameApi:
                 await mixin.change_member_name(mock_guild, id=111, name="NewName", executor=999)
 
         data = mock_api.members_name_change_partial_update.call_args.args[1]
+        # The field is StrictInt -- a stringified id is rejected outright.
+        assert isinstance(data.executor, int)
         assert data.executor == 999
         assert data.to_dict()["executor"] == 999
 
@@ -271,6 +273,7 @@ class TestChangeMemberNameApi:
                 await mixin.change_member_name(mock_guild, id=111, name="NewName")
 
         data = mock_api.members_name_change_partial_update.call_args.args[1]
+        # None, never the string "None" -- StrictInt would reject the latter.
         assert data.executor is None
         assert "executor" not in data.to_dict()
 
