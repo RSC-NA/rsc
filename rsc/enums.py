@@ -164,6 +164,7 @@ class EventAction(StrEnum):
     PLATFORM_ID_SYNC_FAILED = "PSF"
     MMR_PULL_FAILED = "MPF"
     MMR_TRACKER_SKIPPED = "MTS"
+    TRACKER_LINK_CONFLICT = "TLC"
     TASK_FAILED = "TKF"
     DISCORD_JOIN_FAILED = "DJF"
 
@@ -208,6 +209,8 @@ class EventAction(StrEnum):
                 return "MMR Pull Failed"
             case EventAction.MMR_TRACKER_SKIPPED:
                 return "MMR Tracker Skipped"
+            case EventAction.TRACKER_LINK_CONFLICT:
+                return "Tracker Link Conflict"
             case EventAction.TASK_FAILED:
                 return "Task Failed"
             case EventAction.DISCORD_JOIN_FAILED:

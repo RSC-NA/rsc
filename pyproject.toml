@@ -11,7 +11,7 @@ dependencies = [
     "pillow>=12.3.0",
     "pip>=26.1.2",
     "pydantic>=2.11.10",
-    "python-ballchasing",
+    "python-ballchasing>=0.3.0",
     "pytz>=2026.1.post1",
     "red-discordbot==3.5.24",
     "replay-parser",

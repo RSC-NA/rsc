@@ -1252,12 +1252,21 @@ class MemberMixIn(RSCMixIn):
         id: int,
         name: str,
         override: bool = False,
+        executor: int | None = None,
     ) -> Member:
         async with self.api_client(guild) as client:
             api = MembersApi(client)
             try:
-                data = PatchedMemberNameChangeRequest(name=name, admin_override=override)
-                log.debug(f"NameChange Data. Name: {data.name} Override: {data.admin_override}")
+                # `executor` is only sent when we know who ran the command. The
+                # API defaults it to the authenticated caller (the bot's own key),
+                # so passing an explicit null would discard that default rather
+                # than fall back to it.
+                data = PatchedMemberNameChangeRequest(
+                    name=name,
+                    admin_override=override,
+                    **({"executor": executor} if executor is not None else {}),
+                )
+                log.debug(f"NameChange Data. Name: {data.name} Override: {data.admin_override} Executor: {executor}")
                 return await api.members_name_change_partial_update(id, data)
             except ApiException as exc:
                 raise RscException(response=exc)

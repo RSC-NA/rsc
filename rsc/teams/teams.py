@@ -333,7 +333,7 @@ class TeamMixIn(RSCMixIn):
         fteams = await self.teams(guild, franchise=captains[0].team.franchise.name)
 
         # This is validated in franchise_captains()
-        fteams.sort(key=lambda t: cast("int", t.tier.position), reverse=True)
+        fteams.sort(key=lambda t: t.tier.position, reverse=True)
 
         cpt_fmt: list[tuple[str, str, str]] = []
         for t in fteams:
@@ -430,7 +430,7 @@ class TeamMixIn(RSCMixIn):
             x
             for x in players
             if x.captain
-            if x.tier and x.tier.position and x.status in (Status.ROSTERED, Status.RENEWED, Status.IR, Status.AGMIR)
+            if x.tier and x.tier.position is not None and x.status in (Status.ROSTERED, Status.RENEWED, Status.IR, Status.AGMIR)
         ]
         for c in captains:
             if not (c.team and c.team.name):
@@ -445,12 +445,14 @@ class TeamMixIn(RSCMixIn):
         if not players:
             return []
 
-        captains = [x for x in players if x.captain if x.tier and x.tier.position]
+        # `position` is a valid 0, so presence has to be tested explicitly --
+        # truthiness silently dropped the top tier from captain listings.
+        captains = [x for x in players if x.captain if x.tier and x.tier.position is not None]
         for c in captains:
-            if not (c.tier and c.tier.position):
+            if not (c.tier and c.tier.position is not None):
                 raise AttributeError(f"LeaguePlayer {c.id} captain is missing tier data.")
 
-        captains.sort(key=lambda c: c.tier.position if c.tier and c.tier.position else 0, reverse=True)
+        captains.sort(key=lambda c: c.tier.position if c.tier and c.tier.position is not None else 0, reverse=True)
         return captains
 
     async def build_franchise_teams_embed(self, guild: discord.Guild, teams: list[TeamList]) -> discord.Embed:
@@ -467,7 +469,7 @@ class TeamMixIn(RSCMixIn):
                 raise AttributeError(f"`Team {t.id}` has no tier. Please open a modmail ticket")
             if not t.tier.name:
                 raise AttributeError(f"`Team {t.id}` has no tier name. Please open a modmail ticket")
-            if not t.tier.position:
+            if t.tier.position is None:
                 raise AttributeError(f"`Team {t.id}` has no tier position. Please open a modmail ticket")
 
         gm_id = teams[0].franchise.gm.discord_id if teams[0].franchise.gm else None
@@ -482,7 +484,7 @@ class TeamMixIn(RSCMixIn):
         except (RscException, ValueError) as exc:
             log.warning(f"Unable to fetch AGMs for {teams[0].franchise.name}: {exc}", guild=guild)
 
-        teams.sort(key=lambda t: cast("str", t.tier.position), reverse=True)
+        teams.sort(key=lambda t: t.tier.position, reverse=True)
 
         desc = f"GM: {f'<@!{gm_id}>' if gm_id else 'None'}"
         if agm_ids:

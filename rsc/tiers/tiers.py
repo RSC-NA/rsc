@@ -124,7 +124,7 @@ class TierMixIn(RSCMixIn):
         async with self.api_client(guild) as client:
             api = TiersApi(client)
             tiers = await api.tiers_list(name=name, league=self._league[guild.id], _request_timeout=API_TIMEOUT)
-            tiers.sort(key=lambda t: cast("int", t.position), reverse=True)
+            tiers.sort(key=lambda t: t.position, reverse=True)
 
             # Populate cache
             if tiers:

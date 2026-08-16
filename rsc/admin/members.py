@@ -1,10 +1,12 @@
 import logging
 from datetime import datetime
+from typing import cast
 
 import discord
 from redbot.core import app_commands
 from redbot.core.app_commands import Transform
 from rscapi.models.league_player import LeaguePlayer
+from rscapi.models.name_change_history import NameChangeHistory
 
 from rsc.admin import AdminMixIn
 from rsc.embeds import (
@@ -81,14 +83,33 @@ class AdminMembersMixIn(AdminMixIn):
         else:
             embed.description = f"Member: {member.mention}"
 
-        history.sort(key=lambda x: x.date_changed or "None", reverse=True)
+        # Undated entries are partitioned out rather than given a sentinel key.
+        # Sorting on `x.date_changed or "None"` compared a str against a datetime
+        # and raised TypeError as soon as any entry had a null date.
+        dated = [h for h in history if h.date_changed]
+        undated = [h for h in history if not h.date_changed]
+        dated.sort(key=lambda x: cast("datetime", x.date_changed), reverse=True)
+        history = dated + undated
         log.debug(f"Post sort: {history}")
 
-        embed.add_field(name="API Name", value="\n".join([h.old_name for h in history]))
+        def executor_name(h: NameChangeHistory) -> str:
+            # Always the discord ID, never the RSC name. A name is not a stable
+            # identity -- it can itself be changed -- so an audit column keyed on
+            # it could attribute a change to the wrong person.
+            if not h.executor or not h.executor.discord_id:
+                return "None"
+            return f"<@!{h.executor.discord_id}>"
+
+        # `old_name` is Optional in the API model, so a null would blow up the
+        # join. Same for `new_name`, which is nullable by design.
+        embed.add_field(name="Old Name", value="\n".join([h.old_name or "None" for h in history]), inline=True)
+        embed.add_field(name="New Name", value="\n".join([h.new_name or "None" for h in history]), inline=True)
         embed.add_field(
             name="Date",
             value="\n".join([(h.date_changed.strftime("%-m-%d-%y") if h.date_changed else "None") for h in history]),
+            inline=True,
         )
+        embed.add_field(name="Changed By", value="\n".join([executor_name(h) for h in history]), inline=False)
         await interaction.followup.send(embed=embed)
 
     @_members.command(name="elevatedroles", description="Display API elevated roles for a member")
@@ -169,7 +190,7 @@ class AdminMembersMixIn(AdminMixIn):
         try:
             if tracker:
                 await self.add_tracker(guild, member, tracker)
-            await self.change_member_name(guild, id=member.id, name=name, override=override)
+            await self.change_member_name(guild, id=member.id, name=name, override=override, executor=interaction.user.id)
         except RscException as exc:
             await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc), ephemeral=False)
             return

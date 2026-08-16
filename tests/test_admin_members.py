@@ -1,9 +1,11 @@
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import discord
 import pytest
 from rscapi.exceptions import ApiException
 from rscapi.models.league_player_status_enum import LeaguePlayerStatusEnum
+from rscapi.models.name_change_history import NameChangeHistory
 
 from rsc.admin.members import AdminMembersMixIn
 from rsc.enums import ACTIVE_STATUSES, INACTIVE_STATUSES, StaffPositions, Status, is_inactive_status
@@ -49,6 +51,71 @@ def _sent_embed(interaction):
 
 # The decorator turns the method into an app command, so reach through to the callback
 CMD = AdminMembersMixIn._member_elevated_roles_cmd.callback
+
+
+NAMEHISTORY_CMD = AdminMembersMixIn._member_namehistory_cmd.callback
+
+
+def _history_entry(old_name="Old", new_name="New", date_changed=None, executor=None):
+    h = MagicMock(spec=NameChangeHistory)
+    h.old_name = old_name
+    h.new_name = new_name
+    h.date_changed = date_changed
+    h.executor = executor
+    return h
+
+
+def _field(embed, name):
+    return next(f.value for f in embed.fields if f.name == name)
+
+
+class TestAdminNameHistoryCommand:
+    async def test_sorts_undated_entries_without_crashing(self, mock_guild):
+        """A null date_changed used to compare str against datetime and raise TypeError."""
+        interaction = _mock_interaction(mock_guild)
+        member = MagicMock(spec=discord.Member)
+        history = [
+            _history_entry("A", "B", datetime(2026, 1, 1, tzinfo=timezone.utc)),
+            _history_entry("C", "D", None),
+            _history_entry("E", "F", datetime(2026, 6, 1, tzinfo=timezone.utc)),
+        ]
+        mixin = _create_mixin(name_history=AsyncMock(return_value=history))
+
+        await NAMEHISTORY_CMD(mixin, interaction, member)
+
+        embed = _sent_embed(interaction)
+        # Newest first, undated pushed to the end.
+        assert _field(embed, "Old Name") == "E\nA\nC"
+        assert _field(embed, "New Name") == "F\nB\nD"
+
+    async def test_null_names_do_not_crash_join(self, mock_guild):
+        """old_name/new_name are Optional in the API model; a None used to TypeError."""
+        interaction = _mock_interaction(mock_guild)
+        member = MagicMock(spec=discord.Member)
+        mixin = _create_mixin(name_history=AsyncMock(return_value=[_history_entry(None, None, None)]))
+
+        await NAMEHISTORY_CMD(mixin, interaction, member)
+
+        embed = _sent_embed(interaction)
+        assert _field(embed, "Old Name") == "None"
+        assert _field(embed, "New Name") == "None"
+
+    async def test_executor_renders_discord_id_only(self, mock_guild):
+        """Never fall back to rsc_name -- a name is not a stable identity."""
+        interaction = _mock_interaction(mock_guild)
+        member = MagicMock(spec=discord.Member)
+        with_id = MagicMock(discord_id=4242, rsc_name="AdminGuy")
+        name_only = MagicMock(discord_id=None, rsc_name="AdminGuy")
+        history = [
+            _history_entry("A", "B", None, executor=with_id),
+            _history_entry("C", "D", None, executor=name_only),
+            _history_entry("E", "F", None, executor=None),
+        ]
+        mixin = _create_mixin(name_history=AsyncMock(return_value=history))
+
+        await NAMEHISTORY_CMD(mixin, interaction, member)
+
+        assert _field(_sent_embed(interaction), "Changed By") == "<@!4242>\nNone\nNone"
 
 
 class TestAdminElevatedRolesCommand:

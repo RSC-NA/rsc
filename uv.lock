@@ -1434,8 +1434,8 @@ wheels = [
 
 [[package]]
 name = "python-ballchasing"
-version = "0.2.0"
-source = { git = "https://github.com/xentrick/python-ballchasing.git#7045c619e69bcb65ca635ff79e26e03e5c72659b" }
+version = "0.3.0"
+source = { git = "https://github.com/xentrick/python-ballchasing.git#18e0aef5789433e391100882cb5e9d7b21665bfd" }
 dependencies = [
     { name = "aiofiles" },
     { name = "aiohttp" },
@@ -1734,8 +1734,8 @@ dev = [
 
 [[package]]
 name = "rscapi"
-version = "2.1.1"
-source = { git = "https://github.com/RSC-NA/rsc-api-client.git#a1ffa9fafee8240ae2284d31860b631ca9304884" }
+version = "2.1.2"
+source = { git = "https://github.com/RSC-NA/rsc-api-client.git#15d20f12d550e9b6c97bb8296e42d11efaad4df0" }
 dependencies = [
     { name = "aiohttp" },
     { name = "aiohttp-retry" },

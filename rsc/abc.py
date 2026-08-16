@@ -533,6 +533,7 @@ class RSCMixIn(ABC):
         id: int,
         name: str,
         override: bool = False,
+        executor: int | None = None,
     ) -> RSCMember: ...
 
     @abstractmethod

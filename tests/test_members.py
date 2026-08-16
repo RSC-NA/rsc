@@ -244,6 +244,36 @@ class TestChangeMemberNameApi:
                 with pytest.raises(RscException):
                     await mixin.change_member_name(mock_guild, id=111, name="Bad")
 
+    async def test_sends_executor_when_provided(self, mock_guild):
+        """The admin who ran the command is attributed, not the bot's API key."""
+        mixin = _create_mixin(_api_conf={mock_guild.id: MagicMock()})
+
+        with patch("rsc.abc.ApiClient") as mock_client:
+            mock_api = AsyncMock()
+            mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
+            mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
+            with patch("rsc.members.members.MembersApi", return_value=mock_api):
+                await mixin.change_member_name(mock_guild, id=111, name="NewName", executor=999)
+
+        data = mock_api.members_name_change_partial_update.call_args.args[1]
+        assert data.executor == 999
+        assert data.to_dict()["executor"] == 999
+
+    async def test_omits_executor_when_absent(self, mock_guild):
+        """An explicit null would override the API-side default of the caller."""
+        mixin = _create_mixin(_api_conf={mock_guild.id: MagicMock()})
+
+        with patch("rsc.abc.ApiClient") as mock_client:
+            mock_api = AsyncMock()
+            mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
+            mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
+            with patch("rsc.members.members.MembersApi", return_value=mock_api):
+                await mixin.change_member_name(mock_guild, id=111, name="NewName")
+
+        data = mock_api.members_name_change_partial_update.call_args.args[1]
+        assert data.executor is None
+        assert "executor" not in data.to_dict()
+
 
 # --- player_stats API ---
 
