@@ -331,8 +331,9 @@ class AdminFranchiseMixIn(AdminMixIn):
         rebrand_modal = FranchiseRebrandModal()
         await interaction.response.send_modal(rebrand_modal)
 
-        # Fetch franchise data while user is in modal
+        # Fetch franchise and league tier data while user is in modal
         fl = await self.franchises(guild, name=franchise)
+        league_tiers = await self.tiers(guild)
         await rebrand_modal.wait()
 
         # Validate original franchise exists
@@ -381,9 +382,19 @@ class AdminFranchiseMixIn(AdminMixIn):
                 ephemeral=True,
             )
 
-        # Match teams to tiers
+        # Match teams to tiers. The modal collects names highest tier to lowest, so
+        # the franchise tiers have to follow the API's tier position (highest first).
+        # `FranchiseTier` carries no position, so it comes from the league tier list.
+        tier_positions = {t.id: t.position for t in league_tiers if t.id is not None}
+        unknown = [t.name or f"ID {t.id}" for t in fdata.tiers if t.id not in tier_positions]
+        if unknown:
+            return await rebrand_modal.interaction.response.send_message(
+                embed=ErrorEmbed(description=f"Unable to determine tier position for the following tiers: {', '.join(unknown)}"),
+                ephemeral=True,
+            )
+
         rebrands = []
-        fdata.tiers.sort(key=lambda x: cast("int", x.id))
+        fdata.tiers.sort(key=lambda x: tier_positions[cast("int", x.id)], reverse=True)
         for t in fdata.tiers:
             if t.name and t.id:
                 rebrands.append(RebrandTeamDict(name=rebrand_modal.teams.pop(0), tier=t.name, tier_id=t.id))
