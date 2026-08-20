@@ -28,6 +28,7 @@ from rsc.franchises import FranchiseMixIn
 from rsc.logs import GuildLogAdapter
 from rsc.tiers import TierMixIn
 from rsc.utils import utils
+from rsc.utils.cache import merge_name_cache
 
 logger = logging.getLogger("red.rsc.teams")
 log = GuildLogAdapter(logger)
@@ -639,17 +640,12 @@ class TeamMixIn(RSCMixIn):
                     if not all(t.name for t in teams):
                         raise AttributeError("API returned a team with no name.")
 
-                    if full_refresh or not self._team_cache.get(guild.id):
-                        log.debug(f"[{guild.name}] Starting fresh teams cache")
-                        self._team_cache[guild.id] = [t.name for t in teams if t.name]
-                    else:
-                        log.debug(f"[{guild.name}] Adding new teams to cache")
-                        cached = set(self._team_cache[guild.id])
-                        different = {t.name for t in teams if t.name} - cached
-                        if different:
-                            log.debug(f"[{guild.name}] Teams being added to cache: {different}")
-                            self._team_cache[guild.id] += list(different)
-                    self._team_cache[guild.id].sort()
+                    cached = self._team_cache.get(guild.id, [])
+                    merged = merge_name_cache(cached, (t.name for t in teams if t.name), full_refresh=full_refresh)
+                    merged.sort()
+                    if merged != cached:
+                        log.debug(f"[{guild.name}] Team cache now holds {len(merged)} teams")
+                    self._team_cache[guild.id] = merged
                 return teams
             except ApiException as exc:
                 raise RscException(exc)

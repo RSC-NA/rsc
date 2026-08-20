@@ -5,6 +5,7 @@ import discord
 from discord.ui import TextInput
 from pydantic import TypeAdapter
 
+from rsc import const
 from rsc.admin.models import CreateMatchData
 from rsc.embeds import SuccessEmbed
 
@@ -114,7 +115,12 @@ class FranchiseRebrandModal(discord.ui.Modal, title="Franchise Rebrand"):
         style=discord.TextStyle.short,
         required=True,
     )
-    prefix_input: TextInput = TextInput(label="Prefix", style=discord.TextStyle.short, required=True)
+    prefix_input: TextInput = TextInput(
+        label="Prefix",
+        style=discord.TextStyle.short,
+        required=True,
+        max_length=const.FRANCHISE_PREFIX_MAX_LENGTH,
+    )
     team_input: TextInput = TextInput(
         label="Teams (New line separated, high to low tiers)",
         style=discord.TextStyle.paragraph,

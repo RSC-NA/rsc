@@ -10,7 +10,7 @@
     "disabled": false,
     "required_cogs": {},
     "requirements": [
-        "rscapi@git+https://github.com/RSC-NA/rsc-api-client.git",
+        "rscapi@git+https://github.com/RSC-NA/rsc-api-client.git@v2.1.4",
         "python-ballchasing@git+https://github.com/xentrick/python-ballchasing.git",
         "replay-parser@git+https://github.com/xentrick/python-replay-parser.git",
         "aiofiles>=24.1.0",

@@ -42,6 +42,26 @@ logger = logging.getLogger("red.rsc.admin.franchise")
 log = GuildLogAdapter(logger)
 
 
+def rebrand_length_errors(prefix: str, teams: list[str]) -> list[str]:
+    """Report every rebrand field that exceeds the API's length limits.
+
+    The client models enforce these with pydantic, which raises while the
+    request is still being built. Nothing handles a `ValidationError` on an app
+    command, so an over-long entry would abandon the interaction on its loading
+    embed. Checking first turns that into an actionable message, and reporting
+    every offender at once saves reopening the modal one name at a time.
+    """
+    errors: list[str] = []
+    if len(prefix) > const.FRANCHISE_PREFIX_MAX_LENGTH:
+        errors.append(f"Prefix **{prefix}** is {len(prefix)} characters. Limit is {const.FRANCHISE_PREFIX_MAX_LENGTH}.")
+    errors.extend(
+        f"Team name **{name}** is {len(name)} characters. Limit is {const.TEAM_NAME_MAX_LENGTH}."
+        for name in teams
+        if len(name) > const.TEAM_NAME_MAX_LENGTH
+    )
+    return errors
+
+
 class AdminFranchiseMixIn(AdminMixIn):
     def __init__(self):
         log.debug("Initializing AdminMixIn:Franchise")
@@ -77,9 +97,11 @@ class AdminFranchiseMixIn(AdminMixIn):
         except RscException as exc:
             return await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc), ephemeral=True)
 
-        # Update team cache
-        if name not in self._team_cache[guild.id]:
-            self._team_cache[guild.id].append(name)
+        # Update team cache. The API is the authority on the stored name, so
+        # caching the raw input risks a second entry that differs only in case.
+        if result.name not in self._team_cache[guild.id]:
+            self._team_cache[guild.id].append(result.name)
+            self._team_cache[guild.id].sort()
 
         embed = GreenEmbed(title="Team Created", description="Team has been created.")
         embed.add_field(name="Name", value=result.name, inline=True)
@@ -130,9 +152,11 @@ class AdminFranchiseMixIn(AdminMixIn):
         except RscException as exc:
             return await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc), ephemeral=True)
 
-        # Update team cache
-        if team in self._team_cache[guild.id]:
-            self._team_cache[guild.id].append(team)
+        # Update team cache. `team` is whatever was typed, which only matches
+        # the stored name when it came from autocomplete, so drop the name the
+        # API returned for the deleted team.
+        if fteam.name in self._team_cache[guild.id]:
+            self._team_cache[guild.id].remove(fteam.name)
 
         embed = GreenEmbed(title="Team Deleted", description="Team has been deleted.")
         embed.add_field(name="Name", value=team, inline=True)
@@ -382,6 +406,15 @@ class AdminFranchiseMixIn(AdminMixIn):
                 ephemeral=True,
             )
 
+        # Enforce the API length limits before building the models below, which
+        # would otherwise raise an unhandled pydantic ValidationError.
+        length_errors = rebrand_length_errors(rebrand_modal.prefix, rebrand_modal.teams)
+        if length_errors:
+            return await rebrand_modal.interaction.response.send_message(
+                embed=ErrorEmbed(description="\n".join(length_errors)),
+                ephemeral=True,
+            )
+
         # Match teams to tiers. The modal collects names highest tier to lowest, so
         # the franchise tiers have to follow the API's tier position (highest first).
         # `FranchiseTier` carries no position, so it comes from the league tier list.
@@ -450,6 +483,15 @@ class AdminFranchiseMixIn(AdminMixIn):
         if rebrand_modal.name not in self._franchise_cache[guild.id]:
             self._franchise_cache[guild.id].append(rebrand_modal.name)
             self._franchise_cache[guild.id].sort()
+
+        # A rebrand renames every team in the franchise. Refetch the full list
+        # rather than patching it: an unfiltered query rebuilds the cache, so the
+        # old names go away instead of sitting in autocomplete beside the new
+        # ones. The rebrand already succeeded, so a failure here is not fatal.
+        try:
+            await self.teams(guild)
+        except RscException as exc:
+            log.warning(f"Unable to refresh team cache after rebranding {franchise}: {exc}", guild=guild)
 
         # Update transaction channel
         trans_channel = await self.get_franchise_transaction_channel(guild, franchise)
@@ -575,6 +617,19 @@ class AdminFranchiseMixIn(AdminMixIn):
         except RscException as exc:
             await interaction.edit_original_response(embed=ApiExceptionErrorEmbed(exc), view=None)
             return
+
+        # Update caches. The franchise and its teams are gone, so nothing but a
+        # restart would have cleared them from autocomplete. Both are read with
+        # `.get()`: the franchise is already deleted, so an unpopulated cache
+        # must not abandon the role and free agency work below.
+        franchise_cache = self._franchise_cache.get(guild.id, [])
+        if fdata.name in franchise_cache:
+            franchise_cache.remove(fdata.name)
+
+        team_cache = self._team_cache.get(guild.id, [])
+        for t in fdata.teams or []:
+            if t.name and t.name in team_cache:
+                team_cache.remove(t.name)
 
         # Roles
         fa_role = await utils.get_free_agent_role(guild)

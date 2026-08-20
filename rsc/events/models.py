@@ -49,6 +49,14 @@ MAX_BACKOFF = 900
 # steady state, and by the backlog size while draining.
 SEEN_IDS_WARN = 10_000
 
+#: Actions with a dedicated announcer of their own. Their handler already posts a
+#: richer, human-facing message elsewhere - `PTR` goes to the transaction channel
+#: via `rsc.transactions.trade_announce` - so a log embed would only duplicate it.
+#: Suppression is display only, exactly like the user filters: these events are
+#: still fetched, dispatched, handled and counted toward the cursor. `/rsc events
+#: replay` deliberately bypasses it so an operator can still inspect one.
+SUPPRESSED_ACTIONS = frozenset({EventAction.PLAYER_TRADED})
+
 
 def _enum_value(value: object) -> str | None:
     """Normalize a generated enum member to its plain string value.

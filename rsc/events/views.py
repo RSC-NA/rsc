@@ -6,6 +6,7 @@ import discord
 from rsc.const import DEFAULT_TIMEOUT
 from rsc.embeds import BlueEmbed, SuccessEmbed, YellowEmbed
 from rsc.enums import EventAction, EventCategory, EventSeverity
+from rsc.events.models import SUPPRESSED_ACTIONS
 from rsc.views import AuthorOnlyView, ConfirmButton, DeclineButton
 
 log = logging.getLogger("red.rsc.events.views")
@@ -31,7 +32,13 @@ class EventCategorySelect(discord.ui.Select):
 
 class EventActionSelect(discord.ui.Select):
     def __init__(self, selected: list[str]):
-        options = [discord.SelectOption(label=a.full_name, value=a.value, default=a.value in selected) for a in EventAction]
+        # A suppressed action never reaches the channel, so offering it here would
+        # only let an admin select it and wonder why nothing shows up.
+        options = [
+            discord.SelectOption(label=a.full_name, value=a.value, default=a.value in selected)
+            for a in EventAction
+            if a not in SUPPRESSED_ACTIONS
+        ]
         super().__init__(
             placeholder="Actions to log (none selected = all)",
             min_values=0,

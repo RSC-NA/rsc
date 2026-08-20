@@ -428,6 +428,60 @@ class TestTeamsApi:
         assert "Alpha" in mixin._team_cache[mock_guild.id]
         assert "Bravo" in mixin._team_cache[mock_guild.id]
 
+    async def test_cache_holds_one_entry_per_name(self, mock_guild):
+        """Nothing stops two teams from sharing a name, but autocomplete would
+        render each one as its own indistinguishable choice."""
+        t1 = _make_team_list(id=1, name="Dik-diks", tier_name="Premier")
+        t2 = _make_team_list(id=2, name="Dik-diks", tier_name="Master")
+        mixin = _create_mixin(
+            _api_conf={mock_guild.id: MagicMock()},
+            _league={mock_guild.id: 1},
+            _team_cache={},
+        )
+        with patch("rsc.abc.ApiClient") as mock_client:
+            mock_api = AsyncMock()
+            mock_api.teams_list.return_value = [t1, t2]
+            mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
+            mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
+            with patch("rsc.teams.teams.TeamsApi", return_value=mock_api):
+                await mixin.teams(mock_guild)
+
+        assert mixin._team_cache[mock_guild.id] == ["Dik-diks"]
+
+    async def test_filtered_query_does_not_duplicate_a_cached_team(self, mock_guild):
+        t1 = _make_team_list(name="Alpha")
+        mixin = _create_mixin(
+            _api_conf={mock_guild.id: MagicMock()},
+            _league={mock_guild.id: 1},
+            _team_cache={mock_guild.id: ["Alpha", "Bravo"]},
+        )
+        with patch("rsc.abc.ApiClient") as mock_client:
+            mock_api = AsyncMock()
+            mock_api.teams_list.return_value = [t1]
+            mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
+            mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
+            with patch("rsc.teams.teams.TeamsApi", return_value=mock_api):
+                await mixin.teams(mock_guild, name="Alpha")
+
+        assert mixin._team_cache[mock_guild.id] == ["Alpha", "Bravo"]
+
+    async def test_full_refresh_drops_a_team_that_no_longer_exists(self, mock_guild):
+        t1 = _make_team_list(name="Alpha")
+        mixin = _create_mixin(
+            _api_conf={mock_guild.id: MagicMock()},
+            _league={mock_guild.id: 1},
+            _team_cache={mock_guild.id: ["Alpha", "Deleted"]},
+        )
+        with patch("rsc.abc.ApiClient") as mock_client:
+            mock_api = AsyncMock()
+            mock_api.teams_list.return_value = [t1]
+            mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
+            mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
+            with patch("rsc.teams.teams.TeamsApi", return_value=mock_api):
+                await mixin.teams(mock_guild)
+
+        assert mixin._team_cache[mock_guild.id] == ["Alpha"]
+
     async def test_raises_when_team_has_no_name(self, mock_guild):
         t = MagicMock(spec=TeamList)
         t.name = None

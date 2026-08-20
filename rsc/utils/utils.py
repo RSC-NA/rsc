@@ -478,7 +478,8 @@ async def fa_img_path_from_tier(tier: str, tiny: bool = False) -> Path | None:
 async def transaction_image_from_type(action: TransactionType) -> discord.File:
     root = Path(__file__).parent.parent
     match action:
-        case TransactionType.CUT:
+        # A cut off Inactive Reserve is still a release.
+        case TransactionType.CUT | TransactionType.IR_CUT:
             return discord.File(root / "resources/transactions/Released.png")
         case TransactionType.PICKUP:
             return discord.File(root / "resources/transactions/Signed.png")

@@ -14,6 +14,7 @@ from rsc.abc import RSCMixIn
 from rsc.const import API_TIMEOUT
 from rsc.embeds import BlueEmbed, ErrorEmbed
 from rsc.exceptions import RscException
+from rsc.utils.cache import merge_name_cache
 
 log = logging.getLogger("red.rsc.tiers")
 
@@ -131,13 +132,11 @@ class TierMixIn(RSCMixIn):
                 if not all(t.name for t in tiers):
                     raise AttributeError("API returned a tier with no name.")
 
-                if full_refresh or not self._tier_cache.get(guild.id):
-                    self._tier_cache[guild.id] = [t.name for t in tiers if t.name]
-                else:
-                    cached = set(self._tier_cache[guild.id])
-                    different = {t.name for t in tiers if t.name} - cached
-                    if different:
-                        self._tier_cache[guild.id] += list(different)
+                self._tier_cache[guild.id] = merge_name_cache(
+                    self._tier_cache.get(guild.id, []),
+                    (t.name for t in tiers if t.name),
+                    full_refresh=full_refresh,
+                )
             return tiers
 
     async def tier_standings(self, guild: discord.Guild, tier_id: int, season: int) -> list[TeamStandings]:

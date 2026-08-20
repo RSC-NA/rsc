@@ -20,6 +20,7 @@ from rsc.abc import RSCMixIn
 from rsc.const import API_TIMEOUT
 from rsc.embeds import BlueEmbed
 from rsc.exceptions import RscException
+from rsc.utils.cache import merge_name_cache
 
 log = logging.getLogger("red.rsc.franchises")
 
@@ -192,16 +193,12 @@ class FranchiseMixIn(RSCMixIn):
                     raise AttributeError("API returned a franchise with no name.")
 
                 flist.sort(key=lambda f: cast("str", f.name))
-                if full_refresh or not self._franchise_cache.get(guild.id):
-                    log.debug(f"[{guild.name}] Starting fresh franchises cache")
-                    self._franchise_cache[guild.id] = [f.name for f in flist if f.name]
-                else:
-                    cached = set(self._franchise_cache[guild.id])
-                    different = {f.name for f in flist if f.name} - cached
-                    if different:
-                        log.debug(f"[{guild.name}] Franchises being added to cache: {different}")
-                        self._franchise_cache[guild.id] += list(different)
-                self._franchise_cache[guild.id].sort()
+                cached = self._franchise_cache.get(guild.id, [])
+                merged = merge_name_cache(cached, (f.name for f in flist if f.name), full_refresh=full_refresh)
+                merged.sort()
+                if merged != cached:
+                    log.debug(f"[{guild.name}] Franchise cache now holds {len(merged)} franchises")
+                self._franchise_cache[guild.id] = merged
             return flist
 
     async def franchise_by_id(self, guild: discord.Guild, id: int) -> Franchise | None:

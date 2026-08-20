@@ -401,6 +401,7 @@ class TransactionType(StrEnum):
     WAIVER_RELEASE = "WVR"  # Waiver Release
     AGM_IR = "AIR"  # AGM Inactive Reserve
     IR_RETURN = "IRT"  # IR Return
+    IR_CUT = "ICT"  # Cut from IR
     DRAFT = "DFT"  # Draft Player
     PATCH = "PCH"  # Patched Player
     INTENT_TO_PLAY = "INT"  # Intent to Play

@@ -26,6 +26,14 @@ API_RETRIES = 3
 # timeout would multiply API_TIMEOUT by the attempt count.
 API_RETRY_EXCEPTIONS = frozenset({ServerDisconnectedError, ClientOSError})
 
+# Field lengths the API declares on `TeamRebrand.name` and
+# `FranchiseRebrand.prefix`. The generated models enforce them with pydantic,
+# which raises before a request is ever sent, so the rebrand command checks
+# them up front. `tests/test_admin_franchise.py` fails if these drift from the
+# client models.
+TEAM_NAME_MAX_LENGTH = 16
+FRANCHISE_PREFIX_MAX_LENGTH = 3
+
 # Role Names
 AGM_ROLE = "Assistant GM"
 ADMIN_ROLE = "Admin"

@@ -15,6 +15,7 @@ from rsc.events.events import EventMixIn
 from rsc.events.formatters import build_event_embed, generic_event_embed
 from rsc.events.models import (
     MAX_EMBEDS_PER_MESSAGE,
+    SUPPRESSED_ACTIONS,
     WATERMARK_LAG,
     LeagueEventData,
     plan_batch,
@@ -340,6 +341,20 @@ class TestFilters:
     def test_missing_severity_is_not_excluded_by_a_filter(self):
         """Omission must not drop an event; only an explicit mismatch does."""
         assert self.check(evt(1, severity=None), severities=["ERR"])
+
+    def test_suppressed_action_never_reaches_the_channel(self):
+        """`PTR` is announced by rsc.transactions.trade_announce, not logged here."""
+        assert not self.check(evt(1, action="PTR"))
+
+    def test_suppression_beats_an_explicit_allow(self):
+        """Selecting it in /rsc events filter must not resurrect the embed."""
+        assert not self.check(evt(1, action="PTR"), actions=["PTR"])
+
+    def test_only_the_suppressed_actions_are_dropped(self):
+        for action in EventAction:
+            if action in SUPPRESSED_ACTIONS:
+                continue
+            assert self.check(evt(1, action=action.value)), action
 
 
 class TestEmbedChunking:

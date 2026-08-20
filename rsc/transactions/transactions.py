@@ -2305,7 +2305,7 @@ class TransactionMixIn(RSCMixIn):
         files.append(img)
 
         match action:
-            case TransactionType.CUT:
+            case TransactionType.CUT | TransactionType.IR_CUT:
                 if not (ptu_in.old_team and ptu_in.old_team.tier and response.first_franchise):
                     raise MalformedTransactionResponse("Old team, tier, or first_franchise was not returned by API.")
                 author_icon = await utils.fa_img_from_tier(ptu_in.old_team.tier, tiny=True)

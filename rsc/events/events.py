@@ -31,6 +31,7 @@ from rsc.events.models import (
     MAX_EMBEDS_PER_MESSAGE,
     MAX_EVENTS_PER_TICK,
     MAX_WINDOW_LIMIT,
+    SUPPRESSED_ACTIONS,
     EventPage,
     EventPollState,
     LeagueEventData,
@@ -333,6 +334,9 @@ class EventMixIn(RSCMixIn):
         there means the highest visible id never reaches the true max, stalling
         the watermark behind every excluded event.
         """
+        if event.event_action in SUPPRESSED_ACTIONS:
+            return False
+
         categories: list[str] = settings.get("CategoryFilter") or []
         actions: list[str] = settings.get("ActionFilter") or []
         severities: list[str] = settings.get("SeverityFilter") or []

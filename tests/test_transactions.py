@@ -34,6 +34,7 @@ from rsc.transactions.transactions import (
     defaults,
 )
 from rsc.types import Substitute
+from rsc.utils import utils
 
 
 def _create_mixin(**attrs):
@@ -726,6 +727,53 @@ class TestBuildTransactionEmbed:
         field_names = [f.name for f in embed.fields]
         assert "Player In" in field_names
         assert "Player Out" in field_names
+
+
+# --- IR Cut (ICT) Tests ---
+
+
+class TestIrCutTransactionType:
+    """`ICT` (Cut from IR) arrived in rscapi 2.1.4 and rides the cut path."""
+
+    async def test_has_a_transaction_image(self):
+        """The real lookup raises NotImplementedError on an unhandled type, and no
+        `build_transaction_embed` caller catches that -- only the
+        MalformedTransactionResponse the type conversion would have raised first.
+        Every other embed test mocks this call, so it needs its own check."""
+        img = await utils.transaction_image_from_type(TransactionType.IR_CUT)
+        assert img.filename == "Released.png"
+
+    @patch("rsc.transactions.transactions.utils.transaction_image_from_type", new_callable=AsyncMock)
+    @patch("rsc.transactions.transactions.utils.fa_img_from_tier", new_callable=AsyncMock)
+    @patch("rsc.transactions.transactions.utils.tier_color_by_name", new_callable=AsyncMock)
+    async def test_builds_a_release_embed(self, mock_tier_color, mock_fa_img, mock_trans_img, mock_guild, mock_member):
+        """Same roster movement as a plain cut, so it reuses that arm rather than
+        falling through to the `NotImplementedError` default."""
+        mock_img = MagicMock(spec=discord.File)
+        mock_img.filename = "Released.png"
+        mock_trans_img.return_value = mock_img
+        mock_fa_img.return_value = None
+        mock_tier_color.return_value = discord.Color.blue()
+
+        mixin = _create_mixin()
+        mixin.franchise_logo = AsyncMock(return_value=None)
+
+        old_team = MagicMock()
+        old_team.tier = "Elite"
+        old_team.name = "Team Alpha"
+
+        ptu = _make_ptu(mock_member.id, "TestPlayer", old_team=old_team)
+        mixin.league_player_from_transaction = AsyncMock(return_value=ptu)
+
+        response = _make_transaction_response(
+            type=TransactionType.IR_CUT,
+            player_updates=[ptu],
+            first_franchise=_make_franchise_identifier("TestFranchise", 999),
+        )
+
+        embed, files = await mixin.build_transaction_embed(mock_guild, response, mock_member)
+        assert isinstance(embed, discord.Embed)
+        assert "released by Team Alpha" in embed.author.name
 
 
 # --- send_cut_msg Tests ---
