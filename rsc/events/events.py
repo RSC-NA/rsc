@@ -63,7 +63,7 @@ defaults_guild = EventSettings(
     ActionFilter=[],
     SeverityFilter=[],
     IncludePrivate=False,
-    IncludeGlobal=False,
+    IncludeGlobal=True,
     TotalProcessed=0,
 )
 
@@ -179,14 +179,25 @@ class EventMixIn(RSCMixIn):
         )
         state.watermark_history = plan.watermark_history
 
+        league = self._league.get(guild.id)
+
         processed = 0
+        in_scope = []
         for event in plan.to_process:
-            # Dispatch is unconditional and fire-and-forget. Filters are display only.
+            # Every event in the batch is consumed by the cursor, in scope or not.
+            # Skipping one here means "not ours to act on", never "not yet read" -
+            # re-reading it on the next tick would wedge the watermark forever.
+            processed += 1
+            if not EventMixIn._in_scope(event, league):
+                log.debug("Ignoring event %d from league %s", event.id, event.league, guild=guild)
+                continue
+            in_scope.append(event)
+            # Dispatch is fire-and-forget. The display filters below do not apply
+            # to it - only scope does, and that is already decided.
             self.bot.dispatch("rsc_league_event", guild, event)
             await self._run_handler(guild, event)
-            processed += 1
 
-        embeds = [build_event_embed(e) for e in plan.to_process if EventMixIn._passes_filter(e, settings)]
+        embeds = [build_event_embed(e) for e in in_scope if EventMixIn._passes_filter(e, settings)]
         if embeds:
             await self._try_post_embeds(guild, embeds)
 
@@ -325,6 +336,28 @@ class EventMixIn(RSCMixIn):
             except Exception as send_exc:
                 # Never let a failed health alert replace the failure it reports.
                 log.warning("Could not post unhealthy alert: %s", send_exc, guild=guild)
+
+    @staticmethod
+    def _in_scope(event: LeagueEventData, league: int | None) -> bool:
+        """Whether this guild should act on `event` at all.
+
+        Distinct from `_passes_filter`, which is display only. `IncludeGlobal`
+        widens the query from `league=<id>` to `guild_id=<guild>`, and that is an
+        inner join on `league.guild_id` - so any *other* league sharing this
+        guild comes back too. Those events must not reach dispatch or a handler:
+        a sibling league's `PTR` would otherwise announce a foreign trade into
+        this guild's transaction channel.
+
+        Global events (`league is None`) are in scope by definition. They are the
+        reason `IncludeGlobal` exists.
+
+        `league is None` means the guild has no league configured, which is a
+        setup error already logged by `prepare_league`. Scope everything in
+        rather than silently dropping the whole feed.
+        """
+        if league is None or event.league is None:
+            return True
+        return event.league == league
 
     @staticmethod
     def _passes_filter(event: LeagueEventData, settings: dict) -> bool:

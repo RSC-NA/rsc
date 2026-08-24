@@ -357,9 +357,10 @@ async def process_trade_event(cog: "RSCMixIn", guild: discord.Guild, event: "Lea
     Runs inside `EventMixIn._run_handler`, which swallows exceptions so a failure
     here can never block the poll cursor.
     """
-    # Global scoping (`IncludeGlobal`) queries by guild rather than league, so
-    # events from another league attached to this guild can reach us. Display
-    # filters do not help - handlers run unconditionally by design.
+    # Defence in depth. `EventMixIn._in_scope` already drops another league's
+    # events before dispatch, so this should be unreachable from the poller -
+    # but this function is a public entry point and the cost of being wrong is
+    # announcing a foreign league's trade into this guild's transaction channel.
     league = cog._league.get(guild.id)
     if league is not None and event.league is not None and event.league != league:
         log.debug("Ignoring trade event %d from league %s", event.id, event.league, guild=guild)

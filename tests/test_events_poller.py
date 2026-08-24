@@ -112,7 +112,9 @@ def evt(event_id: int, **kwargs) -> LeagueEventData:
     kwargs.setdefault("action", "PSG")
     kwargs.setdefault("created_at", datetime.now(UTC) - timedelta(seconds=30))
     kwargs.setdefault("payload", {"n": event_id})
-    return LeagueEventData(id=event_id, league=1, is_public=True, **kwargs)
+    kwargs.setdefault("league", 1)
+    kwargs.setdefault("is_public", True)
+    return LeagueEventData(id=event_id, **kwargs)
 
 
 def enabled_store(**overrides) -> dict:
@@ -267,13 +269,25 @@ class TestScope:
     def scope_kwargs(poller: "Poller") -> dict:
         return poller.fetch_calls[-1]
 
-    async def test_defaults_to_league_scope(self, guild):
-        store = primed_store()
+    async def test_league_scope_when_global_is_disabled(self, guild):
+        store = primed_store(IncludeGlobal=False)
         poller = Poller(store, [evt(6)])
 
         await poller.poll_league_events(guild, EventPollState())
 
         assert self.scope_kwargs(poller)["include_global"] is False
+
+    async def test_global_scope_is_the_default(self, guild):
+        """Off by default, the entire `SYS` error stream is unreachable: every
+        event the nightly pull emits is global, because it runs across all
+        leagues at once. Sibling leagues that come with guild scoping are
+        dropped by `_in_scope`, so this costs nothing."""
+        store = primed_store()
+        poller = Poller(store, [evt(6)])
+
+        await poller.poll_league_events(guild, EventPollState())
+
+        assert self.scope_kwargs(poller)["include_global"] is True
 
     async def test_include_global_is_passed_through(self, guild):
         store = primed_store(IncludeGlobal=True)
@@ -325,6 +339,79 @@ class TestScope:
         assert poller.bot.dispatch.call_count == 1
         _name, _guild, event = poller.bot.dispatch.call_args.args
         assert event.is_global
+
+
+class TestLeagueScoping:
+    """`IncludeGlobal` widens the query from `league=` to `guild_id=`, which is an
+    inner join on `league.guild_id` - so another league sharing this guild comes
+    back too. Those must not reach dispatch or a handler."""
+
+    @staticmethod
+    def foreign(event_id: int) -> LeagueEventData:
+        return evt(event_id, league=999)
+
+    async def test_other_league_is_not_dispatched(self, guild):
+        store = primed_store(IncludeGlobal=True)
+        poller = Poller(store, [self.foreign(6)])
+
+        await poller.poll_league_events(guild, EventPollState())
+
+        assert poller.bot.dispatch.call_count == 0
+
+    async def test_other_league_does_not_run_handlers(self, guild, monkeypatch):
+        """The concrete hazard: a sibling league's `PTR` announcing a foreign
+        trade into this guild's transaction channel."""
+        from rsc.enums import EventAction
+        from rsc.events import handlers
+
+        ran = []
+
+        async def record(_cog, _guild, event):
+            ran.append(event.id)
+
+        monkeypatch.setitem(handlers.EVENT_HANDLERS, EventAction.PLAYER_SIGNED, record)
+
+        store = primed_store(IncludeGlobal=True)
+        poller = Poller(store, [self.foreign(6), evt(7)])
+
+        await poller.poll_league_events(guild, EventPollState())
+
+        assert ran == [7]
+
+    async def test_other_league_is_not_posted(self, guild):
+        store = primed_store(IncludeGlobal=True)
+        poller = Poller(store, [self.foreign(6)])
+
+        await poller.poll_league_events(guild, EventPollState())
+
+        assert poller.sent == []
+
+    async def test_other_league_still_advances_the_cursor(self, guild):
+        """Out of scope means "not ours to act on", never "not yet read".
+        Re-reading it every tick would wedge the watermark behind it forever."""
+        store = primed_store(confirmed_id=5, IncludeGlobal=True)
+        poller = Poller(store, [self.foreign(6), self.foreign(7)])
+
+        await poller.poll_league_events(guild, EventPollState())
+
+        assert store["SeenIds"] == [6, 7]
+
+    async def test_global_events_are_always_in_scope(self, guild):
+        """The whole point of `IncludeGlobal`. A null league is not a mismatch."""
+        store = primed_store(IncludeGlobal=True)
+        poller = Poller(store, [LeagueEventData(id=6, league=None, category="SYS", action="TMF", severity="ERR")])
+
+        await poller.poll_league_events(guild, EventPollState())
+
+        assert poller.bot.dispatch.call_count == 1
+
+    async def test_own_league_is_in_scope(self, guild):
+        store = primed_store(IncludeGlobal=True)
+        poller = Poller(store, [evt(6)])
+
+        await poller.poll_league_events(guild, EventPollState())
+
+        assert poller.bot.dispatch.call_count == 1
 
 
 class TestGating:

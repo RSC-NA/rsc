@@ -6,9 +6,11 @@ mentions; handlers here deliberately ping people and edit members, so the two
 should not share a namespace.
 
 Handlers run inside `EventMixIn._run_handler`, which catches every exception so a
-handler failure can never block the poll cursor. They also run unconditionally -
-the category/action/severity filters only govern what reaches the event log
-channel, never what gets processed.
+handler failure can never block the poll cursor. Within a guild's own scope they
+run unconditionally - the category/action/severity filters only govern what
+reaches the event log channel, never what gets processed. Scope is the one
+exception: `EventMixIn._in_scope` drops another league's events before dispatch,
+so a handler only ever sees this guild's league or a global event.
 """
 
 import logging
@@ -35,7 +37,7 @@ async def handle_player_traded(cog: "RSCMixIn", guild: discord.Guild, event: "Le
     teams and settings, and importing it at module scope here would make the events
     package depend on transactions at import time.
     """
-    from rsc.transactions.trade_announce import process_trade_event
+    from rsc.transactions.trade_announce import process_trade_event  # noqa: PLC0415
 
     await process_trade_event(cog, guild, event)
 

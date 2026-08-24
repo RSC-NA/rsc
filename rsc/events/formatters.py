@@ -5,9 +5,9 @@ everything rendered here is untrusted API JSON destined for a channel that
 suppresses mentions, whereas handlers ping people and edit members.
 
 Only the actions the API actually produces today have dedicated formatters:
-`PTR` (player traded) and `WCW`/`WCL` (waiver claim resolved). Every other
-action, and any action this bot's enum does not recognise, falls through to
-`generic_event_embed`. That is intentional so an API side addition shows up as a
+`PTR` (player traded), `WCW`/`WCL` (waiver claim resolved) and `TMF`/`TLC` (the
+tracker problems needing a human). Every other action, and any action this bot's
+enum does not recognise, falls through to `generic_event_embed`. That is intentional so an API side addition shows up as a
 readable payload dump rather than an error.
 
 Everything rendered here originates from the API's free form `payload` JSON and
@@ -22,13 +22,17 @@ from collections.abc import Callable
 
 import discord
 
-from rsc.embeds import BetterEmbed, BlueEmbed, GreenEmbed, OrangeEmbed, RedEmbed, YellowEmbed
+from rsc.embeds import BetterEmbed, BlueEmbed, EmbedLimits, GreenEmbed, OrangeEmbed, RedEmbed, YellowEmbed
 from rsc.enums import EventAction, EventCategory, EventSeverity
 from rsc.events.models import LeagueEventData
 
 log = logging.getLogger("red.rsc.events.formatters")
 
 MAX_PAYLOAD_CHARS = 3000
+# Entries rendered individually before the rest collapse into a count. The API caps a
+# single event at 25 (`MAX_FAILURES_PER_EVENT` / `MAX_CONFLICTS_PER_EVENT`), which would
+# blow the 25 field and 6000 character embed limits on its own.
+MAX_RENDERED_ENTRIES = 5
 
 
 def _clean(value: object, default: str = "N/A") -> str:
@@ -222,11 +226,137 @@ def waiver_claim_embed(event: LeagueEventData) -> BetterEmbed:
     return embed
 
 
+def _entry_source(payload: dict) -> str | None:
+    """Where the event came from.
+
+    The nightly task sends `task`; the on-demand admin and spider views send
+    `source` instead. Neither is guaranteed.
+    """
+    return payload.get("task") or payload.get("source")
+
+
+def _merge_failure_lines(entry: dict) -> str:
+    """One `failures` entry from a `TMF` payload."""
+    lines = []
+    if group_key := entry.get("group_key"):
+        group_type = entry.get("group_type")
+        label = f"{_clean(group_type)}: " if group_type else ""
+        lines.append(f"{label}{_clean(group_key)}")
+    if tracker_ids := entry.get("tracker_ids"):
+        if isinstance(tracker_ids, list):
+            lines.append(f"Trackers: {_clean(', '.join(str(t) for t in tracker_ids))}")
+        else:
+            lines.append(f"Trackers: {_clean(tracker_ids)}")
+    if error := entry.get("error"):
+        error_type = entry.get("error_type")
+        prefix = f"[{_clean(error_type)}] " if error_type else ""
+        lines.append(f"{prefix}{_clean(error)}")
+    return "\n".join(lines) or "No detail provided."
+
+
+def _link_conflict_lines(entry: dict) -> str:
+    """One `conflicts` entry from a `TLC` payload.
+
+    `existing_tracker_id` / `existing_member_id` are nullable - a conflicting row
+    can be an unclaimed orphan - so both render as "none" rather than being dropped.
+    """
+    lines = []
+    platform = entry.get("platform")
+    platform_id = entry.get("platform_id")
+    if platform or platform_id:
+        lines.append(f"Account: {_clean(platform)} / {_clean(platform_id)}")
+    holder = _clean(entry.get("existing_member_id"), default="none")
+    holder_tracker = _clean(entry.get("existing_tracker_id"), default="none")
+    lines.append(f"Claimed by member {holder} (tracker {holder_tracker})")
+    spidered_for = _clean(entry.get("member_id"))
+    spidered_from = _clean(entry.get("epic_tracker_id"))
+    lines.append(f"Spidered for member {spidered_for} from tracker {spidered_from}")
+    return "\n".join(lines)
+
+
+def tracker_conflict_embed(event: LeagueEventData) -> BetterEmbed:
+    """`TMF`/`TLC` - the two tracker problems a human has to resolve by hand.
+
+    Both actions share an envelope (`stage`, a count, `truncated`) but carry
+    different entry lists: `TMF` sends `failures` describing trackers that could
+    not be merged, `TLC` sends `conflicts` describing a linked account already
+    held by someone else. They are rendered together because the useful output is
+    the same either way - what to look at, and how much was left out.
+
+    Without this these fall to `generic_event_embed`, which dumps the whole
+    payload as JSON and silently truncates it at `MAX_PAYLOAD_CHARS`, burying the
+    entries under the nightly pull's counters.
+    """
+    payload = event.payload if isinstance(event.payload, dict) else {}
+    conflicts = event.event_action is EventAction.TRACKER_LINK_CONFLICT
+
+    key = "conflicts" if conflicts else "failures"
+    entries = payload.get(key)
+    if not isinstance(entries, list) or not entries:
+        # Nothing this formatter can say that generic cannot say better.
+        return generic_event_embed(event)
+
+    noun = "Conflict" if conflicts else "Failure"
+    embed = _embed_for(
+        event,
+        default=OrangeEmbed,
+        title="Tracker Link Conflict" if conflicts else "Tracker Merge Failed",
+        description=(
+            "Linked accounts are already held by another member and were not created."
+            if conflicts
+            else "Duplicate trackers could not be merged automatically."
+        ),
+    )
+
+    # Prefer the server's own count. It is the true total; `entries` is already
+    # capped at 25 by the emitter, so len() understates a large run.
+    reported = payload.get("conflict_count" if conflicts else "failure_count")
+    total = reported if isinstance(reported, int) else len(entries)
+
+    embed.add_field(name=f"{noun}s", value=str(total), inline=True)
+    if source := _entry_source(payload):
+        embed.add_field(name="Source", value=_clean(source), inline=True)
+    if stage := payload.get("stage"):
+        embed.add_field(name="Stage", value=_clean(stage), inline=True)
+
+    if not conflicts:
+        for name, field in (("Merged", "merged_count"), ("Normalized", "normalized_count")):
+            if isinstance(payload.get(field), int):
+                embed.add_field(name=name, value=str(payload[field]), inline=True)
+
+    renderer = _link_conflict_lines if conflicts else _merge_failure_lines
+    for idx, entry in enumerate(entries[:MAX_RENDERED_ENTRIES], start=1):
+        if not isinstance(entry, dict):
+            continue
+        embed.add_field(
+            name=f"{noun} {idx}",
+            value=renderer(entry)[: EmbedLimits.Field.Value],
+            inline=False,
+        )
+
+    # Two independent kinds of omission. `truncated` means the API dropped
+    # entries before sending; the slice above means this embed did. Reporting
+    # only one would make an event look complete when it is not.
+    hidden = max(total - min(len(entries), MAX_RENDERED_ENTRIES), 0)
+    notes = []
+    if hidden:
+        notes.append(f"{hidden} more not shown")
+    if payload.get("truncated"):
+        notes.append("the API truncated this list")
+    if notes:
+        embed.add_field(name="Note", value=f"{' - '.join(notes)}. Use `/rsc events replay` for the raw payload.", inline=False)
+
+    _add_common_fields(embed, event)
+    return embed
+
+
 #: Action to embed builder. Anything absent renders via `generic_event_embed`.
 EVENT_FORMATTERS: dict[EventAction, Callable[[LeagueEventData], BetterEmbed]] = {
     EventAction.PLAYER_TRADED: player_traded_embed,
     EventAction.WAIVER_CLAIM_WON: waiver_claim_embed,
     EventAction.WAIVER_CLAIM_LOST: waiver_claim_embed,
+    EventAction.TRACKER_MERGE_FAILED: tracker_conflict_embed,
+    EventAction.TRACKER_LINK_CONFLICT: tracker_conflict_embed,
 }
 
 

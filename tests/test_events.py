@@ -12,7 +12,7 @@ sys.path.insert(0, str(project_root))
 from rsc.embeds import BlueEmbed, EmbedLimits
 from rsc.enums import EventAction, EventCategory
 from rsc.events.events import EventMixIn
-from rsc.events.formatters import build_event_embed, generic_event_embed
+from rsc.events.formatters import MAX_RENDERED_ENTRIES, build_event_embed, generic_event_embed
 from rsc.events.models import (
     MAX_EMBEDS_PER_MESSAGE,
     SUPPRESSED_ACTIONS,
@@ -299,6 +299,185 @@ class TestFormatters:
     def test_unknown_severity_does_not_raise(self):
         embed = build_event_embed(evt(1, severity="ZZZ"))
         assert embed.title
+
+
+class TestTrackerConflictFormatter:
+    """`TMF`/`TLC` - the operational events an admin has to act on by hand.
+
+    Payloads here mirror the emitters in the website's `tasks/tasks/numbers.py`,
+    `trackers/views/admin.py` and `trackers/views/spider.py`.
+    """
+
+    @staticmethod
+    def merge_failure(**overrides) -> dict:
+        entry = {
+            "group_type": "link",
+            "group_key": "https://rocketleague.tracker.network/rocket-league/profile/psn/Spiral-ParaDoxx/overview",
+            "tracker_ids": [10165, 16768],
+            "error": "Member IDs do not match for all trackers. Cannot merge. Trackers: 16768, 10165",
+            "error_type": "TrackerError",
+        }
+        entry.update(overrides)
+        return entry
+
+    @staticmethod
+    def tmf(payload: dict) -> LeagueEventData:
+        return LeagueEventData(id=240, league=None, category="SYS", action="TMF", severity="ERR", payload=payload, is_public=False)
+
+    @staticmethod
+    def tlc(payload: dict) -> LeagueEventData:
+        return LeagueEventData(id=239, league=None, category="SYS", action="TLC", severity="ERR", payload=payload, is_public=False)
+
+    def test_renders_the_real_nightly_payload(self):
+        """Verbatim from event 240, the one that went unannounced."""
+        embed = build_event_embed(
+            self.tmf(
+                {
+                    "task": "nightly_mmr_pull",
+                    "stage": "duplicate_merge",
+                    "task_id": "4ae8e6d0-6fe8-4947-adc0-6a55ee989993",
+                    "failures": [
+                        self.merge_failure(),
+                        self.merge_failure(
+                            group_key="https://rocketleague.tracker.network/rocket-league/profile/xbl/Bensam13/overview",
+                            tracker_ids=[4968, 15365],
+                            error="Member IDs do not match for all trackers. Cannot merge. Trackers: 15365, 4968",
+                        ),
+                    ],
+                    "truncated": False,
+                    "total_pulls": 5409,
+                    "merged_count": 0,
+                    "failure_count": 2,
+                    "total_trackers": 6539,
+                    "normalized_count": 0,
+                }
+            )
+        )
+
+        assert embed.title == "Tracker Merge Failed"
+        rendered = " ".join(f"{f.name} {f.value}" for f in embed.fields)
+        # The two failures are the point of the event, not the counters.
+        assert "Bensam13" in rendered
+        assert "Spiral-ParaDoxx" in rendered
+        assert "10165, 16768" in rendered
+        # escape_markdown escapes the underscores - payload text is untrusted.
+        assert "nightly\\_mmr\\_pull" in rendered
+
+    def test_uses_the_server_count_not_the_slice(self):
+        """The emitter caps the list at 25, so len() understates a large run."""
+        payload = {"failures": [self.merge_failure()], "failure_count": 40, "truncated": True}
+        embed = build_event_embed(self.tmf(payload))
+
+        assert any(f.name == "Failures" and f.value == "40" for f in embed.fields)
+
+    def test_reports_both_kinds_of_omission(self):
+        """`truncated` is the API dropping entries; the slice is this embed doing
+        it. Reporting one would make an incomplete event look complete."""
+        payload = {"failures": [self.merge_failure() for _ in range(25)], "failure_count": 40, "truncated": True}
+        embed = build_event_embed(self.tmf(payload))
+
+        note = next(f.value for f in embed.fields if f.name == "Note")
+        assert "35 more not shown" in note
+        assert "truncated" in note
+
+    def test_no_note_when_everything_is_shown(self):
+        payload = {"failures": [self.merge_failure()], "failure_count": 1, "truncated": False}
+        embed = build_event_embed(self.tmf(payload))
+
+        assert not any(f.name == "Note" for f in embed.fields)
+
+    def test_caps_rendered_entries(self):
+        payload = {"failures": [self.merge_failure() for _ in range(25)], "failure_count": 25}
+        embed = build_event_embed(self.tmf(payload))
+
+        assert sum(1 for f in embed.fields if f.name.startswith("Failure ")) == MAX_RENDERED_ENTRIES
+
+    def test_stays_within_embed_limits_at_full_size(self):
+        """25 entries is the emitter's own cap, so this is the worst real case."""
+        long_error = "e" * 2000
+        payload = {
+            "failures": [self.merge_failure(error=long_error, group_key="k" * 500) for _ in range(25)],
+            "failure_count": 25,
+            "truncated": True,
+        }
+        embed = build_event_embed(self.tmf(payload))
+
+        assert len(embed) <= EmbedLimits.Total
+        assert len(embed.fields) <= EmbedLimits.Fields
+        assert all(len(f.value) <= EmbedLimits.Field.Value for f in embed.fields)
+
+    def test_link_conflict_renders_its_own_shape(self):
+        """`TLC` carries `conflicts`, not `failures`."""
+        embed = build_event_embed(
+            self.tlc(
+                {
+                    "task": "nightly_mmr_pull",
+                    "stage": "link_spider",
+                    "conflict_count": 1,
+                    "conflicts": [
+                        {
+                            "member_id": 555,
+                            "epic_tracker_id": 111,
+                            "platform": "steam",
+                            "platform_id": "76561198000000000",
+                            "name": "somebody",
+                            "existing_tracker_id": 222,
+                            "existing_member_id": 777,
+                        }
+                    ],
+                    "truncated": False,
+                }
+            )
+        )
+
+        assert embed.title == "Tracker Link Conflict"
+        rendered = " ".join(f.value for f in embed.fields)
+        assert "76561198000000000" in rendered
+        # Both sides of the conflict have to be present to action it.
+        assert "555" in rendered
+        assert "777" in rendered
+
+    def test_null_existing_ids_render_as_none(self):
+        """A conflicting row can be an unclaimed orphan."""
+        embed = build_event_embed(
+            self.tlc(
+                {
+                    "conflicts": [
+                        {
+                            "member_id": 555,
+                            "epic_tracker_id": 111,
+                            "platform": "steam",
+                            "platform_id": "abc",
+                            "name": "somebody",
+                            "existing_tracker_id": None,
+                            "existing_member_id": None,
+                        }
+                    ],
+                    "conflict_count": 1,
+                }
+            )
+        )
+
+        assert "none" in " ".join(f.value for f in embed.fields)
+
+    def test_missing_entries_falls_back_to_generic(self):
+        """Nothing this formatter can say that the payload dump cannot say better."""
+        embed = build_event_embed(self.tmf({"task": "nightly_mmr_pull", "failure_count": 0}))
+
+        assert any(f.name == "Payload" for f in embed.fields)
+
+    def test_malformed_payload_does_not_raise(self):
+        assert build_event_embed(self.tmf("not a dict")).title is not None
+        assert build_event_embed(self.tlc({"conflicts": "not a list"})).title is not None
+        assert build_event_embed(self.tmf({"failures": [None, "junk"]})).title is not None
+
+    def test_payload_text_is_escaped(self):
+        """Untrusted JSON on its way to a Discord message."""
+        embed = build_event_embed(
+            self.tmf({"failures": [self.merge_failure(group_key="**bold**")], "failure_count": 1})
+        )
+
+        assert "\\*\\*bold\\*\\*" in " ".join(f.value for f in embed.fields)
 
 
 class TestFilters:
