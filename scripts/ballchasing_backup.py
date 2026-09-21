@@ -64,20 +64,18 @@ async def download_group(
 
 
 async def process_group(group: str, output_directory: str, recursive: bool=False, skip_errors: bool=False) -> tuple[int, int]:
-    bapi = ballchasing.Api(auth_key=bckey, patreon_type=ballchasing.PatreonType.ORG)
-    log.info("Checking if group exists: %s", group)
-    base_group = await bapi.get_group(group)
-    if not base_group:
-        log.error("Group does not exist: %s", group)
-        return 0, 0
-    group_count, replay_count = await download_group(
-        bapi,
-        group_id=group,
-        folder=output_directory,
-        recursive=recursive
-    )
-    await bapi.close()
-    return group_count, replay_count
+    async with ballchasing.Api(auth_key=bckey, patreon_type=ballchasing.PatreonType.ORG) as bapi:
+        log.info("Checking if group exists: %s", group)
+        base_group = await bapi.get_group(group)
+        if not base_group:
+            log.error("Group does not exist: %s", group)
+            return 0, 0
+        return await download_group(
+            bapi,
+            group_id=group,
+            folder=output_directory,
+            recursive=recursive
+        )
 
 
 if __name__ == "__main__":

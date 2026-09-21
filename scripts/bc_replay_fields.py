@@ -36,7 +36,7 @@ async def dump_raw(bapi: ballchasing.Api, group: str) -> None:
 
     Distinguishes "ballchasing omits the field" from "our model drops it".
     """
-    resp = await bapi._request(f"{bapi.base_url}/replays", bapi._session.get, params={"group": group, "count": 1})
+    resp = await bapi._request(f"{bapi.base_url}/replays", "get", params={"group": group, "count": 1})
     data = await resp.json()
     entries = data.get("list") or []
     if not entries:

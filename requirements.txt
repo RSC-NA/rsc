@@ -962,7 +962,7 @@ pygments==2.19.2 \
     # via
     #   red-discordbot
     #   rich
-python-ballchasing @ git+https://github.com/xentrick/python-ballchasing.git@18e0aef5789433e391100882cb5e9d7b21665bfd
+python-ballchasing @ git+https://github.com/xentrick/python-ballchasing.git@7625706a0e3c48ef129c52fc56ef07bd9a42a888
     # via rsc-discord-bot
 python-dateutil==2.9.0.post0 \
     --hash=sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3 \

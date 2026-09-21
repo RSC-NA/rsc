@@ -19,10 +19,8 @@ async def main(replay_id: str, output: str | None = None):
         print("Unable to find Ballchasing API key (BALLCHASING_KEY)")
         sys.exit(1)
 
-    bapi = ballchasing.Api(bckey)
-    replay = await bapi.get_replay(replay_id)
-    bapi.close()
-
+    async with ballchasing.Api(bckey) as bapi:
+        replay = await bapi.get_replay(replay_id)
 
     formatted = json.dumps(replay.model_dump(mode="json"), indent=2)
 

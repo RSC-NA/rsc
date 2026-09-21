@@ -6,7 +6,6 @@ import os
 import sys
 from pathlib import Path
 
-import aiohttp
 import ballchasing
 import ballchasing.exceptions
 from dotenv import load_dotenv
@@ -41,18 +40,17 @@ if __name__ == "__main__":
 
     bapi = ballchasing.Api(auth_key=bckey, patreon_type=ballchasing.PatreonType.ORG)
 
-    for r in replays.glob(pattern="*.replay"):
-        try:
-            result: ballchasing.models.ReplayCreated = loop.run_until_complete(
-                bapi.upload_replay(replay_file=str(r.absolute()), group=group)
-            )
-            print(f"Uploaded replay: {r.name}")
-        except ValueError as exc:
-            if exc.args[0] and isinstance(exc.args[0], aiohttp.ClientResponse):
+    try:
+        for r in replays.glob(pattern="*.replay"):
+            try:
+                result: ballchasing.models.ReplayCreated = loop.run_until_complete(
+                    bapi.upload_replay(replay_file=str(r.absolute()), group=group)
+                )
+                print(f"Uploaded replay: {r.name}")
+            except ballchasing.exceptions.DuplicateReplay:
                 print(f"Duplicate replay: {r.name}")
-            else:
-                raise exc
-        except ballchasing.exceptions.BallchasingFault:
-            print(f"Ballchasing Parser Error: {r.name}")
-
-    loop.close()
+            except ballchasing.exceptions.BallchasingFault:
+                print(f"Ballchasing Parser Error: {r.name}")
+    finally:
+        loop.run_until_complete(bapi.close())
+        loop.close()
