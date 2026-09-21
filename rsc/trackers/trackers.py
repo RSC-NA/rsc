@@ -1,4 +1,5 @@
 import logging
+from collections.abc import AsyncIterator
 from datetime import datetime, timedelta
 from typing import cast
 
@@ -6,6 +7,7 @@ import discord
 from redbot.core import app_commands
 from rscapi import TrackerIDInput, TrackerLinksApi
 from rscapi.exceptions import ApiException
+from rscapi.models.paginated_tracker_link_list import PaginatedTrackerLinkList
 from rscapi.models.tracker_link import TrackerLink
 from rscapi.models.tracker_link_linking import TrackerLinkLinking
 from rscapi.models.tracker_link_stats import TrackerLinkStats
@@ -23,6 +25,7 @@ from rsc.embeds import (
 from rsc.enums import StaffPositions, TrackerLinksStatus
 from rsc.exceptions import RscException
 from rsc.utils import utils
+from rsc.pagination import API_MAX_PAGE_SIZE, check_page_limit, iter_pages
 from rsc.views import LinkButton
 
 log = logging.getLogger("red.rsc.trackers")
@@ -209,7 +212,7 @@ class TrackerMixIn(RSCMixIn):
 
         await interaction.response.defer(ephemeral=False)
         try:
-            trackers = await self.trackers(guild, status)
+            trackers = [t async for t in self.paged_trackers(guild, status)]
         except RscException as exc:
             return await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc), ephemeral=False)
 
@@ -295,7 +298,7 @@ class TrackerMixIn(RSCMixIn):
 
         log.debug(f"Getting tracker data older than {date_cutoff.date()}")
         try:
-            trackers = await self.trackers(guild, status)
+            trackers = [t async for t in self.paged_trackers(guild, status)]
         except RscException as exc:
             return await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc), ephemeral=False)
 
@@ -442,6 +445,7 @@ class TrackerMixIn(RSCMixIn):
         offset: int = 0,
     ) -> list[TrackerLink]:
         """Fetch RSC tracker data"""
+        check_page_limit(limit, caller="trackers()")
         player_id = None
         if isinstance(player, discord.Member):
             player_id = player.id
@@ -462,6 +466,39 @@ class TrackerMixIn(RSCMixIn):
                 return trackers.results
             except ApiException as exc:
                 raise RscException(response=exc)
+
+    async def paged_trackers(
+        self,
+        guild: discord.Guild,
+        status: TrackerLinksStatus | None = None,
+        player: discord.Member | int | None = None,
+        name: str | None = None,
+        per_page: int = API_MAX_PAGE_SIZE,
+    ) -> AsyncIterator[TrackerLink]:
+        """Every tracker matching the filters. `trackers()` alone returns a single page."""
+        player_id = None
+        if isinstance(player, discord.Member):
+            player_id = player.id
+        elif isinstance(player, int):
+            player_id = player
+
+        async with self.api_client(guild) as client:
+            api = TrackerLinksApi(client)
+
+            async def fetch(limit: int, offset: int) -> PaginatedTrackerLinkList:
+                try:
+                    return await api.tracker_links_list(
+                        status=str(status) if status else None,
+                        discord_id=player_id,
+                        member_name=name,
+                        limit=limit,
+                        offset=offset,
+                    )
+                except ApiException as exc:
+                    raise RscException(response=exc)
+
+            async for tracker in iter_pages(fetch, per_page=per_page):
+                yield tracker
 
     async def tracker_stats(
         self,

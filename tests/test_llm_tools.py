@@ -13,7 +13,13 @@ import pytest
 
 from rsc.llm.agent.context import AgentContext, UserIdentity
 from rsc.llm.agent.loop import _dispatch
-from rsc.llm.agent.tools.league import get_franchise, list_franchises, list_players
+from rsc.llm.agent.tools.league import (
+    get_franchise,
+    get_season_info,
+    list_franchises,
+    list_players,
+    match_schedule,
+)
 from rsc.llm.agent.tools.rules import ask_rulebook, get_rule, search_rules_tool
 from rsc.llm.agent.tools.stats import top_players
 from rsc.llm.config import TOOL_RESULT_MAX_CHARS
@@ -62,6 +68,32 @@ def player_stat(name: str, goals: int, rank: int, games: int = 10) -> SimpleName
         goals=goals,
         goals_rank=rank,
         games_played=games,
+    )
+
+
+def season(*schedules: tuple[str, list[str] | None, str | None]) -> SimpleNamespace:
+    """A season carrying one `SeasonTierData` per (tier, nights, start time).
+
+    `get_season_info` reads every date field, so they all have to be present
+    even when a test only cares about the schedule.
+    """
+    tier_data = [
+        SimpleNamespace(
+            tier=tier,
+            schedule=None if nights is None else SimpleNamespace(match_nights=nights, match_start_time=start),
+        )
+        for tier, nights, start in schedules
+    ]
+    return SimpleNamespace(
+        id=99,
+        number=26,
+        season_tier_data=tier_data,
+        signups_open=datetime(2026, 7, 1, tzinfo=UTC),
+        signup_close=datetime(2026, 7, 20, tzinfo=UTC),
+        draft_date=datetime(2026, 8, 1, tzinfo=UTC),
+        preseason_start_date=datetime(2026, 8, 5, tzinfo=UTC),
+        regular_season_start=datetime(2026, 8, 12, tzinfo=UTC),
+        regular_season_end=datetime(2026, 11, 4, tzinfo=UTC),
     )
 
 
@@ -265,6 +297,69 @@ async def test_top_players_clamps_limit(ctx, cog):
     rows = [line for line in result.splitlines() if line and line[0].isdigit()]
 
     assert len(rows) == 15
+
+
+# Season
+
+
+@pytest.fixture
+def season_cog(cog):
+    cog._get_dates = AsyncMock(return_value="")
+    return cog
+
+
+async def test_get_season_info_reports_one_schedule_when_tiers_agree(ctx, season_cog):
+    """Tiers normally share a schedule, so it reads as the league's, not each tier's."""
+    season_cog.current_season.return_value = season(
+        ("Master", ["Monday", "Wednesday"], "22:00:00"),
+        ("Elite", ["Monday", "Wednesday"], "22:00:00"),
+    )
+
+    result = await get_season_info(ctx)
+
+    assert "Match nights: Monday, Wednesday at 22:00" in result
+    assert "Master" not in result
+
+
+async def test_get_season_info_names_the_tiers_when_schedules_differ(ctx, season_cog):
+    """Reporting one tier's nights as the league's would be confidently wrong."""
+    season_cog.current_season.return_value = season(
+        ("Master", ["Monday"], "22:00:00"),
+        ("Elite", ["Monday"], "22:00:00"),
+        ("Rival", ["Tuesday"], "21:30:00"),
+    )
+
+    result = await get_season_info(ctx)
+
+    line = next(ln for ln in result.splitlines() if ln.startswith("Match nights:"))
+    assert line == "Match nights: Monday at 22:00 (Master, Elite); Tuesday at 21:30 (Rival)"
+
+
+async def test_get_season_info_renders_nights_without_a_start_time(ctx, season_cog):
+    """The 2.1.4-shaped response: `match_start_time` is new in rscapi 2.1.5 and
+    is read-only, so an API that has not populated it yet sends None."""
+    season_cog.current_season.return_value = season(("Master", ["Monday", "Wednesday"], None))
+
+    result = await get_season_info(ctx)
+
+    assert "Match nights: Monday, Wednesday" in result
+    assert " at " not in result
+
+
+async def test_get_season_info_omits_the_line_when_no_tier_has_a_schedule(ctx, season_cog):
+    season_cog.current_season.return_value = season(("Master", None, None))
+
+    result = await get_season_info(ctx)
+
+    assert "Match nights" not in result
+    assert "Season: 26" in result
+
+
+def test_match_schedule_tolerates_a_season_without_tier_data():
+    """`current_season` is typed `Any` and some callers hand back a trimmed
+    season, so a missing `season_tier_data` must read as 'unknown', not raise."""
+    assert match_schedule(SimpleNamespace(number=26)) == ""
+    assert match_schedule(SimpleNamespace(number=26, season_tier_data=None)) == ""
 
 
 # Rules

@@ -413,7 +413,7 @@ class TeamMixIn(RSCMixIn):
 
     async def team_captain(self, guild: discord.Guild, team_name: str) -> LeaguePlayer | None:
         """Return captain of a team by name"""
-        players = await self.players(guild, team_name=team_name)
+        players = await self.players(guild, team_name=team_name, captain=True)
         log.debug(f"Total Rostered Players: {len(players)}")
         players = [p for p in players if p.team and p.team.name == team_name]
         log.debug(f"Filtered Rostered Players: {len(players)}")
@@ -423,7 +423,7 @@ class TeamMixIn(RSCMixIn):
 
     async def tier_captains(self, guild: discord.Guild, tier_name: str) -> list[LeaguePlayer]:
         """Return all captains in a tier"""
-        players = await self.players(guild, tier_name=tier_name, limit=1000)
+        players = [p async for p in self.paged_players(guild, tier_name=tier_name, captain=True)]
         if not players:
             return []
 
@@ -442,7 +442,7 @@ class TeamMixIn(RSCMixIn):
 
     async def franchise_captains(self, guild: discord.Guild, franchise_name: str) -> list[LeaguePlayer]:
         """Return all captains in a franchise"""
-        players = await self.players(guild, franchise=franchise_name)
+        players = await self.players(guild, franchise=franchise_name, captain=True)
         if not players:
             return []
 

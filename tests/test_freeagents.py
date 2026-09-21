@@ -3,6 +3,7 @@ from unittest.mock import AsyncMock, MagicMock
 import discord
 import pytest
 
+from rsc.enums import Status
 from rsc.freeagents.freeagents import FreeAgentMixIn
 from rsc.types import CheckIn
 
@@ -202,19 +203,30 @@ class TestUpdateFreeagentVisibility:
 # --- free_agents / permanent_free_agents ---
 
 
+def _paged(items):
+    """Stub for a `paged_*` method, which is an async generator rather than a coroutine."""
+
+    async def _iter(*args, **kwargs):
+        for item in items:
+            yield item
+
+    return MagicMock(side_effect=_iter)
+
+
 class TestFreeAgentsApi:
-    async def test_free_agents_calls_players(self, mock_guild):
+    async def test_free_agents_pages_players(self, mock_guild):
+        """A tier's FA pool is unbounded, so it must page rather than ask for one big `limit`."""
         mixin = _create_mixin()
-        mixin.players = AsyncMock(return_value=[MagicMock()])
+        mixin.paged_players = _paged([MagicMock()])
 
         result = await mixin.free_agents(mock_guild, tier_name="Premier")
         assert len(result) == 1
-        mixin.players.assert_awaited_once()
+        mixin.paged_players.assert_called_once_with(mock_guild, status=Status.FREE_AGENT, tier_name="Premier")
 
-    async def test_permanent_free_agents_calls_players(self, mock_guild):
+    async def test_permanent_free_agents_pages_players(self, mock_guild):
         mixin = _create_mixin()
-        mixin.players = AsyncMock(return_value=[MagicMock()])
+        mixin.paged_players = _paged([MagicMock()])
 
         result = await mixin.permanent_free_agents(mock_guild, tier_name="Premier")
         assert len(result) == 1
-        mixin.players.assert_awaited_once()
+        mixin.paged_players.assert_called_once_with(mock_guild, status=Status.PERM_FA, tier_name="Premier")

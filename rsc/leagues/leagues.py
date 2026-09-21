@@ -10,6 +10,7 @@ from rscapi.exceptions import ApiException
 from rscapi.models.league import League
 from rscapi.models.league_player import LeaguePlayer
 from rscapi.models.league_player_status_enum import LeaguePlayerStatusEnum
+from rscapi.models.paginated_league_player_list import PaginatedLeaguePlayerList
 from rscapi.models.patched_league_player_patch import PatchedLeaguePlayerPatch
 from rscapi.models.season import Season
 
@@ -19,6 +20,7 @@ from rsc.enums import Status
 from rsc.exceptions import RscException
 from rsc.tiers import TierMixIn
 from rsc.utils import utils
+from rsc.pagination import API_MAX_PAGE_SIZE, check_page_limit, iter_pages
 from rsc.utils.pagify import Pagify
 
 log = logging.getLogger("red.rsc.leagues")
@@ -262,9 +264,18 @@ class LeagueMixIn(RSCMixIn):
         team_name: str | None = None,
         franchise: str | None = None,
         discord_id: int | None = None,
+        captain: bool | None = None,
         limit: int = 0,
         offset: int = 0,
     ) -> list[LeaguePlayer]:
+        """A single page of league players.
+
+        `limit=0` means the API default (100 rows) and anything above 500 is clamped,
+        so this is only safe for lookups bounded well below that by their filters (one
+        `discord_id`, one team, one franchise). Anything that needs the full set must
+        use `paged_players` -- raising `limit` here will not help.
+        """
+        check_page_limit(limit, caller="players()")
         async with self.api_client(guild) as client:
             api = LeaguePlayersApi(client)
             try:
@@ -279,6 +290,7 @@ class LeagueMixIn(RSCMixIn):
                     team_name=team_name,
                     franchise=franchise,
                     discord_id=discord_id,
+                    captain=captain,
                     limit=limit,
                     offset=offset,
                 )
@@ -367,14 +379,16 @@ class LeagueMixIn(RSCMixIn):
         team_name: str | None = None,
         franchise: str | None = None,
         discord_id: int | None = None,
-        per_page: int = 100,
+        captain: bool | None = None,
+        per_page: int = API_MAX_PAGE_SIZE,
     ) -> AsyncIterator[LeaguePlayer]:
-        offset = 0
-        while True:
-            async with self.api_client(guild) as client:
-                api = LeaguePlayersApi(client)
+        """Every league player matching the filters, paged so no API page cap can truncate it."""
+        async with self.api_client(guild) as client:
+            api = LeaguePlayersApi(client)
+
+            async def fetch(limit: int, offset: int) -> PaginatedLeaguePlayerList:
                 try:
-                    players = await api.league_players_list(
+                    return await api.league_players_list(
                         status=str(status) if status else None,
                         name=name,
                         tier=tier,
@@ -385,23 +399,15 @@ class LeagueMixIn(RSCMixIn):
                         team_name=team_name,
                         franchise=franchise,
                         discord_id=discord_id,
-                        limit=per_page,
+                        captain=captain,
+                        limit=limit,
                         offset=offset,
                     )
-
-                    if not players.results:
-                        break
-
-                    for player in players.results:
-                        yield player
-
                 except ApiException as exc:
                     raise RscException(exc)
 
-            if not players.next:
-                break
-
-            offset += per_page
+            async for player in iter_pages(fetch, per_page=per_page):
+                yield player
 
     async def update_league_player(
         self,

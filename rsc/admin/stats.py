@@ -1,4 +1,5 @@
 import logging
+from pprint import pformat
 
 import discord
 from redbot.core import app_commands
@@ -228,7 +229,7 @@ class AdminStatsMixIn(AdminMixIn):
                 embed=ErrorEmbed(description="API returned a Season without an ID. Please open a modmail ticket.")
             )
 
-        lplayers = await self.players(guild, season=season.id, limit=10000)
+        lplayers = [p async for p in self.paged_players(guild, season=season.id)]
 
         total_des = len(lplayers)
         log.debug(f"DE Player Length: {total_des}")
@@ -243,8 +244,6 @@ class AdminStatsMixIn(AdminMixIn):
         status_dict = {}
         for s in Status:
             status_dict[s.full_name] = sum(1 for p in lplayers if p.status == s)
-
-        from pprint import pformat
 
         log.debug(f"Final Results:\n\n{pformat(status_dict)}")
 

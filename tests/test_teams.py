@@ -288,6 +288,15 @@ class TestTeamCaptain:
 
 # --- tier_captains ---
 
+def _paged(items):
+    """Stub for a `paged_*` method, which is an async generator rather than a coroutine."""
+
+    async def _iter(*args, **kwargs):
+        for item in items:
+            yield item
+
+    return MagicMock(side_effect=_iter)
+
 
 class TestTierCaptains:
     async def test_returns_captains_sorted(self, mock_guild):
@@ -295,16 +304,18 @@ class TestTierCaptains:
         p2 = _make_league_player(discord_id=222, name="Cpt2", captain=True, team_name="Alpha", status=Status.ROSTERED)
         p3 = _make_league_player(discord_id=333, name="NotCpt", captain=False, team_name="Charlie", status=Status.ROSTERED)
         mixin = _create_mixin()
-        mixin.players = AsyncMock(return_value=[p1, p2, p3])
+        mixin.paged_players = _paged([p1, p2, p3])
 
         result = await mixin.tier_captains(mock_guild, "Premier")
+        # The API narrows to captains, and the client-side check still drops any that slip through.
+        mixin.paged_players.assert_called_once_with(mock_guild, tier_name="Premier", captain=True)
         assert len(result) == 2
         assert result[0].team.name == "Alpha"
         assert result[1].team.name == "Bravo"
 
     async def test_returns_empty_when_no_players(self, mock_guild):
         mixin = _create_mixin()
-        mixin.players = AsyncMock(return_value=[])
+        mixin.paged_players = _paged([])
 
         result = await mixin.tier_captains(mock_guild, "Premier")
         assert result == []

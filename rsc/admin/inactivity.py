@@ -304,13 +304,15 @@ class AdminInactivityMixIn(AdminMixIn):
         Every caller must go through here so `populate`, `ping`, and `dm` cannot
         drift apart again.
         """
-        checks = await self.season_activity_checks(
-            guild,
-            season_id=season_id,
-            completed=False,
-            missing=True,
-            limit=10000,
-        )
+        checks = [
+            c
+            async for c in self.paged_activity_checks(
+                guild,
+                season_id=season_id,
+                completed=False,
+                missing=True,
+            )
+        ]
         # Belt and braces. Records carry both flags, so a regression in the
         # server side filter cannot silently re-widen the set.
         return [c for c in checks if not c.completed]

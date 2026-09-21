@@ -1,6 +1,5 @@
 import logging
 from datetime import datetime
-from typing import TYPE_CHECKING
 from collections.abc import AsyncIterator
 
 import discord
@@ -27,11 +26,10 @@ from rsc.enums import (
 from rsc.exceptions import RscException
 from rsc.logs import GuildLogAdapter
 from rsc.teams import TeamMixIn
+from rsc.pagination import API_MAX_PAGE_SIZE, check_page_limit, iter_pages
 from rsc.utils.utils import tier_color_by_name
 
-if TYPE_CHECKING:
-    from rscapi.models.paginated_match_list_list import PaginatedMatchListList
-
+from rscapi.models.paginated_match_list_list import PaginatedMatchListList
 from rscapi.models.match_format_enum import MatchFormatEnum
 from rscapi.models.match_type_enum import MatchTypeEnum
 
@@ -624,6 +622,7 @@ class MatchMixIn(RSCMixIn):
         limit: int = 0,
         offset: int = 0,
     ) -> list[MatchList]:
+        check_page_limit(limit, caller="matches()")
         async with self.api_client(guild) as client:
             api = MatchesApi(client)
             try:
@@ -657,17 +656,15 @@ class MatchMixIn(RSCMixIn):
         day: int | None = None,
         match_type: MatchType | None = None,
         match_format: MatchFormat | None = None,
-        limit: int = 0,
-        offset: int = 0,
-        per_page: int = 100,
+        per_page: int = API_MAX_PAGE_SIZE,
     ) -> AsyncIterator[MatchList]:
         """Generator to page through matches (Must have season number due to high API load)"""
-        offset = 0
-        while True:
-            async with self.api_client(guild) as client:
-                api = MatchesApi(client)
+        async with self.api_client(guild) as client:
+            api = MatchesApi(client)
+
+            async def fetch(limit: int, offset: int) -> PaginatedMatchListList:
                 try:
-                    matches: PaginatedMatchListList = await api.matches_list(
+                    return await api.matches_list(
                         date__lt=date__lt.isoformat() if date__lt else None,
                         date__gt=date__gt.isoformat() if date__gt else None,
                         season=season,
@@ -681,19 +678,11 @@ class MatchMixIn(RSCMixIn):
                         limit=limit,
                         offset=offset,
                     )
-
-                    if not matches.results:
-                        break
-
-                    for match in matches.results:
-                        yield match
                 except ApiException as exc:
                     raise RscException(exc)
 
-            if not matches.next:
-                break
-
-            offset += per_page
+            async for match in iter_pages(fetch, per_page=per_page):
+                yield match
 
     async def match_by_day(self, guild: discord.Guild, team_id: int, day: int, preseason: bool = False) -> Match:
         async with self.api_client(guild) as client:

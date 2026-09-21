@@ -12,7 +12,6 @@ import pandas as pd
 from rscapi import (
     ApiClient,
     Configuration,
-    DraftAPlayerToATeam,
     LeaguePlayersApi,
     SeasonsApi,
     TeamList,
@@ -84,7 +83,7 @@ async def current_season() -> Season:
     """Fetch a list of tiers"""
     async with ApiClient(CONF) as client:
         api = SeasonsApi(client)
-        season = await api.seasons_league_season(league=1)
+        season = await api.seasons_league_season_retrieve(league=1)
 
         # Populate cache
         if not season:
@@ -98,7 +97,7 @@ async def calculate_rounds(tier: str | None = None) -> None:
     season = await current_season()
 
 
-    for t in season.season_tier_data:
+    for t in season.season_tier_data or []:
         print("=" * 20)
         print(f"Tier: {t.tier}")
 
@@ -114,7 +113,5 @@ if __name__ == "__main__":
     argv = parser.parse_args()
 
 
-    loop = asyncio.get_event_loop()
-    loop.run_until_complete(calculate_rounds(tier=argv.tier))
-    # loop.run_until_complete(get_rostered_players())
-    loop.close()
+    asyncio.run(calculate_rounds(tier=argv.tier))
+    # asyncio.run(get_rostered_players())

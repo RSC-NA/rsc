@@ -9,6 +9,39 @@ from rsc.llm.agent.registry import tool
 TIER_PARAM = {"type": "string", "description": "Tier name, e.g. Master, Elite, Rival."}
 
 
+def match_schedule(season: object) -> str:
+    """Render when matches are played, which the API carries per tier.
+
+    `SeasonTierData.schedule` is per tier, and tiers may disagree. They usually
+    do not, so collapse to a single line when they match rather than repeating
+    it once per tier -- but name the tiers when they diverge, since reporting
+    one tier's nights as the league's is a confidently wrong answer rather than
+    a missing one.
+    """
+    by_schedule: dict[str, list[str]] = {}
+    for tier_data in getattr(season, "season_tier_data", None) or []:
+        schedule = getattr(tier_data, "schedule", None)
+        if schedule is None:
+            continue
+
+        nights = ", ".join(getattr(schedule, "match_nights", None) or [])
+        if not nights:
+            continue
+
+        # `match_start_time` arrives as an OpenAPI `time` string ("22:00:00"),
+        # not a datetime, so `format_date` does not apply. Drop the seconds.
+        raw = getattr(schedule, "match_start_time", None) or ""
+        start = ":".join(raw.split(":")[:2])
+        rendered = f"{nights} at {start}" if start else nights
+        by_schedule.setdefault(rendered, []).append(str(getattr(tier_data, "tier", "") or "?"))
+
+    if not by_schedule:
+        return ""
+    if len(by_schedule) == 1:
+        return next(iter(by_schedule))
+    return "; ".join(f"{rendered} ({', '.join(tiers)})" for rendered, tiers in by_schedule.items())
+
+
 @tool(
     "list_franchises",
     "Every franchise in the league with its GM. Set include_agms to also list assistant GMs. "
@@ -222,7 +255,7 @@ async def list_tiers(ctx: AgentContext) -> str:
 
 @tool(
     "get_season_info",
-    "The current season number and its key dates (signups, draft, regular season, deadlines).",
+    "The current season number, its key dates (signups, draft, regular season, deadlines), and which nights and time matches are played.",
     cacheable=True,
 )
 async def get_season_info(ctx: AgentContext) -> str:
@@ -239,6 +272,7 @@ async def get_season_info(ctx: AgentContext) -> str:
             "Preseason start": format_date(season.preseason_start_date),
             "Regular season start": format_date(season.regular_season_start),
             "Regular season end": format_date(season.regular_season_end),
+            "Match nights": match_schedule(season),
         }
     )
 

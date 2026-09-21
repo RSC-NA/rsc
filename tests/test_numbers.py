@@ -6,6 +6,7 @@ from rscapi.exceptions import ApiException
 
 from rsc.exceptions import RscException
 from rsc.numbers.numbers import NumberMixIn
+from rsc.pagination import API_MAX_PAGE_SIZE
 
 
 def _create_mixin(**attrs):
@@ -26,6 +27,7 @@ class TestMmrPullsApi:
         pulled_after = datetime(2026, 5, 20, 12, 0, tzinfo=UTC)
         resp = MagicMock()
         resp.results = [MagicMock(), MagicMock()]
+        resp.next = None
         mixin = _create_mixin(_api_conf={mock_guild.id: MagicMock()})
 
         with patch("rsc.abc.ApiClient") as mock_client:
@@ -45,7 +47,7 @@ class TestMmrPullsApi:
                     psyonix_season=17,
                 )
 
-        assert result is resp.results
+        assert result == resp.results
         mock_api.numbers_mmr_list.assert_awaited_once_with(
             pulled=None,
             pulled_before=pulled_before.isoformat(),
@@ -55,7 +57,8 @@ class TestMmrPullsApi:
             rscid_begin="abc",
             rscid_end="xyz",
             psyonix_season=17,
-            limit=1000,
+            limit=API_MAX_PAGE_SIZE,
+            offset=0,
         )
 
     async def test_raises_rsc_exception(self, mock_guild):

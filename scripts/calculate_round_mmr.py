@@ -34,6 +34,7 @@ from rscapi.models.tier import Tier
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from rsc.enums import TransactionType
+from rsc.pagination import iter_pages
 
 console = Console()
 
@@ -127,9 +128,13 @@ async def tier_players(tier_name: str, status: Status|None=None) -> list[LeagueP
     async with ApiClient(CONF) as client:
         api = LeaguePlayersApi(client)
 
-        resp = await api.league_players_list(league=1, tier_name=tier_name, limit=1000)
-        console.print(f"Resp Count: {resp.count}")
-        lplayers = resp.results
+        # The API caps a page at 500 rows, so a tier has to be paged rather than asked for in one go.
+        lplayers = [
+            p
+            async for p in iter_pages(
+                lambda limit, offset: api.league_players_list(league=1, tier_name=tier_name, limit=limit, offset=offset)
+            )
+        ]
         console.print(f"Total Results: {len(lplayers)}")
 
         while any((remove:= p).status in [Status.FORMER, Status.BANNED, Status.PERM_FA, Status.PERMFA_W] for p in lplayers):
@@ -170,7 +175,7 @@ async def current_season() -> Season:
     """Fetch a list of tiers"""
     async with ApiClient(CONF) as client:
         api = SeasonsApi(client)
-        season = await api.seasons_league_season(league=1)
+        season = await api.seasons_league_season_retrieve(league=1)
 
         # Populate cache
         if not season:

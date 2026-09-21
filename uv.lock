@@ -1734,8 +1734,8 @@ dev = [
 
 [[package]]
 name = "rscapi"
-version = "2.1.4"
-source = { git = "https://github.com/RSC-NA/rsc-api-client.git#40630a28df7568a0edb2f346350d15d3587b3a50" }
+version = "2.1.7"
+source = { git = "https://github.com/RSC-NA/rsc-api-client.git#90b230a536093ee0cf1b3a0a5d5773d25ad0b233" }
 dependencies = [
     { name = "aiohttp" },
     { name = "aiohttp-retry" },

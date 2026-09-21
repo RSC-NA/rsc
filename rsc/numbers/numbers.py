@@ -6,11 +6,13 @@ import discord
 from redbot.core import app_commands
 from rscapi import NumbersApi
 from rscapi.exceptions import ApiException
+from rscapi.models.paginated_player_mmr_list import PaginatedPlayerMMRList
 from rscapi.models.player_mmr import PlayerMMR
 
 from rsc.abc import RSCMixIn
 from rsc.embeds import ApiExceptionErrorEmbed, BlueEmbed, GreenEmbed, YellowEmbed
 from rsc.exceptions import RscException
+from rsc.pagination import iter_pages
 from rsc.types import NumbersSettings
 
 log = logging.getLogger("red.rsc.transactions")
@@ -256,21 +258,25 @@ class NumberMixIn(RSCMixIn):
         """Get list of trackers ready to be updated"""
         async with self.api_client(guild) as client:
             api = NumbersApi(client)
-            try:
-                data = await api.numbers_mmr_list(
-                    pulled=pulled,
-                    pulled_before=pulled_before.isoformat() if pulled_before else None,
-                    pulled_after=pulled_after.isoformat() if pulled_after else None,
-                    discord_id=player.id if player else None,
-                    rscid=rscid,
-                    rscid_begin=rscid_begin,
-                    rscid_end=rscid_end,
-                    psyonix_season=psyonix_season,
-                    limit=1000,
-                )
-                return data.results
-            except ApiException as exc:
-                raise RscException(response=exc)
+
+            async def fetch(limit: int, offset: int) -> PaginatedPlayerMMRList:
+                try:
+                    return await api.numbers_mmr_list(
+                        pulled=pulled,
+                        pulled_before=pulled_before.isoformat() if pulled_before else None,
+                        pulled_after=pulled_after.isoformat() if pulled_after else None,
+                        discord_id=player.id if player else None,
+                        rscid=rscid,
+                        rscid_begin=rscid_begin,
+                        rscid_end=rscid_end,
+                        psyonix_season=psyonix_season,
+                        limit=limit,
+                        offset=offset,
+                    )
+                except ApiException as exc:
+                    raise RscException(response=exc)
+
+            return [pull async for pull in iter_pages(fetch)]
 
     # Config
 

@@ -1,4 +1,5 @@
 import logging
+from collections.abc import AsyncIterator
 from operator import attrgetter
 
 import discord
@@ -7,10 +8,12 @@ from rscapi.exceptions import ApiException
 from rscapi.models import ActivityCheck
 from rscapi.models.franchise_standings import FranchiseStandings
 from rscapi.models.intent_to_play import IntentToPlay
+from rscapi.models.paginated_activity_check_list import PaginatedActivityCheckList
 from rscapi.models.season import Season
 
 from rsc.abc import RSCMixIn
 from rsc.exceptions import LeagueNotConfigured, RscException
+from rsc.pagination import API_MAX_PAGE_SIZE, check_page_limit, iter_pages
 
 log = logging.getLogger("red.rsc.seasons")
 
@@ -115,6 +118,7 @@ class SeasonsMixIn(RSCMixIn):
         limit: int = 50,
         offset: int = 0,
     ) -> list[ActivityCheck]:
+        check_page_limit(limit, caller="season_activity_checks()")
         async with self.api_client(guild) as client:
             api = SeasonsApi(client)
             try:
@@ -131,3 +135,36 @@ class SeasonsMixIn(RSCMixIn):
                 return resp.results
             except ApiException as exc:
                 raise RscException(response=exc)
+
+    async def paged_activity_checks(
+        self,
+        guild: discord.Guild,
+        season_id: int | None = None,
+        season_number: int | None = None,
+        discord_id: int | None = None,
+        completed: bool | None = None,
+        returning: bool | None = None,
+        missing: bool | None = None,
+        per_page: int = API_MAX_PAGE_SIZE,
+    ) -> AsyncIterator[ActivityCheck]:
+        """Every activity check matching the filters. `season_activity_checks()` alone returns a single page."""
+        async with self.api_client(guild) as client:
+            api = SeasonsApi(client)
+
+            async def fetch(limit: int, offset: int) -> PaginatedActivityCheckList:
+                try:
+                    return await api.seasons_activity_check_list(
+                        season=season_id,
+                        season_number=season_number,
+                        discord_id=discord_id,
+                        completed=completed,
+                        returning_status=returning,
+                        missing=missing,
+                        limit=limit,
+                        offset=offset,
+                    )
+                except ApiException as exc:
+                    raise RscException(response=exc)
+
+            async for check in iter_pages(fetch, per_page=per_page):
+                yield check

@@ -58,6 +58,7 @@ from rsc.enums import (
     TrackerLinksStatus,
     TransactionType,
 )
+from rsc.pagination import API_MAX_PAGE_SIZE
 
 if TYPE_CHECKING:
     from rsc.combines.models import CombinesLobby
@@ -339,6 +340,19 @@ class RSCMixIn(ABC):
     ) -> list[ActivityCheck]: ...
 
     @abstractmethod
+    def paged_activity_checks(
+        self,
+        guild: discord.Guild,
+        season_id: int | None = None,
+        season_number: int | None = None,
+        discord_id: int | None = None,
+        completed: bool | None = None,
+        returning: bool | None = None,
+        missing: bool | None = None,
+        per_page: int = API_MAX_PAGE_SIZE,
+    ) -> AsyncIterator[ActivityCheck]: ...
+
+    @abstractmethod
     async def players(
         self,
         guild: discord.Guild,
@@ -351,6 +365,7 @@ class RSCMixIn(ABC):
         team_name: str | None = None,
         franchise: str | None = None,
         discord_id: int | None = None,
+        captain: bool | None = None,
         limit: int = 0,
         offset: int = 0,
     ) -> list[LeaguePlayer]: ...
@@ -398,7 +413,8 @@ class RSCMixIn(ABC):
         team_name: str | None = None,
         franchise: str | None = None,
         discord_id: int | None = None,
-        per_page: int = 100,
+        captain: bool | None = None,
+        per_page: int = API_MAX_PAGE_SIZE,
     ) -> AsyncIterator[LeaguePlayer]: ...
 
     @abstractmethod
@@ -488,9 +504,7 @@ class RSCMixIn(ABC):
         day: int | None = None,
         match_type: MatchType | None = None,
         match_format: MatchFormat | None = None,
-        limit: int = 0,
-        offset: int = 0,
-        per_page: int = 100,
+        per_page: int = API_MAX_PAGE_SIZE,
     ) -> AsyncIterator[MatchList]: ...
 
     @abstractmethod
@@ -554,7 +568,7 @@ class RSCMixIn(ABC):
         rsc_name: str | None = None,
         discord_username: str | None = None,
         discord_id: int | None = None,
-        per_page: int = 100,
+        per_page: int = API_MAX_PAGE_SIZE,
     ) -> AsyncIterator[RSCMember]: ...
 
     @abstractmethod
@@ -797,6 +811,16 @@ class RSCMixIn(ABC):
         limit: int = 0,
         offset: int = 0,
     ) -> list[TrackerLink]: ...
+
+    @abstractmethod
+    def paged_trackers(
+        self,
+        guild: discord.Guild,
+        status: TrackerLinksStatus | None = None,
+        player: discord.Member | int | None = None,
+        name: str | None = None,
+        per_page: int = API_MAX_PAGE_SIZE,
+    ) -> AsyncIterator[TrackerLink]: ...
 
     @abstractmethod
     async def tracker_stats(

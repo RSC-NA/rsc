@@ -67,11 +67,18 @@ def _mock_cog(checks, *, season=None, last_run=(None, None, None)):
     """A cog stub whose method signatures track the real ones.
 
     Autospec rather than a bare MagicMock so that renaming a parameter or
-    adding a required one on `season_activity_checks` fails these tests
+    adding a required one on `paged_activity_checks`/`season_activity_checks` fails these tests
     instead of passing while production breaks.
     """
     cog = create_autospec(RSC, instance=True)
+    # The send-time precheck looks up one `discord_id`, so it stays on the single-page call.
     cog.season_activity_checks.return_value = checks
+
+    async def _paged(*args, **kwargs):
+        for check in checks:
+            yield check
+
+    cog.paged_activity_checks.side_effect = _paged
     cog.current_season.return_value = season if season is not None else _mock_season()
     cog._get_activity_check_msg_id.return_value = MSG_ID
     cog._get_activity_check_dm_last_run.return_value = last_run
@@ -122,7 +129,7 @@ class TestFetchMissingActivityChecks:
 
         await fetch_missing(cog, _mock_guild(), SEASON_ID)
 
-        kwargs = cog.season_activity_checks.call_args.kwargs
+        kwargs = cog.paged_activity_checks.call_args.kwargs
         assert kwargs["completed"] is False, "dropping completed=False re-opens the 426-DM bug"
         assert kwargs["missing"] is True
         assert kwargs["season_id"] == SEASON_ID

@@ -1260,7 +1260,7 @@ class AdminSyncMixIn(AdminMixIn):
 
         sync_view = ConfirmSyncView(interaction)
         await sync_view.prompt()
-        plist = await self.players(guild, status=Status.DRAFT_ELIGIBLE, limit=10000)
+        plist = [p async for p in self.paged_players(guild, status=Status.DRAFT_ELIGIBLE)]
         tiers: list[Tier] = await self.tiers(guild)
         await sync_view.wait()
 

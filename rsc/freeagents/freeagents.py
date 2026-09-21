@@ -424,11 +424,11 @@ class FreeAgentMixIn(RSCMixIn):
 
     async def free_agents(self, guild: discord.Guild, tier_name: str) -> list[LeaguePlayer]:
         """Fetch a list of Free Agents for specified tier"""
-        return await self.players(guild, status=Status.FREE_AGENT, tier_name=tier_name, limit=1000)
+        return [p async for p in self.paged_players(guild, status=Status.FREE_AGENT, tier_name=tier_name)]
 
     async def permanent_free_agents(self, guild: discord.Guild, tier_name: str) -> list[LeaguePlayer]:
         """Fetch a list of Permanent Free Agents for specified tier"""
-        return await self.players(guild, status=Status.PERM_FA, tier_name=tier_name, limit=1000)
+        return [p async for p in self.paged_players(guild, status=Status.PERM_FA, tier_name=tier_name)]
 
     # Config
 

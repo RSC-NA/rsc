@@ -28,6 +28,7 @@ from rscapi.models.trade_object import TradeObject
 from rscapi.models.trade_player import TradePlayer
 from rscapi.models.trade_transaction import TradeTransaction
 from rscapi.models.transaction_franchise import TransactionFranchise
+from rscapi.models.paginated_transaction_response_list import PaginatedTransactionResponseList
 from rscapi.models.transaction_response import TransactionResponse
 
 from rsc.abc import RSCMixIn
@@ -64,6 +65,7 @@ from rsc.transactions.roles import (
 from rsc.transactions.views import TradeAnnouncementModal
 from rsc.types import Substitute, TransactionSettings
 from rsc.utils import utils
+from rsc.pagination import API_MAX_PAGE_SIZE, check_page_limit, iter_pages
 
 logger = logging.getLogger("red.rsc.transactions")
 log = GuildLogAdapter(logger)
@@ -3230,6 +3232,7 @@ class TransactionMixIn(RSCMixIn):
         offset: int = 0,
     ) -> list[TransactionResponse]:
         """Fetch transaction history based on specified criteria"""
+        check_page_limit(limit, caller="transaction_history()")
         async with self.api_client(guild) as client:
             api = TransactionsApi(client)
             player_id = player.id if player else None
@@ -3261,7 +3264,7 @@ class TransactionMixIn(RSCMixIn):
         executor: discord.Member | None = None,
         season: int | None = None,
         trans_type: TransactionType | None = None,
-        per_page: int = 50,
+        per_page: int = API_MAX_PAGE_SIZE,
     ) -> AsyncIterator[TransactionResponse]:
         """Fetch transaction history based on specified criteria"""
         player_id = player.id if player else None
@@ -3272,37 +3275,26 @@ class TransactionMixIn(RSCMixIn):
             guild=guild,
         )
 
-        offset = 0
         async with self.api_client(guild) as client:
             api = TransactionsApi(client)
-            while True:
+
+            async def fetch(limit: int, offset: int) -> PaginatedTransactionResponseList:
                 log.debug(f"Offset: {offset}")
                 try:
-                    league_id = self._league[guild.id]
-                    trans_list = await api.transactions_history_list(
-                        league=league_id,
+                    return await api.transactions_history_list(
+                        league=self._league[guild.id],
                         player=player_id,
                         executor=executor_id,
                         transaction_type=t_type,
                         season_number=season,
-                        limit=per_page,
+                        limit=limit,
                         offset=offset,
                     )
-                    results = trans_list.results
-                    has_next = bool(trans_list.next)
-
-                    if not results:
-                        break
-
-                    for transaction in results:
-                        yield transaction
-
-                    if not has_next:
-                        break
-
-                    offset += per_page
                 except ApiException as exc:
                     raise RscException(response=exc)
+
+            async for transaction in iter_pages(fetch, per_page=per_page):
+                yield transaction
 
     async def transaction_history_by_id(self, guild: discord.Guild, transaction_id: int) -> TransactionResponse:
         """Fetch transaction history based on specified criteria"""

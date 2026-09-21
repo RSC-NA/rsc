@@ -17,15 +17,22 @@ session = requests.session()
 session.headers.update(auth)
 
 
-def api_fa_players():
-    r = session.get(
-        "https://api.rscna.com/api/v1/league-players/?status=FA&limit=10000", timeout=10
-    )
+def api_get_all(url: str) -> list[dict]:
+    """Every row of a paginated endpoint. The API caps a page at 500, so follow `next`."""
+    results: list[dict] = []
+    next_url: str | None = url
+    while next_url:
+        r = session.get(next_url, timeout=10)
+        if r.status_code != 200:
+            raise RuntimeError(f"Error fetching {next_url} from RSC API ({r.status_code})")
+        data = r.json()
+        results.extend(data["results"])
+        next_url = data["next"]
+    return results
 
-    if r.status_code != 200:
-        raise RuntimeError("Error fetching franchises from RSC API")
-    data = r.json()
-    return data["results"]
+
+def api_fa_players():
+    return api_get_all(f"{API_HOST}/league-players/?status=FA&limit=500")
 
 
 def check_invalid_fa(players, df: pandas.DataFrame):
@@ -43,17 +50,10 @@ def check_invalid_fa(players, df: pandas.DataFrame):
 
 
 def remove_cut_players(players, season):
-    r = session.get(
-        f"https://api.rscna.com/api/v1/transactions/history/?season_number={season}&league=1&transaction_type=CUT&limit=5000",
-        timeout=10,
-    )
-
-    if r.status_code != 200:
-        raise RuntimeError("Error fetching franchises from RSC API")
-    data = r.json()
+    transactions = api_get_all(f"{API_HOST}/transactions/history/?season_number={season}&league=1&transaction_type=CUT&limit=500")
 
     cut_players = []
-    for r in data["results"]:
+    for r in transactions:
         tmp = r["player_updates"].pop(0)  # type: ignore
         try:
             cut_players.append(tmp["player"]["player"]["name"])

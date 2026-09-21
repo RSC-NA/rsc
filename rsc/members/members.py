@@ -1,5 +1,6 @@
 import logging
 import time
+from collections.abc import AsyncIterator
 from typing import cast
 
 import discord
@@ -18,6 +19,7 @@ from rscapi.models.league_player import LeaguePlayer
 from rscapi.models.league_player_patch import LeaguePlayerPatch
 from rscapi.models.league_player_status_enum import LeaguePlayerStatusEnum
 from rscapi.models.league_player_signup import LeaguePlayerSignup
+from rscapi.models.paginated_member_list import PaginatedMemberList
 from rscapi.models.member import Member
 from rscapi.models.member_transfer_request import MemberTransferRequest
 from rscapi.models.name_change_history import NameChangeHistory
@@ -52,6 +54,7 @@ from rsc.teams import TeamMixIn
 from rsc.tiers import TierMixIn
 from rsc.transactions.roles import update_league_player_discord
 from rsc.utils import utils
+from rsc.pagination import API_MAX_PAGE_SIZE, check_page_limit, iter_pages
 from rsc.views import ResultView
 
 logger = logging.getLogger("red.rsc.members")
@@ -1030,6 +1033,7 @@ class MemberMixIn(RSCMixIn):
         limit: int = 0,
         offset: int = 0,
     ) -> list[Member]:
+        check_page_limit(limit, caller="members()")
         async with self.api_client(guild) as client:
             api = MembersApi(client)
             try:
@@ -1050,36 +1054,25 @@ class MemberMixIn(RSCMixIn):
         rsc_name: str | None = None,
         discord_username: str | None = None,
         discord_id: int | None = None,
-        per_page: int = 100,
-    ):
-        offset = 0
-        while True:
-            async with self.api_client(guild) as client:
-                api = MembersApi(client)
+        per_page: int = API_MAX_PAGE_SIZE,
+    ) -> AsyncIterator[Member]:
+        async with self.api_client(guild) as client:
+            api = MembersApi(client)
+
+            async def fetch(limit: int, offset: int) -> PaginatedMemberList:
                 try:
-                    members = await api.members_list(
+                    return await api.members_list(
                         rsc_name=rsc_name,
                         discord_username=discord_username,
                         discord_id=discord_id,
-                        limit=per_page,
+                        limit=limit,
                         offset=offset,
                     )
-
-                    if not members:
-                        break
-
-                    if not members.results:
-                        break
-
-                    for member in members.results:
-                        yield member
-
-                    if not members.next:
-                        break
-
-                    offset += per_page
                 except ApiException as exc:
                     raise RscException(exc)
+
+            async for member in iter_pages(fetch, per_page=per_page):
+                yield member
 
     async def member_elevated_roles(
         self,

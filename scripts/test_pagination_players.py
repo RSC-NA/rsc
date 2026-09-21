@@ -60,7 +60,7 @@ async def paged_players(
         if not players.next:
             break
 
-        offset += per_page
+        offset += len(players.results)
 
 
 async def players(
@@ -74,23 +74,21 @@ async def players(
     franchise: str | None = None,
     discord_id: int | None = None,
 ) -> list[LeaguePlayer]:
-    async with ApiClient(CONF) as client:
-        api = LeaguePlayersApi(client)
-        players = await api.league_players_list(
-            status=str(status) if status else None,
+    # The API caps a page at 500 rows; one big `limit` is silently truncated.
+    return [
+        p
+        async for p in paged_players(
+            status=status,
             name=name,
             tier=tier,
             tier_name=tier_name,
             season=season,
             season_number=season_number,
-            league=1,
             team_name=team_name,
             franchise=franchise,
             discord_id=discord_id,
-            limit=2000,
-            offset=0,
         )
-        return players.results
+    ]
 
 
 async def get_paged_rostered_players():
