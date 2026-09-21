@@ -13,7 +13,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import ballchasing
 import discord
 import pytest
-from ballchasing.exceptions import BackoffLimitExceeded, BallchasingFault, DuplicateReplay
+from ballchasing.exceptions import BackoffLimitExceeded, BallchasingFault, DuplicateReplay, MissingAPIKey
 
 from rsc.ballchasing import groups, process
 from rsc.ballchasing.ballchasing import BallchasingMixIn, normalize_scores, upload_summary
@@ -926,6 +926,16 @@ class TestBuildCandidates:
 # ---------------------------------------------------------------- api lifecycle
 
 
+def _patch_api(ping: AsyncMock | None = None):
+    """Patch the network facing half of ballchasing.Api; the constructor is offline."""
+    return patch.multiple(
+        ballchasing.Api,
+        ping=ping or AsyncMock(),
+        reconfigure_session=AsyncMock(),
+        close=AsyncMock(),
+    )
+
+
 class TestPrepareBallchasing:
     async def test_unchanged_token_reuses_the_session(self):
         existing = MagicMock(auth_key="token")
@@ -933,36 +943,55 @@ class TestPrepareBallchasing:
         mixin = _create_mixin(_get_bc_auth_token=AsyncMock(return_value="token"))
         mixin._ballchasing_api = {GUILD_ID: existing}
 
-        with patch.object(ballchasing.Api, "create", AsyncMock()) as create:
+        with _patch_api():
             await mixin.prepare_ballchasing(_guild())
+            ballchasing.Api.ping.assert_not_awaited()
 
-        create.assert_not_awaited()
         existing.close.assert_not_awaited()
         assert mixin._ballchasing_api[GUILD_ID] is existing
 
     async def test_changed_token_swaps_and_closes(self):
         existing = MagicMock(auth_key="old")
         existing.close = AsyncMock()
-        fresh = MagicMock(auth_key="new")
         mixin = _create_mixin(_get_bc_auth_token=AsyncMock(return_value="new"))
         mixin._ballchasing_api = {GUILD_ID: existing}
         mixin._bc_group_cache = {GUILD_ID: {("a", "b"): "c"}}
 
-        with patch.object(ballchasing.Api, "create", AsyncMock(return_value=fresh)):
+        with _patch_api():
             await mixin.prepare_ballchasing(_guild())
+            ballchasing.Api.ping.assert_awaited_once()
+            # The fresh instance is kept, not closed.
+            ballchasing.Api.close.assert_not_awaited()
 
-        assert mixin._ballchasing_api[GUILD_ID] is fresh
+        assert mixin._ballchasing_api[GUILD_ID].auth_key == "new"
         existing.close.assert_awaited_once()
         assert GUILD_ID not in mixin._bc_group_cache
 
     async def test_no_token_is_a_noop(self):
         mixin = _create_mixin(_get_bc_auth_token=AsyncMock(return_value=None))
 
-        with patch.object(ballchasing.Api, "create", AsyncMock()) as create:
+        with _patch_api():
             await mixin.prepare_ballchasing(_guild())
+            ballchasing.Api.ping.assert_not_awaited()
 
-        create.assert_not_awaited()
         assert mixin._ballchasing_api == {}
+
+    @pytest.mark.parametrize("error", [MissingAPIKey(), asyncio.CancelledError()])
+    async def test_failed_ping_closes_the_session_it_opened(self, error):
+        """ping() lazily opens a ClientSession; nobody else holds the instance."""
+        existing = MagicMock(auth_key="old")
+        existing.close = AsyncMock()
+        mixin = _create_mixin(_get_bc_auth_token=AsyncMock(return_value="new"))
+        mixin._ballchasing_api = {GUILD_ID: existing}
+
+        with _patch_api(ping=AsyncMock(side_effect=error)):
+            with pytest.raises(type(error)):
+                await mixin.prepare_ballchasing(_guild())
+            ballchasing.Api.close.assert_awaited_once()
+
+        # The working instance is left in place rather than swapped for a dead one.
+        assert mixin._ballchasing_api[GUILD_ID] is existing
+        existing.close.assert_not_awaited()
 
 
 # ---------------------------------------------------------------- end to end

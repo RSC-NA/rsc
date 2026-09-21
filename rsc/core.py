@@ -295,6 +295,15 @@ class RSC(
         url = await self._get_api_url(guild)
         key = await self._get_api_key(guild)
         if url and key:
+            # setup() re-runs on every on_ready(). Invalidating unconditionally
+            # closes the session under in-flight requests, and a caller already
+            # holding the popped client would lazily open a session that
+            # close_api_clients() can no longer reach.
+            current = self._api_conf.get(guild.id)
+            if current is not None and current.host == url and current.api_key.get("Api-Key") == key:
+                log.debug("RSC API already configured", guild=guild)
+                return
+
             # The cached client is bound to the old Configuration. Both
             # _set_api_key() and _set_api_url() funnel through here, so this is
             # the only invalidation point required.

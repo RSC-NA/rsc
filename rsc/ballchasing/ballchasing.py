@@ -125,7 +125,19 @@ class BallchasingMixIn(RSCMixIn):
             log.debug("Ballchasing API already configured", guild=guild)
             return
 
-        self._ballchasing_api[guild.id] = await ballchasing.Api.create(auth_key=token)
+        # Not Api.create(): it pings before returning, and ping() lazily opens a
+        # ClientSession. If the key is rejected or a sibling setup task cancels
+        # us mid-request, create() never hands the instance back and the session
+        # is orphaned ("Unclosed client session" at startup).
+        api = ballchasing.Api(auth_key=token)
+        try:
+            await api.ping()
+            await api.reconfigure_session()
+        except BaseException:
+            await api.close()
+            raise
+
+        self._ballchasing_api[guild.id] = api
         self._bc_group_cache.pop(guild.id, None)
 
         if existing is not None:

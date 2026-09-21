@@ -127,6 +127,49 @@ class TestPrepareApiInvalidation:
         assert mock_guild.id not in cog._api_clients
         assert mock_guild.id in cog._api_conf
 
+    async def test_unchanged_config_keeps_the_cached_client(self, mock_guild):
+        """setup() re-runs on every on_ready(); that must not drop live sessions."""
+        cog = _create_cog(
+            _api_conf={},
+            _api_clients={},
+            _get_api_url=AsyncMock(return_value="https://api.example.com"),
+            _get_api_key=AsyncMock(return_value="key"),
+        )
+        await cog.prepare_api(mock_guild)
+        conf = cog._api_conf[mock_guild.id]
+        client = AsyncMock()
+        cog._api_clients[mock_guild.id] = client
+
+        await cog.prepare_api(mock_guild)
+
+        client.close.assert_not_awaited()
+        assert cog._api_clients[mock_guild.id] is client
+        assert cog._api_conf[mock_guild.id] is conf
+
+    @pytest.mark.parametrize(
+        ("url", "key"),
+        [("https://api.example.com", "rotated"), ("https://other.example.com", "key")],
+    )
+    async def test_changed_key_or_url_replaces_the_client(self, mock_guild, url, key):
+        cog = _create_cog(
+            _api_conf={},
+            _api_clients={},
+            _get_api_url=AsyncMock(return_value="https://api.example.com"),
+            _get_api_key=AsyncMock(return_value="key"),
+        )
+        await cog.prepare_api(mock_guild)
+        conf = cog._api_conf[mock_guild.id]
+        client = AsyncMock()
+        cog._api_clients[mock_guild.id] = client
+        cog._get_api_url = AsyncMock(return_value=url)
+        cog._get_api_key = AsyncMock(return_value=key)
+
+        await cog.prepare_api(mock_guild)
+
+        client.close.assert_awaited_once()
+        assert mock_guild.id not in cog._api_clients
+        assert cog._api_conf[mock_guild.id] is not conf
+
     async def test_retries_cover_stale_pooled_sockets(self, mock_guild):
         """Long lived clients can hand out a socket the server already closed.
 
