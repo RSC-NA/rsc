@@ -2778,7 +2778,7 @@ class TransactionMixIn(RSCMixIn):
                     raise TradeParserException(message="Destination franchise is `None`")
 
                 # Parse line with regex
-                if not match or not match.group("player"):
+                if not match.group("player"):
                     raise TradeParserException(message=f"Unable to parse player trade from: `{line}`")
 
                 m_str = match.group("player").strip()
@@ -2835,8 +2835,6 @@ class TransactionMixIn(RSCMixIn):
                 item = TradeObject(source=sfranchise, destination=dest_franchise, value=tvalue)
                 trade_list.append(item)
             elif match := FUTURE_TRADE_REGEX.match(line):
-                if not match:
-                    raise TradeParserException(message=f"Unable to parse future trade from: `{line}`")
                 if not dest_franchise:
                     raise TradeParserException(message="Destination franchise is `None`. Parser error.")
 
@@ -2875,8 +2873,6 @@ class TransactionMixIn(RSCMixIn):
                 trade_list.append(item)
 
             elif match := PICK_TRADE_REGEX.match(line):
-                if not match:
-                    raise TradeParserException(message=f"Unable to parse future trade from: `{line}`")
                 if not dest_franchise:
                     raise TradeParserException(message="Destination franchise is `None`. Parser error.")
 

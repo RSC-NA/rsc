@@ -223,12 +223,12 @@ victim from reporting while producing no record.
 try:
     tiers: list[Tier] = await self.tiers(guild)
 except RscException as exc:
-    log.exception("Error fetching tiers", guild=guild, exc=exc)      # line 69
+    log.exception("Error fetching tiers", guild=guild, exc=exc)  # line 69
 
 try:
     agm_map = await self.agm_franchise_map(guild)
 except (RscException, RuntimeError) as exc:
-    log.exception("Error fetching AGMs. Skipping guild.", guild=guild, exc=exc)   # line 77
+    log.exception("Error fetching AGMs. Skipping guild.", guild=guild, exc=exc)  # line 77
     continue
 ```
 
@@ -514,7 +514,7 @@ _intent = app_commands.Group(
     name="intent",
     description="Declare or check status of player intent to play",
     guild_only=True,
-)                                   # no default_permissions
+)  # no default_permissions
 ```
 
 The `_intent` group carries no `default_permissions`, and `_intents_search_cmd` checks only that a
@@ -579,7 +579,7 @@ during a sync drop entries.
 
 ```python
 league = None
-if self._league[guild.id]:      # KeyError when the guild was never prepared
+if self._league[guild.id]:  # KeyError when the guild was never prepared
     league = await self.league(guild)
 
 league_str = "Not Configured"
@@ -733,11 +733,11 @@ the regression risk is real.
 `rsc/members/members.py:472-526`
 
 ```python
-signup_season = await self.next_signup_season(guild)                              # HTTP #1
-plist = await self.players(guild, season=signup_season.id, discord_id=..., limit=1)   # HTTP #2
-prev_list = await self.players(guild, season_number=..., discord_id=..., limit=1)     # HTTP #3
+signup_season = await self.next_signup_season(guild)  # HTTP #1
+plist = await self.players(guild, season=signup_season.id, discord_id=..., limit=1)  # HTTP #2
+prev_list = await self.players(guild, season_number=..., discord_id=..., limit=1)  # HTTP #3
 signup_view = SignupView(interaction)
-await signup_view.prompt()      # FIRST acknowledgement
+await signup_view.prompt()  # FIRST acknowledgement
 ```
 
 Discord's initial-response deadline is **3 seconds**. There is no `defer()` on this path, and the
@@ -818,7 +818,7 @@ except LeagueNotConfigured:
 ```python
 async def next_signup_season(self, guild) -> Season | None:
     async with self.api_client(guild) as client:
-        league_id = self._league[guild.id]      # raises KeyError, not LeagueNotConfigured
+        league_id = self._league[guild.id]  # raises KeyError, not LeagueNotConfigured
 ```
 
 `LeagueNotConfigured` is raised in exactly one place in the codebase — `seasons.py:28`, inside
@@ -841,7 +841,7 @@ behind H-3 and M-0.
 ```python
 async def remove_checkin(self, guild, player: CheckIn):
     current = await self._get_check_ins(guild)
-    current.remove(player)          # ValueError if absent
+    current.remove(player)  # ValueError if absent
 ```
 
 **Scenario:** the FA confirm button never acknowledges its own interaction
@@ -868,9 +868,10 @@ write, `add_checkin` is an unsynchronised read-modify-write, and `remove_checkin
 
 ```python
 if tiers and league_player.tier and league_player.tier.name:
-    for r in player.roles: ...          # dead: tiers == []
+    for r in player.roles:
+        ...  # dead: tiers == []
 elif tiers:
-    ...                                 # dead: tiers == []
+    ...  # dead: tiers == []
 ```
 
 Both tier-*removal* branches are unreachable, while `:969-972` still *adds* the new tier role.
@@ -976,6 +977,7 @@ versioning on the bucket would make the whole class of failure survivable.
 ```python
 CHECKIN_URL = "https://devleague.rscna.com/c-api/check_in"
 
+
 def combines_check_in(discord_id: int) -> int:
     params = {"discord_id": discord_id}
     r = requests.get(url=CHECKIN_URL, params=params, timeout=10)
@@ -1006,7 +1008,7 @@ one helper.
 user an actionable message. But the only place that raises it does so *after* an unguarded index:
 
 ```python
-league_id = self._league[guild.id]          # KeyError here on an unconfigured guild
+league_id = self._league[guild.id]  # KeyError here on an unconfigured guild
 if not league_id:
     raise LeagueNotConfigured("Guild does not have a league configured.")
 ```
@@ -1027,9 +1029,11 @@ The codebase documented the workaround instead of fixing it —
 def apicall(f):
     @wraps(f)
     def wrapper(self: RSCMixIn, guild: discord.Guild, *args, **kwargs):
-        if not self._league.get(guild.id): raise ValueError(...)
-        if not self._api_conf.get(guild.id): raise ValueError(...)
-        return f(self, *args, **kwargs)      # drops `guild`
+        if not self._league.get(guild.id):
+            raise ValueError(...)
+        if not self._api_conf.get(guild.id):
+            raise ValueError(...)
+        return f(self, *args, **kwargs)  # drops `guild`
 ```
 
 It is applied to **zero** functions, and applying it to any of the 51 sites would break them
@@ -1048,7 +1052,7 @@ with io.BytesIO() as buf:
     buf.seek(0)
     dFile = discord.File(filename="progress.jpeg", fp=buf)
 
-return dFile            # buf.__exit__ already ran
+return dFile  # buf.__exit__ already ran
 ```
 
 The test suite already says this out loud — `tests/test_images.py:90-92`:
@@ -1278,7 +1282,7 @@ push that is a lot of avoidable noise pointed at staff.
 `rsc/combines/runner.py:248`, `rsc/combines/combines.py:182`
 
 ```python
-home_fmt[0] += " (Makes Lobby)"     # IndexError when lobby.home is empty
+home_fmt[0] += " (Makes Lobby)"  # IndexError when lobby.home is empty
 ```
 
 Reached from `create_combine_lobby_channel` (`:219`) **after** both voice channels are already

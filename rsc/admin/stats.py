@@ -87,7 +87,7 @@ class AdminStatsMixIn(AdminMixIn):
         for i in intents:
             if i.returning:
                 intent_dict["Returning"] += 1
-            elif not i.returning and not i.missing:
+            elif not i.missing:
                 intent_dict["Not Returning"] += 1
             elif i.missing:
                 intent_dict["Missing"] += 1

@@ -1,8 +1,8 @@
 repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.16.2
+    rev: v0.16.8
     hooks:
-      - id: ruff
+      - id: ruff-check
       - id: ruff-format
 
   - repo: https://github.com/pre-commit/pre-commit-hooks
@@ -20,12 +20,12 @@ repos:
           - tomli
 
   - repo: https://github.com/astral-sh/ty-pre-commit
-    rev: v0.0.69
+    rev: v0.0.82
     hooks:
       - id: ty
 
   - repo: https://github.com/astral-sh/uv-pre-commit
-    rev: 0.12.3
+    rev: 0.12.17
     hooks:
       # Keep uv.lock in sync with pyproject.toml
       - id: uv-lock

@@ -206,7 +206,7 @@ class MemberMixIn(RSCMixIn):
             embed = BlueEmbed(title="Sign-up Status")
             if intent.returning:
                 embed.description = "You are **returning** to the league next season"
-            elif not intent.returning and not intent.missing:
+            elif not intent.missing:
                 embed.description = "You are **not returning** to the league next season"
             else:
                 embed.description = "You have **not submitted** your intent status for next season"
@@ -286,7 +286,7 @@ class MemberMixIn(RSCMixIn):
         embed = BlueEmbed(title="Intent to Play Status")
         if intent.returning:
             embed.description = "You are **returning** to the league next season"
-        elif not intent.returning and not intent.missing:
+        elif not intent.missing:
             embed.description = "You are **not returning** to the league next season"
         else:
             embed.description = "You have **not submitted** your intent status for next season"
@@ -433,7 +433,7 @@ class MemberMixIn(RSCMixIn):
 
             if i.returning:
                 intent_dict[m.mention] = "Returning"
-            elif not i.returning and not i.missing:
+            elif not i.missing:
                 intent_dict[m.mention] = "Not Returning"
             elif i.missing:
                 intent_dict[m.mention] = "Missing"

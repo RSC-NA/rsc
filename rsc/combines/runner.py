@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+from pprint import pformat
 
 from aiohttp import web
 import discord
@@ -28,8 +29,6 @@ class CombineRunnerMixIn(RSCMixIn):
 
         try:
             data = await request.json()
-            from pprint import pformat
-
             log.debug(f"body:\n\n{pformat(data)}\n\n")
             event = models.CombineEvent(**data)
         except json.JSONDecodeError:

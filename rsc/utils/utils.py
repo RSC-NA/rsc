@@ -153,7 +153,7 @@ async def get_audit_log_reason(
     guild: discord.Guild,
     target: discord.abc.GuildChannel | discord.Member | discord.Role | int,
     action: discord.AuditLogAction,
-) -> tuple[discord.abc.User | None, str | None]:
+) -> tuple[discord.User | discord.Member | None, str | None]:
     """Retrieve audit log reason for `discord.AuditLogAction`"""
     perp = None
     reason = None
@@ -1345,7 +1345,9 @@ class UtilsMixIn(RSCMixIn):
         permission: DiscordPermType,
         value: DiscordPermValue,
     ):
-        perms = channel.overwrites_for(target)
+        # discord.py types this as the `abc.User` protocol, whose writable `bot` attribute
+        # `Member` (a read-only property) cannot satisfy. It accepts a Member at runtime.
+        perms = channel.overwrites_for(target)  # ty: ignore[invalid-argument-type]
         if permission not in perms.VALID_NAMES:
             return await interaction.response.send_message(
                 embed=ErrorEmbed(description=f"Invalid permission type: `{permission}`"),

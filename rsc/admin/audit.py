@@ -152,7 +152,9 @@ class AdminAuditMixIn(AdminMixIn):
         after_arg: datetime = after if after is not None else MISSING
 
         if user:
-            async for entry in guild.audit_logs(action=audit_action, limit=limit, before=before_arg, after=after_arg, user=user):
+            # `user` is typed as the `Snowflake` protocol with a writable `id`, which the
+            # read-only `id` on Member/User cannot satisfy. It accepts either at runtime.
+            async for entry in guild.audit_logs(action=audit_action, limit=limit, before=before_arg, after=after_arg, user=user):  # ty: ignore[invalid-argument-type]
                 log.debug(f"Entry: {entry}")
         else:
             async for entry in guild.audit_logs(action=audit_action, limit=limit, before=before_arg, after=after_arg):

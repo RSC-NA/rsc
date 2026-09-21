@@ -92,13 +92,15 @@ Also add the matching `OpenApiParameter` to `league_event_list_filter_parameters
 so it shows up in the schema and the generated client:
 
 ```python
-OpenApiParameter(
-    "ordering",
-    location=OpenApiParameter.QUERY,
-    description="Field to order by. Prefix with `-` for descending. One of: `id`, `created_at`.",
-    required=False,
-    type=str,
-),
+(
+    OpenApiParameter(
+        "ordering",
+        location=OpenApiParameter.QUERY,
+        description="Field to order by. Prefix with `-` for descending. One of: `id`, `created_at`.",
+        required=False,
+        type=str,
+    ),
+)
 ```
 
 ### 2. `id__gt` — medium

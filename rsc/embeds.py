@@ -31,7 +31,7 @@ def chunk_field_value(value: str) -> list[str]:
     split if no delimiter is found in a page.
     """
     # Imported here to avoid a circular import (pagify -> utils -> embeds)
-    from rsc.utils.pagify import Pagify
+    from rsc.utils.pagify import Pagify  # noqa: PLC0415
 
     chunks = list(
         Pagify(

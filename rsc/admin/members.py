@@ -752,7 +752,7 @@ class AdminMembersMixIn(AdminMixIn):
             embed = BlueEmbed(title=f"{player.display_name} Sign-up Status")
             if intent.returning:
                 embed.description = f"{player.mention} is **returning** to the league next season"
-            elif not intent.returning and not intent.missing:
+            elif not intent.missing:
                 embed.description = f"{player.mention} is **not returning** to the league next season"
             else:
                 embed.description = f"{player.mention} has **not submitted** their intent status for next season"
