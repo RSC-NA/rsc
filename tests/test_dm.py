@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import discord
 import pytest
 
-from rsc.utils.dm import MAX_FAILED_MEMBERS, DMHelper, DMTask, SCHEDULE_POLL_INTERVAL
+from rsc.utils.dm import MAX_FAILED_MEMBERS, DMHelper, DMOutcome, DMTask, SCHEDULE_POLL_INTERVAL
 
 
 def _mock_member(name="TestUser", member_id=111111111):
@@ -36,6 +36,7 @@ class TestDMTask:
         assert task.embed is None
         assert task.view is None
         assert task.send_at is None
+        assert task.on_result is None
 
     def test_with_all_fields(self):
         member = _mock_member()
@@ -366,6 +367,87 @@ class TestDMHelperPrecheck:
         member.send.assert_awaited_once_with(content="hi")
         assert helper.skipped == 0
         assert helper.success == 1
+
+
+class TestDMHelperOnResult:
+    """Per-recipient outcome reporting, used to track delivery and keep message ids."""
+
+    async def test_sent_reports_the_message(self):
+        helper = DMHelper(rate=0)
+        helper.start()
+        member = _mock_member()
+        message = MagicMock(spec=discord.Message)
+        member.send.return_value = message
+        on_result = AsyncMock()
+
+        await helper.enqueue(member, content="hi", on_result=on_result)
+        await helper.stop()
+
+        on_result.assert_awaited_once_with(DMOutcome.SENT, message)
+
+    async def test_forbidden_reports_failed(self):
+        helper = DMHelper(rate=0)
+        helper.start()
+        member = _mock_member()
+        member.send.side_effect = discord.Forbidden(MagicMock(), "Cannot DM")
+        on_result = AsyncMock()
+
+        await helper.enqueue(member, content="hi", on_result=on_result)
+        await helper.stop()
+
+        on_result.assert_awaited_once_with(DMOutcome.FAILED, None)
+
+    @patch("rsc.utils.dm.asyncio.sleep", new_callable=AsyncMock)
+    async def test_exhausted_retries_report_failed(self, mock_sleep):
+        helper = DMHelper(rate=0)
+        helper.start()
+        member = _mock_member()
+        member.send.side_effect = discord.RateLimited(0.0)
+        on_result = AsyncMock()
+
+        await helper.enqueue(member, content="hi", on_result=on_result)
+        await helper.stop()
+
+        on_result.assert_awaited_once_with(DMOutcome.FAILED, None)
+
+    async def test_precheck_skip_reports_skipped(self):
+        helper = DMHelper(rate=0)
+        helper.start()
+        member = _mock_member()
+        on_result = AsyncMock()
+
+        async def no_longer_needed() -> bool:
+            return False
+
+        await helper.enqueue(member, content="hi", precheck=no_longer_needed, on_result=on_result)
+        await helper.stop()
+
+        on_result.assert_awaited_once_with(DMOutcome.SKIPPED, None)
+
+    async def test_raising_callback_does_not_count_as_failure_or_kill_the_queue(self):
+        helper = DMHelper(rate=0)
+        helper.start()
+        first, second = _mock_member(member_id=1), _mock_member(member_id=2)
+        exploding = AsyncMock(side_effect=discord.HTTPException(MagicMock(), "boom"))
+
+        await helper.enqueue(first, content="hi", on_result=exploding)
+        await helper.enqueue(second, content="hi")
+        await helper.stop()
+
+        # Sent exactly once: the callback error must not trigger a resend
+        first.send.assert_awaited_once()
+        second.send.assert_awaited_once()
+        assert helper.success == 2
+        assert helper.failed == 0
+
+    async def test_purged_dm_never_reports(self):
+        helper = DMHelper(rate=0)
+        on_result = AsyncMock()
+        # Not started, so the DM sits in the queue until purged
+        await helper.enqueue(_mock_member(), content="hi", on_result=on_result)
+        await helper.purge()
+
+        on_result.assert_not_awaited()
 
 
 class TestDMHelperNonBlocking:

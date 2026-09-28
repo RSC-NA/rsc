@@ -38,6 +38,7 @@ if TYPE_CHECKING:
     # Activity check config accessors live on AdminMixIn, not the ABC. Type-only
     # import: a runtime one would be circular via `rsc.admin`.
     from rsc.admin.admin import AdminMixIn
+    from rsc.admin.permfa_poll import AdminPermFAPollMixIn
 
 log = logging.getLogger("red.rsc.admin.views")
 
@@ -575,6 +576,132 @@ def build_activity_check_dm_view(guild_id: int, season: int) -> discord.ui.View:
     view = discord.ui.View(timeout=None)
     view.add_item(ActivityCheckDMButton(guild_id=guild_id, season=season, active=True))
     view.add_item(ActivityCheckDMButton(guild_id=guild_id, season=season, active=False))
+    return view
+
+
+PERMFA_POLL_DM_TEMPLATE = r"pfa_poll:(?P<guild>\d+):(?P<tier>\d+):(?P<poll>\d+):(?P<choice>yes|no)"
+
+
+class PermFAPollButton(discord.ui.DynamicItem[discord.ui.Button], template=PERMFA_POLL_DM_TEMPLATE):
+    """Answer a PermFA to Free Agent conversion poll from a DM button.
+
+    Registered once globally with `bot.add_dynamic_items()`. The guild, tier and
+    poll ride inside the custom_id, so a click resolves without persisting
+    anything per message, and buttons survive a restart.
+
+    The poll id only identifies which prompt was clicked. The stored poll is the
+    authority on whether it is still the active one and still open. All of that
+    lives in `AdminPermFAPollMixIn.permfa_poll_click`; this class only adapts
+    the interaction.
+    """
+
+    def __init__(self, guild_id: int, tier_id: int, poll_id: int, yes: bool):
+        self.guild_id = guild_id
+        self.tier_id = tier_id
+        self.poll_id = poll_id
+        self.yes = yes
+        super().__init__(
+            discord.ui.Button(
+                label="Yes" if yes else "No",
+                style=discord.ButtonStyle.green if yes else discord.ButtonStyle.grey,
+                custom_id=f"pfa_poll:{guild_id}:{tier_id}:{poll_id}:{'yes' if yes else 'no'}",
+            )
+        )
+
+    @classmethod
+    async def from_custom_id(
+        cls,
+        interaction: discord.Interaction,
+        item: discord.ui.Item[Any],
+        match: re.Match[str],
+        /,
+    ) -> "PermFAPollButton":
+        # Parsing only. This runs inside the same 3 second budget as the callback
+        # and any exception raised here is logged then swallowed, which would
+        # leave the player staring at a dead button.
+        return cls(
+            guild_id=int(match["guild"]),
+            tier_id=int(match["tier"]),
+            poll_id=int(match["poll"]),
+            yes=match["choice"] == "yes",
+        )
+
+    async def callback(self, interaction: discord.Interaction):
+        # Acknowledge first. Recording the answer takes a lock shared with the
+        # DM queue and the close sweep, which may briefly hold it.
+        await interaction.response.defer()
+
+        # discord.py swallows anything raised out of a dynamic item callback, and
+        # a type 6 deferral leaves the message untouched. Without this catch-all an
+        # escaping error looks to the player like a click that silently did nothing.
+        try:
+            await self._respond(interaction)
+        except Exception:
+            log.exception(f"[PermFA Poll DM] Unhandled error handling click from {interaction.user.id}")
+            with contextlib.suppress(discord.HTTPException):
+                await self._retry(interaction, self._player_error())
+
+    async def _respond(self, interaction: discord.Interaction):
+        # Runtime import: `rsc.admin.permfa_poll` imports this module
+        from rsc.admin.permfa_poll import PREVIEW_POLL_ID, PollResponse  # noqa: PLC0415
+
+        bot = cast("Red", interaction.client)
+        raw_cog = bot.get_cog(RSC_COG_NAME)
+        if not raw_cog:
+            log.warning(f"[PermFA Poll DM] Unable to resolve {RSC_COG_NAME} cog")
+            return await self._retry(interaction, self._player_error())
+
+        cog = cast("AdminPermFAPollMixIn", raw_cog)
+        response = PollResponse.YES if self.yes else PollResponse.NO
+
+        # `/admin permfa dmtest` preview. Nothing is stored, so no guild is needed.
+        if self.poll_id == PREVIEW_POLL_ID:
+            result = cog.permfa_poll_preview_click(interaction.message, response)
+        else:
+            guild = bot.get_guild(self.guild_id)
+            if not guild:
+                log.warning(f"[PermFA Poll DM] Unable to resolve guild {self.guild_id}")
+                return await self._retry(interaction, self._player_error())
+
+            result = await cog.permfa_poll_click(
+                guild,
+                tier_id=self.tier_id,
+                poll_id=self.poll_id,
+                user_id=interaction.user.id,
+                response=response,
+            )
+
+        if result.keep_buttons:
+            # `view` omitted on purpose: the buttons stay so the answer can change
+            await interaction.edit_original_response(embed=result.embed)
+        else:
+            await interaction.edit_original_response(embed=result.embed, view=None)
+
+    @staticmethod
+    def _player_error() -> discord.Embed:
+        """Player facing error. The technical detail goes to the log, not the DM."""
+        return RedEmbed(
+            title="Something Went Wrong",
+            description=(
+                "We could not record your answer right now. Please try the buttons again in a few minutes.\n\n"
+                f"If it keeps failing, message {modmail_reference(DEFAULT_MODMAIL_BOT_ID)} to open a ticket."
+            ),
+        )
+
+    async def _retry(self, interaction: discord.Interaction, embed: discord.Embed):
+        """Transient failure. Leave the buttons in place so the player can retry."""
+        await interaction.followup.send(embed=embed, ephemeral=True)
+
+
+def build_permfa_poll_view(guild_id: int, tier_id: int, poll_id: int) -> discord.ui.View:
+    """Build the Yes/No pair sent in a PermFA conversion poll DM.
+
+    Deliberately not registered with `add_view()`. Dispatch happens through the
+    `PermFAPollButton` template registered once via `add_dynamic_items()`.
+    """
+    view = discord.ui.View(timeout=None)
+    view.add_item(PermFAPollButton(guild_id=guild_id, tier_id=tier_id, poll_id=poll_id, yes=True))
+    view.add_item(PermFAPollButton(guild_id=guild_id, tier_id=tier_id, poll_id=poll_id, yes=False))
     return view
 
 

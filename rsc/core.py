@@ -25,9 +25,10 @@ from rsc.admin.match import AdminMatchMixIn
 from rsc.admin.members import AdminMembersMixIn
 
 # from rsc.admin.permfa import AdminPermFAMixIn
+from rsc.admin.permfa_poll import AdminPermFAPollMixIn
 from rsc.admin.stats import AdminStatsMixIn
 from rsc.admin.sync import AdminSyncMixIn
-from rsc.admin.views import ActivityCheckDMButton, IntentDMButton
+from rsc.admin.views import ActivityCheckDMButton, IntentDMButton, PermFAPollButton
 from rsc.ballchasing import BallchasingMixIn
 from rsc.combines import CombineMixIn
 from rsc.developer import DeveloperMixIn
@@ -84,6 +85,7 @@ class RSC(
     AdminMatchMixIn,
     AdminMembersMixIn,
     # AdminPermFAMixIn,
+    AdminPermFAPollMixIn,
     AdminRetireMixIn,
     AdminStatsMixIn,
     AdminSyncMixIn,
@@ -165,6 +167,8 @@ class RSC(
         # the same cursor. Cancelling here is mandatory, not tidiness.
         self.rsc_events_loop.cancel()
         self.retire_audit_loop.cancel()
+        # One-shot close timers. Re-armed from Config by the next setup().
+        self.cancel_permfa_poll_timers()
         # Discard rather than drain. Draining sends one DM per `rate` seconds, so a
         # large queued batch would block the reload for many minutes.
         await self._dm_helper.stop(drain=False)
@@ -183,12 +187,12 @@ class RSC(
             # Start runners
             await self.start_webapp()
 
-            # Intent to Play and activity check DM buttons.
+            # Intent to Play, activity check and PermFA poll DM buttons.
             #
             # Registered once globally, not per guild and not per message. The guild
-            # and season live in the custom_id and are matched by regex, so buttons
-            # from any season keep dispatching after a restart instead of dying.
-            self.bot.add_dynamic_items(IntentDMButton, ActivityCheckDMButton)
+            # and season (or poll) live in the custom_id and are matched by regex, so
+            # buttons from any season keep dispatching after a restart instead of dying.
+            self.bot.add_dynamic_items(IntentDMButton, ActivityCheckDMButton, PermFAPollButton)
 
             # Per guild setup.
             #
@@ -244,6 +248,8 @@ class RSC(
                 # API configuration. This used to live in the FA loop's
                 # before_loop hook, which looped over all guilds unconditionally.
                 tg.create_task(self._populate_free_agent_cache(guild))
+                # Also Config only. Closes polls that expired while we were down.
+                tg.create_task(self.setup_permfa_poll_timers(guild))
                 if has_api:
                     tg.create_task(self.prepare_ballchasing(guild))
                 if has_league:

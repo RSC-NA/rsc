@@ -11,7 +11,7 @@ from aiohttp import (
     ServerTimeoutError,
 )
 
-from rsc.admin.views import ActivityCheckDMButton, IntentDMButton
+from rsc.admin.views import ActivityCheckDMButton, IntentDMButton, PermFAPollButton
 from rsc.core import RSC
 from rsc.tiers.tiers import TierMixIn
 
@@ -229,6 +229,7 @@ class TestSetupGuild:
             franchises=AsyncMock(),
             teams=AsyncMock(),
             _populate_free_agent_cache=AsyncMock(),
+            setup_permfa_poll_timers=AsyncMock(),
             prepare_ballchasing=AsyncMock(),
             setup_persistent_activity_check=AsyncMock(),
         )
@@ -247,11 +248,27 @@ class TestSetupGuild:
             prepare_api=AsyncMock(),
             prepare_league=AsyncMock(),
             _populate_free_agent_cache=AsyncMock(),
+            setup_permfa_poll_timers=AsyncMock(),
         )
 
         await cog._setup_guild(mock_guild)
 
         cog._populate_free_agent_cache.assert_awaited_once_with(mock_guild)
+
+    async def test_rearms_permfa_poll_timers_without_api_config(self, mock_guild):
+        """Config only. A poll that expired while the bot was down must still close."""
+        cog = _create_cog(
+            _api_conf={},
+            _league={},
+            prepare_api=AsyncMock(),
+            prepare_league=AsyncMock(),
+            _populate_free_agent_cache=AsyncMock(),
+            setup_permfa_poll_timers=AsyncMock(),
+        )
+
+        await cog._setup_guild(mock_guild)
+
+        cog.setup_permfa_poll_timers.assert_awaited_once_with(mock_guild)
 
     async def test_skips_league_caches_without_league(self, mock_guild):
         """tiers/franchises/teams bare-index _league, so they must not run."""
@@ -264,6 +281,7 @@ class TestSetupGuild:
             franchises=AsyncMock(),
             teams=AsyncMock(),
             _populate_free_agent_cache=AsyncMock(),
+            setup_permfa_poll_timers=AsyncMock(),
             prepare_ballchasing=AsyncMock(),
             setup_persistent_activity_check=AsyncMock(),
         )
@@ -289,6 +307,7 @@ class TestSetupGuild:
             franchises=AsyncMock(),
             teams=AsyncMock(),
             _populate_free_agent_cache=AsyncMock(),
+            setup_permfa_poll_timers=AsyncMock(),
             prepare_ballchasing=AsyncMock(),
             setup_persistent_activity_check=AsyncMock(),
         )
@@ -319,6 +338,7 @@ class TestSetupGuild:
             franchises=AsyncMock(),
             teams=AsyncMock(),
             _populate_free_agent_cache=AsyncMock(),
+            setup_permfa_poll_timers=AsyncMock(),
             prepare_ballchasing=AsyncMock(),
             setup_persistent_activity_check=AsyncMock(),
         )
@@ -349,9 +369,9 @@ class TestSetupIsolation:
         await cog.setup()
 
         assert prepared == [1, 3]
-        # Both DM button templates must register, or clicks on those DMs die
+        # Every DM button template must register, or clicks on those DMs die
         # silently after a restart.
-        bot.add_dynamic_items.assert_called_once_with(IntentDMButton, ActivityCheckDMButton)
+        bot.add_dynamic_items.assert_called_once_with(IntentDMButton, ActivityCheckDMButton, PermFAPollButton)
 
     async def test_prepares_guilds_concurrently(self):
         """Startup latency should be the slowest guild, not the sum."""

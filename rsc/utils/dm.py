@@ -5,6 +5,7 @@ from collections import deque
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from enum import StrEnum
 
 import discord
 
@@ -16,6 +17,14 @@ SCHEDULE_POLL_INTERVAL = 30.0  # seconds between checks for scheduled messages
 # The helper is a long lived singleton, so undeliverable recipients are kept in a
 # bounded ring rather than a list that grows for the lifetime of the process.
 MAX_FAILED_MEMBERS = 200
+
+
+class DMOutcome(StrEnum):
+    """What finally happened to a queued DM, reported through `DMTask.on_result`."""
+
+    SENT = "sent"
+    FAILED = "failed"
+    SKIPPED = "skipped"
 
 
 @dataclass
@@ -31,6 +40,10 @@ class DMTask:
     # Lets a batch queued minutes ago skip recipients who are no longer relevant.
     # Fails open: if the check itself raises, the DM is still sent.
     precheck: Callable[[], Awaitable[bool]] | None = None
+    # Awaited once the DM reaches a final outcome, with the sent message on
+    # success. Lets a feature record per-recipient delivery and keep message
+    # ids for later edits. Never called for DMs dropped by `purge()`.
+    on_result: Callable[[DMOutcome, discord.Message | None], Awaitable[None]] | None = None
 
 
 class DMHelper:
@@ -192,16 +205,26 @@ class DMHelper:
         view: discord.ui.View | None = None,
         send_at: datetime | None = None,
         precheck: Callable[[], Awaitable[bool]] | None = None,
+        on_result: Callable[[DMOutcome, discord.Message | None], Awaitable[None]] | None = None,
     ) -> None:
         """Add a DM to the send queue.
 
         If ``send_at`` is provided (timezone-aware UTC datetime), the message
         is held until that time before entering the send queue. If ``precheck``
         is provided it is awaited just before sending; a False result drops the
-        message.
+        message. If ``on_result`` is provided it is awaited with the final
+        outcome, and the sent message when there is one.
         """
         self._total += 1
-        task = DMTask(member=member, content=content, embed=embed, view=view, send_at=send_at, precheck=precheck)
+        task = DMTask(
+            member=member,
+            content=content,
+            embed=embed,
+            view=view,
+            send_at=send_at,
+            precheck=precheck,
+            on_result=on_result,
+        )
         if send_at and send_at > datetime.now(UTC):
             async with self._scheduled_lock:
                 self._scheduled.append(task)
@@ -250,10 +273,18 @@ class DMHelper:
             await asyncio.sleep(SCHEDULE_POLL_INTERVAL)
 
     async def _send(self, task: DMTask) -> None:
-        """Send a single DM with exponential backoff on rate limits."""
+        """Send a single DM and report how it ended."""
         if task.precheck and not await self._should_still_send(task):
+            await self._report(task, DMOutcome.SKIPPED, None)
             return
 
+        sent, message = await self._deliver(task)
+        # Reported outside the send loop, so an error raised by the callback can
+        # never be mistaken for a failed DM or trigger a resend.
+        await self._report(task, DMOutcome.SENT if sent else DMOutcome.FAILED, message)
+
+    async def _deliver(self, task: DMTask) -> tuple[bool, discord.Message | None]:
+        """Send with exponential backoff on rate limits. Returns (sent, message)."""
         kwargs: dict = {}
         if task.content:
             kwargs["content"] = task.content
@@ -264,9 +295,9 @@ class DMHelper:
 
         for attempt in range(1, MAX_RETRIES + 1):
             try:
-                await task.member.send(**kwargs)
+                message = await task.member.send(**kwargs)
                 self._success += 1
-                return
+                return True, message
             except discord.RateLimited as exc:
                 backoff = exc.retry_after + (2**attempt)
                 logger.warning(
@@ -276,15 +307,29 @@ class DMHelper:
             except discord.Forbidden:
                 self._record_failure(task.member)
                 logger.debug(f"Cannot DM {task.member} ({task.member.id}): DMs disabled")
-                return
+                return False, None
             except discord.HTTPException as exc:
                 self._record_failure(task.member)
                 logger.debug(f"Failed to DM {task.member} ({task.member.id}): {exc}")
-                return
+                return False, None
 
         # Exhausted all retries
         self._record_failure(task.member)
         logger.warning(f"Exhausted {MAX_RETRIES} retries for DM to {task.member} ({task.member.id})")
+        return False, None
+
+    async def _report(self, task: DMTask, outcome: DMOutcome, message: discord.Message | None) -> None:
+        """Hand the outcome to the task's callback, if any.
+
+        The consumer is shared by every feature that sends DMs, so a broken
+        callback is logged and contained rather than allowed to kill the queue.
+        """
+        if task.on_result is None:
+            return
+        try:
+            await task.on_result(outcome, message)
+        except Exception:
+            logger.exception(f"DM result callback failed for {task.member} ({task.member.id})")
 
     async def _should_still_send(self, task: DMTask) -> bool:
         """Run a task's precheck, failing open.
