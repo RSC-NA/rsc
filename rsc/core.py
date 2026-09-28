@@ -23,8 +23,6 @@ from rsc.admin.intents import AdminIntentsMixIn
 from rsc.admin.retire import AdminRetireMixIn
 from rsc.admin.match import AdminMatchMixIn
 from rsc.admin.members import AdminMembersMixIn
-
-# from rsc.admin.permfa import AdminPermFAMixIn
 from rsc.admin.permfa_poll import AdminPermFAPollMixIn
 from rsc.admin.stats import AdminStatsMixIn
 from rsc.admin.sync import AdminSyncMixIn
@@ -84,7 +82,6 @@ class RSC(
     AdminIntentsMixIn,
     AdminMatchMixIn,
     AdminMembersMixIn,
-    # AdminPermFAMixIn,
     AdminPermFAPollMixIn,
     AdminRetireMixIn,
     AdminStatsMixIn,

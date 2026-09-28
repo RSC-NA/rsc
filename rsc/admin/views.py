@@ -9,7 +9,6 @@ from rscapi import ApiClient, Configuration, MembersApi
 from rscapi.exceptions import ApiException
 from rscapi.models.activity_request import ActivityRequest
 from rscapi.models.activity_check import ActivityCheck
-from rscapi.models.league_player import LeaguePlayer
 
 from rsc.const import DEFAULT_MODMAIL_BOT_ID, DEFAULT_TIMEOUT, RSC_COG_NAME
 from rsc.embeds import (
@@ -23,7 +22,6 @@ from rsc.embeds import (
 from rsc.exceptions import RscException
 from rsc.types import RebrandTeamDict
 from rsc.views import (
-    AgreeButton,
     AuthorOnlyView,
     CancelButton,
     ConfirmButton,
@@ -1040,43 +1038,3 @@ class TransferFranchiseView(AuthorOnlyView):
             view=None,
         )
         self.stop()
-
-
-class PermFAConsentView(discord.ui.View):
-    def __init__(
-        self,
-        guild: discord.Guild,
-        member: discord.Member,
-        league_player: LeaguePlayer,
-        timeout: float | None = None,
-    ):
-        super().__init__(timeout=timeout)
-
-        self.guild = guild
-        self.member = member
-        self.league_player = league_player
-        self.result = False
-
-        self.add_item(AgreeButton())
-        self.add_item(DeclineButton())
-
-    async def confirm(self, interaction: discord.Interaction):
-        log.debug("Player agreed to PermFA")
-        self.result = True
-        # await self.interaction.edit_original_response(
-        #     embed=LoadingEmbed(title="Processing Sync"),
-        #     view=None,
-        # )
-        # self.stop()
-
-    async def decline(self, interaction: discord.Interaction):
-        log.debug("Player declined to PermFA")
-        self.result = False
-        # await self.interaction.edit_original_response(
-        #     embed=RedEmbed(
-        #         title="Sync Canelled",
-        #         description="You have cancelled syncing from the API.",
-        #     ),
-        #     view=None,
-        # )
-        # self.stop()

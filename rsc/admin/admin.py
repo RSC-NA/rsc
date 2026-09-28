@@ -56,7 +56,6 @@ defaults_guild = AdminSettings(
     IntentDmLastSeason=None,
     IntentDmLastRun=None,
     IntentDmLastExecutor=None,
-    PermFAMsgIds=None,
     RetireAuditEnabled=True,
 )
 
@@ -561,12 +560,3 @@ class AdminMixIn(RSCMixIn):
             remaining_count -= 1
 
         return "\n".join(visible_lines) + f"\n...and {remaining_count} more"
-
-    async def _set_permfa_msg_ids(self, guild: discord.Guild, msg_ids: list[int]):
-        await self.config.custom("Admin", str(guild.id)).PermFAMsgIds.set(msg_ids)
-
-    async def _get_permfa_msg_ids(self, guild: discord.Guild) -> list[int]:
-        ids = await self.config.custom("Admin", str(guild.id)).PermFAMsgIds()
-        if not ids:
-            return []
-        return ids
