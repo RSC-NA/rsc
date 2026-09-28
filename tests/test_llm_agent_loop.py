@@ -16,10 +16,20 @@ import pytest
 
 from rsc.exceptions import RscException
 from rsc.llm.agent.context import AgentContext
-from rsc.llm.agent.loop import AgentError, _dispatch, run_agent
+from rsc.llm.agent.loop import FINAL_ANSWER_NUDGE, AgentError, _dispatch, run_agent
 from rsc.llm.agent.registry import TOOLS, AgentTool
 from rsc.llm.config import AGENT_MAX_ITERATIONS, AGENT_MAX_TOTAL_TOKENS, TOOL_RESULT_MAX_CHARS
 from rsc.llm.rulebook import load_rulebooks
+
+# What production posted when the forced final turn had its tools withdrawn:
+# the model wrote the `ask_rulebook` call it wanted out as text, then answered.
+LEAKED_ANSWER = (
+    "to=functions.ask_rulebook  尚度  天天爱彩票 to=functions.ask_rulebook ೊಳ?  "
+    "to=functions.ask_rulebook  大发快三官网 to=functions.ask_rulebook 񹚑"
+    '{"question":"Can a Legend-tier player who is currently on waivers sign with a Master-tier team?"}'
+    "Yes — if Plasma is on waivers and the Giraffes are a Master-tier team under Safari, "
+    "then Plasma can sign with them."
+)
 
 
 def fn_call(name: str, args: dict | str, call_id: str = "call_1") -> SimpleNamespace:
@@ -272,8 +282,18 @@ async def test_loop_stops_at_iteration_cap_and_forces_an_answer(ctx, registered_
 
     assert result.answer == "best effort"
     assert ctx.client.responses.create.await_count == AGENT_MAX_ITERATIONS + 1
-    # The forced final call must withdraw the tools, or it would loop forever.
-    assert "tools" not in ctx.client.responses.create.await_args_list[-1].kwargs
+    assert_forced_final_call(ctx.client.responses.create.await_args_list[-1].kwargs)
+
+
+def assert_forced_final_call(kwargs: dict) -> None:
+    """Calls are forbidden, not withdrawn, and the model is told to answer.
+
+    Withdrawing the tools is what made the model write its call out as text.
+    """
+    assert kwargs["tools"]
+    assert kwargs["tool_choice"] == "none"
+    assert "max_tool_calls" not in kwargs
+    assert kwargs["input"][-1] == {"role": "developer", "content": FINAL_ANSWER_NUDGE}
 
 
 async def test_loop_trips_the_token_ceiling(ctx, registered_tool):
@@ -289,6 +309,47 @@ async def test_loop_trips_the_token_ceiling(ctx, registered_tool):
 
     assert result.answer == "stopped early"
     assert ctx.client.responses.create.await_count == 2
+    assert_forced_final_call(ctx.client.responses.create.await_args_list[-1].kwargs)
+
+
+async def test_forced_final_call_keeps_the_cached_prefix(ctx, registered_tool):
+    """Instructions, tools and cache key must match the looping calls byte for byte."""
+    registered_tool("echo_tool", AsyncMock(return_value="more"))
+    ctx.client.responses.create = AsyncMock(
+        side_effect=[
+            *[fake_response([fn_call("echo_tool", {})]) for _ in range(AGENT_MAX_ITERATIONS)],
+            fake_response([text_item("best effort")]),
+        ]
+    )
+
+    await run_agent(ctx, "question")
+
+    first, last = (call.kwargs for call in ctx.client.responses.create.await_args_list[::AGENT_MAX_ITERATIONS])
+    for key in ("instructions", "tools", "prompt_cache_key"):
+        assert first[key] == last[key]
+
+
+async def test_forced_final_answer_strips_a_leaked_tool_call(ctx, registered_tool):
+    registered_tool("echo_tool", AsyncMock(return_value="more"))
+    ctx.client.responses.create = AsyncMock(
+        side_effect=[
+            *[fake_response([fn_call("echo_tool", {})]) for _ in range(AGENT_MAX_ITERATIONS)],
+            fake_response([text_item(LEAKED_ANSWER)]),
+        ]
+    )
+
+    result = await run_agent(ctx, "question")
+
+    assert result.answer.startswith("Yes — if Plasma")
+    assert "to=functions" not in result.answer
+
+
+async def test_answer_that_is_only_a_leaked_tool_call_raises(ctx):
+    leak = 'to=functions.ask_rulebook 天天中彩票 {"question": "can X sign with Y"}'
+    ctx.client.responses.create = AsyncMock(return_value=fake_response([text_item(leak)]))
+
+    with pytest.raises(AgentError):
+        await run_agent(ctx, "question")
 
 
 async def test_loop_raises_when_the_model_returns_nothing(ctx):

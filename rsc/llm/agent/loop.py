@@ -15,7 +15,7 @@ import json
 import logging
 import time
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Literal
 
 from openai import APIError, RateLimitError
 from openai.types.responses import Response, ResponseFunctionToolCall
@@ -43,6 +43,15 @@ from rsc.llm.config import (
 
 logger = logging.getLogger("red.rsc.llm.agent")
 log = GuildLogAdapter(logger)
+
+
+# Appended before the forced final turn. Without it the history ends in tool
+# output and the model's natural next move is another call, which it then
+# writes out as text because calls are forbidden.
+FINAL_ANSWER_NUDGE = (
+    "Tool budget exhausted. Answer now using only the results above. If something needed to "
+    "answer could not be checked, say briefly what, and do not describe tool calls."
+)
 
 
 class AgentError(Exception):
@@ -102,10 +111,21 @@ async def _dispatch(ctx: AgentContext, call: ResponseFunctionToolCall) -> str:
     return clamp(result)
 
 
-async def _respond(ctx: AgentContext, system: str, input_items: list[Any], *, with_tools: bool) -> Response:
+async def _respond(
+    ctx: AgentContext,
+    system: str,
+    input_items: list[Any],
+    *,
+    tool_choice: Literal["auto", "none"] = "auto",
+) -> Response:
     """One model call, with a single retry reserved for rate limiting.
 
     Retries are the fastest way to double a bill, so nothing else is retried.
+
+    Tools are always sent, even when calls are forbidden. Withdrawing them
+    changes the cached prefix, and leaves the model looking at its own earlier
+    calls with no schemas -- it then writes the call it wanted out as raw text
+    (`to=functions.ask_rulebook {...}`), which gets posted to Discord.
     """
     kwargs: dict[str, Any] = {
         "model": OPENAI_AGENT_MODEL,
@@ -115,9 +135,10 @@ async def _respond(ctx: AgentContext, system: str, input_items: list[Any], *, wi
         "store": False,
         "prompt_cache_key": f"rsc-agent-v{PROMPT_VERSION}-{ctx.guild.id}",
         "timeout": OPENAI_REQUEST_TIMEOUT,
+        "tools": tool_schemas(),
+        "tool_choice": tool_choice,
     }
-    if with_tools:
-        kwargs["tools"] = tool_schemas()
+    if tool_choice == "auto":
         kwargs["parallel_tool_calls"] = True
         kwargs["max_tool_calls"] = AGENT_MAX_TOOL_CALLS
 
@@ -158,17 +179,18 @@ async def _run(ctx: AgentContext, question: str) -> AgentResult:
 
     for _ in range(AGENT_MAX_ITERATIONS):
         ctx.iterations += 1
-        response = await _respond(ctx, system, input_items, with_tools=True)
+        response = await _respond(ctx, system, input_items)
         ctx.usage.record(getattr(response, "usage", None))
+        calls = _function_calls(response)
 
         if ctx.usage.total > AGENT_MAX_TOTAL_TOKENS:
             log.warning(
-                f"Token ceiling hit ({ctx.usage.total} > {AGENT_MAX_TOTAL_TOKENS}); forcing an answer.",
+                f"Token ceiling hit ({ctx.usage.total} > {AGENT_MAX_TOTAL_TOKENS}); "
+                f"forcing an answer and dropping {len(calls)} pending tool call(s).",
                 guild=ctx.guild,
             )
             return await _final_answer(ctx, system, input_items)
 
-        calls = _function_calls(response)
         if not calls:
             return AgentResult(
                 answer=_output_text(response),
@@ -185,17 +207,19 @@ async def _run(ctx: AgentContext, question: str) -> AgentResult:
             {"type": "function_call_output", "call_id": call.call_id, "output": result} for call, result in zip(calls, results, strict=True)
         )
 
+    log.info(f"Iteration cap ({AGENT_MAX_ITERATIONS}) reached; forcing an answer.", guild=ctx.guild)
     return await _final_answer(ctx, system, input_items)
 
 
 async def _final_answer(ctx: AgentContext, system: str, input_items: list[Any]) -> AgentResult:
-    """Force a reply with tools withdrawn.
+    """Force a reply with tool calls forbidden.
 
     An exhausted loop should answer from what it already gathered rather than
     erroring -- partial information beats no information.
     """
     ctx.iterations += 1
-    response = await _respond(ctx, system, input_items, with_tools=False)
+    input_items = [*input_items, {"role": "developer", "content": FINAL_ANSWER_NUDGE}]
+    response = await _respond(ctx, system, input_items, tool_choice="none")
     ctx.usage.record(getattr(response, "usage", None))
     return AgentResult(
         answer=_output_text(response),

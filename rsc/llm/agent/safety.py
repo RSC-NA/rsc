@@ -6,7 +6,7 @@ tool result can talk the model out of it. Everything the bot posts therefore
 passes through here first, where the rules are enforced in code and cannot be
 argued with.
 
-Two risks are covered:
+Three risks are covered:
 
 * **Command injection.** The bot posts into channels where other bots are
   listening. A message beginning `!ban @someone` is, to a bot that does not
@@ -16,8 +16,14 @@ Two risks are covered:
   are constructor arguments to the client, never prompt content -- but a
   belt-and-braces redaction means a future tool that accidentally surfaces one
   cannot leak it to a channel.
+* **Tool-call leakage.** When the model wants a tool it may not call, it can
+  write the call out as text -- a `to=functions.<name>` header, junk tokens,
+  then the JSON arguments -- ahead of the real answer. That is meaningless to
+  the asker and exposes the tool surface, so it is cut out.
 """
 
+import json
+import logging
 import re
 
 # Characters that commonly start a bot command and are not meaningful at the
@@ -38,6 +44,12 @@ COMMAND_LINE_RE = re.compile(
 # but rendering them as plain text avoids the alarm of seeing them at all.
 MASS_MENTION_RE = re.compile(r"@(everyone|here)\b")
 
+# The model's internal tool-call header, and its special tokens. Neither
+# belongs in prose, so matching them does not risk eating real answers.
+TOOL_CALL_LEAK_RE = re.compile(r"\bto=(?:functions|multi_tool_use)\.[\w.]+|<\|[a-z_]+\|>")
+
+log = logging.getLogger("red.rsc.llm.agent.safety")
+
 REDACTED = "[redacted]"
 ZERO_WIDTH_SPACE = "\u200b"
 
@@ -56,6 +68,35 @@ CREDENTIAL_PATTERNS: tuple[re.Pattern[str], ...] = (
         re.IGNORECASE,
     ),
 )
+
+
+def strip_tool_call_leaks(text: str) -> str:
+    """Remove a tool call the model wrote out as text.
+
+    Everything from the line holding the first leak marker through the end of
+    the last marker's JSON arguments is dropped; what follows is the answer the
+    model went on to write. If nothing follows, the result is empty and the
+    caller's no-answer handling takes over.
+    """
+    markers = list(TOOL_CALL_LEAK_RE.finditer(text))
+    if not markers:
+        return text
+
+    start = text.rfind("\n", 0, markers[0].start()) + 1
+    end = markers[-1].end()
+    # The arguments sit on the marker's own line, after any junk tokens. A
+    # brace further down belongs to the answer and must not be consumed.
+    brace = text.find("{", end)
+    if brace != -1 and "\n" not in text[end:brace]:
+        try:
+            _, consumed = json.JSONDecoder().raw_decode(text, brace)
+        except json.JSONDecodeError:
+            pass
+        else:
+            end = consumed
+
+    log.warning(f"Stripped leaked tool-call text from a model answer: {text[start:end]!r}")
+    return (text[:start] + text[end:]).strip()
 
 
 def neutralize_commands(text: str) -> str:
@@ -95,6 +136,7 @@ def sanitize_response(text: str) -> str:
     """
     if not text:
         return text
+    text = strip_tool_call_leaks(text)
     text = redact_credentials(text)
     text = neutralize_commands(text)
     return defang_mass_mentions(text)

@@ -11,7 +11,7 @@ OPENAI_SUMMARY_MODEL = "gpt-5.4-mini"
 
 # Bump when the cached system prefix changes shape, so stale cache shards are
 # not reused across a deploy.
-PROMPT_VERSION = 1
+PROMPT_VERSION = 2
 
 # Iteration and token ceilings. The loop re-sends its whole context on every
 # iteration, so iteration count multiplies cost -- these are the primary spend

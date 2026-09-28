@@ -12,6 +12,7 @@ from rsc.llm.agent.safety import (
     neutralize_commands,
     redact_credentials,
     sanitize_response,
+    strip_tool_call_leaks,
 )
 
 
@@ -150,6 +151,61 @@ def test_discord_bot_token_is_redacted() -> None:
 def test_ordinary_league_data_is_not_redacted(text: str) -> None:
     """Generic long-random-string matching would eat ids and ballchasing links."""
     assert redact_credentials(text) == text
+
+
+# Tool-call leakage
+
+
+def test_leaked_tool_call_is_stripped_ahead_of_the_answer() -> None:
+    """The shape production posted: header, junk tokens, arguments, then the answer."""
+    leaked = (
+        "to=functions.ask_rulebook  尚度  天天爱彩票 to=functions.ask_rulebook ೊಳ?  "
+        "to=functions.ask_rulebook  大发快三官网 to=functions.ask_rulebook 񹚑"
+        '{"question":"Can a Legend-tier player on waivers sign with a Master-tier team?"}'
+        "Yes — Plasma can sign with them.\n\nWhat I confirmed:\n- Plasma: Waivers, Legend tier"
+    )
+
+    assert strip_tool_call_leaks(leaked) == "Yes — Plasma can sign with them.\n\nWhat I confirmed:\n- Plasma: Waivers, Legend tier"
+
+
+def test_leak_on_its_own_line_keeps_the_text_before_it() -> None:
+    leaked = 'Let me check.\nto=functions.find_player {"name": "Plasma"}\nPlasma is on waivers.'
+
+    assert strip_tool_call_leaks(leaked) == "Let me check.\n\nPlasma is on waivers."
+
+
+def test_leak_without_arguments_is_stripped() -> None:
+    assert strip_tool_call_leaks("to=functions.list_tiers Tiers are listed below.") == "Tiers are listed below."
+
+
+def test_special_tokens_are_stripped() -> None:
+    leaked = '<|channel|>commentary to=functions.get_rule <|constrain|>json<|message|>{"number": "5.7"}Rule 5.7 says...'
+
+    assert strip_tool_call_leaks(leaked) == "Rule 5.7 says..."
+
+
+def test_a_brace_later_in_the_answer_is_not_consumed() -> None:
+    """Only arguments on the marker's own line belong to the leak."""
+    leaked = 'to=functions.get_rule\nThe config looks like {"a": 1} in the docs.'
+
+    assert strip_tool_call_leaks(leaked) == 'The config looks like {"a": 1} in the docs.'
+
+
+def test_a_leak_with_no_answer_leaves_nothing() -> None:
+    assert strip_tool_call_leaks('to=functions.ask_rulebook 天天中彩票 {"question": "x"}') == ""
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Set to=5 in the config",
+        "Trades go to=> the GM",
+        "Call `ask_rulebook` for rules",
+        "Scores were {3-1, 2-0}",
+    ],
+)
+def test_ordinary_text_is_not_treated_as_a_leak(text: str) -> None:
+    assert strip_tool_call_leaks(text) == text
 
 
 # Combined
