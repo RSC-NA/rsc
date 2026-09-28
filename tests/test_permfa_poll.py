@@ -940,64 +940,91 @@ class TestPreviewClick:
 
 
 class TestDmTestCommand:
-    def _mixin(self, guild):
+    def _mixin(self, guild, tier_name="Elite"):
         mixin = _mixin(guild)
-        mixin.is_valid_tier = AsyncMock(return_value=True)
         season = MagicMock()
         season.number = 24
         mixin.current_season = AsyncMock(return_value=season)
+        league_player = _league_player(4242, "RSC Tester")
+        league_player.tier.name = tier_name
+        mixin.players = AsyncMock(return_value=[league_player])
         return mixin
 
-    def _interaction(self, guild):
-        interaction = _command_interaction(guild)
-        interaction.user.display_name = "Admin"
-        interaction.user.send = AsyncMock()
-        return interaction
+    def _target(self):
+        member = _member(4242)
+        member.display_name = "Tester"
+        member.send = AsyncMock()
+        return member
 
     @pytest.mark.parametrize("reminder", [False, True])
-    async def test_sends_preview_dm_with_preview_buttons(self, clock, reminder):
+    async def test_sends_preview_to_the_chosen_member(self, clock, reminder):
         guild = _guild()
         mixin = self._mixin(guild)
-        interaction = self._interaction(guild)
+        interaction = _command_interaction(guild)
+        interaction.user.send = AsyncMock()
+        target = self._target()
 
-        await AdminPermFAPollMixIn._permfa_dm_test_cmd.callback(mixin, interaction, tier="elite", reminder=reminder)
+        await AdminPermFAPollMixIn._permfa_dm_test_cmd.callback(mixin, interaction, member=target, reminder=reminder)
 
-        kwargs = interaction.user.send.call_args.kwargs
+        # Goes to the member picked, not whoever ran the command
+        interaction.user.send.assert_not_awaited()
+        kwargs = target.send.call_args.kwargs
         embed = kwargs["embed"]
-        assert "Elite" in embed.title
+        mixin.players.assert_awaited_once_with(guild, discord_id=target.id, limit=1)
         assert embed.title.startswith("Reminder:") is reminder
+        # The member's tier and RSC name, as a real poll DM would show
+        assert "Free Agent Conversion - Elite" in embed.title
+        assert "**RSC Tester**" in embed.description
         assert "Season 24" in embed.description
         assert "not recorded" in embed.footer.text
         ids = [child.item.custom_id for child in kwargs["view"].children]
         assert ids == [f"pfa_poll:{GUILD_ID}:0:0:yes", f"pfa_poll:{GUILD_ID}:0:0:no"]
         assert mixin.config.store == {}
+        assert target.mention in interaction.followup.send.call_args.kwargs["embed"].description
 
     async def test_season_lookup_failure_is_not_fatal(self, clock):
         guild = _guild()
         mixin = self._mixin(guild)
         mixin.current_season.side_effect = RscException(message="down")
-        interaction = self._interaction(guild)
+        target = self._target()
 
-        await AdminPermFAPollMixIn._permfa_dm_test_cmd.callback(mixin, interaction, tier="elite")
+        await AdminPermFAPollMixIn._permfa_dm_test_cmd.callback(mixin, _command_interaction(guild), member=target)
 
-        assert "the current season" in interaction.user.send.call_args.kwargs["embed"].description
-
-    async def test_invalid_tier(self, clock):
-        guild = _guild()
-        mixin = self._mixin(guild)
-        mixin.is_valid_tier.return_value = False
-        interaction = self._interaction(guild)
-
-        await AdminPermFAPollMixIn._permfa_dm_test_cmd.callback(mixin, interaction, tier="nope")
-
-        interaction.user.send.assert_not_awaited()
+        assert "the current season" in target.send.call_args.kwargs["embed"].description
 
     async def test_closed_dms_are_reported(self, clock):
         guild = _guild()
         mixin = self._mixin(guild)
-        interaction = self._interaction(guild)
-        interaction.user.send.side_effect = discord.Forbidden(MagicMock(), "Cannot DM")
+        interaction = _command_interaction(guild)
+        target = self._target()
+        target.send.side_effect = discord.Forbidden(MagicMock(), "Cannot DM")
 
-        await AdminPermFAPollMixIn._permfa_dm_test_cmd.callback(mixin, interaction, tier="elite")
+        await AdminPermFAPollMixIn._permfa_dm_test_cmd.callback(mixin, interaction, member=target)
 
-        assert "Unable to DM you" in interaction.followup.send.call_args.kwargs["embed"].description
+        assert f"Unable to DM {target.mention}" in interaction.followup.send.call_args.kwargs["embed"].description
+
+    @pytest.mark.parametrize("found", [False, True])
+    async def test_member_without_a_tier_is_an_error(self, clock, found):
+        guild = _guild()
+        mixin = self._mixin(guild, tier_name=None)
+        if not found:
+            mixin.players.return_value = []
+        interaction = _command_interaction(guild)
+        target = self._target()
+
+        await AdminPermFAPollMixIn._permfa_dm_test_cmd.callback(mixin, interaction, member=target)
+
+        target.send.assert_not_awaited()
+        assert "does not have a tier" in interaction.followup.send.call_args.kwargs["embed"].description
+
+    async def test_api_error_is_reported(self, clock):
+        guild = _guild()
+        mixin = self._mixin(guild)
+        mixin.players.side_effect = RscException(message="down")
+        interaction = _command_interaction(guild)
+        target = self._target()
+
+        await AdminPermFAPollMixIn._permfa_dm_test_cmd.callback(mixin, interaction, member=target)
+
+        target.send.assert_not_awaited()
+        interaction.followup.send.assert_awaited_once()

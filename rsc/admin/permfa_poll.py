@@ -374,22 +374,31 @@ class AdminPermFAPollMixIn(AdminMixIn):
             view=None,
         )
 
-    @_permfa.command(name="dmtest", description="Preview the PermFA conversion poll DM by sending it to yourself")
+    @_permfa.command(name="dmtest", description="Send a preview of the PermFA conversion poll DM to a member")
     @app_commands.describe(
-        tier='Tier to show in the preview (Ex: "Elite")',
+        member="Member to send the preview to (yourself, for example)",
         reminder="Preview the reminder version of the DM",
     )
-    @app_commands.autocomplete(tier=TierMixIn.tier_autocomplete)
-    async def _permfa_dm_test_cmd(self, interaction: discord.Interaction, tier: str, reminder: bool = False):
+    async def _permfa_dm_test_cmd(self, interaction: discord.Interaction, member: discord.Member, reminder: bool = False):
         guild = interaction.guild
         if not guild:
             return
 
         await interaction.response.defer(ephemeral=True)
 
-        tier = tier.capitalize()
-        if not await self.is_valid_tier(guild, tier):
-            return await interaction.followup.send(embed=ErrorEmbed(description=f"**{tier}** is not a valid tier."), ephemeral=True)
+        # The preview uses the member's own tier, as the real poll would
+        try:
+            players = await self.players(guild, discord_id=member.id, limit=1)
+        except RscException as exc:
+            return await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc), ephemeral=True)
+
+        league_player = players[0] if players else None
+        tier_name = league_player.tier.name if league_player and league_player.tier else None
+        if not (league_player and tier_name):
+            return await interaction.followup.send(
+                embed=ErrorEmbed(description=f"{member.mention} does not have a tier in the API, so there is no tier to preview."),
+                ephemeral=True,
+            )
 
         # Only used for the "Season N" wording, so an API failure is not fatal
         try:
@@ -401,27 +410,30 @@ class AdminPermFAPollMixIn(AdminMixIn):
         preview = PermFAPoll(
             poll_id=PREVIEW_POLL_ID,
             tier_id=PREVIEW_POLL_ID,
-            tier_name=tier,
+            tier_name=tier_name,
             season=season.number if season else None,
             created_at=now,
             expires_at=now + int(POLL_DURATION.total_seconds()),
             created_by=interaction.user.id,
         )
-        embed = self._permfa_poll_dm_embed(guild, preview, PollRecipient(name=interaction.user.display_name), reminder=reminder)
+        embed = self._permfa_poll_dm_embed(
+            guild, preview, PollRecipient(name=league_player.player.name or member.display_name), reminder=reminder
+        )
         embed.set_footer(text=f"{guild.name} · Test preview, answers are not recorded")
 
         try:
             # Same view players receive. The preview ids route clicks to
             # `permfa_poll_preview_click`, which never touches a real poll.
-            await interaction.user.send(embed=embed, view=build_permfa_poll_view(guild.id, PREVIEW_POLL_ID, PREVIEW_POLL_ID))
+            await member.send(embed=embed, view=build_permfa_poll_view(guild.id, PREVIEW_POLL_ID, PREVIEW_POLL_ID))
         except discord.Forbidden:
             return await interaction.followup.send(
-                embed=ErrorEmbed(description="Unable to DM you. Check your DM settings."),
+                embed=ErrorEmbed(description=f"Unable to DM {member.mention}. Their DMs may be closed."),
                 ephemeral=True,
             )
 
+        log.debug(f"{interaction.user} sent a PermFA poll test DM to {member}", guild=guild)
         await interaction.followup.send(
-            embed=GreenEmbed(description="Test DM sent. Check your direct messages. The buttons work, but answers are not recorded."),
+            embed=GreenEmbed(description=f"Test DM sent to {member.mention}. The buttons work, but answers are not recorded."),
             ephemeral=True,
         )
 
