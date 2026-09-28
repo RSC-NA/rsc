@@ -109,7 +109,6 @@ class PermFAPoll:
     closed_by: int | None = None
     last_remind_at: int | None = None
     dms_cleaned: bool = False
-    results_posted: bool = False
     recipients: dict[int, PollRecipient] = field(default_factory=dict)
 
     def is_open(self, now: int) -> bool:
@@ -133,7 +132,6 @@ class PermFAPoll:
             "ClosedBy": self.closed_by,
             "LastRemindAt": self.last_remind_at,
             "DmsCleaned": self.dms_cleaned,
-            "ResultsPosted": self.results_posted,
             "Recipients": {str(uid): r.to_dict() for uid, r in self.recipients.items()},
         }
 
@@ -157,7 +155,6 @@ class PermFAPoll:
             closed_by=data.get("ClosedBy"),
             last_remind_at=data.get("LastRemindAt"),
             dms_cleaned=bool(data.get("DmsCleaned")),
-            results_posted=bool(data.get("ResultsPosted")),
             recipients={int(uid): PollRecipient.from_dict(r) for uid, r in (data.get("Recipients") or {}).items()},
         )
 
@@ -182,7 +179,6 @@ defaults_poll: dict[str, Any] = {
     "ClosedBy": None,
     "LastRemindAt": None,
     "DmsCleaned": False,
-    "ResultsPosted": False,
     "Recipients": {},
 }
 
@@ -807,31 +803,11 @@ class AdminPermFAPollMixIn(AdminMixIn):
 
         async with lock:
             current = await self._get_permfa_poll(guild_id, tier_id)
-            if not current or current.poll_id != poll.poll_id:
-                return None
-            post_results = not current.results_posted
-
-        if post_results and guild:
-            await self._post_permfa_poll_results(guild, current)
-
-        async with lock:
-            current = await self._get_permfa_poll(guild_id, tier_id)
             if current and current.poll_id == poll.poll_id:
-                current.results_posted = True
                 current.dms_cleaned = True
                 await self._save_permfa_poll(guild_id, current)
 
         return None
-
-    async def _post_permfa_poll_results(self, guild: discord.Guild, poll: PermFAPoll) -> None:
-        channel = await self._get_permfa_announce_channel(guild)
-        if not channel:
-            return
-        try:
-            for embed in self._permfa_poll_results_embeds(poll):
-                await channel.send(embed=embed, allowed_mentions=discord.AllowedMentions.none())
-        except discord.HTTPException as exc:
-            log.warning(f"Unable to post PermFA poll results to {channel}: {exc}", guild=guild)
 
     # Embeds
 

@@ -39,7 +39,7 @@ This module is designed for RSC admins to perform day to day league management.
 
 ### PermFA Group
 
-Polls a tier's Permanent Free Agents by DM, asking whether they want to convert to a regular Free Agent. DMs go through the shared DM queue (`/admin dmstatus`). Each DM has Yes/No buttons that keep working across restarts, and players can change their answer until the poll closes 72 hours later. When a poll closes, the buttons are removed from every DM. If a PermFA announcement channel is configured (`/admin pfachnanel`), the results are posted there too. One poll is kept per tier, and starting a new one replaces the previous results.
+Polls a tier's Permanent Free Agents by DM, asking whether they want to convert to a regular Free Agent. DMs go through the shared DM queue (`/admin dmstatus`). Each DM has Yes/No buttons that keep working across restarts, and players can change their answer until the poll closes 72 hours later. When a poll closes, the buttons are removed from every DM. Use `/admin permfa responses` to see the results. One poll is kept per tier, and starting a new one replaces the previous results.
 
 - `/admin permfa poll` - DM every PermFA in a tier and open a 72 hour poll
 - `/admin permfa dmtest` - Send a preview of the poll DM to a member, such as yourself. The buttons work, but nothing is recorded

@@ -127,7 +127,6 @@ class AdminSettings(TypedDict):
     IntentDmLastSeason: int | None
     IntentDmLastRun: int | None  # unix timestamp, rendered with discord <t:> markup
     IntentDmLastExecutor: int | None
-    PermFAChannel: int | None
     PermFAMsgIds: list[int] | None
     RetireAuditEnabled: bool
 

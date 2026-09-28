@@ -56,7 +56,6 @@ defaults_guild = AdminSettings(
     IntentDmLastSeason=None,
     IntentDmLastRun=None,
     IntentDmLastExecutor=None,
-    PermFAChannel=None,
     PermFAMsgIds=None,
     RetireAuditEnabled=True,
 )
@@ -92,7 +91,6 @@ class AdminMixIn(RSCMixIn):
         intent_missing_msg = await self._get_intent_missing_message(guild)
         dates = await self._get_dates(guild)
         agm_msg = await self._get_agm_message(guild)
-        pfa_channel = await self._get_permfa_announce_channel(guild)
 
         # Intents
 
@@ -107,20 +105,13 @@ class AdminMixIn(RSCMixIn):
         intent_embed.add_field(name="Intent Missing Role", value=intent_role_fmt, inline=False)
         intent_embed.add_field(name="Intent Missing Message", value=intent_missing_msg, inline=False)
 
-        # PermFA
-
-        pfa_channel_fmt = pfa_channel.mention if pfa_channel else "None"
-
-        permfa_embed = BlueEmbed(title="Admin PermFA Settings")
-        permfa_embed.add_field(name="PermFA Announcement Channel", value=pfa_channel_fmt, inline=False)
-
         # AGM & Dates
 
         agm_msg_embed = BlueEmbed(title="Admin Dates Setting", description=dates)
         dates_embed = BlueEmbed(title="Admin AGM Message", description=agm_msg)
 
         await interaction.response.send_message(
-            embeds=[intent_embed, permfa_embed, agm_msg_embed, dates_embed],
+            embeds=[intent_embed, agm_msg_embed, dates_embed],
             ephemeral=True,
         )
 
@@ -390,17 +381,6 @@ class AdminMixIn(RSCMixIn):
                 ephemeral=True,
             )
 
-    @_admin.command(name="pfachnanel", description="Configure the PermFA announcement channel")
-    @app_commands.describe(channel="Discord channel to announce PermFAs")
-    async def _admin_set_pfa_channel_cmd(self, interaction: discord.Interaction, channel: discord.TextChannel):
-        if not interaction.guild:
-            return
-
-        await self._set_permfa_announce_chnanel(interaction.guild, channel)
-        await interaction.response.send_message(
-            embed=SuccessEmbed(description=f"Configured PermFA announcement channel to {channel.mention}")
-        )
-
     # Config
 
     async def _set_agm_message(self, guild: discord.Guild, value: str):
@@ -560,18 +540,6 @@ class AdminMixIn(RSCMixIn):
 
     async def _get_activity_check_msg_id(self, guild: discord.Guild) -> int | None:
         return await self.config.custom("Admin", str(guild.id)).ActivityCheckMsgId()
-
-    async def _set_permfa_announce_chnanel(self, guild: discord.Guild, channel: discord.TextChannel):
-        await self.config.custom("Admin", str(guild.id)).PermFAChannel.set(channel.id)
-
-    async def _get_permfa_announce_channel(self, guild: discord.Guild) -> discord.TextChannel | None:
-        cid = await self.config.custom("Admin", str(guild.id)).PermFAChannel()
-        if not cid:
-            return None
-        c = guild.get_channel(cid)
-        if not isinstance(c, discord.TextChannel):
-            return None
-        return c
 
     @staticmethod
     def _format_truncated_list(lines: list[str]) -> str:

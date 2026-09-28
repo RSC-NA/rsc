@@ -99,7 +99,6 @@ def _mixin(guild=None):
     m.bot.get_guild.return_value = guild
     m._dm_helper = MagicMock()
     m._dm_helper.enqueue = AsyncMock()
-    m._get_permfa_announce_channel = AsyncMock(return_value=None)
     return m
 
 
@@ -514,21 +513,15 @@ class TestSweep:
         assert stored.dms_cleaned is True
         assert stored.recipients[1].messages == []
 
-    async def test_results_posted_once(self, clock):
+    async def test_cleaned_poll_is_not_swept_again(self, clock):
         mixin = _mixin(_guild())
-        channel = MagicMock()
-        channel.send = AsyncMock()
-        mixin._get_permfa_announce_channel = AsyncMock(return_value=channel)
-        await _store(mixin, _poll(closed_at=NOW + 1))
+        poll = _poll(closed_at=NOW + 1, dms_cleaned=True)
+        poll.recipients[1].messages = [[11, 101]]
+        await _store(mixin, poll)
         clock["now"] = NOW + 2
 
-        await mixin._sweep_permfa_poll(GUILD_ID, TIER_ID)
-        sent = channel.send.await_count
-        await mixin._sweep_permfa_poll(GUILD_ID, TIER_ID)
-
-        assert sent >= 1
-        assert channel.send.await_count == sent
-        assert (await _load(mixin)).results_posted is True
+        assert await mixin._sweep_permfa_poll(GUILD_ID, TIER_ID) is None
+        mixin.bot.get_partial_messageable.assert_not_called()
 
 
 # --- Timers ---
