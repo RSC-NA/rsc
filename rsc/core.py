@@ -371,6 +371,11 @@ class RSC(
         # Combines
         self._web_app.router.add_post("/combines_match", self.start_combines_game)
         self._web_app.router.add_post("/combines_event", self.combines_event_handler)
+
+        # Dev League
+        self._web_app.router.add_post("/devleague_match", self.start_devleague_game)
+        self._web_app.router.add_post("/devleague_event", self.devleague_event_handler)
+
         self._web_app.router.add_post("/league_player_update", self.league_player_update_handler)
 
         # Runner and Site

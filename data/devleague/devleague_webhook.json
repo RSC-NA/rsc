@@ -1,0 +1,120 @@
+{
+    "101": {
+        "id": 101,
+        "lobby_user": "dlsplus",
+        "lobby_pass": "rsc",
+        "home_wins": 0,
+        "away_wins": 0,
+        "reported_rsc_id": null,
+        "confirmed_rsc_id": null,
+        "completed": 0,
+        "cancelled": 0,
+        "tier": "S+",
+        "guild_id": "991044575567179856",
+        "home": [
+            {
+                "discord_id": "138778232802508801",
+                "rsc_id": "RSC002050",
+                "match_id": 101,
+                "team": "home",
+                "name": "nickm"
+            },
+            {
+                "discord_id": "352600418062303244",
+                "rsc_id": "RSC003169",
+                "match_id": 101,
+                "team": "home",
+                "name": "monty"
+            },
+            {
+                "discord_id": "207266416355835904",
+                "rsc_id": "RSC006911",
+                "match_id": 101,
+                "team": "home",
+                "name": "tehblister"
+            }
+        ],
+        "away": [
+            {
+                "discord_id": "90000134712090624",
+                "rsc_id": "RSC002050",
+                "match_id": 101,
+                "team": "away",
+                "name": "Array"
+            },
+            {
+                "discord_id": "186600667094188042",
+                "rsc_id": "RSC003169",
+                "match_id": 101,
+                "team": "away",
+                "name": "Naro"
+            },
+            {
+                "discord_id": "181204305993400321",
+                "rsc_id": "RSC006911",
+                "match_id": 101,
+                "team": "away",
+                "name": "(P|F)ineapple"
+            }
+        ]
+    },
+    "102": {
+        "id": 102,
+        "lobby_user": "dlb",
+        "lobby_pass": "rsc",
+        "home_wins": 0,
+        "away_wins": 0,
+        "reported_rsc_id": null,
+        "confirmed_rsc_id": null,
+        "completed": 0,
+        "cancelled": 0,
+        "tier": "B",
+        "guild_id": "991044575567179856",
+        "home": [
+            {
+                "discord_id": "138778232802508801",
+                "rsc_id": "RSC002050",
+                "match_id": 102,
+                "team": "home",
+                "name": "nickm"
+            },
+            {
+                "discord_id": "352600418062303244",
+                "rsc_id": "RSC003169",
+                "match_id": 102,
+                "team": "home",
+                "name": "monty"
+            },
+            {
+                "discord_id": "207266416355835904",
+                "rsc_id": "RSC006911",
+                "match_id": 102,
+                "team": "home",
+                "name": "tehblister"
+            }
+        ],
+        "away": [
+            {
+                "discord_id": "90000134712090624",
+                "rsc_id": "RSC002050",
+                "match_id": 102,
+                "team": "away",
+                "name": "Array"
+            },
+            {
+                "discord_id": "186600667094188042",
+                "rsc_id": "RSC003169",
+                "match_id": 102,
+                "team": "away",
+                "name": "Naro"
+            },
+            {
+                "discord_id": "181204305993400321",
+                "rsc_id": "RSC006911",
+                "match_id": 102,
+                "team": "away",
+                "name": "(P|F)ineapple"
+            }
+        ]
+    }
+}

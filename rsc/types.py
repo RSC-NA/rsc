@@ -138,6 +138,13 @@ class CombineSettings(TypedDict):
     CombinesCategory: discord.CategoryChannel | None
 
 
+class DevLeagueSettings(TypedDict):
+    DevLeagueRoleUsers: list[int] | None
+    Active: bool
+    DevLeagueCategory: int | None
+    DevLeagueAnnounceChannel: int | None
+
+
 class LLMSettings(TypedDict):
     LLMActive: bool
     LLMBlacklist: list[discord.TextChannel] | None

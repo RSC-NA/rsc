@@ -1,4 +1,5 @@
 from pydantic import BaseModel
+from rsc.combines.models import CombineEvent, CombineEventType, CombinesLobby
 
 
 class DevLeagueStatus(BaseModel):
@@ -12,3 +13,9 @@ class DevLeagueStatus(BaseModel):
 class DevLeagueCheckInOut(BaseModel):
     error: str | None
     success: str | None
+
+
+# Game lobby webhooks share the combines payload shape.
+DevLeagueLobby = CombinesLobby
+DevLeagueEvent = CombineEvent
+DevLeagueEventType = CombineEventType

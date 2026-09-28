@@ -152,6 +152,10 @@ class CombinesNotActive(RscException):
     """Combines returned error status message"""
 
 
+class DevLeagueNotActive(RscException):
+    """Dev League game channels are not enabled in the guild"""
+
+
 # Discord
 
 

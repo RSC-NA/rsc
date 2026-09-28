@@ -427,3 +427,15 @@ class TestStartWebapp:
 
         runner.cleanup.assert_awaited_once()
         assert cog._web_runner is None
+
+    async def test_registers_devleague_routes(self):
+        cog = _create_cog(_web_runner=None, _web_site=None)
+
+        with patch("rsc.core.web") as mock_web:
+            mock_web.AppRunner.return_value = AsyncMock()
+            mock_web.TCPSite.return_value = AsyncMock()
+            await cog.start_webapp()
+
+        routes = {c.args[0]: c.args[1] for c in mock_web.Application.return_value.router.add_post.call_args_list}
+        assert routes["/devleague_match"] == cog.start_devleague_game
+        assert routes["/devleague_event"] == cog.devleague_event_handler
