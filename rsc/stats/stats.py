@@ -230,9 +230,6 @@ class StatsMixIn(RSCMixIn):
             return await interaction.followup.send(embed=ErrorEmbed(description="API returned a team with no ID. Please submit a modmail."))
 
         team_id = team_data.id
-        team_tier = None
-        if team_tier:
-            team_tier = team_data.tier.name
 
         try:
             team_stats = await self.team_stats(guild, team_id=team_id, season=season)

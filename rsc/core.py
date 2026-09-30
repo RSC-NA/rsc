@@ -398,8 +398,6 @@ class RSC(
 
     async def command_autocomplete(self, interaction: discord.Interaction, current: str) -> list[app_commands.Choice[str]]:
         cmds = self.walk_app_commands()
-        if not cmds:
-            return []
 
         if not isinstance(interaction.user, discord.Member):
             return []
