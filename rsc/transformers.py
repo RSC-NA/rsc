@@ -19,7 +19,7 @@ class MemberTransformer(Transformer):
             return []
 
         members = []
-        mlist = value.strip().split(" ")
+        mlist = value.split()
 
         for m in mlist:
             # Validate string is int
@@ -82,11 +82,11 @@ class GreedyMemberTransformer(Transformer):
             return []
 
         members = []
-        mlist = value.strip().split(" ")
+        mlist = value.split()
 
         for m in mlist:
             result = None
-            match = self._get_id_match(m) or re.match(r"<@!?([0-9]{15,20})>$", value)
+            match = self._get_id_match(m) or re.match(r"<@!?([0-9]{15,20})>$", m)
             if match is None:
                 # not a mention...
                 result = guild.get_member_named(m)
