@@ -50,6 +50,8 @@ MAX_FRANCHISE_PREFIX_LEN = 3
 # Discord's hard cap on a nickname. Enforced here so a name that cannot fit is
 # reported instead of bouncing off the discord API as a 400.
 NICKNAME_MAX_LENGTH = 32
+# /getreactlist bucket for reacting users without a tier role
+NO_TIER = "No Tier"
 EMOJI_REGEX = re.compile(
     "["
     "\U0001f600-\U0001f64f"  # emoticons
@@ -665,10 +667,16 @@ class UtilsMixIn(RSCMixIn):
         channel="Channel containing the message",
         message_id="The discord message ID to fetch reacts from",
         filter="Only list users who reacted with this emoji",
+        by_tier="Group users by their tier role (Default: False)",
     )
     @app_commands.guild_only
     async def _react_list_ctx_menu(
-        self, interaction: discord.Interaction, channel: discord.TextChannel, message_id: str, filter: str | None = None
+        self,
+        interaction: discord.Interaction,
+        channel: discord.TextChannel,
+        message_id: str,
+        filter: str | None = None,
+        by_tier: bool = False,
     ):
         try:
             msgid = int(message_id)
@@ -683,6 +691,12 @@ class UtilsMixIn(RSCMixIn):
             return await interaction.response.send_message(content=f"Message {message_id} has no reactions.", ephemeral=True)
 
         await interaction.response.defer(ephemeral=True)
+
+        if by_tier:
+            reactions = [r for r in msg.reactions if not filter or r.emoji == filter.strip()]
+            if not reactions:
+                return await interaction.followup.send(content=f"No matching reactions for filter: {filter}", ephemeral=True)
+            return await self._send_react_list_by_tier(interaction, reactions)
 
         fmt_msg: dict[discord.Reaction, str] = {}
         for r in msg.reactions:
@@ -707,6 +721,52 @@ class UtilsMixIn(RSCMixIn):
                     )
             else:
                 await interaction.followup.send(content=f"{r.emoji} - Count {r.count}\n\n```\n{fmt}```\n", ephemeral=True)
+
+    async def _send_react_list_by_tier(self, interaction: discord.Interaction, reactions: list[discord.Reaction]) -> None:
+        """Send reacting users grouped by tier, one message per tier"""
+        guild = interaction.guild
+        if not guild:
+            return
+
+        # Tier roles share the tier's name, so matching on roles costs one API
+        # call instead of a league player lookup for every reacting user.
+        tier_roles: list[discord.Role] = []
+        for t in await self.tiers(guild):
+            role = discord.utils.get(guild.roles, name=t.name)
+            if not role:
+                await interaction.followup.send(content=f"{t.name} does not have a role in the guild.", ephemeral=True)
+                return
+            tier_roles.append(role)
+
+        # Ordered by tier position with unmatched users last. Users who left
+        # the guild come back as `discord.User` and have no roles to match.
+        grouped: dict[str, dict[discord.Reaction, list[str]]] = {r.name: {} for r in tier_roles}
+        grouped[NO_TIER] = {}
+        for r in reactions:
+            async for user in r.users():
+                tier = NO_TIER
+                if isinstance(user, discord.Member):
+                    tier = next((t.name for t in tier_roles if user.get_role(t.id)), NO_TIER)
+                grouped[tier].setdefault(r, []).append(f"{user.id}:{user.display_name}")
+
+        for tier, by_reaction in grouped.items():
+            if not by_reaction:
+                continue
+
+            # Pages are capped well under 2000 so the tier header and code
+            # fences always fit alongside one.
+            header = f"**{tier}**\n"
+            content = header
+            for r, users in by_reaction.items():
+                pages = list(Pagify(text="\n".join(users), page_length=1900))
+                for idx, page in enumerate(pages):
+                    page_num = f" (Page {idx + 1})" if len(pages) > 1 else ""
+                    block = f"{r.emoji} - Count {len(users)}{page_num}\n```\n{page}\n```\n"
+                    if len(content) + len(block) > 2000:
+                        await interaction.followup.send(content=content, ephemeral=True)
+                        content = header
+                    content += block
+            await interaction.followup.send(content=content, ephemeral=True)
 
     @app_commands.command(
         name="getmassid",
