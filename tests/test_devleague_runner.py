@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import discord
 import pytest
 
+from rsc import const
 from rsc.devleague import runner
 from rsc.devleague.models import DevLeagueLobby
 from rsc.devleague.runner import DevLeagueRunnerMixIn
@@ -77,13 +78,18 @@ def _member(member_id: int):
     return member
 
 
-def _guild(channels=None):
+def _guild(channels=None, *, league_role=True):
     guild = MagicMock(spec=discord.Guild)
     guild.id = GUILD_ID
     guild.icon = None
     guild.channels = channels or []
     guild.categories = []
     guild.default_role = MagicMock(spec=discord.Role)
+    guild.roles = []
+    if league_role:
+        role = MagicMock(spec=discord.Role)
+        role.name = const.LEAGUE_ROLE
+        guild.roles.append(role)
     guild.get_member.return_value = None
     return guild
 
@@ -163,21 +169,30 @@ class TestStartDevLeagueGame:
 
 
 class TestCreateDevLeagueLobbyChannels:
-    async def test_creates_slugged_channels_for_players_only(self):
+    async def test_creates_slugged_channels_for_league_role(self):
         guild = _guild()
+        league_role = guild.roles[0]
         category = _category(guild)
-        players = [_member(i) for i in range(1, 7)]
-        m = _mixin(guild, category, players=players)
+        m = _mixin(guild, category)
         m._sort_devleague_lobby = AsyncMock()
 
         home, away = await m.create_devleague_lobby_channels(DevLeagueLobby(**_lobby_payload()))
 
         assert (home.name, away.name) == ("splus-101-home", "splus-101-away")
         for channel in (home, away):
-            assert set(channel.overwrites) == {guild.default_role, *players}
+            assert set(channel.overwrites) == {guild.default_role, league_role}
             assert channel.overwrites[guild.default_role].connect is False
-            assert all(channel.overwrites[p].connect for p in players)
+            assert channel.overwrites[league_role].connect is True
+            assert channel.overwrites[league_role].send_messages is True
         m._sort_devleague_lobby.assert_awaited_once_with(category, home, away)
+
+    async def test_missing_league_role_is_skipped(self):
+        guild = _guild(league_role=False)
+        category = _category(guild)
+        m = _mixin(guild, category)
+
+        assert await m.create_devleague_lobby_channels(DevLeagueLobby(**_lobby_payload())) == []
+        category.create_voice_channel.assert_not_called()
 
     async def test_announces_when_channel_configured(self):
         guild = _guild()

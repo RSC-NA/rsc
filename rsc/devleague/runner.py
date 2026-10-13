@@ -14,6 +14,7 @@ from rsc.devleague.api import DEVLEAGUE_API_URL
 from rsc.devleague.tiers import channel_sort_key, lobby_channel_name, parse_lobby_channel
 from rsc.embeds import BlueEmbed
 from rsc.exceptions import DevLeagueNotActive, NotInGuild
+from rsc.utils import utils
 from rsc.views import LinkButton
 
 if TYPE_CHECKING:
@@ -128,9 +129,15 @@ class DevLeagueRunnerMixIn(RSCMixIn):
             log.error(f"Dev League match {lobby.id} has no players in the guild")
             return []
 
+        try:
+            league_role = await utils.get_league_role(guild)
+        except ValueError:
+            log.error(f"League role does not exist. Can't create dev league match {lobby.id}.")
+            return []
+
         target = await self._devleague_target_category(guild, category)
 
-        # Only the lobby's players can join. Everyone else can see the channel.
+        # Only league members can join. Everyone else can see the channel.
         overwrites: dict[discord.Role | discord.Member | discord.Object, discord.PermissionOverwrite] = {
             guild.default_role: discord.PermissionOverwrite(
                 view_channel=True,
@@ -139,16 +146,15 @@ class DevLeagueRunnerMixIn(RSCMixIn):
                 send_messages=False,
                 add_reactions=False,
             ),
-        }
-        for player in players:
-            overwrites[player] = discord.PermissionOverwrite(
+            league_role: discord.PermissionOverwrite(
                 view_channel=True,
                 connect=True,
                 speak=True,
                 stream=True,
                 send_messages=True,
                 add_reactions=True,
-            )
+            ),
+        }
 
         reason = f"Starting dev league match {lobby.id}"
         home_channel = await target.create_voice_channel(name=home_name, overwrites=overwrites, reason=reason, user_limit=5)

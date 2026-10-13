@@ -29,7 +29,7 @@ The feature is **disabled by default**.
 
 - Channel names use a lowercase tier slug: `S+` becomes `splus`. For example, `splus-101-home` and `b-102-away`.
 - Channels are ordered by tier (S+, S, A, B, ... F), then by match id.
-- Only the match's players can connect and speak. Everyone else can view the channel.
+- Only members with the League role can connect and speak. Everyone else can view the channel.
 - When a category has more than 40 channels, new games go into overflow categories named `<category>-2` to `<category>-4`.
 
 ### Webhooks
