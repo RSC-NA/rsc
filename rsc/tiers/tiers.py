@@ -7,6 +7,7 @@ from rscapi import TiersApi
 from rscapi.exceptions import ApiException
 from rscapi.models.player_season_stats_in_depth import PlayerSeasonStatsInDepth
 from rscapi.models.tier import Tier
+from rscapi.models.tier_playoff_hunt import TierPlayoffHunt
 from rscapi.models.team_season_stats import TeamSeasonStats
 from rscapi.models.team_standings import TeamStandings
 
@@ -147,6 +148,20 @@ class TierMixIn(RSCMixIn):
                 standings: list[TeamStandings] = await api.tiers_standings_list(id=tier_id, season=season)
                 standings.sort(key=lambda t: (t.rank, t.team))
                 return standings
+            except ApiException as exc:
+                raise RscException(response=exc)
+
+    async def tier_playoff_hunt(self, guild: discord.Guild, tier_id: int, season: int | None = None) -> TierPlayoffHunt:
+        """The tier's playoff hunt: each playoff group's teams in standings order, with the cut line."""
+        async with self.api_client(guild) as client:
+            api = TiersApi(client)
+            try:
+                return await api.tiers_playoffs_retrieve(
+                    id=tier_id,
+                    league=self._league[guild.id],
+                    season=season,
+                    _request_timeout=API_TIMEOUT,
+                )
             except ApiException as exc:
                 raise RscException(response=exc)
 

@@ -441,6 +441,35 @@ class TestTierStandings:
         assert result == []
 
 
+class TestTierPlayoffHunt:
+    async def test_requests_the_guild_league_and_season(self, mock_guild):
+        hunt = MagicMock()
+        mixin = _create_mixin(_api_conf={mock_guild.id: MagicMock()}, _league={mock_guild.id: 1})
+
+        with patch("rsc.abc.ApiClient") as mock_client:
+            mock_api = AsyncMock()
+            mock_api.tiers_playoffs_retrieve.return_value = hunt
+            mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
+            mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
+            with patch("rsc.tiers.tiers.TiersApi", return_value=mock_api):
+                result = await mixin.tier_playoff_hunt(mock_guild, tier_id=3, season=28)
+
+        assert result is hunt
+        mock_api.tiers_playoffs_retrieve.assert_awaited_once_with(id=3, league=1, season=28, _request_timeout=API_TIMEOUT)
+
+    async def test_raises_rsc_exception_on_api_error(self, mock_guild):
+        mixin = _create_mixin(_api_conf={mock_guild.id: MagicMock()}, _league={mock_guild.id: 1})
+
+        with patch("rsc.abc.ApiClient") as mock_client:
+            mock_api = AsyncMock()
+            mock_api.tiers_playoffs_retrieve.side_effect = ApiException(status=404, reason="Not Found")
+            mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
+            mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
+            with patch("rsc.tiers.tiers.TiersApi", return_value=mock_api):
+                with pytest.raises(RscException):
+                    await mixin.tier_playoff_hunt(mock_guild, tier_id=999)
+
+
 class TestCreateTier:
     async def test_creates_and_returns_tier(self, mock_guild):
         created = _make_tier(id=10, name="Bronze", color=0xCD7F32, position=0)

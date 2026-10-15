@@ -20,6 +20,7 @@ class TestTiersApiContract:
         "tiers_list",
         "tiers_retrieve",
         "tiers_standings_list",
+        "tiers_playoffs_retrieve",
         "tiers_create",
         "tiers_destroy",
     ]

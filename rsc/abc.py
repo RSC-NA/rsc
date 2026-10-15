@@ -41,6 +41,7 @@ from rscapi.models.team_player import TeamPlayer
 from rscapi.models.team_season_stats import TeamSeasonStats
 from rscapi.models.team_standings import TeamStandings
 from rscapi.models.tier import Tier
+from rscapi.models.tier_playoff_hunt import TierPlayoffHunt
 from rscapi.models.tracker_link import TrackerLink
 from rscapi.models.tracker_link_stats import TrackerLinkStats
 from rscapi.models.transaction_response import TransactionResponse
@@ -703,6 +704,9 @@ class RSCMixIn(ABC):
 
     @abstractmethod
     async def tier_standings(self, guild: discord.Guild, tier_id: int, season: int) -> list[TeamStandings]: ...
+
+    @abstractmethod
+    async def tier_playoff_hunt(self, guild: discord.Guild, tier_id: int, season: int | None = None) -> TierPlayoffHunt: ...
 
     @abstractmethod
     async def tier_player_stats(

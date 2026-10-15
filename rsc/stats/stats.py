@@ -3,15 +3,21 @@ import logging
 import discord
 from redbot.core import app_commands
 from rscapi.models.player_season_stats import PlayerSeasonStats
+from rscapi.models.playoff_qualifier_reason_enum import PlayoffQualifierReasonEnum
+from rscapi.models.playoff_team import PlayoffTeam
 from rscapi.models.team_season_stats import TeamSeasonStats
+from rscapi.models.tier_playoff_hunt import TierPlayoffHunt
 
 from rsc.abc import RSCMixIn
-from rsc.embeds import ApiExceptionErrorEmbed, BlueEmbed, ErrorEmbed, YellowEmbed
+from rsc.embeds import ApiExceptionErrorEmbed, BetterEmbed, BlueEmbed, ErrorEmbed, YellowEmbed
 from rsc.exceptions import RscException
 from rsc.teams import TeamMixIn
 from rsc.tiers import TierMixIn
+from rsc.utils.utils import tier_color_by_name
 
 log = logging.getLogger("red.rsc.stats")
+
+PLAYOFF_CUT_LINE = "┈┈┈┈┈┈┈┈┈ cut line ┈┈┈┈┈┈┈┈┈"
 
 
 class StatsMixIn(RSCMixIn):
@@ -155,6 +161,66 @@ class StatsMixIn(RSCMixIn):
 
         await interaction.followup.send(embed=embed, ephemeral=False)
 
+    @app_commands.command(name="playoffs", description="Display the playoff hunt for a tier")
+    @app_commands.describe(tier="League tier (Default: your tier)", season="Season number (Default: current season)")
+    @app_commands.autocomplete(tier=TierMixIn.tier_autocomplete)
+    @app_commands.guild_only
+    async def _playoffs_cmd(self, interaction: discord.Interaction, tier: str | None = None, season: int | None = None):
+        guild = interaction.guild
+        if not guild:
+            return
+        await interaction.response.defer()
+
+        if tier:
+            try:
+                tier_id = await self.tier_id_by_name(guild, tier)
+            except ValueError as exc:
+                await interaction.followup.send(embed=ErrorEmbed(description=str(exc)))
+                return
+        else:
+            # Default to the caller's tier. The API uses the current season when none is given.
+            try:
+                players = await self.players(guild, discord_id=interaction.user.id, season_number=season, limit=1)
+            except RscException as exc:
+                await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc))
+                return
+
+            player_tier = players[0].tier if players else None
+            if not (player_tier and player_tier.id):
+                await interaction.followup.send(
+                    embed=ErrorEmbed(description="We can't determine your tier. Please select a `tier` option in the command.")
+                )
+                return
+            tier_id = player_tier.id
+
+        if not season:
+            current_season = await self.current_season(guild)
+            if not (current_season and current_season.number):
+                await interaction.followup.send(
+                    embed=ErrorEmbed(description="Could not determine current season. Please specify a season number.")
+                )
+                return
+            season = current_season.number
+
+        try:
+            hunt = await self.tier_playoff_hunt(guild, tier_id=tier_id, season=season)
+        except RscException as exc:
+            await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc))
+            return
+
+        if not any(group.teams for group in hunt.groups):
+            await interaction.followup.send(
+                embed=YellowEmbed(
+                    title=f"S{season} {hunt.tier_name} Playoff Hunt",
+                    description="No playoff hunt yet. It opens once the regular season is under way.",
+                )
+            )
+            return
+
+        color = await tier_color_by_name(guild, hunt.tier_name)
+        embed = await self.create_playoff_hunt_embed(hunt, season=season, color=color)
+        await interaction.followup.send(embed=embed)
+
     @app_commands.command(name="playerstats", description="Display RSC stats for a player")
     @app_commands.describe(player="RSC Discord Member")
     @app_commands.guild_only
@@ -245,6 +311,59 @@ class StatsMixIn(RSCMixIn):
             embed.set_thumbnail(url=guild.icon.url)
 
         await interaction.followup.send(embed=embed)
+
+    async def create_playoff_hunt_embed(
+        self,
+        hunt: TierPlayoffHunt,
+        season: int,
+        color: discord.Color | None = None,
+    ) -> discord.Embed:
+        """One field per playoff group, teams in standings order with the cut line drawn in."""
+        progress = "Regular season complete." if hunt.regular_season_complete else "Regular season in progress."
+
+        embed = BetterEmbed(
+            title=f"S{season} {hunt.tier_name} Playoff Hunt",
+            description=progress,
+            color=color or discord.Color.blue(),
+        )
+        # Spell out the division letters used on each row, e.g. "(M) Mountain".
+        divisions = {d.division: d.label for group in hunt.groups for d in group.divisions}
+        legend = ["Bold: in a playoff spot", *(f"({code}) {label}" for code, label in sorted(divisions.items()))]
+        # Set before the fields: add_long_field counts the footer against the embed total.
+        embed.set_footer(text=" · ".join(legend))
+
+        for group in hunt.groups:
+            if not group.teams:
+                continue
+            lines = []
+            for team in group.teams:
+                lines.append(self.playoff_team_line(team, show_division=bool(group.divisions)))
+                # No line under the last team: a group with fewer teams than spots has nobody outside.
+                if team.playoff_rank == group.cutline_rank and team is not group.teams[-1]:
+                    lines.append(PLAYOFF_CUT_LINE)
+            embed.add_long_field(name=f"{group.label} · {group.cutoff} spots", value="\n".join(lines))
+
+        return embed
+
+    @staticmethod
+    def playoff_team_line(team: PlayoffTeam, show_division: bool = False) -> str:
+        name = discord.utils.escape_markdown(team.team_name)
+        if team.playoff_qualified:
+            name = f"**{name}**"
+        if show_division:
+            name += f" ({team.division})"
+
+        if team.playoff_qualifier_reason == PlayoffQualifierReasonEnum.DIVISION:
+            status = "Division Leader"
+        elif team.playoff_qualifier_reason == PlayoffQualifierReasonEnum.WILDCARD:
+            status = "Wildcard"
+        else:
+            status = team.playoff_delta_label
+
+        # Rank and record share one fixed-width span so both line up as columns.
+        record = f"{team.games_won}-{team.games_lost}"
+        line = f"`{team.playoff_rank:>2}  {record:>5}` {name}"
+        return f"{line} · {status}" if status else line
 
     async def create_stats_embed(
         self,
