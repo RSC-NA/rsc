@@ -16,7 +16,7 @@ dependencies = [
     "red-discordbot==3.5.24",
     "replay-parser",
     "rich>=14.2.0",
-    "rscapi>=2.1.8",
+    "rscapi>=2.1.9",
     "trio>=0.33.0",
     "validators>=0.35.0",
 ]
