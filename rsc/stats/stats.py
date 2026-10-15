@@ -304,6 +304,16 @@ class StatsMixIn(RSCMixIn):
             embed.add_field(name="Points", value=str(points), inline=True)
             embed.add_field(name="PPG", value=f"{points_per_game:.2f}", inline=True)
             embed.add_field(name="Avg Speed", value=f"{stats.avg_speed:.2f}", inline=True)
+            # Goals for and against in the games this player played
+            if stats.team_goals_in_games is not None and stats.opponent_goals_in_games is not None:
+                embed.add_field(name="", value="", inline=False)
+                embed.add_field(name="Team Goals", value=str(stats.team_goals_in_games), inline=True)
+                embed.add_field(name="Goals Against", value=str(stats.opponent_goals_in_games), inline=True)
+                embed.add_field(
+                    name="Goal Differential",
+                    value=f"{stats.team_goals_in_games - stats.opponent_goals_in_games:+d}",
+                    inline=True,
+                )
         else:
             embed.add_field(name="Points", value=str(points), inline=True)
             embed.add_field(name="PPG", value=f"{points_per_game:.2f}", inline=True)

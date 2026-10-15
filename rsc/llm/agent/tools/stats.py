@@ -26,35 +26,41 @@ RANKED_STATS: dict[str, tuple[str, str]] = {
     "bpm": ("bpm", "bpm_rank"),
 }
 
-PLAYER_STAT_FIELDS = (
-    "games_played",
-    "wins",
-    "losses",
-    "goals",
-    "assists",
-    "saves",
-    "shots",
-    "points",
-    "mvps",
-    "shooting_percentage",
-    "goals_per_game",
-    "points_per_game",
-    "demos_inflicted",
-    "bpm",
-)
+# Name the model sees -> record attribute. The names are the league's wording;
+# the API calls wins and losses `games_won` / `games_lost`.
+PLAYER_STAT_FIELDS: dict[str, str] = {
+    "games_played": "games_played",
+    "wins": "games_won",
+    "losses": "games_lost",
+    "goals": "goals",
+    "assists": "assists",
+    "saves": "saves",
+    "shots": "shots",
+    "points": "points",
+    "mvps": "mvps",
+    "shooting_percentage": "shooting_percentage",
+    "demos_inflicted": "demos_inflicted",
+    "bpm": "bpm",
+    "team_goals_in_games": "team_goals_in_games",
+    "opponent_goals_in_games": "opponent_goals_in_games",
+}
 
-TEAM_STAT_FIELDS = (
-    "games_played",
-    "wins",
-    "losses",
-    "goals",
-    "goals_against",
-    "goal_differential",
-    "assists",
-    "saves",
-    "shots",
-    "shooting_percentage",
-)
+TEAM_STAT_FIELDS: dict[str, str] = {
+    "games_played": "games_played",
+    "wins": "games_won",
+    "losses": "games_lost",
+    "goals": "goals",
+    "goals_against": "opponent_goals",
+    "goal_differential": "goal_differential",
+    "assists": "assists",
+    "saves": "saves",
+    "shots": "shots",
+    "shooting_percentage": "shooting_percentage",
+}
+
+
+def _stat_block(stats: object, stat_fields: dict[str, str]) -> dict[str, object]:
+    return {name.replace("_", " ").title(): getattr(stats, attr, None) for name, attr in stat_fields.items()}
 
 
 def _stat_rows(records: list[Any], value_attr: str, rank_attr: str, limit: int, min_games: int) -> list[str]:
@@ -120,13 +126,14 @@ async def top_teams(ctx: AgentContext, stat: str, tier: str, limit: int = 10) ->
     tier_id = await ctx.cog.tier_id_by_name(ctx.guild, tier)
     records = list(await ctx.cog.tier_team_stats(ctx.guild, tier_id, season=ctx.season_number))
 
-    if records and not hasattr(records[0], stat):
-        available = ", ".join(field for field in TEAM_STAT_FIELDS if hasattr(records[0], field))
+    attr = TEAM_STAT_FIELDS.get(stat, stat)
+    if records and not hasattr(records[0], attr):
+        available = ", ".join(name for name, field in TEAM_STAT_FIELDS.items() if hasattr(records[0], field))
         return f"ERROR: unknown team stat {stat!r}. Valid: {available}"
 
-    records.sort(key=lambda record: getattr(record, stat, 0) or 0, reverse=True)
+    records.sort(key=lambda record: getattr(record, attr, 0) or 0, reverse=True)
     rows = [
-        f"{index} | {name_of(record.team)} | {getattr(record, stat, 0)} | {getattr(record, 'games_played', '?')} GP"
+        f"{index} | {name_of(record.team)} | {getattr(record, attr, 0)} | {getattr(record, 'games_played', '?')} GP"
         for index, record in enumerate(records[:limit], start=1)
     ]
     return table(f"TOP {stat.upper()} - {tier} TEAMS\nRANK | TEAM | {stat.upper()} | GAMES", rows)
@@ -174,7 +181,15 @@ async def get_player_stats(
     # A deliberate subset: the model never needs all ~112 fields, and sending
     # them would dominate the context for one lookup.
     block = {"Player": name_of(players[0].player), "Tier": name_of(players[0].tier)}
-    block.update({field.replace("_", " ").title(): getattr(stats, field, None) for field in PLAYER_STAT_FIELDS})
+    block.update(_stat_block(stats, PLAYER_STAT_FIELDS))
+    games_played = getattr(stats, "games_played", None)
+    if games_played:
+        block["Goals Per Game"] = round((getattr(stats, "goals", None) or 0) / games_played, 2)
+        block["Points Per Game"] = round((getattr(stats, "points", None) or 0) / games_played, 2)
+    team_goals = getattr(stats, "team_goals_in_games", None)
+    opponent_goals = getattr(stats, "opponent_goals_in_games", None)
+    if team_goals is not None and opponent_goals is not None:
+        block["Goal Differential"] = team_goals - opponent_goals
     return fields(block)
 
 
@@ -193,5 +208,5 @@ async def get_team_stats(ctx: AgentContext, team: str) -> str:
         return f"No statistics recorded for {team}."
 
     block = {"Team": team}
-    block.update({field.replace("_", " ").title(): getattr(stats, field, None) for field in TEAM_STAT_FIELDS})
+    block.update(_stat_block(stats, TEAM_STAT_FIELDS))
     return fields(block)

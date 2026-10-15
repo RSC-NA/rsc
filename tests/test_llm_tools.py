@@ -21,7 +21,7 @@ from rsc.llm.agent.tools.league import (
     match_schedule,
 )
 from rsc.llm.agent.tools.rules import ask_rulebook, get_rule, search_rules_tool
-from rsc.llm.agent.tools.stats import top_players
+from rsc.llm.agent.tools.stats import get_player_stats, get_team_stats, top_players, top_teams
 from rsc.llm.config import TOOL_RESULT_MAX_CHARS
 from rsc.llm.rulebook import RuleBook, load_rulebooks
 
@@ -149,8 +149,7 @@ async def test_list_franchises_fetches_agms_in_a_single_call(ctx, cog):
     call and the wrong source -- AGMs are FranchiseStaff now.
     """
     cog.franchises.return_value = [
-        franchise(i, f"Franchise {i}", f"F{i}", f"GM{i}", agms=("Assistant0",) if i == 0 else ())
-        for i in range(30)
+        franchise(i, f"Franchise {i}", f"F{i}", f"GM{i}", agms=("Assistant0",) if i == 0 else ()) for i in range(30)
     ]
 
     result = await list_franchises(ctx, include_agms=True)
@@ -426,9 +425,7 @@ async def test_ask_rulebook_uses_the_subagent_and_shares_usage(ctx):
 async def test_ask_rulebook_sends_only_scoped_sections(ctx):
     """Section scoping is the saving; a whole book would be far larger."""
     ctx.client.responses = MagicMock()
-    ctx.client.responses.create = AsyncMock(
-        return_value=SimpleNamespace(output_text="ok", usage=None)
-    )
+    ctx.client.responses.create = AsyncMock(return_value=SimpleNamespace(output_text="ok", usage=None))
 
     await ask_rulebook(ctx, "can a permFA sub twice in a row", book="competitive")
 
@@ -446,3 +443,64 @@ async def test_tool_output_respects_the_char_budget(ctx, cog, count):
     result = await list_franchises(ctx)
 
     assert len(result) <= TOOL_RESULT_MAX_CHARS + 200
+
+
+async def test_get_player_stats_includes_goal_differential(ctx, cog):
+    cog.players.return_value = [league_player("Striker")]
+    cog.player_stats = AsyncMock(
+        return_value=SimpleNamespace(games_played=40, goals=50, team_goals_in_games=113, opponent_goals_in_games=74)
+    )
+
+    result = await get_player_stats(ctx, name="Striker")
+
+    assert "Team Goals In Games: 113" in result
+    assert "Opponent Goals In Games: 74" in result
+    assert "Goal Differential: 39" in result
+
+
+async def test_get_player_stats_omits_goal_differential_without_goals_in_games(ctx, cog):
+    cog.players.return_value = [league_player("Striker")]
+    cog.player_stats = AsyncMock(return_value=SimpleNamespace(games_played=40, goals=50, team_goals_in_games=None))
+
+    result = await get_player_stats(ctx, name="Striker")
+
+    assert "Goal Differential" not in result
+
+
+async def test_get_player_stats_maps_wins_losses_and_per_game(ctx, cog):
+    """The API names these games_won / games_lost and has no per-game fields."""
+    cog.players.return_value = [league_player("Striker")]
+    cog.player_stats = AsyncMock(return_value=SimpleNamespace(games_played=40, games_won=26, games_lost=14, goals=50, points=15000))
+
+    result = await get_player_stats(ctx, name="Striker")
+
+    assert "Wins: 26" in result
+    assert "Losses: 14" in result
+    assert "Goals Per Game: 1.25" in result
+    assert "Points Per Game: 375.0" in result
+
+
+async def test_get_team_stats_maps_api_field_names(ctx, cog):
+    cog.team_id_by_name = AsyncMock(return_value=3)
+    cog.team_stats = AsyncMock(return_value=SimpleNamespace(games_played=40, games_won=30, games_lost=10, goals=150, opponent_goals=90))
+
+    result = await get_team_stats(ctx, team="Sharks")
+
+    assert "Wins: 30" in result
+    assert "Losses: 10" in result
+    assert "Goals Against: 90" in result
+
+
+async def test_top_teams_by_wins(ctx, cog):
+    cog.tier_team_stats = AsyncMock(
+        return_value=[
+            SimpleNamespace(team=SimpleNamespace(name="Second"), games_won=20, games_played=30),
+            SimpleNamespace(team=SimpleNamespace(name="First"), games_won=25, games_played=30),
+        ]
+    )
+
+    result = await top_teams(ctx, stat="wins", tier="Master")
+    rows = [line for line in result.splitlines() if line and line[0].isdigit()]
+
+    assert "First | 25" in rows[0]
+    assert "Second | 20" in rows[1]
