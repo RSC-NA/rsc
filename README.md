@@ -11,7 +11,17 @@ This was designed for use within [RSC (Rocket Soccar Confederation)](https://www
 
 ## Installation
 
-Follow the Red Discord Bot installation guide for [Windows](https://docs.discord.red/en/stable/install_windows.html) or [Linux/Mac](https://docs.discord.red/en/stable/install_linux_mac.html). You'll need to also [create a Discord bot account](https://discordpy.readthedocs.io/en/latest/discord.html) to get a token for use during the bot setup. After you have the bot setup, running, and invited to one of your Discord servers, you can begin installing and loading the cogs to the bot using the following commands in Discord (where `<p>` represents the prefix you selected your bot to use):
+Follow the Red Discord Bot installation guide for [Windows](https://docs.discord.red/en/stable/install_windows.html) or [Linux/Mac](https://docs.discord.red/en/stable/install_linux_mac.html). You'll need to also [create a Discord bot account](https://discordpy.readthedocs.io/en/latest/discord.html) to get a token for use during the bot setup. After you have the bot setup, running, and invited to one of your Discord servers, you can begin installing and loading the cogs to the bot using the following commands in Discord (where `<p>` represents the prefix you selected your bot to use).
+
+The cog's Python dependencies are not installed by Red's Downloader. Install them into the bot's virtual environment first, and again whenever `requirements.txt` changes:
+
+```sh
+uv pip install --python <bot venv>/bin/python -r requirements.txt
+```
+
+Use [uv](https://docs.astral.sh/uv/) rather than pip: `requirements.txt` carries hashes alongside git dependencies, and pip refuses that combination.
+
+Then install the cog itself:
 
 ```
 <p>load downloader
