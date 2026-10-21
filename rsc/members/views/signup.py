@@ -26,15 +26,16 @@ _2V2_GUILD_ID = 809939294331994113
 
 
 class SignupState(IntEnum):
-    TIMES = 0
-    RULES = 1
-    PLAYER_TYPE = 2
-    REGION = 3
-    PLATFORM = 4
-    REFERRER = 5
-    TRACKERS = 6
-    FINISHED = 7
-    CANCELLED = 8
+    PERMFA = 0
+    TIMES = 1
+    RULES = 2
+    PLAYER_TYPE = 3
+    REGION = 4
+    PLATFORM = 5
+    REFERRER = 6
+    TRACKERS = 7
+    FINISHED = 8
+    CANCELLED = 9
 
 
 # ── Modal ────────────────────────────────────────────────────────────────
@@ -230,7 +231,7 @@ class AgreementPhase:
             TextDisplay("## \N{CLOCK FACE TEN OCLOCK}  RSC Game Times"),  # codespell:ignore oclock
             TextDisplay(times_desc),
             Separator(spacing=discord.SeparatorSpacing.small),
-            ActionRow(self.times_btn, self.cancel_btn),
+            self._times_row(),
             accent_colour=discord.Colour.blue(),
         )
         self.rules_container = Container(
@@ -244,6 +245,10 @@ class AgreementPhase:
             ActionRow(self.rules_btn, self.rules_link),
             accent_colour=discord.Colour.dark_grey(),
         )
+
+    def _times_row(self) -> ActionRow:
+        """Buttons under Game Times. The Cancel button lives in the first container."""
+        return ActionRow(self.times_btn, self.cancel_btn)
 
     @property
     def containers(self) -> list[Container]:
@@ -268,6 +273,56 @@ class AgreementPhase:
                 return SignupState.PLAYER_TYPE
             case _:
                 raise ValueError(f"AgreementPhase cannot handle step {step!r}")
+
+
+class PermFAAgreementPhase(AgreementPhase):
+    """Phase 1 for `/permfa` — a Permanent Free Agent acknowledgement ahead of Game Times and Rules."""
+
+    def __init__(self, *, is_2v2: bool):
+        super().__init__(is_2v2=is_2v2)
+        self.permfa_btn = _StepButton(
+            step=SignupState.PERMFA,
+            label="I understand",
+            style=discord.ButtonStyle.success,
+            emoji="\N{WHITE HEAVY CHECK MARK}",
+        )
+
+        # Game Times stays locked until the PermFA terms are accepted
+        self.times_btn.disabled = True
+        self.times_container.accent_colour = discord.Colour.dark_grey()
+
+        self.permfa_container = Container(
+            TextDisplay("## \N{ANTICLOCKWISE DOWNWARDS AND UPWARDS OPEN CIRCLE ARROWS}  Permanent Free Agent"),
+            TextDisplay(
+                "You are signing up as a **Permanent Free Agent (PermFA)**.\n\n"
+                "PermFAs can **sub** for teams in their tier, but are **not eligible to be signed** to a team's roster.\n\n"
+                "If you want to play on a team full time, cancel and use `/signup` instead.\n\n"
+                "*League staff may occasionally offer PermFAs the option to convert to a regular Free Agent.*"
+            ),
+            Separator(spacing=discord.SeparatorSpacing.small),
+            ActionRow(self.permfa_btn, self.cancel_btn),
+            accent_colour=discord.Colour.blue(),
+        )
+
+    def _times_row(self) -> ActionRow:
+        return ActionRow(self.times_btn)
+
+    @property
+    def containers(self) -> list[Container]:
+        return [self.permfa_container, *super().containers]
+
+    def complete_step(self, step: SignupState) -> SignupState:
+        if step != SignupState.PERMFA:
+            return super().complete_step(step)
+
+        self.permfa_btn.disabled = True
+        self.permfa_btn.label = "\N{WHITE HEAVY CHECK MARK} Accepted"
+        self.permfa_btn.style = discord.ButtonStyle.secondary
+        self.cancel_btn.disabled = True
+        self.permfa_container.accent_colour = discord.Colour.green()
+        self.times_btn.disabled = False
+        self.times_container.accent_colour = discord.Colour.blue()
+        return SignupState.TIMES
 
 
 # ── Phase 2: Player Info Selects ────────────────────────────────────────
@@ -363,9 +418,12 @@ class SignupLayoutView(AuthorOnlyLayoutView):
     Phase 3 — :class:`PlayerInfoModal`: In-game name and tracker links.
     """
 
+    agreement_phase: type[AgreementPhase] = AgreementPhase
+    initial_state = SignupState.TIMES
+
     def __init__(self, interaction: discord.Interaction, timeout: float = 600.0):
         super().__init__(interaction=interaction, timeout=timeout)
-        self.state = SignupState.TIMES
+        self.state = self.initial_state
         self.player_type = PlayerType.NEW
         self.platform = Platform.EPIC
         self.region = RegionPreference.EAST
@@ -375,7 +433,7 @@ class SignupLayoutView(AuthorOnlyLayoutView):
 
         self._is_2v2 = bool(interaction.guild and interaction.guild.id == _2V2_GUILD_ID)
 
-        self._agreement = AgreementPhase(is_2v2=self._is_2v2)
+        self._agreement = self.agreement_phase(is_2v2=self._is_2v2)
         self._selects: SelectPhase | None = None  # built lazily in Phase 2
 
         self._load_phase(self._agreement)
@@ -399,7 +457,7 @@ class SignupLayoutView(AuthorOnlyLayoutView):
         log.debug(f"[SIGNUP] Completed step: {step.name}")
 
         # Phase 1 steps
-        if step in (SignupState.TIMES, SignupState.RULES):
+        if step in (SignupState.PERMFA, SignupState.TIMES, SignupState.RULES):
             next_state = self._agreement.complete_step(step)
             self.state = next_state
 
@@ -442,6 +500,14 @@ class SignupLayoutView(AuthorOnlyLayoutView):
             return
 
         await interaction.response.edit_message(view=self)
+
+
+class PermFASignupView(SignupLayoutView):
+    """Signup form for `/permfa`. Same flow as :class:`SignupLayoutView`, starting
+    with a :class:`PermFAAgreementPhase` acknowledgement."""
+
+    agreement_phase = PermFAAgreementPhase
+    initial_state = SignupState.PERMFA
 
 
 # Alias so existing imports from other modules still work
