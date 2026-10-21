@@ -49,7 +49,7 @@ from rsc.franchises import FranchiseMixIn
 from rsc.logs import GuildLogAdapter
 from rsc.members.views.intent import IntentState, IntentToPlayView
 from rsc.members.views.player_info import PlayerInfoView
-from rsc.members.views.signup import SignupState, SignupView
+from rsc.members.views.signup import PermFASignupView, SignupState, SignupView
 from rsc.teams import TeamMixIn
 from rsc.tiers import TierMixIn
 from rsc.transactions.roles import update_league_player_discord
@@ -636,7 +636,7 @@ class MemberMixIn(RSCMixIn):
             )
         )
 
-    @app_commands.command(name="permfa", description="Sign up as an permanent free agent")
+    @app_commands.command(name="permfa", description="Sign up as a permanent free agent")
     @app_commands.guild_only
     async def _member_permfa_signup(self, interaction: discord.Interaction):
         guild = interaction.guild
@@ -646,7 +646,7 @@ class MemberMixIn(RSCMixIn):
         log.debug(f"{interaction.user} is signing up as PermFA")
 
         # User prompts
-        signup_view = SignupView(interaction)
+        signup_view = PermFASignupView(interaction)
         await signup_view.prompt()
 
         # Create a member just in case
@@ -747,7 +747,9 @@ class MemberMixIn(RSCMixIn):
             view=ResultView(
                 title="PermFA Sign-Up Success",
                 description=(
-                    "You have successfully signed up as a permenent free agent in RSC!\n\nPlease be patient while we process your request."
+                    "You have successfully signed up as a permanent free agent in RSC!\n\n"
+                    "As a PermFA you can sub for teams, but will not be signed to a team's roster.\n\n"
+                    "Please be patient while we process your request."
                     f"{nickname_note}"
                 ),
                 colour=discord.Colour.green(),
