@@ -945,11 +945,19 @@ class BallchasingMixIn(RSCMixIn):
         if files is None:
             files = []
 
+        category = await self._get_score_reporting_category(guild)
+        if not category:
+            log.warning(f"[{guild.name}] Ballchasing score report category is not configured")
+            return None
+
         cname = f"{tier.lower()}-score-reporting"
 
-        score_channel = discord.utils.get(guild.text_channels, name=cname)
+        score_channel = discord.utils.get(category.channels, name=cname)
         if not score_channel:
             log.warning(f"[{guild.name}] Unable to find tier score report channel: {cname}")
+            return None
+
+        if not isinstance(score_channel, discord.TextChannel):
             return None
 
         if view:
