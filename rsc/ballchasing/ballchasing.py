@@ -4,7 +4,7 @@ import math
 import random
 import string
 import time
-from collections.abc import AsyncIterator, Sequence
+from collections.abc import AsyncGenerator, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
@@ -149,7 +149,7 @@ class BallchasingMixIn(RSCMixIn):
     # Concurrency
 
     @asynccontextmanager
-    async def bc_match_guard(self, guild: discord.Guild, match_id: int) -> AsyncIterator[_LockEntry]:
+    async def bc_match_guard(self, guild: discord.Guild, match_id: int) -> AsyncGenerator[_LockEntry]:
         """Serialize match reporting so two reporters cannot duplicate each other's work."""
         key = (guild.id, match_id)
         entry = self._bc_match_locks.setdefault(key, _LockEntry())
@@ -945,19 +945,11 @@ class BallchasingMixIn(RSCMixIn):
         if files is None:
             files = []
 
-        category = await self._get_score_reporting_category(guild)
-        if not category:
-            log.warning(f"[{guild.name}] Ballchasing score report category is not configured")
-            return None
-
         cname = f"{tier.lower()}-score-reporting"
 
-        score_channel = discord.utils.get(category.channels, name=cname)
+        score_channel = discord.utils.get(guild.text_channels, name=cname)
         if not score_channel:
             log.warning(f"[{guild.name}] Unable to find tier score report channel: {cname}")
-            return None
-
-        if not isinstance(score_channel, discord.TextChannel):
             return None
 
         if view:
