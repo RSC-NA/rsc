@@ -461,6 +461,7 @@ class TestMakeLeaguePlayerApi:
                     base_mmr=1000,
                     current_mmr=1050,
                     tier=1,
+                    status=Status.DRAFT_ELIGIBLE,
                 )
 
         assert result is lp
@@ -483,6 +484,7 @@ class TestMakeLeaguePlayerApi:
                     base_mmr=1000,
                     current_mmr=1050,
                     tier=1,
+                    status=Status.DRAFT_ELIGIBLE,
                 )
 
 

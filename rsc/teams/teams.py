@@ -700,7 +700,7 @@ class TeamMixIn(RSCMixIn):
         async with self.api_client(guild) as client:
             try:
                 api = TeamsApi(client)
-                matches = await api.teams_season_matches_list(id, preseason=preseason, season=season)
+                matches = await api.teams_season_matches_list(id, preseason=preseason, season_number=season)
                 matches.sort(key=lambda x: cast("int", x.day))
                 return matches
             except ApiException as exc:
@@ -715,7 +715,7 @@ class TeamMixIn(RSCMixIn):
         try:
             async with self.api_client(guild) as client:
                 api = TeamsApi(client)
-                stats = await api.teams_stats_retrieve(team_id, season_id=season)
+                stats = await api.teams_stats_retrieve(team_id, season_number=season)
                 return stats
         except ApiException as exc:
             raise RscException(exc)

@@ -408,7 +408,7 @@ class TestTierStandings:
 
         assert result[0].rank == 1
         assert result[1].rank == 2
-        mock_api.tiers_standings_list.assert_awaited_once_with(id=1, season=5)
+        mock_api.tiers_standings_list.assert_awaited_once_with(id=1, season_number=5)
 
     async def test_raises_rsc_exception_on_api_error(self, mock_guild):
         exc = ApiException(status=404, reason="Not Found")
@@ -450,7 +450,7 @@ class TestTierPlayoffHunt:
                 result = await mixin.tier_playoff_hunt(mock_guild, tier_id=3, season=28)
 
         assert result is hunt
-        mock_api.tiers_playoffs_retrieve.assert_awaited_once_with(id=3, league=1, season=28, _request_timeout=API_TIMEOUT)
+        mock_api.tiers_playoffs_retrieve.assert_awaited_once_with(id=3, league=1, season_number=28, _request_timeout=API_TIMEOUT)
 
     async def test_raises_rsc_exception_on_api_error(self, mock_guild):
         mixin = _create_mixin(_api_conf={mock_guild.id: MagicMock()}, _league={mock_guild.id: 1})

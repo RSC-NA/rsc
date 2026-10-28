@@ -263,7 +263,7 @@ class TestFranchiseNameToId:
 
 
 class TestDeleteFranchiseByName:
-    async def test_deletes_franchise(self, mock_guild):
+    async def test_raises_because_the_api_cannot_delete(self, mock_guild):
         f = _make_franchise_list(id=10, name="Eagles")
         mixin = _create_mixin(
             _api_conf={mock_guild.id: MagicMock()},
@@ -273,13 +273,10 @@ class TestDeleteFranchiseByName:
         with patch("rsc.abc.ApiClient") as mock_client:
             mock_api = AsyncMock()
             mock_api.franchises_list.return_value = [f]
-            mock_api.franchises_destroy.return_value = None
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
-            with patch("rsc.franchises.franchises.FranchisesApi", return_value=mock_api):
+            with patch("rsc.franchises.franchises.FranchisesApi", return_value=mock_api), pytest.raises(RscException):
                 await mixin.delete_franchise_by_name(mock_guild, "Eagles")
-
-        mock_api.franchises_destroy.assert_awaited_once_with(10)
 
     async def test_raises_when_not_found(self, mock_guild):
         mixin = _create_mixin(
@@ -509,29 +506,16 @@ class TestUploadFranchiseLogoApi:
 
 
 class TestDeleteFranchiseApi:
-    async def test_deletes_franchise(self, mock_guild):
+    async def test_raises_without_calling_the_api(self, mock_guild):
         mixin = _create_mixin(_api_conf={mock_guild.id: MagicMock()})
 
-        with patch("rsc.abc.ApiClient") as mock_client:
-            mock_api = AsyncMock()
-            mock_api.franchises_destroy.return_value = None
-            mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
-            mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
-            with patch("rsc.franchises.franchises.FranchisesApi", return_value=mock_api):
-                await mixin.delete_franchise(mock_guild, id=5)
+        with (
+            patch("rsc.franchises.franchises.FranchisesApi") as mock_api_cls,
+            pytest.raises(RscException, match="does not support deleting"),
+        ):
+            await mixin.delete_franchise(mock_guild, id=5)
 
-        mock_api.franchises_destroy.assert_awaited_once_with(5)
-
-    async def test_raises_rsc_exception_on_api_error(self, mock_guild):
-        mixin = _create_mixin(_api_conf={mock_guild.id: MagicMock()})
-
-        with patch("rsc.abc.ApiClient") as mock_client:
-            mock_api = AsyncMock()
-            mock_api.franchises_destroy.side_effect = ApiException(status=404, reason="Not Found")
-            mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
-            mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
-            with patch("rsc.franchises.franchises.FranchisesApi", return_value=mock_api), pytest.raises(RscException):
-                await mixin.delete_franchise(mock_guild, id=999)
+        mock_api_cls.assert_not_called()
 
 
 class TestRebrandFranchiseApi:

@@ -732,7 +732,6 @@ class RSCMixIn(ABC):
         guild: discord.Guild,
         tier_id: int,
         season: int | None = None,
-        name: str | None = None,
     ) -> list[PlayerSeasonStatsInDepth]: ...
 
     @abstractmethod
@@ -741,7 +740,6 @@ class RSCMixIn(ABC):
         guild: discord.Guild,
         tier_id: int,
         season: int | None = None,
-        name: str | None = None,
     ) -> list[TeamSeasonStats]: ...
 
     @abstractmethod

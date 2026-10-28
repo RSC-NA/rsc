@@ -145,7 +145,7 @@ class TierMixIn(RSCMixIn):
         async with self.api_client(guild) as client:
             api = TiersApi(client)
             try:
-                standings: list[TeamStandings] = await api.tiers_standings_list(id=tier_id, season=season)
+                standings: list[TeamStandings] = await api.tiers_standings_list(id=tier_id, season_number=season)
                 standings.sort(key=lambda t: (t.rank, t.team))
                 return standings
             except ApiException as exc:
@@ -159,7 +159,7 @@ class TierMixIn(RSCMixIn):
                 return await api.tiers_playoffs_retrieve(
                     id=tier_id,
                     league=self._league[guild.id],
-                    season=season,
+                    season_number=season,
                     _request_timeout=API_TIMEOUT,
                 )
             except ApiException as exc:
@@ -170,7 +170,6 @@ class TierMixIn(RSCMixIn):
         guild: discord.Guild,
         tier_id: int,
         season: int | None = None,
-        name: str | None = None,
     ) -> list[PlayerSeasonStatsInDepth]:
         """Season stats for every player in a tier, in a single request.
 
@@ -183,8 +182,7 @@ class TierMixIn(RSCMixIn):
                 return await api.tiers_player_stats_list(
                     id=tier_id,
                     league=self._league[guild.id],
-                    name=name,
-                    season=season,
+                    season_number=season,
                     _request_timeout=API_TIMEOUT,
                 )
             except ApiException as exc:
@@ -195,7 +193,6 @@ class TierMixIn(RSCMixIn):
         guild: discord.Guild,
         tier_id: int,
         season: int | None = None,
-        name: str | None = None,
     ) -> list[TeamSeasonStats]:
         """Season stats for every team in a tier, in a single request."""
         async with self.api_client(guild) as client:
@@ -204,8 +201,7 @@ class TierMixIn(RSCMixIn):
                 return await api.tiers_team_stats_list(
                     id=tier_id,
                     league=self._league[guild.id],
-                    name=name,
-                    season=season,
+                    season_number=season,
                     _request_timeout=API_TIMEOUT,
                 )
             except ApiException as exc:

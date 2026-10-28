@@ -2,7 +2,6 @@ import asyncio
 import logging
 import time
 from collections.abc import AsyncIterator
-from typing import cast
 
 import discord
 from redbot.core import app_commands, commands
@@ -12,14 +11,13 @@ from rscapi.models.activity_request import ActivityRequest
 from rscapi.models.activity_check import ActivityCheck
 from rscapi.models.create_member_input import CreateMemberInput
 from rscapi.models.deleted import Deleted
-from rscapi.models.drop_a_player_from_a_league import DropAPlayerFromALeague
 from rscapi.models.elevated_role import ElevatedRole
 from rscapi.models.elevated_role_input import ElevatedRoleInput
 from rscapi.models.intent_to_play_request import IntentToPlayRequest
 from rscapi.models.league_player import LeaguePlayer
-from rscapi.models.league_player_patch import LeaguePlayerPatch
 from rscapi.models.league_player_status_enum import LeaguePlayerStatusEnum
 from rscapi.models.league_player_signup import LeaguePlayerSignup
+from rscapi.models.member_league_drop_request import MemberLeagueDropRequest
 from rscapi.models.paginated_member_list import PaginatedMemberList
 from rscapi.models.member import Member
 from rscapi.models.member_transfer_request import MemberTransferRequest
@@ -1242,7 +1240,7 @@ class MemberMixIn(RSCMixIn):
                 return await api.members_stats_retrieve(
                     player.id,
                     self._league[guild.id],
-                    season=season,
+                    season_number=season,
                     stats_type=stats_type.value,
                 )
             except ApiException as exc:
@@ -1366,10 +1364,10 @@ class MemberMixIn(RSCMixIn):
         base_mmr: int,
         current_mmr: int,
         tier: int,
-        status: Status | None = None,
+        status: Status,
         team_name: str | None = None,
         contract_length: int | None = None,
-    ) -> LeaguePlayerPatch:
+    ) -> LeaguePlayer:
         async with self.api_client(guild) as client:
             api = MembersApi(client)
             data = LeaguePlayerSignup(
@@ -1377,7 +1375,7 @@ class MemberMixIn(RSCMixIn):
                 base_mmr=base_mmr,
                 current_mmr=current_mmr,
                 tier=tier,
-                status=LeaguePlayerStatusEnum(status.value) if status else None,
+                status=LeaguePlayerStatusEnum(status.value),
                 team_name=team_name,
                 contract_length=contract_length,
             )
@@ -1397,7 +1395,7 @@ class MemberMixIn(RSCMixIn):
     ) -> Member:
         async with self.api_client(guild) as client:
             api = MembersApi(client)
-            data = DropAPlayerFromALeague(
+            data = MemberLeagueDropRequest(
                 league=self._league[guild.id],
             )
             try:
@@ -1405,6 +1403,6 @@ class MemberMixIn(RSCMixIn):
                     f"Droppping {member.display_name} ({member.id}) from league {data}",
                     guild=guild,
                 )
-                return await api.members_member_league_drop_create(id=member.id, league_player_signup=cast("LeaguePlayerSignup", data))
+                return await api.members_member_league_drop_create(id=member.id, member_league_drop_request=data)
             except ApiException as exc:
                 raise RscException(response=exc)

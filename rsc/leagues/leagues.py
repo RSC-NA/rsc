@@ -447,7 +447,7 @@ class LeagueMixIn(RSCMixIn):
             if not waiver_period.tzinfo:
                 tz = await self.timezone(guild)
                 waiver_period = waiver_period.replace(hour=12, minute=0, second=0, microsecond=0, tzinfo=tz)
-            data.waiver_period = waiver_period.isoformat()
+            data.waiver_period = waiver_period
 
         async with self.api_client(guild) as client:
             api = LeaguePlayersApi(client)
@@ -455,7 +455,6 @@ class LeagueMixIn(RSCMixIn):
             try:
                 result = await api.league_players_partial_update(
                     id=player_id,
-                    league=self._league[guild.id],
                     patched_league_player_patch=data,
                 )
                 log.debug(f"Patch Result: {result}")

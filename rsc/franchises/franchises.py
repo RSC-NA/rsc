@@ -256,12 +256,9 @@ class FranchiseMixIn(RSCMixIn):
             return result
 
     async def delete_franchise(self, guild: discord.Guild, id: int) -> None:
-        async with self.api_client(guild) as client:
-            api = FranchisesApi(client)
-            try:
-                await api.franchises_destroy(id)
-            except ApiException as exc:
-                raise RscException(response=exc)
+        # The API has never deleted franchises (it answered 400 "Not implemented"), and
+        # rscapi 2.2.0 dropped the call.
+        raise RscException(message="The API does not support deleting franchises.")
 
     async def rebrand_franchise(self, guild: discord.Guild, id: int, rebrand: FranchiseRebrand) -> Franchise:
         async with self.api_client(guild) as client:
