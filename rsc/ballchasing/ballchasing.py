@@ -874,7 +874,6 @@ class BallchasingMixIn(RSCMixIn):
             gm_mentions=gm_mentions,
             match_url=await self.match_page_link(guild, match),
             ballchasing_url=link,
-            reported_at=discord.utils.utcnow(),
         )
 
     async def match_page_link(self, guild: discord.Guild, match: Match) -> str | None:

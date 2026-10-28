@@ -1,4 +1,3 @@
-from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock
 
 import discord
@@ -11,7 +10,6 @@ from rsc.enums import MatchType, PostSeasonType
 
 GUILD_ID = 1234
 LEAGUE_ID = 1
-REPORTED = datetime(2026, 10, 28, 22, 47, tzinfo=UTC)
 
 
 def _team(name: str, *, tier: str | None = "Elite", franchise: str = "Hex Systems", gm_id: int | None = None) -> MagicMock:
@@ -47,7 +45,6 @@ def _card(**overrides) -> MatchResultCard:
         "gm_mentions": ["<@11>", "<@22>"],
         "match_url": "https://www.rscna.com/matches/36901/?league=1&season=11&source=matches",
         "ballchasing_url": "https://ballchasing.com/group/abc",
-        "reported_at": REPORTED,
     }
     fields.update(overrides)
     return MatchResultCard(**fields)
@@ -99,7 +96,7 @@ class TestRender:
         section = _section(view)
         assert _texts(section) == [
             "-# Elite · Match Day 7 · Final\n## Quantum 3\N{NO-BREAK SPACE}\N{EN DASH}\N{WORD JOINER}\N{NO-BREAK SPACE}1 Voltage",
-            "Quantum wins the series",
+            # No winner line: the score already says it
             "GMs <@11> · <@22>",
         ]
         assert isinstance(section.accessory, ui.Thumbnail)
@@ -107,15 +104,11 @@ class TestRender:
         assert files == []
         assert _container(view).accent_colour == discord.Colour.orange()
 
-    def test_away_win_and_escaped_names(self):
+    def test_escaped_names(self):
         match = _match()
         match.away_team.name = "Under_score"
         view, _ = _card(match=match, result=_result(0, 3)).render()
-        assert _texts(_section(view))[1] == r"Under\_score wins the series"
-
-    def test_tie(self):
-        view, _ = _card(result=_result(2, 2)).render()
-        assert _texts(_section(view))[1] == "Series tied"
+        assert _texts(_section(view))[0].endswith(r"3 Under\_score")
 
     def test_link_buttons(self):
         view, _ = _card().render()
@@ -130,7 +123,7 @@ class TestRender:
 
     def test_no_gms_no_gm_line(self):
         view, _ = _card(gm_mentions=[]).render()
-        assert len(_texts(_section(view))) == 2
+        assert len(_texts(_section(view))) == 1
 
     def test_no_tier_drops_it_from_the_label(self):
         view, _ = _card(match=_match(home_tier=None)).render()
@@ -148,11 +141,11 @@ class TestRender:
         card = _card(logo_url=None)
         assert card.render()[1][0] is not card.render()[1][0]
 
-    def test_footer_and_reporter_replays_line(self):
+    def test_no_footer_and_reporter_replays_line(self):
         public, _ = _card().render()
         reporter, _ = _card().render(replays="Uploaded **4**")
-        assert _texts(_container(public)) == [f"-# Reported {discord.utils.format_dt(REPORTED, 'R')}"]
-        assert _texts(_container(reporter)) == ["-# Replays: Uploaded **4**", f"-# Reported {discord.utils.format_dt(REPORTED, 'R')}"]
+        assert _texts(_container(public)) == []
+        assert _texts(_container(reporter)) == ["-# Replays: Uploaded **4**"]
 
     def test_within_component_limits(self):
         view, _ = _card().render(replays="Uploaded **4**")

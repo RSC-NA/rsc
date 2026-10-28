@@ -2,7 +2,6 @@
 
 from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import datetime
 from pathlib import Path
 
 import discord
@@ -54,7 +53,6 @@ class MatchResultCard:
     gm_mentions: Sequence[str]
     match_url: str | None
     ballchasing_url: str | None
-    reported_at: datetime
 
     def render(self, *, replays: str | None = None) -> tuple[ui.LayoutView, list[discord.File]]:
         """The card, plus any file it references. A fresh File each call, since a send consumes it.
@@ -63,11 +61,6 @@ class MatchResultCard:
         """
         home, away = self.match.home_team, self.match.away_team
         home_wins, away_wins = self.result.home_wins or 0, self.result.away_wins or 0
-        if home_wins == away_wins:
-            outcome = "Series tied"
-        else:
-            outcome = f"{discord.utils.escape_markdown(home.name if home_wins > away_wins else away.name)} wins the series"
-
         label = " · ".join(filter(None, [home.tier, match_label(self.match), "Final"]))
         # No-break spaces around the dash, and a word joiner after it, keep the score on one line on phones
         score = f"{home_wins}\N{NO-BREAK SPACE}\N{EN DASH}\N{WORD JOINER}\N{NO-BREAK SPACE}{away_wins}"
@@ -81,7 +74,7 @@ class MatchResultCard:
             files.append(logo)
             thumbnail = ui.Thumbnail(logo)
 
-        section = ui.Section(ui.TextDisplay(headline), ui.TextDisplay(outcome), accessory=thumbnail)
+        section = ui.Section(ui.TextDisplay(headline), accessory=thumbnail)
         if self.gm_mentions:
             # Its own line, and a TextDisplay: mentions here ping, embed mentions never do
             section.add_item(ui.TextDisplay(f"GMs {' · '.join(self.gm_mentions)}"))
@@ -99,7 +92,6 @@ class MatchResultCard:
 
         if replays:
             container.add_item(ui.TextDisplay(f"-# Replays: {replays}"))
-        container.add_item(ui.TextDisplay(f"-# Reported {discord.utils.format_dt(self.reported_at, 'R')}"))
 
         view = ui.LayoutView(timeout=None)
         view.add_item(container)

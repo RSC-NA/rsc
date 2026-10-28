@@ -293,22 +293,21 @@ Each spec uses only what discord.py 2.7.1 supports. Mockups are in the published
   - a `Section` whose text column reads:
     - `-# Elite · Match Day 7 · Final` (subtext)
     - `## Quantum 3 – 1 Voltage`
-    - `Quantum wins the series`
     - **`GMs @Monty · @Sable` on its own TextDisplay line**, as the user requested
   - the winner's franchise logo as the Section's `Thumbnail` accessory;
-  - an `ActionRow` of link buttons, "Match page" and "Ballchasing";
-  - `-# Reported <t:…:R>`.
-- 10 of 40 components. The match-type title switch (MD / Pre / playoff round) is unchanged.
+  - an `ActionRow` of link buttons, "Match page" and "Ballchasing".
+- 8 of 40 components. The match-type title switch (MD / Pre / playoff round) is unchanged.
 - GM pings move from `content` into their own TextDisplay (embed mentions never ping), sent with `AllowedMentions(users=True)`. A GM who isn't in the server is left out, and the line is dropped if neither GM is found.
 - No login note. The user removed the "needs an rscna.com login" subtext.
 - The score uses no-break spaces and a word joiner around the en dash, so on a phone it never wraps mid-score.
 - Match page URL and season id as decided in §4 (API URL base, startup season cache).
 - **Implemented (2026-10-28, branch `discord-ui-phase-3`):** `rsc/ballchasing/views.py` (`MatchResultCard`, `match_label`) and `BallchasingMixIn.match_result_card` / `match_page_link`.
   - Labels are spelled out: "Preseason 2", "Wildcard", "Quarterfinals", "Semifinals", "Finals", or "Playoffs" for the generic round; `MatchType.FINALS` reads "Finals".
-  - The reporter's private copy adds `-# Replays: …` above the footer.
+  - The reporter's private copy adds a `-# Replays: …` line under the buttons.
   - Thumbnail fallback order: winning franchise logo, then server icon, then the bundled `rsc/resources/rsc_logo.png`, a 256px trim of `2021_rsc_logo_v3_600dpi-01.png`.
   - Preview it live with `/pingtest style:match_result`.
-- **Tied series (decided 2026-10-28):** the headline stays `Quantum 2 – 2 Voltage`, the winner line reads **"Series tied"**, and the thumbnail falls back to the server icon, as today's embed already does when there's no winning franchise logo.
+- **Tied series (decided 2026-10-28):** the headline stays `Quantum 2 – 2 Voltage`, and the thumbnail falls back to the server icon, as today's embed already does when there's no winning franchise logo.
+- **Trimmed after the live test (2026-10-28):** the user dropped the winner line ("Quantum wins the series" / "Series tied"), since the score line already says it, and the `-# Reported <t:…:R>` countdown footer.
 
 ---
 
