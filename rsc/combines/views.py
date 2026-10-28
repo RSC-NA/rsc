@@ -128,7 +128,8 @@ class LobbyCard(BaseModel):
         if final or not vc_url:
             # The voice channels are gone once the match is over, so no Join button
             return ui.TextDisplay("\n".join(texts))
-        return ui.Section(*(ui.TextDisplay(t) for t in texts), accessory=ui.Button(label="Join VC", url=vc_url))
+        # Link buttons can only be grey, so the label alone tells Home from Away
+        return ui.Section(*(ui.TextDisplay(t) for t in texts), accessory=ui.Button(label=f"Join {team} VC", url=vc_url))
 
 
 def _code(text: str) -> str:

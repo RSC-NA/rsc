@@ -77,9 +77,12 @@ class TestRenderLive:
         _, home, away = _sections(_card().render())
         assert _texts(home) == ["**Home**", "-# Nova makes the lobby", "<@1> · <@2> · <@3>"]
         assert _texts(away) == ["**Away**", "-# Uploads the replays", r"<@4> · <@5> · Off\_server"]
-        for section, url in ((home, "https://discord.com/channels/1/10"), (away, "https://discord.com/channels/1/11")):
+        for section, label, url in (
+            (home, "Join Home VC", "https://discord.com/channels/1/10"),
+            (away, "Join Away VC", "https://discord.com/channels/1/11"),
+        ):
             assert isinstance(section.accessory, ui.Button)
-            assert (section.accessory.label, section.accessory.url, section.accessory.style) == ("Join VC", url, discord.ButtonStyle.link)
+            assert (section.accessory.label, section.accessory.url, section.accessory.style) == (label, url, discord.ButtonStyle.link)
 
     def test_missing_emoji_reads_plain_live(self):
         header = _sections(_card().render())[0]
