@@ -1,7 +1,7 @@
 import asyncio
 import copy
 import json
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import discord
 import pytest
@@ -47,6 +47,13 @@ def _request(data=None, *, bad_json: bool = False):
     else:
         request.json = AsyncMock(return_value=copy.deepcopy(data))
     return request
+
+
+@pytest.fixture(autouse=True)
+def _clear_active_lobbies():
+    runner.active_lobbies.clear()
+    yield
+    runner.active_lobbies.clear()
 
 
 def _mixin(guild=None, *, active=True):
@@ -113,4 +120,44 @@ class TestStartCombinesGame:
         await asyncio.gather(*runner.background_tasks)
 
         assert resp.status == 200
+        assert m.create_combine_lobby_channel.await_count == 2
+
+
+class TestDuplicateLobbies:
+    async def test_concurrent_duplicate_is_created_once(self):
+        guild = MagicMock()
+        guild.id = GUILD_ID
+        m = _mixin(guild)
+        m.create_combine_lobby_channel.return_value = [MagicMock(), MagicMock()]
+
+        first = await m.start_combines_game(_request({"101": _lobby_payload()}))
+        second = await m.start_combines_game(_request({"101": _lobby_payload()}))
+        await asyncio.gather(*runner.background_tasks)
+
+        assert (first.status, second.status) == (200, 200)
+        m.create_combine_lobby_channel.assert_awaited_once()
+
+    async def test_lobby_that_created_nothing_can_be_retried(self):
+        m = _mixin(MagicMock())
+
+        for _ in range(2):
+            await m.start_combines_game(_request({"101": _lobby_payload()}))
+            await asyncio.gather(*runner.background_tasks)
+
+        assert m.create_combine_lobby_channel.await_count == 2
+
+    async def test_teardown_allows_lobby_again(self):
+        guild = MagicMock()
+        guild.id = GUILD_ID
+        guild.channels = []
+        m = _mixin(guild)
+        m.create_combine_lobby_channel.return_value = [MagicMock(), MagicMock()]
+
+        await m.start_combines_game(_request({"101": _lobby_payload()}))
+        await asyncio.gather(*runner.background_tasks)
+        with patch("rsc.combines.runner.asyncio.sleep", AsyncMock()):
+            await m.teardown_combine_lobby(guild, lobby_id=101)
+        await m.start_combines_game(_request({"101": _lobby_payload()}))
+        await asyncio.gather(*runner.background_tasks)
+
         assert m.create_combine_lobby_channel.await_count == 2

@@ -24,6 +24,11 @@ log = logging.getLogger("red.rsc.devleague.runner")
 
 background_tasks = set()
 
+# (guild ID, match ID) of lobbies being created or still up. New channels can
+# take a moment to reach the guild cache, so a duplicate webhook could slip past
+# the channel name check without this.
+active_lobbies: set[tuple[int, int]] = set()
+
 # Discord allows 50 channels per category. Leave headroom before overflowing.
 CATEGORY_CHANNEL_LIMIT = 40
 OVERFLOW_CATEGORIES = range(2, 5)
@@ -112,12 +117,23 @@ class DevLeagueRunnerMixIn(RSCMixIn):
     async def _create_devleague_lobbies(self, lobbies: list[models.DevLeagueLobby]):
         # One failed lobby must not stop the rest from being created.
         for lobby in lobbies:
+            key = (lobby.guild_id, lobby.id)
+            if key in active_lobbies:
+                log.warning(f"Dev League match {lobby.id} is already active. Skipping duplicate.")
+                continue
+
+            active_lobbies.add(key)
+            channels: list[discord.VoiceChannel] = []
             try:
-                await self.create_devleague_lobby_channels(lobby)
+                channels = await self.create_devleague_lobby_channels(lobby)
             except (NotInGuild, DevLeagueNotActive):
                 log.warning(f"Dev League became unavailable before match {lobby.id} was created")
             except Exception as exc:
                 log.exception(f"Error creating dev league match {lobby.id}", exc_info=exc)
+            finally:
+                # Nothing was created, so let a later request try again.
+                if not channels:
+                    active_lobbies.discard(key)
 
     async def create_devleague_lobby_channels(self, lobby: models.DevLeagueLobby) -> list[discord.VoiceChannel]:
         log.debug(f"Creating dev league lobby channels for match {lobby.id}")
@@ -316,6 +332,7 @@ class DevLeagueRunnerMixIn(RSCMixIn):
         await asyncio.sleep(30)
 
         log.debug(f"Tearing down dev league lobby: {lobby_id}")
+        active_lobbies.discard((guild.id, lobby_id))
 
         category = await self._get_devleague_category(guild)
         if not category:

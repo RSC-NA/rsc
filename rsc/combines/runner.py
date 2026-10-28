@@ -18,6 +18,11 @@ log = logging.getLogger("red.rsc.combines.runner")
 
 background_tasks = set()
 
+# (guild ID, lobby ID) of lobbies being created or still up. New channels can
+# take a moment to reach the guild cache, so a duplicate webhook could slip past
+# the channel name check without this.
+active_lobbies: set[tuple[int, int]] = set()
+
 
 class CombineRunnerMixIn(RSCMixIn):
     def __init__(self):
@@ -112,12 +117,23 @@ class CombineRunnerMixIn(RSCMixIn):
     async def _create_combine_lobbies(self, lobbies: list[models.CombinesLobby]):
         # One failed lobby must not stop the rest from being created.
         for lobby in lobbies:
+            key = (lobby.guild_id, lobby.id)
+            if key in active_lobbies:
+                log.warning(f"Combine lobby {lobby.id} is already active. Skipping duplicate.")
+                continue
+
+            active_lobbies.add(key)
+            channels: list[discord.VoiceChannel] = []
             try:
-                await self.create_combine_lobby_channel(lobby)
+                channels = await self.create_combine_lobby_channel(lobby)
             except (NotInGuild, CombinesNotActive):
                 log.warning(f"Combines became unavailable before lobby {lobby.id} was created")
             except Exception as exc:
                 log.exception(f"Error creating combine lobby {lobby.id}", exc_info=exc)
+            finally:
+                # Nothing was created, so let a later request try again.
+                if not channels:
+                    active_lobbies.discard(key)
 
     async def create_combine_lobby_channel(
         self,
@@ -309,6 +325,7 @@ class CombineRunnerMixIn(RSCMixIn):
         await asyncio.sleep(30)
 
         log.debug(f"Tearing down combine lobby: {lobby_id}")
+        active_lobbies.discard((guild.id, lobby_id))
 
         # Loop guild since we don't know the lobby tier
         gchannels = guild.channels

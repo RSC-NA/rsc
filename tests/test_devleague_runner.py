@@ -14,6 +14,13 @@ from rsc.devleague.runner import DevLeagueRunnerMixIn
 GUILD_ID = 991044575567179856
 
 
+@pytest.fixture(autouse=True)
+def _clear_active_lobbies():
+    runner.active_lobbies.clear()
+    yield
+    runner.active_lobbies.clear()
+
+
 def _player(discord_id: int, team: str, match_id: int = 101) -> dict:
     return {
         "discord_id": str(discord_id),
@@ -181,15 +188,51 @@ class TestStartDevLeagueGame:
 
     async def test_failed_lobby_does_not_stop_the_rest(self):
         m = _mixin(_guild())
-        m.create_devleague_lobby_channels = AsyncMock(
-            side_effect=[discord.HTTPException(MagicMock(status=500), "boom"), []]
-        )
+        m.create_devleague_lobby_channels = AsyncMock(side_effect=[discord.HTTPException(MagicMock(status=500), "boom"), []])
 
         resp = await m.start_devleague_game(_request({"101": _lobby_payload(101), "102": _lobby_payload(102)}))
         await asyncio.gather(*runner.background_tasks)
 
         assert resp.status == 200
         assert [c.args[0].id for c in m.create_devleague_lobby_channels.await_args_list] == [101, 102]
+
+
+class TestDuplicateDevLeagueLobbies:
+    async def test_concurrent_duplicate_is_created_once(self):
+        m = _mixin(_guild())
+        m.create_devleague_lobby_channels = AsyncMock(return_value=[MagicMock(), MagicMock()])
+
+        first = await m.start_devleague_game(_request({"101": _lobby_payload()}))
+        second = await m.start_devleague_game(_request({"101": _lobby_payload()}))
+        await asyncio.gather(*runner.background_tasks)
+
+        assert (first.status, second.status) == (200, 200)
+        m.create_devleague_lobby_channels.assert_awaited_once()
+
+    async def test_lobby_that_created_nothing_can_be_retried(self):
+        m = _mixin(_guild())
+        m.create_devleague_lobby_channels = AsyncMock(return_value=[])
+
+        for _ in range(2):
+            await m.start_devleague_game(_request({"101": _lobby_payload()}))
+            await asyncio.gather(*runner.background_tasks)
+
+        assert m.create_devleague_lobby_channels.await_count == 2
+
+    async def test_teardown_allows_lobby_again(self):
+        guild = _guild()
+        m = _mixin(guild, _category(guild))
+        m._devleague_categories = MagicMock(return_value=[])
+        m.create_devleague_lobby_channels = AsyncMock(return_value=[MagicMock(), MagicMock()])
+
+        await m.start_devleague_game(_request({"101": _lobby_payload()}))
+        await asyncio.gather(*runner.background_tasks)
+        with patch("rsc.devleague.runner.asyncio.sleep", AsyncMock()):
+            await m.teardown_devleague_lobby(guild, lobby_id=101)
+        await m.start_devleague_game(_request({"101": _lobby_payload()}))
+        await asyncio.gather(*runner.background_tasks)
+
+        assert m.create_devleague_lobby_channels.await_count == 2
 
 
 class TestCreateDevLeagueLobbyChannels:

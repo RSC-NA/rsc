@@ -34,8 +34,10 @@ class LeagueMixIn(RSCMixIn):
     # Web App
 
     async def league_player_update_handler(self, request: web.Request):
+        # Placeholder route, never implemented, and nothing is known to post to it.
+        # League player changes reach the bot through the rsc/events poller instead.
+        # Kept so a caller gets a clean 501 rather than a dropped connection.
         log.debug("Got league player update event.")
-        # Not handled yet. Without a response aiohttp drops the connection.
         return web.Response(status=501)  # 501 Not Implemented
 
     # Commands
