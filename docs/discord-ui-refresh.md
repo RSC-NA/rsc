@@ -13,10 +13,12 @@ This file is the working record for the refresh. Update the status table as phas
 | Phase | Scope | Status |
 |---|---|---|
 | 1 | Fix the bugs listed under [Bugs](#bugs) | **Done** (2026-10-28, branch `discord-ui-phase-1`) |
-| 2 | Shared building blocks: `rsc/layouts.py` (`Card`, `ConfirmLayoutView`), `LayoutView` support in `DMTask` | Open |
+| 2 | Shared building blocks: `rsc/layouts.py` (`Card`, `ConfirmLayoutView`), `LayoutView` support in `DMTask` | **In progress** (started 2026-10-28) |
 | 3 | Migrate public announcements: transactions and trades, combine and Dev League lobbies, help and guide posts | Open |
 | 4 | Upgrade the modals: Report Match radios, Label descriptions on admin modals, `.replay` filter once discord.py ships it | Open |
 | 5 | Optional: errors and logs stay as embeds unless `ResultView` gets a one-line constructor | Open |
+
+> **Remove before the final commit:** the temporary `/pingtest` command in `rsc/developer/developer.py` (added 2026-10-28, uncommitted). It sends a mention as a V2 TextDisplay, an embed, plain content, or a V2 DM, so pings can be checked live.
 
 ---
 
@@ -59,12 +61,25 @@ Read-only cosmetics (no bot control): server tags (`Member.primary_guild`), name
 - Each modal holds at most 5 top-level items. Every input must sit in a Label.
 - Webhooks need `?with_components=true` (we don't send components via webhooks today).
 
-### Mentions: embeds vs. TextDisplay (verified 2026-10-28)
+### Mentions: embeds vs. TextDisplay (**settled**, re-verified 2026-10-28)
 
-- **Classic embeds do not ping.** Discord's message docs say `allowed_mentions` applies to "the message content" and "the content of components attached to that message". Embeds aren't on that list, and community reports agree that embed mentions render but don't notify. This is why `announce_transaction` sends the pings in `content` and then edits the content away.
-- **V2 TextDisplay mentions do ping.** The component reference, Text Display section: *"When sent in a message, pingable mentions (@user, @role, etc) present in this component will ping and send notifications based on the value of the allowed mention object set in message.allowed_mentions."*
-- Red's bot-wide default is `AllowedMentions(everyone=False, roles=False)`. Per-message `AllowedMentions(users=True)` merges on top of it, so `@everyone` and roles stay blocked.
-- Before moving transactions to V2, send one test post in a staging guild.
+> **Rule: a mention inside an embed never pings. A mention in message `content` or inside a Components V2 TextDisplay does ping.** Any message that must notify someone (transactions, lobby pings, match results, DMs) needs its mentions in `content` (legacy) or a TextDisplay (V2), never only in an embed.
+
+Evidence:
+
+1. **Discord developer docs, Allowed Mentions Object.** `allowed_mentions` decides "whether users will receive notifications when you include mentions in the message content … or the content of components attached to that message". For `@everyone`, "the mention format … must also be present in the content of the message or its components." Embeds are not a notifying location. The `mentions` arrays are rebuilt from `content`, or from `components` on a V2 message, never from embeds.
+2. **Discord developer docs, Text Display component:** *"When sent in a message, pingable mentions (@user, @role, etc) present in this component will ping and send notifications based on the value of the allowed mention object set in message.allowed_mentions."*
+3. **discord.js guide FAQ:** *"Mentions in embeds may resolve correctly in embed titles, descriptions and field values but will never notify the user."*
+4. **discord-api-docs Discussion #4110** (2021, still unanswered and never shipped): a request to make embed mentions ping. A reply notes embed mentions "were never truly supported, whether the mention resolves is luck of the draw". Mobile clients often fail to resolve them, showing raw IDs or "invalid-user".
+5. **Our own code depends on this.** `announce_transaction` sends the pings in `content` and then edits the content away. The combines/Dev League lobby announcements put `players_fmt` in `content` next to the embed. `announce_trade` does the same.
+
+Consequences for the redesign:
+
+- **Legacy embeds:** keep pings in `content`. Mentions in fields or descriptions are display-only.
+- **V2 messages:** have no `content`. Put pings in a TextDisplay; they notify. This replaces the send-then-edit trick. Pass explicit `allowed_mentions` (Red's bot-wide default already blocks `@everyone` and roles).
+- `allowed_mentions` cannot make an embed mention ping.
+- **Verified live 2026-10-28:** the user ran `/pingtest style:text_display` and the TextDisplay mention pinged.
+- Separately, Discord search indexing of V2 TextDisplay text is **unverified**: no official source either way as of 2026-10-28. The transaction Discord ID requirement depends on it. Test by searching for a Discord ID that appears only inside a V2 message.
 
 Sources:
 - https://docs.discord.com/developers/components/reference
@@ -72,6 +87,8 @@ Sources:
 - https://docs.discord.com/developers/change-log
 - https://discordpy.readthedocs.io/en/latest/whats_new.html
 - https://discordjs.guide/popular-topics/components-v2
+- https://discordjs.guide/legacy/popular-topics/faq
+- https://github.com/discord/discord-api-docs/discussions/4110
 
 ---
 
@@ -103,6 +120,7 @@ Each bug was checked against the installed discord.py 2.7.1 source. Line numbers
 | UI-5 | Minor | Modal waits that never end, plus small issues | Fixed |
 | UI-6 | Medium | Intent view timeout replaced by "Something went wrong… submit a modmail" (found during the fix) | Fixed |
 | UI-7 | Low | Cancelling a franchise rebrand says "You have cancelled deleting this franchise" (found during the fix) | Fixed |
+| UI-8 | Low | `/accounts` crashes with `UnboundLocalError` when the trackers API call fails (found 2026-10-28 during the 05 mockup) | Fixed |
 
 ### UI-1 — Closing the sign-up modal strands the user
 
@@ -146,6 +164,10 @@ Discord requires every interaction to be acknowledged within 3 seconds, and clie
 - `TradeAnnouncementView` (`rsc/transactions/views.py:25`) is never used, and it ignores its `timeout` argument.
 - `if not trade_modal.trade` (`rsc/transactions/transactions.py:1280`) tests the `TextInput` object, not its value, so the check always passes. It's harmless because the field is required.
 
+### UI-8 — `/accounts` crashes when the API call fails
+
+`rsc/trackers/trackers.py:402-405`. `_accounts` catches `RscException` and sends the error embed, but doesn't `return`. Execution falls through to `if not trackers:`, and `trackers` was never assigned, so it raises `UnboundLocalError`. The player sees the API error, then the command fails and the error lands in the logs. **Fixed:** added `return` after the followup, with a regression test in `tests/test_trackers.py::TestAccountsCommand`.
+
 ### Phase 1 changes (verified: 1542 tests pass, ruff and format clean, ty at the baseline 9 warnings)
 
 - UI-1: `signup.py` adds an "Enter name & trackers" button that reopens the modal. The modal times out with the view, and only the first submission counts. In `members.py`, `/signup`, `/permfa` and the intent flow return early when the view timed out (UI-6).
@@ -164,70 +186,111 @@ Discord requires every interaction to be acknowledged within 3 seconds, and clie
 
 Each spec uses only what discord.py 2.7.1 supports. Mockups are in the published artifact.
 
-### 01 — Transaction card (`build_transaction_embed`, `rsc/transactions/transactions.py`)
+### 01 — Transaction card (`build_transaction_embed`, `rsc/transactions/transactions.py`) — **LOCKED: option B, full-width text, banner last** (2026-10-28)
 
-- `Container(accent_colour=tier colour)` contains:
-  - a `MediaGallery` holding the transaction banner (`attachment://Signed.png` etc.) at the top;
-  - a `Section` with the `## headline` and a detail line, and the franchise logo as a `Thumbnail` accessory (only when a logo exists);
-  - a `Separator`;
-  - a TextDisplay with player and GM mentions (these ping, see above);
-  - an `ActionRow` with persistent "Player card" and "Team roster" `DynamicItem` buttons;
-  - a `-#` subtext footer with the Discord ID and timestamp.
-- This removes the send-then-edit ping step.
-- Trades: one Section per franchise. When text would pass 4,000 characters, add a "Full trade" link button to the web UI.
+- V2 card modelled on today's embed, in today's order:
+  - `Container(accent_colour=tier colour)` holding:
+    - `### Supercalifragilistic has been signed by Quantum (Elite)`: today's author-line wording;
+    - one line of facts, `@player · Hex Systems · GM @Monty`. The mentions ping from the TextDisplay, which replaces the send-then-edit trick;
+    - a `MediaGallery` with the transaction banner (`attachment://Signed.png` etc.);
+    - a `-#` footer, `Discord ID: 138778232802508801 · <t:…:f>`.
+  - The ID wording is exactly today's footer, so one search finds old and new posts. **Search indexing of V2 text is unverified**; test it with `/pingtest` before Phase 3.
+- No thumbnail. The 84px V2 thumbnail squeezed the text on phones, which is the "too much stacked text" the user rejected. The franchise is named in the facts line. A `Section` + `Thumbnail` could add a logo later.
+- Same template for every type. Released: "X has been released to Free Agency by Team (Tier)" with the `Released.png` banner and that tier's accent.
+- Trades still need their own layout (one section per franchise, with an overflow link past 4,000 characters).
 
-Sketch:
+### 02 — Combine / Dev League lobby ready (`rsc/combines/runner.py:302`, `rsc/devleague/runner.py:314`) — **LOCKED: option A, Join beside each team** (2026-10-28)
 
-```python
-class TransactionCard(discord.ui.LayoutView):
-    def __init__(
-        self, *, banner: discord.File, headline: str, detail: str, logo: str | None, people: str, footer: str, colour: discord.Colour
-    ):
-        super().__init__(timeout=None)
-        head = [TextDisplay(f"## {headline}"), TextDisplay(detail)]
-        top = [Section(*head, accessory=Thumbnail(logo))] if logo else head
-        self.add_item(
-            Container(
-                MediaGallery(discord.MediaGalleryItem(banner)),
-                *top,
-                Separator(),
-                TextDisplay(people),
-                ActionRow(PlayerCardButton(...), RosterButton(...)),
-                TextDisplay(f"-# {footer}"),
-                accent_colour=colour,
-            )
-        )
+- **Header:** `## <a:live:ID> LIVE · Combine 4812` on a green Container. The Match link button is the header Section's accessory.
+- **Animated application emoji** `live`: a pulsing green dot, the only emoji on the card. It carries state: live, then gone when the card turns Final.
+  - Upload a 128×128 animated GIF once (portal, or `bot.create_application_emoji(name=, image=)`).
+  - Look it up at cog load with `bot.fetch_application_emojis()`; `str(emoji)` gives `<a:live:id>`.
+  - Verified in discord.py 2.7.1 `client.py` (versionadded 2.5).
+  - If the emoji is missing, fall back to plain `LIVE`.
+- **Credentials:** lobby and password on a line each, as inline code (monospace on a dark grey chip).
+- `-#` "Started <t:…:R>" line.
+- **Teams:** one `Section` per team. Its TextDisplays are the team label, the role ("Nova makes the lobby" / "Uploads the replays") and the player mentions, which ping. The accessory is a "Join VC" **link button (grey; link buttons can't be coloured, user confirmed 2026-10-28)** to the voice channel's `jump_url`: one tap into the channel. That's 19 components.
+- **Finished state:** in teardown, after the 30 s wait and before deleting the voice channels, edit the stored message to `## Final · Combine 4812` with the score (fetched from the combines API; the webhook payload only has a template). The accent turns grey, the dot and Join buttons are removed, and the Match link stays. This needs `lobby id → (channel id, message id, DM message ids)` stored in Config (`LobbyMessages`) at announce time.
+- **Player DMs (new):** the same card, DM'd to each player when the lobby is created, with a personal line "You're on **Home** · you make the lobby" (20 components).
+  - Sent via `DMHelper`; `DMTask.view` and `enqueue(view=)` must accept `LayoutView`.
+  - About 1.5 s per DM, so 120 DMs take about 3 min. Use a separate lobby lane or a priority flag.
+  - A `precheck` against `active_lobbies` drops stale DMs.
+  - `on_result` stores the DM message IDs so teardown edits them to Final too.
+  - Closed DMs fail silently; the channel ping is the fallback.
+  - Optional per-player opt-out.
+- **Dev League:** the same `LobbyCard(kind=…)` builder.
+  - Title `LIVE · Dev League A Match 2207`. Dev League tiers are letter grades S+…F (`rsc/devleague/tiers.py`), not league tiers.
+  - The Match link goes to `{DEVLEAGUE_API_URL}/match/{id}`.
+  - No lobbyinfo hint (Dev League has no such command) and no "uploads replays" role. Green accent, since there's no letter-grade colour map yet.
+  - DMs work the same way.
 
+### 03 — Combines guide (`send_combines_how_to_play`, `rsc/combines/manager.py:363`) — **LOCKED: option A, step sections** (2026-10-28)
 
-# await tchan.send(view=card, files=files, allowed_mentions=discord.AllowedMentions(users=True))
-```
+- Replace the five messages with one Container titled "How to play combines". Steps 1–4 are each a `Section` with that step's screenshot as a `Thumbnail` (`attachment://combines_login.png` etc.). Step 5 is a TextDisplay. Then a Separator, an ActionRow with "Open Dev League" (link) and "Where are my replays?" (persistent `DynamicItem`, ephemeral `Demos` path), and a `-#` credit line. That's 20 of 40 components, sent with `AllowedMentions.none()` so the credit line doesn't ping on re-posts.
+- Step copy is short, about 3–4 lines at 375px beside the thumbnail:
+  - 1 · Log in: "Go to devleague.rscna.com and log in with Discord."
+  - **2 · Check in: "Opens 10 minutes before start. Hit Check In on the site or run `/combines checkin`."** The bot check-in option was requested by the user.
+  - 3 · Wait for your ping: "Watch #combines-announcements. Missed it? Run `/combines lobbyinfo`."
+  - 4 · Report: "Home hosts and reports the score. Away uploads replays, then confirms."
+  - 5 · Queue again: "Check in again for every series. Leave the queue with `/combines checkout`."
+- Commands render as clickable chips (`</combines checkin:ID>`). The ID comes from `tree.fetch_commands()`, and the subcommand's `.mention` is checked against the discord.py 2.7.1 `AppCommandGroup.mention`. If the lookup fails, they fall back to inline code.
 
-### 02 — Combine / Dev League lobby ready (`rsc/combines/runner.py:302`, `rsc/devleague/runner.py:314`)
+### 04 — Report Match modal (`rsc/ballchasing/modals.py`) — **LOCKED: improved copy, same layout** (approved 2026-10-28)
 
-- A Section with the title and `Lobby **name** · Password **pass**`, with the match page as a link-button accessory.
-- Home ("creates lobby") and away ("uploads replays") team blocks with mentions. They stack vertically, since V2 has no columns.
-- Voice-channel link buttons (`jump_url`).
-- Subtext pointing to `/combines lobbyinfo`.
-- Optional animated "LIVE" WebP, edited to "Finished" on teardown.
+- The user asked to keep the original layout exactly (TextDisplay, two Label + short TextInput score boxes, Label + FileUpload 1–10) and improve only the text.
+- Proposed strings, for an Elite, Match Day 7, 4-game regular season:
+  - **Title:** "Report Quantum vs Voltage" (falls back to just the matchup, cut to 45).
+  - **Text:**
+    - `**Elite** · Match Day 7 · 4-game series`
+    - `Wins must add up to 4. Attach one replay per game.`
+    - `-# Something wrong? DM the ModMail bot.`
+  - **Score boxes:** labels "Quantum games won" / "Voltage games won", descriptions "Home team" / "Away team", placeholder "Number from 0 to 4".
+  - **Upload:** "Replay files", described as "All 4 .replay files from this series". Best-of formats get matching variants.
+- Clearer error replies, e.g. "You entered 3–3, which is 6 games. This series has 4, so the wins must add up to 4."
+- **Code impact:** `/reportmatch` only looks up the match after submit, so it doesn't know the tier or format when the modal opens. To show them:
+  - move `find_match` ahead of `send_modal`, inside `asyncio.timeout(2)`;
+  - pass `match=` to `ReportMatchModal(home, away, *, match=None, day=None)`;
+  - on timeout, use the "teams only" fallback copy.
 
-### 03 — Combines guide (`send_combines_how_to_play`, `rsc/combines/manager.py:363`)
+  Bonus: the bot can say "no match found" before anyone picks replay files. Validation is unchanged.
 
-- Replace the five messages with one Container: a header, a 4-image `MediaGallery` (login, check-in, announcement, report), five numbered steps, and buttons for "Open Dev League" and "Where are my replays?" (an ephemeral reply with the `Demos` path).
-- The text is about 1,400 characters.
+### 05 — Player card (`/playerinfo`, `rsc/members/members.py:817`) — **LOCKED: refined A** (approved 2026-10-28)
 
-### 04 — Report Match modal (`rsc/ballchasing/modals.py`)
+- Contract, platform and region removed.
+- `Container(accent_colour=tier colour)` holding:
+  - a `Section`: `## Name` and the `-# @mention`, with the franchise logo as its Thumbnail;
+  - a full-width TextDisplay with the key fields, **`### Premier · Singularity`** then `@Franchise role · **Rostered**`. It sits outside the Section so the logo doesn't squeeze it on phones;
+  - a Separator, then `-# 1655 MMR · base 1640`;
+  - an ActionRow with **Team** and **Franchise** (Primary/blurple, the existing `PlayerInfoButton`) and **Trackers** (Success/green).
+- **Button colours:** link buttons are always grey, so Trackers is a new `PlayerTrackersButton` `DynamicItem`.
+  - Template `player_info:trackers:(?P<discord_id>\d{15,20})`.
+  - Registered with `add_dynamic_items()`.
+  - Replies ephemerally with every tracker account as a markdown link, through `fix_tracker_url`.
+- The "Roster" label is renamed "Team" so three buttons fit one row at 375px.
+- **`/accounts` uses the same tracker card** (user requirement at approval; `/trackers list`, the staff command, is unchanged). One shared builder, e.g. `tracker_accounts_card(player, trackers, *, ephemeral)`, renders both the Trackers button reply and `/accounts` (`rsc/trackers/trackers.py` `_accounts`), so they can't drift apart. For `/accounts`:
+  - it's public, and the heading names the player;
+  - the grey "RSC Tracker Links" link button is kept;
+  - the empty state reads "@player has no registered RL trackers.";
+  - it's sent with `AllowedMentions.none()`, so the player mention doesn't ping. Today's embed mention doesn't ping either.
+- Alternatives A1 (label lines) and A2 (tier as a role-mention chip, the only coloured text Discord draws) are kept for reference.
 
-- A TextDisplay naming the matchup, then two `Label(RadioGroup)` score pickers with options generated from the match format (0–4 for best of 7, 0–2 for best of 3), then `Label(FileUpload)`. That's exactly 4 top-level items.
-- Add `file_types=[".replay"]` once discord.py supports it. Until then, keep the description hint.
-- Admin modals: add Label descriptions. A `Checkbox` could replace boolean options such as `announce`.
+### 06 — Match result (`build_match_result_embed`, `rsc/ballchasing/ballchasing.py:862`) — **LOCKED: option B, scoreboard** (2026-10-28)
 
-### 05 — Player card (`/playerinfo`, `rsc/members/members.py:817`)
-
-- A Section with name, tier, team and status, and the avatar or franchise logo as the Thumbnail.
-- Label-and-value lines for MMR, contract and trackers.
-- Persistent Roster, Franchise and Trackers buttons.
-- One builder can serve `/team` and `/franchise` too.
-
+- `Container(accent_colour=tier colour)` holding:
+  - a `Section` whose text column reads:
+    - `-# Elite · Match Day 7 · Final` (subtext)
+    - `## Quantum 3 – 1 Voltage`
+    - `Quantum wins the series`
+    - **`GMs @Monty · @Sable` on its own TextDisplay line**, as the user requested
+  - the winner's franchise logo as the Section's `Thumbnail` accessory;
+  - an `ActionRow` of link buttons, "Match page" and "Ballchasing";
+  - `-# Reported <t:…:R>`.
+- 10 of 40 components. The match-type title switch (MD / Pre / playoff round) is unchanged.
+- GM pings move from `content` into their own TextDisplay (embed mentions never ping), sent with `AllowedMentions(users=True)`. A GM who isn't in the server is left out, and the line is dropped if neither GM is found.
+- No login note. The user removed the "needs an rscna.com login" subtext.
+- The score uses no-break spaces and a word joiner around the en dash, so on a phone it never wraps mid-score.
+- Match page URL and season id as decided in §4 (API URL base, startup season cache).
+- **Tied series (decided 2026-10-28):** the headline stays `Quantum 2 – 2 Voltage`, the winner line reads **"Series tied"**, and the thumbnail falls back to the server icon, as today's embed already does when there's no winning franchise logo.
 
 ---
 
