@@ -152,7 +152,6 @@ class PlayerTrackersButton(discord.ui.DynamicItem[discord.ui.Button], template=P
 
         member = guild.get_member(self.discord_id)
         view = await tracker_accounts_card(
-            name=member.display_name if member else str(self.discord_id),
             mention=f"<@{self.discord_id}>",
             trackers=trackers,
             avatar_url=member.display_avatar.url if member else None,

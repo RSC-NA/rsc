@@ -403,7 +403,6 @@ class TrackerMixIn(RSCMixIn):
             return
 
         view = await tracker_accounts_card(
-            name=player.display_name,
             mention=player.mention,
             trackers=trackers,
             avatar_url=player.display_avatar.url,

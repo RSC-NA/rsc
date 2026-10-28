@@ -117,25 +117,39 @@ def _tracker(platform: str, *, name: str = "Monty", platform_id: str = "76561197
 
 
 class TestTrackerAccountsCard:
-    async def test_lists_each_account_as_a_link(self):
+    async def test_groups_accounts_by_platform(self):
         view = await tracker_accounts_card(
-            name="Monty",
             mention=f"<@{PLAYER_ID}>",
-            trackers=[_tracker("STEAM"), _tracker("EPIC", name="Mon_ty")],
+            trackers=[_tracker("EPIC", name="Mon_ty"), _tracker("STEAM"), _tracker("EPIC", name="Second")],
             avatar_url="https://cdn.example/avatar.png",
         )
+        section = _container(view).children[0]
+        assert isinstance(section, ui.Section) and isinstance(section.accessory, ui.Thumbnail)
         texts = _texts(view)
-        assert texts[0] == "### Monty's accounts"
+        assert texts[0] == f"### Tracker accounts\n-# <@{PLAYER_ID}> · 3 accounts"
+        # Platforms in Platform order (Steam first), accounts in the order the API gave them
         assert texts[1].splitlines() == [
-            "- [Steam · 76561197960409023](https://rocketleague.tracker.network/rocket-league/profile/steam/Monty/overview)",
-            "- [Epic Games · Mon\\_ty](https://rocketleague.tracker.network/rocket-league/profile/epic/Mon_ty/overview)",
+            "**Steam**",
+            "- [76561197960409023](https://rocketleague.tracker.network/rocket-league/profile/steam/Monty/overview)",
+            "**Epic Games**",
+            "- [Mon\\_ty](https://rocketleague.tracker.network/rocket-league/profile/epic/Mon_ty/overview)",
+            "- [Second](https://rocketleague.tracker.network/rocket-league/profile/epic/Second/overview)",
         ]
         (link,) = _buttons(view)
         assert isinstance(link, ui.Button) and (link.label, link.url) == ("RSC Tracker Links", RSC_TRACKER_URL)
 
+    async def test_one_account_is_singular(self):
+        view = await tracker_accounts_card(mention=f"<@{PLAYER_ID}>", trackers=[_tracker("STEAM")])
+        assert _texts(view)[0].endswith("· 1 account")
+
+    async def test_unknown_platform_goes_last(self):
+        view = await tracker_accounts_card(mention=f"<@{PLAYER_ID}>", trackers=[_tracker("NEWTHING"), _tracker("STEAM")])
+        lines = _texts(view)[1].splitlines()
+        assert [line for line in lines if line.startswith("**")] == ["**Steam**", "**NEWTHING**"]
+
     async def test_empty_state(self):
-        view = await tracker_accounts_card(name="Monty", mention=f"<@{PLAYER_ID}>", trackers=[])
-        assert _texts(view) == ["### Monty's accounts", f"<@{PLAYER_ID}> has no registered RL trackers."]
+        view = await tracker_accounts_card(mention=f"<@{PLAYER_ID}>", trackers=[])
+        assert _texts(view) == [f"### Tracker accounts\n-# <@{PLAYER_ID}>", "No registered RL trackers."]
 
 
 def _interaction(cog) -> MagicMock:
@@ -179,7 +193,7 @@ class TestPlayerTrackersButton:
         assert send is not None
         assert send.kwargs["ephemeral"] is True
         assert send.kwargs["allowed_mentions"].users is False
-        assert _texts(send.kwargs["view"])[0] == "### Monty's accounts"
+        assert _texts(send.kwargs["view"])[0].startswith("### Tracker accounts")
 
 
 def _mixin(cls, **attrs):
@@ -243,4 +257,4 @@ class TestAccountsCommand:
         assert send is not None
         assert send.kwargs["ephemeral"] is False
         assert send.kwargs["allowed_mentions"].users is False
-        assert _texts(send.kwargs["view"])[0] == f"### {mock_member.display_name}'s accounts"
+        assert _texts(send.kwargs["view"])[0] == f"### Tracker accounts\n-# {mock_member.mention} · 1 account"
