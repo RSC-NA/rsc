@@ -28,11 +28,6 @@ class TradeAnnouncementModal(discord.ui.Modal, title="Trade Announcement"):
         self.stop()
 
 
-def _gap() -> ui.Separator:
-    """Blank space between the card's parts, so it doesn't read as one stacked block."""
-    return ui.Separator(visible=False, spacing=discord.SeparatorSpacing.large)
-
-
 @dataclass(frozen=True)
 class TransactionCard:
     """One player's transaction: signed, released, re-signed, subbed, retired or moved on or off IR."""
@@ -47,9 +42,11 @@ class TransactionCard:
     player_out_id: int | None = None
     franchise: str | None = None
     gm_id: int | None = None
+    # Shown beside the text: a franchise logo or server icon URL, or a bundled image such as a free agent tier badge
+    logo: str | Path | None = None
 
     def render(self) -> tuple[ui.LayoutView, list[discord.File]]:
-        """The card and its banner. A fresh File each call, since a send consumes it."""
+        """The card and the files it references. Fresh Files each call, since a send consumes them."""
         franchise = [discord.utils.escape_markdown(self.franchise)] if self.franchise else []
         gm = [f"GM <@{self.gm_id}>"] if self.gm_id else []
         if self.player_out_id:
@@ -59,21 +56,30 @@ class TransactionCard:
         else:
             facts = " · ".join([f"<@{self.player_id}>", *franchise, *gm])
 
+        # A TextDisplay, so these mentions ping; embed mentions never do
+        texts = (ui.TextDisplay(f"### {self.title}"), ui.TextDisplay(facts))
+        files: list[discord.File] = []
+        container = ui.Container(accent_colour=self.colour)
+        if self.logo is None:
+            for text in texts:
+                container.add_item(text)
+        else:
+            if isinstance(self.logo, Path):
+                logo = discord.File(self.logo, filename=self.logo.name)
+                files.append(logo)
+                thumbnail = ui.Thumbnail(logo)
+            else:
+                thumbnail = ui.Thumbnail(self.logo)
+            container.add_item(ui.Section(*texts, accessory=thumbnail))
+
+        # The banner image is padded so it fills ~70% of the card, close to the old embed's size
         banner = discord.File(self.banner, filename=self.banner.name)
+        files.append(banner)
+        container.add_item(ui.Separator(visible=False, spacing=discord.SeparatorSpacing.small))
+        container.add_item(ui.MediaGallery(discord.MediaGalleryItem(banner)))
         # The Discord ID wording matches the old embed footer, so one search finds old and new posts
-        footer = f"-# Discord ID: {self.player_id} · {discord.utils.format_dt(self.created_at, 'f')}"
-        container = ui.Container(
-            ui.TextDisplay(f"### {self.title}"),
-            _gap(),
-            # A TextDisplay, so these mentions ping; embed mentions never do
-            ui.TextDisplay(facts),
-            _gap(),
-            ui.MediaGallery(discord.MediaGalleryItem(banner)),
-            _gap(),
-            ui.TextDisplay(footer),
-            accent_colour=self.colour,
-        )
+        container.add_item(ui.TextDisplay(f"-# Discord ID: {self.player_id} · {discord.utils.format_dt(self.created_at, 'f')}"))
 
         view = ui.LayoutView(timeout=None)
         view.add_item(container)
-        return view, [banner]
+        return view, files

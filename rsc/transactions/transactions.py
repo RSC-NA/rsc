@@ -2240,6 +2240,7 @@ class TransactionMixIn(RSCMixIn):
 
         franchise = None
         gm_id = None
+        logo: str | Path | None = None
         tier = None
         pname = discord.utils.escape_markdown(ptu_in.player.player.name)
 
@@ -2250,6 +2251,7 @@ class TransactionMixIn(RSCMixIn):
                 tier = ptu_in.old_team.tier
                 team = discord.utils.escape_markdown(ptu_in.old_team.name or "Unknown team")
                 title = f"{pname} has been released by {team} ({tier})"
+                logo = await utils.fa_img_path_from_tier(tier, tiny=True)
                 franchise = response.first_franchise.name
                 gm_id = gm_discord_id(response.first_franchise)
             case TransactionType.PICKUP | TransactionType.RESIGN | TransactionType.TEMP_FA | TransactionType.SUBSTITUTION:
@@ -2262,10 +2264,12 @@ class TransactionMixIn(RSCMixIn):
                     TransactionType.RESIGN: "re-signed",
                 }.get(action, "signed to a temporary contract")
                 title = f"{pname} has been {verb} by {team} ({tier})"
+                logo = await self.franchise_logo(guild, response.second_franchise.id)
                 franchise = response.second_franchise.name
                 gm_id = gm_discord_id(response.second_franchise)
             case TransactionType.RETIRE:
                 title = f"{pname} has retired from the league"
+                logo = guild.icon.url if guild.icon else None
                 if response.first_franchise:
                     franchise = response.first_franchise.name
                     gm_id = gm_discord_id(response.first_franchise)
@@ -2276,6 +2280,7 @@ class TransactionMixIn(RSCMixIn):
                 team = discord.utils.escape_markdown(ptu_in.old_team.name or "Unknown team")
                 moved = "moved to" if action == TransactionType.INACTIVE_RESERVE else "removed from"
                 title = f"{pname} has been {moved} Inactive Reserve by {team} ({tier})"
+                logo = await self.franchise_logo(guild, response.first_franchise.id)
                 franchise = response.first_franchise.name
                 gm_id = gm_discord_id(response.first_franchise)
             case _:
@@ -2290,6 +2295,7 @@ class TransactionMixIn(RSCMixIn):
             player_out_id=player_out.id if player_out else None,
             franchise=franchise,
             gm_id=gm_id,
+            logo=logo,
         )
 
     async def send_cut_msg(self, guild: discord.Guild, player: discord.Member) -> discord.Message | None:

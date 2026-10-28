@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 from zoneinfo import ZoneInfo
 
@@ -535,6 +536,7 @@ class TestBuildTransactionCard:
     def mixin(self, mock_guild):
         m = _create_mixin()
         m.league_player_from_transaction = AsyncMock()
+        m.franchise_logo = AsyncMock(return_value="https://cdn.example/hex.png")
         return m
 
     @pytest.fixture(autouse=True)
@@ -570,6 +572,11 @@ class TestBuildTransactionCard:
         assert (card.player_id, card.franchise, card.gm_id) == (mock_member.id, "Hex", 999)
         assert card.colour == discord.Colour.orange()
         tier_colour.assert_awaited_once_with(mock_guild, "Elite")
+        if action in (TransactionType.CUT, TransactionType.IR_CUT):
+            # Releases show the free agent badge for the tier, like the old embed's author icon
+            assert isinstance(card.logo, Path) and card.logo.name == "EliteFA_64x64.png"
+        else:
+            assert card.logo == "https://cdn.example/hex.png"
 
     @pytest.mark.parametrize(
         ("action", "title", "banner"),
@@ -586,12 +593,14 @@ class TestBuildTransactionCard:
         assert card.banner.name == banner
         # The GM is named, and so pinged, on every type that has one
         assert (card.franchise, card.gm_id) == ("Hex", 999)
+        assert card.logo == "https://cdn.example/hex.png"
 
     async def test_retire_without_franchise(self, mixin, mock_guild, mock_member):
         card = await self._card(mixin, mock_guild, mock_member, TransactionType.RETIRE)
         assert card.title == r"Test\_Player has retired from the league"
         assert (card.franchise, card.gm_id) == (None, None)
         assert card.colour == discord.Colour.blue()
+        assert card.logo == mock_guild.icon.url
 
     async def test_retire_with_franchise(self, mixin, mock_guild, mock_member):
         card = await self._card(mixin, mock_guild, mock_member, TransactionType.RETIRE, first=_make_franchise_identifier("Hex", 999))

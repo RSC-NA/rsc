@@ -208,7 +208,7 @@ Each spec uses only what discord.py 2.7.1 supports. Mockups are in the published
     - a `MediaGallery` with the transaction banner (`attachment://Signed.png` etc.);
     - a `-#` footer, `Discord ID: 138778232802508801 · <t:…:f>`.
   - The ID wording is exactly today's footer, so one search finds old and new posts. **Search indexing of V2 text is unverified**; test it with `/pingtest` before Phase 3.
-- No thumbnail. The 84px V2 thumbnail squeezed the text on phones, which is the "too much stacked text" the user rejected. The franchise is named in the facts line. A `Section` + `Thumbnail` could add a logo later.
+- ~~No thumbnail.~~ Reversed after the live test: the logo is back as a `Section` thumbnail (see below).
 - Same template for every type. Released: "X has been released by Team (Tier)", today's wording (kept 2026-10-28 over "released to Free Agency"), with the `Released.png` banner and that tier's accent.
 - Trades still need their own layout (one section per franchise, with an overflow link past 4,000 characters). **Deferred to a later piece (decided 2026-10-28)**: `trade_announce.py` keeps its embed until that layout is mocked up and locked.
 - **Decided 2026-10-28 while building:**
@@ -220,7 +220,10 @@ Each spec uses only what discord.py 2.7.1 supports. Mockups are in the published
   - The title keeps today's wording ("has been released by Team (Tier)"). A missing team name reads "Unknown team" instead of "None".
   - The admin bulk-retire path passes a `discord.User` straight through, so its `cast()` is gone.
   - Preview it live with `/pingtest style:transaction`.
-  - **Spacing (after the live test, 2026-10-28):** invisible large `Separator`s sit between the title, facts, banner and footer, because the card read as one stacked block.
+  - **Size and logo (after the live tests, 2026-10-28):** the full-width banner dwarfed the old embed's, and the user missed the franchise logo. Picked from three live variants (option C):
+    - the title and facts sit in a `Section` with the logo as its `Thumbnail`, using the old author icon's sources: franchise logo for signings, re-signs, temporary contracts and IR moves, the tier's free agent badge for releases, the server icon for retirements, and no thumbnail when there's none;
+    - one small invisible `Separator` above the banner replaces the large gaps between every part;
+    - a single-image `MediaGallery` always spans the card, so the banners in `rsc/resources/transactions/card/` carry transparent right padding to fill ~70% of it, about the old embed's size. `scripts/make_card_banners.py` regenerates them.
 
 ### 02 — Combine / Dev League lobby ready (`rsc/combines/runner.py:302`, `rsc/devleague/runner.py:314`) — **LOCKED: option A, Join beside each team** (2026-10-28)
 

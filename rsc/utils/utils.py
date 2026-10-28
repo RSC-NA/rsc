@@ -478,8 +478,8 @@ async def fa_img_path_from_tier(tier: str, tiny: bool = False) -> Path | None:
 
 
 def transaction_banner(action: TransactionType) -> Path:
-    """The banner image for a transaction card."""
-    root = Path(__file__).parent.parent / "resources/transactions"
+    """The banner image for a transaction card, padded to ~70% of the card's width (scripts/make_card_banners.py)."""
+    root = Path(__file__).parent.parent / "resources/transactions/card"
     match action:
         # A cut off Inactive Reserve is still a release.
         case TransactionType.CUT | TransactionType.IR_CUT:
