@@ -13,10 +13,11 @@ This file is the working record for the refresh. Update the status table as phas
 | Phase | Scope | Status |
 |---|---|---|
 | 1 | Fix the bugs listed under [Bugs](#bugs) | **Done** (2026-10-28, branch `discord-ui-phase-1`) |
-| 2 | Shared building blocks (see [Phase 2](#phase-2-shared-building-blocks)) | **Done** (2026-10-28, branch `discord-ui-phase-2`) |
-| 3 | Migrate public announcements: transactions and trades, combine and Dev League lobbies, help and guide posts | Open |
-| 4 | Upgrade the modals: Report Match radios, Label descriptions on admin modals, `.replay` filter once discord.py ships it | Open |
+| 2 | Shared building blocks (see [Phase 2](#phase-2-shared-building-blocks)) | **Done** (2026-10-28, merged to master `31985f2`) |
+| 3 | Ship the six locked designs, in the order **06 → 01 → 02 → 03 → 05 → 04** (decided 2026-10-28): match result, transactions, lobbies + DMs, combines guide, player card + `/accounts`, Report Match copy | **In progress** (branch `discord-ui-phase-3`) |
+| 4 | Upgrade the other modals: Label descriptions on admin modals, and the `.replay` upload filter once discord.py ships it. (The Report Match copy is in Phase 3.) | Open |
 | 5 | Optional: errors and logs stay as embeds unless `ResultView` gets a one-line constructor | Open |
+| 6 | Move the 12 legacy confirm/decline views to `ConfirmLayoutView`, as a separate change after Phase 3 (decided 2026-10-28) | Open |
 
 > **Remove before the final commit:** the temporary `/pingtest` command in `rsc/developer/developer.py` (added 2026-10-28, uncommitted). It sends a mention as a V2 TextDisplay, an embed, plain content, or a V2 DM, so pings can be checked live.
 
