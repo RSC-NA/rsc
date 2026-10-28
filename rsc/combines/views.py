@@ -13,10 +13,7 @@ import discord
 from discord import ui
 from pydantic import BaseModel, ConfigDict
 
-from rsc.views import label_chip
 
-# Lobby and Password labels share this width, so the values line up
-_LABEL_WIDTH = len("Password")
 LIVE_COLOUR = discord.Colour.green()
 FINAL_COLOUR = discord.Colour.dark_grey()
 
@@ -88,10 +85,7 @@ class LobbyCard(BaseModel):
                 result = f"{score.home_wins}\N{NO-BREAK SPACE}\N{EN DASH}\N{NO-BREAK SPACE}{score.away_wins}"
                 container.add_item(ui.TextDisplay(f"### Home {result} Away"))
         else:
-            # Same-width label chips, so the name and password start in the same column
-            lobby = f"{label_chip('Lobby', _LABEL_WIDTH)} `{_code(self.lobby_name)}`"
-            password = f"{label_chip('Password', _LABEL_WIDTH)} `{_code(self.lobby_pass)}`"
-            container.add_item(ui.TextDisplay(f"{lobby}\n{password}"))
+            container.add_item(ui.TextDisplay(f"**Lobby** `{_code(self.lobby_name)}`\n**Password** `{_code(self.lobby_pass)}`"))
             container.add_item(ui.TextDisplay(f"-# Started {discord.utils.format_dt(self.started_at, 'R')}"))
 
         container.add_item(ui.Separator())

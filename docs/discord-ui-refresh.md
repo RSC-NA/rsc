@@ -284,7 +284,7 @@ Each spec uses only what discord.py 2.7.1 supports. Mockups are in the published
     - A DM that lands after teardown is edited straight to Final, since it missed teardown's pass.
     - Records live in Config as `LobbyMessages` under the `Combines` and `DevLeague` custom groups, keyed by lobby id, and are removed at teardown.
     - Not built: the optional per-player DM opt-out.
-  - **Credentials aligned (after the live review, 2026-10-28):** the user wanted the lobby name and password to start in the same column. Text can't be aligned (see [Layout](#layout-what-we-can-and-cant-control-checked-2026-10-28)), so each label is now a code chip padded with no-break spaces to the width of "Password": `` `Lobby   ` `rsc4812` `` over `` `Password` `nova` ``. The monospaced chips match in width, so the values line up.
+  - **Credential alignment tried and dropped (2026-10-28):** same-width label code chips lined up the lobby name and password, but the user found the label chips ugly. The labels are now bold, `**Lobby** `rsc4812``; the values stay as code chips, as the spec has them.
   - **Join buttons named (after the live review, 2026-10-28):** two identical grey "Join VC" buttons were hard to tell apart, so they now read "Join Home VC" and "Join Away VC". Link buttons can't be coloured, so the label is the only way to tell them apart.
 
 ### 03 — Combines guide (`send_combines_how_to_play`, `rsc/combines/manager.py:363`) — **LOCKED: option A, step sections** (2026-10-28)
@@ -364,7 +364,7 @@ Each spec uses only what discord.py 2.7.1 supports. Mockups are in the published
     - `player_info_view()` (the old legacy View) is removed; the card builds its own buttons. "Is the bot ready" is one `_ready_cog()` helper shared by all three buttons.
   - **Accounts grouped (after the live review, 2026-10-28):** the heading no longer carries the nickname (and its emoji). It reads `### Tracker accounts` over `-# @player · 5 accounts`. Accounts are grouped under a bold header per platform, in `Platform` order (Steam, PlayStation, Xbox, Epic Games, Switch), with unknown platforms last as "Other" or their raw value. Each line is the linked account name, or the Steam64ID for Steam. The list sits full width under the avatar Section. The Trackers button reply uses the same card.
   - **Labelled rows (after the live review, 2026-10-28):** the user found `### Premier · Singularity` / role chip · status / `1655 MMR · base 1640` hard to read, and didn't want the franchise role shown. The facts are now one labelled line each: `**Tier** Master`, `**Team** Giraffes`, `**Franchise** Safari` (plain text, no role chip, so no role lookup), `**Status** Rostered`, with missing ones left out. The MMR line reads `-# Current MMR 1575 · Base MMR 1575`.
-  - **Aligned values (2026-10-28):** the bold labels left the values starting at different points. Each label is now a code chip padded to the width of "Franchise" (`label_chip()` in `rsc/views.py`, shared with the lobby card), so every value starts in one column.
+  - **Aligned values tried and dropped (2026-10-28):** same-width label code chips lined the values up, but the user found the chips ugly. Text can't be aligned without monospace (see [Layout](#layout-what-we-can-and-cant-control-checked-2026-10-28)), so the labels are back to `**Tier** Master` and the values don't line up.
 
 ### 06 — Match result (`build_match_result_embed`, `rsc/ballchasing/ballchasing.py:862`) — **LOCKED: option B, scoreboard** (2026-10-28)
 

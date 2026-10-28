@@ -12,7 +12,6 @@ from rsc.const import RSC_COG_NAME
 from rsc.embeds import ApiExceptionErrorEmbed, ErrorEmbed, ExceptionErrorEmbed
 from rsc.exceptions import RscException
 from rsc.trackers.views import tracker_accounts_card
-from rsc.views import label_chip
 
 log = logging.getLogger("red.rsc.members.views.player_info")
 
@@ -183,14 +182,10 @@ class PlayerCard:
         else:
             container.add_item(title)
 
-        # One fact per line, full width outside the Section so the logo doesn't squeeze it on phones.
-        # Same-width label chips start every value in one column.
+        # One labelled fact per line, full width outside the Section so the logo doesn't squeeze it on phones
         facts = (("Tier", self.tier), ("Team", self.team), ("Franchise", self.franchise), ("Status", self.status))
-        width = len("Franchise")
         container.add_item(
-            discord.ui.TextDisplay(
-                "\n".join(f"{label_chip(label, width)} {discord.utils.escape_markdown(value)}" for label, value in facts if value)
-            )
+            discord.ui.TextDisplay("\n".join(f"**{label}** {discord.utils.escape_markdown(value)}" for label, value in facts if value))
         )
 
         mmr = " · ".join(

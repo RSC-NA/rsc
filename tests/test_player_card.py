@@ -19,9 +19,7 @@ from .utils import command_callback
 
 PLAYER_ID = 138778232802508801
 GUILD_ID = 395806681994493964
-NBSP = "\N{NO-BREAK SPACE}"
-# Labels padded to the width of "Franchise", so the values line up
-ROWS = f"`Tier{NBSP * 5}` Premier\n`Team{NBSP * 5}` Singularity\n`Franchise` Hex Systems\n`Status{NBSP * 3}` Rostered"
+ROWS = "**Tier** Premier\n**Team** Singularity\n**Franchise** Hex Systems\n**Status** Rostered"
 
 
 def _card(**overrides) -> PlayerCard:
@@ -87,13 +85,13 @@ class TestPlayerCard:
 
     def test_free_agent_without_team_or_franchise(self):
         view = _card(team=None, franchise=None, status="Free Agent").render()
-        assert _texts(view)[1] == f"`Tier{NBSP * 5}` Premier\n`Status{NBSP * 3}` Free Agent"
+        assert _texts(view)[1] == "**Tier** Premier\n**Status** Free Agent"
         (trackers,) = _buttons(view)
         assert isinstance(trackers, PlayerTrackersButton)
 
     def test_franchise_is_plain_escaped_text(self):
         view = _card(franchise="Under_score").render()
-        assert "`Franchise` Under\\_score" in _texts(view)[1].splitlines()
+        assert "**Franchise** Under\\_score" in _texts(view)[1].splitlines()
 
     def test_no_mmr_no_separator(self):
         view = _card(current_mmr=None, base_mmr=None).render()
