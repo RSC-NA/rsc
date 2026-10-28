@@ -1,13 +1,12 @@
 from rsc.members.views.intent import IntentState, IntentToPlayView
 from rsc.members.views.player_info import PlayerInfoButton, player_info_view
-from rsc.members.views.signup import PermFASignupView, SignupState, SignupView
+from rsc.members.views.signup import SignupFlowView, SignupOutcome
 
 __all__ = [
     "IntentState",
     "IntentToPlayView",
-    "PermFASignupView",
     "PlayerInfoButton",
-    "SignupState",
-    "SignupView",
+    "SignupFlowView",
+    "SignupOutcome",
     "player_info_view",
 ]

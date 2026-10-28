@@ -1,12 +1,25 @@
+import io
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import discord
 import pytest
 from rscapi.exceptions import ApiException
 from rscapi.models.member import Member
 
-from rsc.enums import Platform, PlayerType, Referrer, RegionPreference, StaffPositions
+from rsc.enums import Platform, PlayerType, Referrer, RegionPreference, StaffPositions, Status
 from rsc.exceptions import RscException
 from rsc.members.members import MemberMixIn
+from rsc.members.tracker_links import TrackerLine
+from rsc.members.views.signup import (
+    AlreadySignedUp,
+    AlreadySignedUpView,
+    SignupAnswers,
+    SignupContext,
+    SignupKind,
+    SignupOutcome,
+    SignupPrefill,
+    SignupSuccessView,
+)
 
 GUILD_ID = 395806681994493964
 
@@ -747,3 +760,148 @@ class TestIntentToPlayFlowTimeout:
 
         interaction.edit_original_response.assert_not_awaited()
         mixin.declare_intent.assert_not_awaited()
+
+
+# --- /signup and /permfa ---
+
+EPIC_TRACKER = "https://rocketleague.tracker.network/rocket-league/profile/epic/Xentrick/overview"
+
+
+def _signup_mixin(**attrs):
+    defaults = {
+        "_league": {GUILD_ID: 1},
+        "members": AsyncMock(return_value=[]),
+        "create_member": AsyncMock(),
+        "trackers": AsyncMock(return_value=[]),
+        "signup": AsyncMock(return_value=MagicMock()),
+        "permfa_signup": AsyncMock(return_value=MagicMock()),
+        "should_get_devleague_role": AsyncMock(return_value=False),
+    }
+    defaults.update(attrs)
+    return _create_mixin(**defaults)
+
+
+def _flow_mock(kind: SignupKind | None, outcome: SignupOutcome = SignupOutcome.SUBMITTED) -> MagicMock:
+    flow = MagicMock()
+    flow.start = AsyncMock()
+    flow.wait_for_outcome = AsyncMock(return_value=outcome)
+    flow.submit_interaction = MagicMock()
+    flow.submit_interaction.edit_original_response = AsyncMock()
+    flow.answers = SignupAnswers(
+        kind=kind,
+        player_type=PlayerType.NEW,
+        region=RegionPreference.EAST,
+        rsc_name="Xentrick",
+        platform=Platform.EPIC,
+        referrer=Referrer.FRIEND,
+        trackers=[TrackerLine(raw=EPIC_TRACKER, url=EPIC_TRACKER, platform="epic", player_id="Xentrick")],
+    )
+    return flow
+
+
+async def _run_flow(mixin, mock_guild, mock_member, flow, banner=None, banner_error=None):
+    banner_file = AsyncMock(return_value=banner, side_effect=banner_error)
+    with (
+        patch("rsc.members.members.SignupFlowView", return_value=flow),
+        patch("rsc.members.members.update_league_player_discord", AsyncMock()),
+        patch("rsc.members.members.signup_banner_file", banner_file),
+    ):
+        await mixin._signup_flow(MagicMock(), mock_guild, mock_member, SignupContext(season_number=24))
+    return banner_file
+
+
+class TestSignupFlow:
+    async def test_signup_sends_parsed_trackers_and_banner(self, mock_guild, mock_member):
+        mixin = _signup_mixin()
+        flow = _flow_mock(SignupKind.FREE_AGENT)
+        banner = discord.File(io.BytesIO(b"webp"), filename="signup.webp")
+        banner_file = await _run_flow(mixin, mock_guild, mock_member, flow, banner=banner)
+
+        mixin.signup.assert_awaited_once()
+        assert mixin.signup.await_args.kwargs["trackers"] == [EPIC_TRACKER]
+        mixin.permfa_signup.assert_not_awaited()
+        assert banner_file.await_args.kwargs["kicker"] == "RSC · SEASON 24"
+        kwargs = flow.submit_interaction.edit_original_response.await_args.kwargs
+        assert isinstance(kwargs["view"], SignupSuccessView)
+        assert kwargs["attachments"] == [banner]
+
+    async def test_permfa_choice_uses_permfa_endpoint(self, mock_guild, mock_member):
+        mixin = _signup_mixin()
+        await _run_flow(mixin, mock_guild, mock_member, _flow_mock(SignupKind.PERMFA), banner=MagicMock())
+        mixin.permfa_signup.assert_awaited_once()
+        mixin.signup.assert_not_awaited()
+
+    async def test_banner_failure_still_reports_success(self, mock_guild, mock_member):
+        mixin = _signup_mixin()
+        flow = _flow_mock(SignupKind.FREE_AGENT)
+        await _run_flow(mixin, mock_guild, mock_member, flow, banner_error=OSError("font"))
+        kwargs = flow.submit_interaction.edit_original_response.await_args.kwargs
+        assert isinstance(kwargs["view"], SignupSuccessView)
+        assert kwargs["attachments"] == []
+
+    async def test_duplicate_shows_already_signed_up(self, mock_guild, mock_member):
+        mixin = _signup_mixin(signup=AsyncMock(side_effect=RscException(response=ApiException(status=409, reason="Conflict"))))
+        flow = _flow_mock(SignupKind.FREE_AGENT)
+        await _run_flow(mixin, mock_guild, mock_member, flow)
+        view = flow.submit_interaction.edit_original_response.await_args.kwargs["view"]
+        assert isinstance(view, AlreadySignedUpView)
+        assert view.state is AlreadySignedUp.SIGNUP
+
+    async def test_cancelled_sends_nothing(self, mock_guild, mock_member):
+        mixin = _signup_mixin()
+        flow = _flow_mock(SignupKind.FREE_AGENT, outcome=SignupOutcome.CANCELLED)
+        await _run_flow(mixin, mock_guild, mock_member, flow)
+        mixin.signup.assert_not_awaited()
+        flow.submit_interaction.edit_original_response.assert_not_awaited()
+
+
+class TestSignupPrefill:
+    async def test_existing_member_prefills_name_and_trackers(self, mock_guild, mock_member):
+        member = MagicMock(spec=Member)
+        member.rsc_name = "Xentrick"
+        tracker = MagicMock()
+        tracker.link = EPIC_TRACKER
+        mixin = _signup_mixin(members=AsyncMock(return_value=[member]), trackers=AsyncMock(return_value=[tracker]))
+
+        prefill = await mixin._signup_prefill(mock_guild, mock_member, None, looked_up=False)
+
+        assert prefill == SignupPrefill(rsc_name="Xentrick", trackers=(EPIC_TRACKER,))
+        mixin.create_member.assert_not_awaited()
+
+    async def test_new_member_is_created_without_a_name(self, mock_guild, mock_member):
+        mixin = _signup_mixin()
+        prefill = await mixin._signup_prefill(mock_guild, mock_member, None, looked_up=False)
+        assert prefill == SignupPrefill()
+        mixin.create_member.assert_awaited_once()
+
+    async def test_lookup_errors_leave_the_form_empty(self, mock_guild, mock_member):
+        error = RscException(response=ApiException(status=500, reason="Down"))
+        mixin = _signup_mixin(trackers=AsyncMock(side_effect=error))
+        prefill = await mixin._signup_prefill(mock_guild, mock_member, None, looked_up=True)
+        assert prefill.trackers == ()
+
+
+class TestPermFAPrecheck:
+    async def _run(self, mock_guild, mock_member, status):
+        league_player = MagicMock()
+        league_player.league.id = 1
+        league_player.status = status
+        member = MagicMock(spec=Member)
+        member.player_leagues = [league_player]
+        mixin = _signup_mixin(members=AsyncMock(return_value=[member]))
+        state, found = await mixin._permfa_precheck(mock_guild, mock_member)
+        assert found is member
+        return state
+
+    async def test_permfa_sees_e3(self, mock_guild, mock_member):
+        assert await self._run(mock_guild, mock_member, Status.PERM_FA) is AlreadySignedUp.PERMFA
+
+    async def test_waiting_permfa_sees_e3w(self, mock_guild, mock_member):
+        assert await self._run(mock_guild, mock_member, Status.PERMFA_W) is AlreadySignedUp.PERMFA_WAITING
+
+    async def test_anyone_else_gets_the_form(self, mock_guild, mock_member):
+        assert await self._run(mock_guild, mock_member, Status.DROPPED) is None
+
+    async def test_lookup_error_falls_through_to_the_form(self, mock_guild, mock_member):
+        mixin = _signup_mixin(members=AsyncMock(side_effect=RscException(response=ApiException(status=500, reason="Down"))))
+        assert await mixin._permfa_precheck(mock_guild, mock_member) == (None, None)
