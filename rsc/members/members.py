@@ -765,13 +765,7 @@ class MemberMixIn(RSCMixIn):
             colour = await utils.tier_color_by_name(guild, p.tier.name)
 
         franchise = p.team.franchise if p.team and p.team.franchise else None
-        franchise_mention = None
-        logo_url = None
-        if franchise and franchise.name:
-            frole = await utils.franchise_role_from_name(guild, franchise.name)
-            franchise_mention = frole.mention if frole else None
-        if franchise and franchise.id:
-            logo_url = await self.franchise_logo(guild, franchise.id)
+        logo_url = await self.franchise_logo(guild, franchise.id) if franchise and franchise.id else None
 
         card = PlayerCard(
             name=p.player.name,
@@ -781,12 +775,11 @@ class MemberMixIn(RSCMixIn):
             tier=p.tier.name if p.tier else None,
             team=p.team.name if p.team else None,
             franchise=franchise.name if franchise else None,
-            franchise_mention=franchise_mention,
             logo_url=logo_url or player.display_avatar.url,
             current_mmr=p.current_mmr,
             base_mmr=p.base_mmr,
         )
-        # The card names the player and their franchise role; neither should ping
+        # The card names the player, who shouldn't be pinged
         await interaction.followup.send(view=card.render(), allowed_mentions=discord.AllowedMentions.none())
 
     @app_commands.command(name="waivers", description="Display players currently on waivers")

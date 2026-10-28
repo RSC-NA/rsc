@@ -170,8 +170,6 @@ class PlayerCard:
     tier: str | None = None
     team: str | None = None
     franchise: str | None = None
-    # The franchise role's mention, which Discord draws in the role's colour
-    franchise_mention: str | None = None
     # Franchise logo, or the player's avatar
     logo_url: str | None = None
     current_mmr: int | None = None
@@ -185,13 +183,20 @@ class PlayerCard:
         else:
             container.add_item(title)
 
-        # Full width, outside the Section, so the logo doesn't squeeze it on phones
-        headline = " · ".join(discord.utils.escape_markdown(x) for x in (self.tier, self.team) if x)
-        affiliation = " · ".join(filter(None, [self.franchise_mention or _escaped(self.franchise), f"**{self.status}**"]))
-        container.add_item(discord.ui.TextDisplay(f"### {headline}\n{affiliation}" if headline else affiliation))
+        # One labelled fact per line, full width outside the Section so the logo doesn't squeeze it on phones
+        facts = (("Tier", self.tier), ("Team", self.team), ("Franchise", self.franchise), ("Status", self.status))
+        container.add_item(
+            discord.ui.TextDisplay("\n".join(f"**{label}** {discord.utils.escape_markdown(value)}" for label, value in facts if value))
+        )
 
         mmr = " · ".join(
-            filter(None, [f"{self.current_mmr} MMR" if self.current_mmr else None, f"base {self.base_mmr}" if self.base_mmr else None])
+            filter(
+                None,
+                [
+                    f"Current MMR {self.current_mmr}" if self.current_mmr else None,
+                    f"Base MMR {self.base_mmr}" if self.base_mmr else None,
+                ],
+            )
         )
         if mmr:
             container.add_item(discord.ui.Separator())
@@ -208,10 +213,6 @@ class PlayerCard:
         view = discord.ui.LayoutView(timeout=None)
         view.add_item(container)
         return view
-
-
-def _escaped(text: str | None) -> str | None:
-    return discord.utils.escape_markdown(text) if text else None
 
 
 async def _ready_cog(interaction: discord.Interaction, guild: discord.Guild) -> RSCMixIn | None:

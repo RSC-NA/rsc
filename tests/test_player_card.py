@@ -30,7 +30,6 @@ def _card(**overrides) -> PlayerCard:
         "tier": "Premier",
         "team": "Singularity",
         "franchise": "Hex Systems",
-        "franchise_mention": "<@&5>",
         "logo_url": "https://cdn.example/hex.png",
         "current_mmr": 1655,
         "base_mmr": 1640,
@@ -69,9 +68,9 @@ class TestPlayerCard:
         assert isinstance(section.accessory, ui.Thumbnail) and section.accessory.media.url == "https://cdn.example/hex.png"
         assert _texts(view) == [
             f"## Monty\n-# <@{PLAYER_ID}>",
-            # Outside the Section, so the logo doesn't squeeze it on phones
-            "### Premier · Singularity\n<@&5> · **Rostered**",
-            "-# 1655 MMR · base 1640",
+            # Labelled, full width outside the Section, so the logo doesn't squeeze it on phones
+            "**Tier** Premier\n**Team** Singularity\n**Franchise** Hex Systems\n**Status** Rostered",
+            "-# Current MMR 1655 · Base MMR 1640",
         ]
         assert isinstance(container.children[1], ui.TextDisplay)
 
@@ -84,14 +83,14 @@ class TestPlayerCard:
         assert (trackers.item.label, trackers.item.style) == ("Trackers", discord.ButtonStyle.success)
 
     def test_free_agent_without_team_or_franchise(self):
-        view = _card(team=None, franchise=None, franchise_mention=None, status="Free Agent").render()
-        assert _texts(view)[1] == "### Premier\n**Free Agent**"
+        view = _card(team=None, franchise=None, status="Free Agent").render()
+        assert _texts(view)[1] == "**Tier** Premier\n**Status** Free Agent"
         (trackers,) = _buttons(view)
         assert isinstance(trackers, PlayerTrackersButton)
 
-    def test_franchise_without_role_is_plain_text(self):
-        view = _card(franchise="Under_score", franchise_mention=None).render()
-        assert _texts(view)[1] == "### Premier · Singularity\nUnder\\_score · **Rostered**"
+    def test_franchise_is_plain_escaped_text(self):
+        view = _card(franchise="Under_score").render()
+        assert "**Franchise** Under\\_score" in _texts(view)[1].splitlines()
 
     def test_no_mmr_no_separator(self):
         view = _card(current_mmr=None, base_mmr=None).render()
@@ -218,18 +217,15 @@ class TestPlayerInfoCommand:
         )
         interaction = _command_interaction(mock_guild)
 
-        with (
-            patch("rsc.members.members.utils.tier_color_by_name", AsyncMock(return_value=discord.Colour.orange())),
-            patch("rsc.members.members.utils.franchise_role_from_name", AsyncMock(return_value=MagicMock(mention="<@&5>"))),
-        ):
+        with patch("rsc.members.members.utils.tier_color_by_name", AsyncMock(return_value=discord.Colour.orange())):
             await command_callback(MemberMixIn._playerinfo_cmd)(mixin, interaction, mock_member)
 
         send = interaction.followup.send.await_args
         assert send is not None
         assert send.kwargs["allowed_mentions"].users is False
         texts = _texts(send.kwargs["view"])
-        assert texts[1] == "### Premier · Singularity\n<@&5> · **Rostered**"
-        assert texts[2] == "-# 1655 MMR · base 1640"
+        assert texts[1] == "**Tier** Premier\n**Team** Singularity\n**Franchise** Hex Systems\n**Status** Rostered"
+        assert texts[2] == "-# Current MMR 1655 · Base MMR 1640"
 
 
 class TestAccountsCommand:
