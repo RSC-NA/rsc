@@ -208,3 +208,19 @@ class TestMigrateTrackerPullsApi:
                 result = await mixin.migrate_tracker_pulls(mock_guild, source=1, dest=2)
 
         assert result is migrated
+
+
+class TestAccountsCommand:
+    """`/accounts` used to fall through to an unbound `trackers` after reporting an API error."""
+
+    async def test_api_error_is_reported_once(self, mock_guild):
+        exc = RscException(response=ApiException(status=500, reason="Error"))
+        mixin = _create_mixin(trackers=AsyncMock(side_effect=exc))
+        interaction = MagicMock()
+        interaction.guild = mock_guild
+        interaction.response.defer = AsyncMock()
+        interaction.followup.send = AsyncMock()
+
+        await TrackerMixIn._accounts.callback(mixin, interaction, MagicMock())
+
+        interaction.followup.send.assert_awaited_once()

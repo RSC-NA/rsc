@@ -401,6 +401,7 @@ class TrackerMixIn(RSCMixIn):
             trackers = await self.trackers(interaction.guild, player=player.id)
         except RscException as exc:
             await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc))
+            return
 
         if not trackers:
             await interaction.followup.send(
