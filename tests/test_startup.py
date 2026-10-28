@@ -14,6 +14,7 @@ from aiohttp import (
 )
 
 from rsc.admin.views import ActivityCheckDMButton, IntentDMButton, PermFAPollButton
+from rsc.combines.guide import ReplayLocationButton
 from rsc.core import RSC
 from rsc.members.views import PlayerInfoButton
 from rsc.tiers.tiers import TierMixIn
@@ -373,7 +374,9 @@ class TestSetupIsolation:
         assert prepared == [1, 3]
         # Every DM button template must register, or clicks on those DMs die
         # silently after a restart.
-        bot.add_dynamic_items.assert_called_once_with(IntentDMButton, ActivityCheckDMButton, PermFAPollButton, PlayerInfoButton)
+        bot.add_dynamic_items.assert_called_once_with(
+            IntentDMButton, ActivityCheckDMButton, PermFAPollButton, PlayerInfoButton, ReplayLocationButton
+        )
 
     async def test_prepares_guilds_concurrently(self):
         """Startup latency should be the slowest guild, not the sum."""
@@ -424,7 +427,9 @@ class TestCogUnload:
 
         await cog.cog_unload()
 
-        bot.remove_dynamic_items.assert_called_once_with(IntentDMButton, ActivityCheckDMButton, PermFAPollButton, PlayerInfoButton)
+        bot.remove_dynamic_items.assert_called_once_with(
+            IntentDMButton, ActivityCheckDMButton, PermFAPollButton, PlayerInfoButton, ReplayLocationButton
+        )
 
 
 class TestStartWebapp:

@@ -272,6 +272,14 @@ Each spec uses only what discord.py 2.7.1 supports. Mockups are in the published
   - 5 · Queue again: "Check in again for every series. Leave the queue with `/combines checkout`."
 - Commands render as clickable chips (`</combines checkin:ID>`). The ID comes from `tree.fetch_commands()`, and the subcommand's `.mention` is checked against the discord.py 2.7.1 `AppCommandGroup.mention`. If the lookup fails, they fall back to inline code.
 
+- **Implemented (2026-10-28, branch `discord-ui-phase-3`):** `combines_guide()` and the persistent `ReplayLocationButton` (`combines:replays`, registered with the other dynamic items) in `rsc/combines/guide.py`. `send_combines_how_to_play` posts it with `AllowedMentions.none()`. Preview with `/pingtest style:guide`.
+  - **Calls made while building, for review:**
+    - The guide is now sent just after `#combines-announcements` is created, not before, so step 3 links the channel. Channel creation order is unchanged.
+    - Command chips come from `tree.fetch_commands()`, then the guild's commands if the global list is empty. If neither has `/combines`, they fall back to inline code.
+    - Blue accent. Step 1 links devleague.rscna.com. Step 5 is a `### 5 · Queue again` TextDisplay.
+    - The replays reply gives the PC path, plus a `-#` line for console players to ask a teammate or the home team, carried over from the old step 4.
+    - The old `COMBINES_HOW_TO_PLAY_1`–`5` strings are removed from `rsc/const.py`.
+
 ### 04 — Report Match modal (`rsc/ballchasing/modals.py`) — **LOCKED: improved copy, same layout** (approved 2026-10-28)
 
 - The user asked to keep the original layout exactly (TextDisplay, two Label + short TextInput score boxes, Label + FileUpload 1–10) and improve only the text.

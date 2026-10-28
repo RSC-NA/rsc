@@ -29,6 +29,7 @@ from rsc.admin.permfa_poll import AdminPermFAPollMixIn
 from rsc.admin.stats import AdminStatsMixIn
 from rsc.admin.sync import AdminSyncMixIn
 from rsc.admin.views import ActivityCheckDMButton, IntentDMButton, PermFAPollButton
+from rsc.combines.guide import ReplayLocationButton
 from rsc.ballchasing import BallchasingMixIn
 from rsc.combines import CombineMixIn
 from rsc.developer import DeveloperMixIn
@@ -180,7 +181,7 @@ class RSC(
         # Registered on the bot, not the cog, so they outlive a reload. The next
         # setup() replaces them only if the template is unchanged. Remove them so an
         # edited template cannot leave the old class answering old buttons.
-        self.bot.remove_dynamic_items(IntentDMButton, ActivityCheckDMButton, PermFAPollButton, PlayerInfoButton)
+        self.bot.remove_dynamic_items(IntentDMButton, ActivityCheckDMButton, PermFAPollButton, PlayerInfoButton, ReplayLocationButton)
         # Discard rather than drain. Draining sends one DM per `rate` seconds, so a
         # large queued batch would block the reload for many minutes.
         await self._dm_helper.stop(drain=False)
@@ -206,7 +207,7 @@ class RSC(
             # Registered once globally, not per guild and not per message. The guild
             # and season (or poll, or team) live in the custom_id and are matched by
             # regex, so buttons keep dispatching after a restart instead of dying.
-            self.bot.add_dynamic_items(IntentDMButton, ActivityCheckDMButton, PermFAPollButton, PlayerInfoButton)
+            self.bot.add_dynamic_items(IntentDMButton, ActivityCheckDMButton, PermFAPollButton, PlayerInfoButton, ReplayLocationButton)
 
             await self.prepare_application_emojis()
 

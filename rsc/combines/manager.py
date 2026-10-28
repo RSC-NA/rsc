@@ -1,6 +1,5 @@
 import logging
 import re
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 import discord
@@ -11,13 +10,9 @@ from rsc.const import (
     COMBINES_HELP_1,
     COMBINES_HELP_2,
     COMBINES_HELP_3,
-    COMBINES_HOW_TO_PLAY_1,
-    COMBINES_HOW_TO_PLAY_2,
-    COMBINES_HOW_TO_PLAY_3,
-    COMBINES_HOW_TO_PLAY_4,
-    COMBINES_HOW_TO_PLAY_5,
     MUTED_ROLE,
 )
+from rsc.combines.guide import combines_command_mentions, combines_guide
 from rsc.embeds import BlueEmbed, ErrorEmbed, GreenEmbed
 from rsc.types import CombineSettings
 from rsc.utils import utils
@@ -162,6 +157,7 @@ class CombineManagerMixIn(RSCMixIn):
         }
 
         combines_how_to_play = discord.utils.get(category.channels, name="how-to-play")
+        new_how_to_play = combines_how_to_play is None
         if not combines_how_to_play:
             combines_how_to_play = await guild.create_text_channel(
                 name="how-to-play",
@@ -169,10 +165,6 @@ class CombineManagerMixIn(RSCMixIn):
                 overwrites=admin_overwrites,
                 reason="Starting combines",
             )
-
-            # Send how to play
-            if isinstance(combines_how_to_play, discord.TextChannel):
-                await self.send_combines_how_to_play(combines_how_to_play)
 
         combines_announce = discord.utils.get(category.channels, name="combines-announcements")
         if not combines_announce:
@@ -182,6 +174,10 @@ class CombineManagerMixIn(RSCMixIn):
                 overwrites=admin_overwrites,
                 reason="Starting combines",
             )
+
+        # Sent once the announcements channel exists, so the guide can link it
+        if new_how_to_play and isinstance(combines_how_to_play, discord.TextChannel):
+            await self.send_combines_how_to_play(combines_how_to_play, announcements=combines_announce)
 
         # Configure permissions
         player_overwrites: MutableMapping[discord.Role | discord.Member | discord.Object, discord.PermissionOverwrite] = {
@@ -360,19 +356,16 @@ class CombineManagerMixIn(RSCMixIn):
         await channel.send(content=COMBINES_HELP_2)
         await channel.send(content=COMBINES_HELP_3)
 
-    async def send_combines_how_to_play(self, channel: discord.TextChannel):
-        resources_root = Path(__file__).parent.parent / "resources" / "combines"
-
-        login_img = discord.File(resources_root / "combines_login.png")
-        checkin_img = discord.File(resources_root / "combines_check_in.png")
-        announce_img = discord.File(resources_root / "combines_announcement.png")
-        report_img = discord.File(resources_root / "combines_report.png")
-
-        await channel.send(content=COMBINES_HOW_TO_PLAY_1, file=login_img)
-        await channel.send(content=COMBINES_HOW_TO_PLAY_2, file=checkin_img)
-        await channel.send(content=COMBINES_HOW_TO_PLAY_3, file=announce_img)
-        await channel.send(content=COMBINES_HOW_TO_PLAY_4, file=report_img)
-        await channel.send(content=COMBINES_HOW_TO_PLAY_5)
+    async def send_combines_how_to_play(self, channel: discord.TextChannel, announcements: discord.abc.GuildChannel | None = None):
+        """Post the how-to-play guide card. Commands it names become clickable when they're synced."""
+        try:
+            synced = await self.bot.tree.fetch_commands() or await self.bot.tree.fetch_commands(guild=channel.guild)
+        except discord.HTTPException as exc:
+            log.warning(f"Unable to look up command mentions for the combines guide: {exc}")
+            synced = []
+        where = announcements.mention if announcements else "#combines-announcements"
+        view, files = combines_guide(combines_command_mentions(synced), announcements=where)
+        await channel.send(view=view, files=files, allowed_mentions=discord.AllowedMentions.none())
 
     # Config
 
