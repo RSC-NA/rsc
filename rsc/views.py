@@ -9,6 +9,16 @@ from rsc.const import DEFAULT_TIMEOUT
 log = logging.getLogger("red.rsc.views")
 
 
+def label_chip(text: str, width: int) -> str:
+    """A label as an inline code chip padded to `width` characters.
+
+    Text can't be aligned in Components V2, but code is monospaced, so labels padded to one
+    width line their values up in a column. No-break spaces, since Discord trims ordinary
+    spaces at the ends of inline code.
+    """
+    return f"`{text.ljust(width, chr(0xA0))}`"
+
+
 # Generic View structures for use in any module
 
 

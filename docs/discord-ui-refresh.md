@@ -362,6 +362,7 @@ Each spec uses only what discord.py 2.7.1 supports. Mockups are in the published
     - The tracker card reads `### Monty's accounts`, then one `- [Steam · 7656…](link)` line per account (Steam by Steam64ID, others by name, platform names from `Platform.label`), capped at 25. It has the grey "RSC Tracker Links" button, plus the avatar as thumbnail. The button reply and `/accounts` are identical, so the builder needs no `ephemeral` flag.
     - `player_info_view()` (the old legacy View) is removed; the card builds its own buttons. "Is the bot ready" is one `_ready_cog()` helper shared by all three buttons.
   - **Labelled rows (after the live review, 2026-10-28):** the user found `### Premier · Singularity` / role chip · status / `1655 MMR · base 1640` hard to read, and didn't want the franchise role shown. The facts are now one labelled line each: `**Tier** Master`, `**Team** Giraffes`, `**Franchise** Safari` (plain text, no role chip, so no role lookup), `**Status** Rostered`, with missing ones left out. The MMR line reads `-# Current MMR 1575 · Base MMR 1575`.
+  - **Aligned values (2026-10-28):** the bold labels left the values starting at different points. Each label is now a code chip padded to the width of "Franchise" (`label_chip()` in `rsc/views.py`, shared with the lobby card), so every value starts in one column.
 
 ### 06 — Match result (`build_match_result_embed`, `rsc/ballchasing/ballchasing.py:862`) — **LOCKED: option B, scoreboard** (2026-10-28)
 

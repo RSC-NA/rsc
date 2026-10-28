@@ -13,6 +13,10 @@ import discord
 from discord import ui
 from pydantic import BaseModel, ConfigDict
 
+from rsc.views import label_chip
+
+# Lobby and Password labels share this width, so the values line up
+_LABEL_WIDTH = len("Password")
 LIVE_COLOUR = discord.Colour.green()
 FINAL_COLOUR = discord.Colour.dark_grey()
 
@@ -85,9 +89,9 @@ class LobbyCard(BaseModel):
                 container.add_item(ui.TextDisplay(f"### Home {result} Away"))
         else:
             # Same-width label chips, so the name and password start in the same column
-            container.add_item(
-                ui.TextDisplay(f"{_label('Lobby')} `{_code(self.lobby_name)}`\n{_label('Password')} `{_code(self.lobby_pass)}`")
-            )
+            lobby = f"{label_chip('Lobby', _LABEL_WIDTH)} `{_code(self.lobby_name)}`"
+            password = f"{label_chip('Password', _LABEL_WIDTH)} `{_code(self.lobby_pass)}`"
+            container.add_item(ui.TextDisplay(f"{lobby}\n{password}"))
             container.add_item(ui.TextDisplay(f"-# Started {discord.utils.format_dt(self.started_at, 'R')}"))
 
         container.add_item(ui.Separator())
@@ -130,12 +134,3 @@ class LobbyCard(BaseModel):
 def _code(text: str) -> str:
     """Text for an inline code span. Backticks would end the span early."""
     return text.replace("`", "'")
-
-
-def _label(text: str) -> str:
-    """A label as a code chip padded to a fixed width. No-break spaces, since Discord trims ordinary
-    spaces at the ends of inline code."""
-    return f"`{text.ljust(_LABEL_WIDTH, chr(0xA0))}`"
-
-
-_LABEL_WIDTH = len("Password")
