@@ -6,7 +6,7 @@ with a test update alongside it, not an incidental edit.
 
 from inspect import signature
 
-from rsc.llm import summarize
+from rsc.llm import config, summarize
 from rsc.llm.config import (
     AGENT_MAX_ITERATIONS,
     AGENT_MAX_OUTPUT_TOKENS,
@@ -59,7 +59,5 @@ def test_tool_and_subagent_context_budgets_are_bounded() -> None:
 
 def test_chroma_configuration_is_gone() -> None:
     """The vector store was removed; leftover config would invite its return."""
-    from rsc.llm import config
-
     assert not hasattr(config, "CHROMA_PATH")
     assert not hasattr(config, "OPENAI_EMBEDDING_MODEL")

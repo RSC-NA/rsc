@@ -18,6 +18,8 @@ from rsc.admin.retire import (
 )
 from rsc.enums import Status
 
+from .utils import command_callback
+
 GUILD_ID = 395806681994493964
 
 
@@ -34,7 +36,7 @@ def _create_mixin(**attrs):
     return m
 
 
-def _make_league_player(discord_id: int, status: Status = Status.ROSTERED, team: str | None = "Team", franchise: str = "Franchise"):
+def _make_league_player(discord_id: int | None, status: Status = Status.ROSTERED, team: str | None = "Team", franchise: str = "Franchise"):
     lp = MagicMock()
     lp.status = status
     lp.player = MagicMock()
@@ -273,7 +275,7 @@ class TestRetireDepartedCommand:
         mixin.find_departed_players = AsyncMock(return_value=DepartedReport(departed=[100, 101], total_active=50))
         interaction = _interaction(guild)
 
-        await AdminRetireMixIn._admin_retire_departed_cmd.callback(mixin, interaction)
+        await command_callback(AdminRetireMixIn._admin_retire_departed_cmd)(mixin, interaction)
 
         mixin.bulk_retire_players.assert_not_awaited()
         embed = interaction.followup.send.await_args.kwargs["embed"]
@@ -289,7 +291,7 @@ class TestRetireDepartedCommand:
         view.result = False
 
         with patch("rsc.admin.retire.ConfirmRetireView", return_value=view):
-            await AdminRetireMixIn._admin_retire_departed_cmd.callback(mixin, interaction, apply=True)
+            await command_callback(AdminRetireMixIn._admin_retire_departed_cmd)(mixin, interaction, apply=True)
 
         mixin.bulk_retire_players.assert_not_awaited()
 
@@ -304,7 +306,7 @@ class TestRetireDepartedCommand:
         view.result = True
 
         with patch("rsc.admin.retire.ConfirmRetireView", return_value=view):
-            await AdminRetireMixIn._admin_retire_departed_cmd.callback(mixin, interaction, apply=True)
+            await command_callback(AdminRetireMixIn._admin_retire_departed_cmd)(mixin, interaction, apply=True)
 
         mixin.bulk_retire_players.assert_awaited_once()
         assert mixin.bulk_retire_players.await_args.kwargs["discord_ids"] == [100, 101]
@@ -316,6 +318,6 @@ class TestRetireDepartedCommand:
         interaction = _interaction(guild)
 
         with patch("rsc.admin.retire.ConfirmRetireView", side_effect=AssertionError("must not prompt")):
-            await AdminRetireMixIn._admin_retire_departed_cmd.callback(mixin, interaction, apply=True)
+            await command_callback(AdminRetireMixIn._admin_retire_departed_cmd)(mixin, interaction, apply=True)
 
         mixin.bulk_retire_players.assert_not_awaited()

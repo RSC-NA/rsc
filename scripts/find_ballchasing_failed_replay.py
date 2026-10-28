@@ -11,13 +11,9 @@ from dotenv import load_dotenv
 if __name__ == "__main__":
     loop = asyncio.get_event_loop()
 
-    parser = argparse.ArgumentParser(
-        description="Find failed replay in ballchasing group."
-    )
+    parser = argparse.ArgumentParser(description="Find failed replay in ballchasing group.")
     parser.add_argument("group", type=str, help="Ballchasing group")
-    parser.add_argument(
-        "-d", "--delete", action="store_true", help="Delete the failed replays"
-    )
+    parser.add_argument("-d", "--delete", action="store_true", help="Delete the failed replays")
     argv = parser.parse_args()
 
     group: str = argv.group

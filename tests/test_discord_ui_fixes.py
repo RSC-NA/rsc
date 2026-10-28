@@ -19,6 +19,8 @@ from rsc.freeagents.views import CheckInView, CheckOutView
 from rsc.members.views.player_info import PLAYER_INFO_TEMPLATE, PlayerInfoButton, PlayerInfoKind, player_info_view
 from rsc.utils.views.bulk_role import BulkRoleConfirmView
 
+from .utils import custom_ids
+
 GUILD_ID = 395806681994493964
 TEMPLATE = re.compile(PLAYER_INFO_TEMPLATE)
 
@@ -66,13 +68,13 @@ class TestPlayerInfoButton:
         view = player_info_view(team="Quantum", franchise="Hex Systems")
         assert view is not None
         assert view.timeout is None
-        assert [c.custom_id for c in view.children] == ["player_info:roster:Quantum", "player_info:franchise:Hex Systems"]
+        assert custom_ids(view) == ["player_info:roster:Quantum", "player_info:franchise:Hex Systems"]
 
     def test_skips_names_too_long_for_a_custom_id(self):
         long_name = "x" * 90
         view = player_info_view(team="Quantum", franchise=long_name)
         assert view is not None
-        assert [c.custom_id for c in view.children] == ["player_info:roster:Quantum"]
+        assert custom_ids(view) == ["player_info:roster:Quantum"]
         assert player_info_view(team=long_name, franchise=long_name) is None
 
     async def test_roster_click_replies_ephemerally(self):
@@ -107,7 +109,6 @@ class TestPlayerInfoButton:
         cog.players.assert_not_awaited()
         assert interaction.followup.send.await_args.kwargs["ephemeral"] is True
 
-
     async def test_click_outside_red_is_refused(self):
         interaction = _interaction(create_autospec(RSC, instance=True))
         interaction.client = MagicMock(spec=discord.Client)
@@ -119,9 +120,12 @@ class TestPlayerInfoButton:
 
 def _report_modal(home: str, away: str) -> tuple[ReportMatchModal, MagicMock]:
     modal = ReportMatchModal(home_team="Quantum", away_team="Voltage")
-    modal.home_score.component._value = home  # type: ignore[attr-defined]
-    modal.away_score.component._value = away  # type: ignore[attr-defined]
-    modal.upload_replays.component._values = [MagicMock(spec=discord.Attachment)]  # type: ignore[attr-defined]
+    assert isinstance(modal.home_score.component, discord.ui.TextInput)
+    assert isinstance(modal.away_score.component, discord.ui.TextInput)
+    assert isinstance(modal.upload_replays.component, discord.ui.FileUpload)
+    modal.home_score.component._value = home
+    modal.away_score.component._value = away
+    modal.upload_replays.component._values = [MagicMock(spec=discord.Attachment)]
     return modal, _interaction()
 
 
@@ -175,7 +179,7 @@ class TestClicksAreAcknowledged:
         await getattr(view, handler)(click)
         click.response.defer.assert_awaited_once()
 
-    @pytest.mark.parametrize("factory", [lambda i: ConfirmSyncView(i), _bulk_role])
+    @pytest.mark.parametrize("factory", [ConfirmSyncView, _bulk_role])
     async def test_decline(self, factory):
         view = factory(_interaction())
         click = _interaction()

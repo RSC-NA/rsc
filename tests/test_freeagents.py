@@ -1,8 +1,5 @@
 from unittest.mock import AsyncMock, MagicMock
 
-import discord
-import pytest
-
 from rsc.enums import Status
 from rsc.freeagents.freeagents import FreeAgentMixIn
 from rsc.types import CheckIn

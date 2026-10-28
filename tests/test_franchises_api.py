@@ -1,12 +1,7 @@
 import os
 import sys
-from pathlib import Path
 
 import pytest
-
-# Add the project root to the path so we can import the modules
-project_root = Path(__file__).parent.parent
-sys.path.insert(0, str(project_root))
 
 from rsc.core import RSC
 from rscapi import FranchisesApi
@@ -20,7 +15,7 @@ pytestmark = pytest.mark.integration
 class TestFranchisesApiContract:
     """Verify all expected rscapi FranchisesApi methods exist without calling them."""
 
-    EXPECTED_METHODS = [
+    EXPECTED_METHODS = (
         "franchises_list",
         "franchises_retrieve",
         "franchises_upload_logo_update",
@@ -31,7 +26,7 @@ class TestFranchisesApiContract:
         "franchises_logo_retrieve",
         "franchises_add_agm_update",
         "franchises_remove_agm_update",
-    ]
+    )
 
     @pytest.mark.parametrize("method_name", EXPECTED_METHODS)
     def test_method_exists(self, method_name: str):
@@ -85,8 +80,8 @@ class TestFranchisesApiCalls:
         assert new_franchise.gm.discord_id == mock_member.id
         print("✓ create_franchise() returned expected Franchise object")
 
-class TestFranchisesPrivilegedApiCalls:
 
+class TestFranchisesPrivilegedApiCalls:
     @pytest.mark.asyncio
     async def test_create_franchise_privileged_api_call(self, rsc_bot_no_key: RSC, rsc_bot_invalid_key: RSC, mock_guild, mock_member):
         """Test that create_franchise() API call raises NotImplementedError."""
@@ -118,6 +113,7 @@ class TestFranchisesPrivilegedApiCalls:
 
         rebrand = FranchiseRebrand(name="New Franchise Name", prefix="NF", teams=[], admin_override=False)
         with pytest.raises(RscException) as exc:
+            assert franchise.id is not None
             await rsc_bot_no_key.rebrand_franchise(guild=mock_guild, id=franchise.id, rebrand=rebrand)
         assert exc.type == RscException
         assert exc.value.type == "NotAuthenticated"
@@ -126,6 +122,7 @@ class TestFranchisesPrivilegedApiCalls:
         assert exc.value.response.status == 403
 
         with pytest.raises(RscException) as exc:
+            assert franchise.id is not None
             await rsc_bot_invalid_key.rebrand_franchise(guild=mock_guild, id=franchise.id, rebrand=rebrand)
         assert exc.type == RscException
         assert exc.value.type == "NotAuthenticated"
@@ -144,6 +141,7 @@ class TestFranchisesPrivilegedApiCalls:
         print(f"Testing transfer_franchise() on franchise ID {franchise.id}, Name: {franchise.name}")
 
         with pytest.raises(RscException) as exc:
+            assert franchise.id is not None
             await rsc_bot_no_key.transfer_franchise(guild=mock_guild, id=franchise.id, gm=mock_member)
         assert exc.type == RscException
         assert exc.value.type == "NotAuthenticated"
@@ -152,6 +150,7 @@ class TestFranchisesPrivilegedApiCalls:
         assert exc.value.response.status == 403
 
         with pytest.raises(RscException) as exc:
+            assert franchise.id is not None
             await rsc_bot_invalid_key.transfer_franchise(guild=mock_guild, id=franchise.id, gm=mock_member)
         assert exc.type == RscException
         assert exc.value.type == "NotAuthenticated"
@@ -172,6 +171,7 @@ class TestFranchisesPrivilegedApiCalls:
         logo = bytes("fake image data", "utf-8")
 
         with pytest.raises(RscException) as exc:
+            assert franchise.id is not None
             await rsc_bot_no_key.upload_franchise_logo(guild=mock_guild, id=franchise.id, logo=logo)
         assert exc.type == RscException
         assert exc.value.type == "NotAuthenticated"
@@ -180,12 +180,14 @@ class TestFranchisesPrivilegedApiCalls:
         assert exc.value.response.status == 403
 
         with pytest.raises(RscException) as exc:
+            assert franchise.id is not None
             await rsc_bot_invalid_key.upload_franchise_logo(guild=mock_guild, id=franchise.id, logo=logo)
         assert exc.type == RscException
         assert exc.value.type == "NotAuthenticated"
         assert exc.value.response.reason == "Forbidden"
         assert exc.value.status == 403
         assert exc.value.response.status == 403
+
 
 class TestFranchisesApiDataStructures:
     """Test that API responses have expected structure."""

@@ -1,39 +1,26 @@
 #!/usr/bin/env python3
 
 import argparse
-import os
 from statistics import mean, stdev
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import scipy.stats as stats
+from scipy import stats
 
 
 def parse_csv(csv_file: str):
     df = pd.read_csv(csv_file)
-    df.set_index('RSC ID', inplace=True)
+    df.set_index("RSC ID", inplace=True)
     print(df)
 
     return df
 
 
-
-
-
-
-
-
-
-
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description='Check combines participation')
-    parser.add_argument(
-        'combines_csv', type=str, default=None,
-        help='Combines CSV file')
-    parser.add_argument(
-        'rpv_csv', type=str, default=None,
-        help='Combines CSV file')
+    parser = argparse.ArgumentParser(description="Check combines participation")
+    parser.add_argument("combines_csv", type=str, default=None, help="Combines CSV file")
+    parser.add_argument("rpv_csv", type=str, default=None, help="Combines CSV file")
 
     argv = parser.parse_args()
 
@@ -45,12 +32,11 @@ if __name__ == "__main__":
     print(f"Total combine players: {total_combine_players}")
     print(f"Total Season players: {total_season_players}")
 
-    average_rpv = rpv['RPV'].mean()
+    average_rpv = rpv["RPV"].mean()
     print(f"Average RPV: {average_rpv}")
 
     pdata = {}
-    for rscid, rpv in rpv.iterrows():
-
+    for rscid, row in rpv.iterrows():
         try:
             cperf = combines.loc[rscid]
         except KeyError:
@@ -58,12 +44,12 @@ if __name__ == "__main__":
             continue
 
         pdata[rscid] = {
-            'rpv': rpv['RPV'],
-            'idr': rpv['IDR'],
-            'sbv': rpv['SBV'],
-            'combine_games': cperf['Games'],
-            'combine_win_prcnt': cperf['Win %'],
-            'season_games': rpv["GP"]
+            "rpv": row["RPV"],
+            "idr": row["IDR"],
+            "sbv": row["SBV"],
+            "combine_games": cperf["Games"],
+            "combine_win_prcnt": cperf["Win %"],
+            "season_games": row["GP"],
         }
 
     print(f"Len combined: {len(pdata)}")
@@ -79,23 +65,20 @@ if __name__ == "__main__":
     print(f"Played Combines Mean: {mean(has_combines)}")
     print(f"Played Combines StdDev: {stdev(has_combines)}")
 
-
     tresult = stats.ttest_ind(zero_combines, has_combines, equal_var=False)
     print(f"2-T: {tresult}")
-
 
     y = []
     x = []
     for v in pdata.values():
-        if v['season_games'] <= 10:
+        if v["season_games"] <= 10:
             continue
 
-        #if v["combine_games"] == 0:
+        # if v["combine_games"] == 0:
         #    continue
 
-        y.append(v['rpv'])
-        x.append(v['combine_win_prcnt'])
-
+        y.append(v["rpv"])
+        x.append(v["combine_win_prcnt"])
 
     plt.scatter(x, y)
     plt.plot(np.unique(x), np.poly1d(np.polyfit(x, y, 1))(np.unique(x)), color="red")

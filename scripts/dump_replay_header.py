@@ -19,7 +19,7 @@ from replay_parser import ReplayParser
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from rsc.ballchasing.process import MATCH_GUID_KEYS, match_guid  # noqa: E402
+from rsc.ballchasing.process import MATCH_GUID_KEYS, match_guid
 
 INTERESTING = ("Id", "Date", "MapName", "BuildVersion", "TeamSize", "MatchType")
 
@@ -42,13 +42,12 @@ def dump(path: Path) -> str | None:
     for key in INTERESTING:
         print(f"  {key:<14}: {props.get(key, '<MISSING>')}")
 
-    players = props.get("PlayerStats") or []
+    players = props.get("PlayerStats")
+    if not isinstance(players, list):
+        players = []
     print(f"  {'Players':<14}: {len(players)}")
     for p in players:
-        print(
-            f"      team={p.get('Team')} score={str(p.get('Score')):>4} "
-            f"platform={str(p.get('Platform')):<24} {p.get('Name')}"
-        )
+        print(f"      team={p.get('Team')} score={p.get('Score')!s:>4} platform={p.get('Platform')!s:<24} {p.get('Name')}")
     return guid
 
 

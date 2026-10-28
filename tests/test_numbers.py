@@ -69,6 +69,5 @@ class TestMmrPullsApi:
             mock_api.numbers_mmr_list.side_effect = ApiException(status=500, reason="Error")
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
-            with patch("rsc.numbers.numbers.NumbersApi", return_value=mock_api):
-                with pytest.raises(RscException):
-                    await mixin.mmr_pulls(mock_guild)
+            with patch("rsc.numbers.numbers.NumbersApi", return_value=mock_api), pytest.raises(RscException):
+                await mixin.mmr_pulls(mock_guild)

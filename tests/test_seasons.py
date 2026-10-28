@@ -139,9 +139,8 @@ class TestNextSignupSeason:
             mock_api.seasons_signup_season_retrieve.side_effect = ApiException(status=500, reason="Error")
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
-            with patch("rsc.seasons.seasons.SeasonsApi", return_value=mock_api):
-                with pytest.raises(RscException):
-                    await mixin.next_signup_season(mock_guild)
+            with patch("rsc.seasons.seasons.SeasonsApi", return_value=mock_api), pytest.raises(RscException):
+                await mixin.next_signup_season(mock_guild)
 
 
 # --- seasons API ---
@@ -190,9 +189,8 @@ class TestSeasonsApi:
             mock_api.seasons_list.side_effect = ApiException(status=500, reason="Error")
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
-            with patch("rsc.seasons.seasons.SeasonsApi", return_value=mock_api):
-                with pytest.raises(RscException):
-                    await mixin.seasons(mock_guild)
+            with patch("rsc.seasons.seasons.SeasonsApi", return_value=mock_api), pytest.raises(RscException):
+                await mixin.seasons(mock_guild)
 
 
 class TestSeasonByIdApi:
@@ -219,9 +217,8 @@ class TestSeasonByIdApi:
             mock_api.seasons_retrieve.side_effect = ApiException(status=404, reason="Not Found")
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
-            with patch("rsc.seasons.seasons.SeasonsApi", return_value=mock_api):
-                with pytest.raises(RscException):
-                    await mixin.season_by_id(mock_guild, 999)
+            with patch("rsc.seasons.seasons.SeasonsApi", return_value=mock_api), pytest.raises(RscException):
+                await mixin.season_by_id(mock_guild, 999)
 
 
 class TestPlayerIntentsApi:
@@ -283,9 +280,8 @@ class TestPlayerIntentsApi:
             mock_api.seasons_player_intents_list.side_effect = ApiException(status=500, reason="Error")
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
-            with patch("rsc.seasons.seasons.SeasonsApi", return_value=mock_api):
-                with pytest.raises(RscException):
-                    await mixin.player_intents(mock_guild, season_id=1)
+            with patch("rsc.seasons.seasons.SeasonsApi", return_value=mock_api), pytest.raises(RscException):
+                await mixin.player_intents(mock_guild, season_id=1)
 
 
 class TestFranchiseStandingsApi:
@@ -311,9 +307,8 @@ class TestFranchiseStandingsApi:
             mock_api.seasons_franchise_standings_list.side_effect = ApiException(status=404, reason="Not Found")
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
-            with patch("rsc.seasons.seasons.SeasonsApi", return_value=mock_api):
-                with pytest.raises(RscException):
-                    await mixin.franchise_standings(mock_guild, season_id=999)
+            with patch("rsc.seasons.seasons.SeasonsApi", return_value=mock_api), pytest.raises(RscException):
+                await mixin.franchise_standings(mock_guild, season_id=999)
 
 
 class TestSeasonActivityChecksApi:
@@ -375,6 +370,5 @@ class TestSeasonActivityChecksApi:
             mock_api.seasons_activity_check_list.side_effect = ApiException(status=500, reason="Error")
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
-            with patch("rsc.seasons.seasons.SeasonsApi", return_value=mock_api):
-                with pytest.raises(RscException):
-                    await mixin.season_activity_checks(mock_guild)
+            with patch("rsc.seasons.seasons.SeasonsApi", return_value=mock_api), pytest.raises(RscException):
+                await mixin.season_activity_checks(mock_guild)

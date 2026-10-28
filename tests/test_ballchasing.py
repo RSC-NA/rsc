@@ -6,8 +6,11 @@ with exactly one copy of each game under exactly one group tree.
 """
 
 import asyncio
+from collections.abc import Generator
+from contextlib import contextmanager
 from hashlib import md5
 from pathlib import Path
+from typing import NamedTuple
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import ballchasing
@@ -87,7 +90,7 @@ def _group(group_id: str, name: str) -> MagicMock:
     return g
 
 
-def _api(children: dict[str, list] | None = None) -> MagicMock:
+def _api(children: dict[str | None, list] | None = None) -> MagicMock:
     """A ballchasing Api mock whose get_groups walks a parent -> children map."""
     children = children or {}
     api = MagicMock()
@@ -143,7 +146,7 @@ def _candidate(
     )
 
 
-def _bc_player(name: str, score: int, goals: int = 0, assists: int = 0, saves: int = 0, shots: int = 0) -> MagicMock:
+def _bc_player(name: str, score: float, goals: float = 0, assists: float = 0, saves: float = 0, shots: float = 0) -> MagicMock:
     player = MagicMock()
     player.name = name
     player.stats.core.score = score
@@ -475,12 +478,15 @@ class TestRealReplayFixtures:
         a = process._parse_bytes((FIXTURES / "same_match_a.replay").read_bytes())
         b = process._parse_bytes((FIXTURES / "same_match_b.replay").read_bytes())
 
+        assert a.player_stats is not None
+        assert b.player_stats is not None
         assert [p["Name"] for p in a.player_stats] != [p["Name"] for p in b.player_stats]
         assert process.local_fingerprint(a) == process.local_fingerprint(b)
 
     def test_a_different_game_fingerprints_differently(self):
         a = process._parse_bytes((FIXTURES / "same_match_a.replay").read_bytes())
         tampered = process._parse_bytes((FIXTURES / "same_match_b.replay").read_bytes())
+        assert tampered.player_stats is not None
         tampered.player_stats[0]["Score"] += 1
 
         assert process.local_fingerprint(a) != process.local_fingerprint(tampered)
@@ -592,6 +598,7 @@ class TestReplayGroupCollisions:
         locally at upload time."""
         candidate = _candidate()
         processing = _bc_replay("bc1", guid=None, status=ballchasing.ReplayStatus.PENDING)
+        assert candidate.fingerprint is not None
 
         report = await process.replay_group_collisions(
             [candidate],
@@ -605,6 +612,7 @@ class TestReplayGroupCollisions:
     async def test_ledger_does_not_block_a_different_game(self):
         candidate = _candidate(players=_other_game())
         stale = _candidate()
+        assert stale.fingerprint is not None
 
         report = await process.replay_group_collisions([candidate], [], ledger={stale.fingerprint: "bc1"})
 
@@ -858,6 +866,7 @@ class TestUploadReplays:
 
         await mixin.upload_replays(_guild(), group="grp", candidates=[_candidate("a.replay", "GUID-A", payload)])
 
+        assert api.upload_replay_from_bytes.await_args is not None
         assert api.upload_replay_from_bytes.await_args.kwargs["replay_data"] is payload
 
     async def test_failed_patch_is_reported(self):
@@ -894,7 +903,7 @@ class TestUploadSummary:
 class TestBuildCandidates:
     async def test_attachment_is_read_once(self):
         attachment = MagicMock(spec=discord.Attachment)
-        attachment.filename ="a.replay"
+        attachment.filename = "a.replay"
         attachment.read = AsyncMock(return_value=b"bytes")
 
         with patch.object(process, "_parse_bytes", return_value=_parsed("GUID-A")):
@@ -906,7 +915,7 @@ class TestBuildCandidates:
 
     async def test_parsing_is_offloaded_to_a_thread(self):
         attachment = MagicMock(spec=discord.Attachment)
-        attachment.filename ="a.replay"
+        attachment.filename = "a.replay"
         attachment.read = AsyncMock(return_value=b"bytes")
 
         with patch.object(process.asyncio, "to_thread", AsyncMock(return_value=_parsed("GUID-A"))) as to_thread:
@@ -916,24 +925,27 @@ class TestBuildCandidates:
 
     async def test_unparseable_file_names_itself(self):
         attachment = MagicMock(spec=discord.Attachment)
-        attachment.filename ="broken.replay"
+        attachment.filename = "broken.replay"
         attachment.read = AsyncMock(return_value=b"not a replay")
 
-        with pytest.raises(process.ReplayParseError, match="broken.replay"):
+        with pytest.raises(process.ReplayParseError, match=r"broken\.replay"):
             await process.build_candidates([attachment])
 
 
 # ---------------------------------------------------------------- api lifecycle
 
 
-def _patch_api(ping: AsyncMock | None = None):
+class _ApiPatch(NamedTuple):
+    ping: AsyncMock
+    close: AsyncMock
+
+
+@contextmanager
+def _patch_api(ping: AsyncMock | None = None) -> Generator[_ApiPatch]:
     """Patch the network facing half of ballchasing.Api; the constructor is offline."""
-    return patch.multiple(
-        ballchasing.Api,
-        ping=ping or AsyncMock(),
-        reconfigure_session=AsyncMock(),
-        close=AsyncMock(),
-    )
+    mocks = _ApiPatch(ping=ping or AsyncMock(), close=AsyncMock())
+    with patch.multiple(ballchasing.Api, ping=mocks.ping, reconfigure_session=AsyncMock(), close=mocks.close):
+        yield mocks
 
 
 class TestPrepareBallchasing:
@@ -943,9 +955,9 @@ class TestPrepareBallchasing:
         mixin = _create_mixin(_get_bc_auth_token=AsyncMock(return_value="token"))
         mixin._ballchasing_api = {GUILD_ID: existing}
 
-        with _patch_api():
+        with _patch_api() as api:
             await mixin.prepare_ballchasing(_guild())
-            ballchasing.Api.ping.assert_not_awaited()
+            api.ping.assert_not_awaited()
 
         existing.close.assert_not_awaited()
         assert mixin._ballchasing_api[GUILD_ID] is existing
@@ -957,11 +969,11 @@ class TestPrepareBallchasing:
         mixin._ballchasing_api = {GUILD_ID: existing}
         mixin._bc_group_cache = {GUILD_ID: {("a", "b"): "c"}}
 
-        with _patch_api():
+        with _patch_api() as api:
             await mixin.prepare_ballchasing(_guild())
-            ballchasing.Api.ping.assert_awaited_once()
+            api.ping.assert_awaited_once()
             # The fresh instance is kept, not closed.
-            ballchasing.Api.close.assert_not_awaited()
+            api.close.assert_not_awaited()
 
         assert mixin._ballchasing_api[GUILD_ID].auth_key == "new"
         existing.close.assert_awaited_once()
@@ -970,9 +982,9 @@ class TestPrepareBallchasing:
     async def test_no_token_is_a_noop(self):
         mixin = _create_mixin(_get_bc_auth_token=AsyncMock(return_value=None))
 
-        with _patch_api():
+        with _patch_api() as api:
             await mixin.prepare_ballchasing(_guild())
-            ballchasing.Api.ping.assert_not_awaited()
+            api.ping.assert_not_awaited()
 
         assert mixin._ballchasing_api == {}
 
@@ -984,10 +996,10 @@ class TestPrepareBallchasing:
         mixin = _create_mixin(_get_bc_auth_token=AsyncMock(return_value="new"))
         mixin._ballchasing_api = {GUILD_ID: existing}
 
-        with _patch_api(ping=AsyncMock(side_effect=error)):
+        with _patch_api(ping=AsyncMock(side_effect=error)) as api:
             with pytest.raises(type(error)):
                 await mixin.prepare_ballchasing(_guild())
-            ballchasing.Api.close.assert_awaited_once()
+            api.close.assert_awaited_once()
 
         # The working instance is left in place rather than swapped for a dead one.
         assert mixin._ballchasing_api[GUILD_ID] is existing

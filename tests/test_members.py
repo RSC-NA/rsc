@@ -93,9 +93,8 @@ class TestMembersApi:
             mock_api.members_list.side_effect = ApiException(status=500, reason="Error")
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
-            with patch("rsc.members.members.MembersApi", return_value=mock_api):
-                with pytest.raises(RscException):
-                    await mixin.members(mock_guild)
+            with patch("rsc.members.members.MembersApi", return_value=mock_api), pytest.raises(RscException):
+                await mixin.members(mock_guild)
 
 
 # --- signup API ---
@@ -139,18 +138,17 @@ class TestSignupApi:
             mock_api.members_signup_create.side_effect = ApiException(status=400, reason="Bad")
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
-            with patch("rsc.members.members.MembersApi", return_value=mock_api):
-                with pytest.raises(RscException):
-                    await mixin.signup(
-                        mock_guild,
-                        member=mock_member,
-                        rsc_name="TestPlayer",
-                        trackers=["https://tracker.gg/1"],
-                        platform=Platform.STEAM,
-                        player_type=PlayerType.NEW,
-                        referrer=Referrer.REDDIT,
-                        region_preference=RegionPreference.EAST,
-                    )
+            with patch("rsc.members.members.MembersApi", return_value=mock_api), pytest.raises(RscException):
+                await mixin.signup(
+                    mock_guild,
+                    member=mock_member,
+                    rsc_name="TestPlayer",
+                    trackers=["https://tracker.gg/1"],
+                    platform=Platform.STEAM,
+                    player_type=PlayerType.NEW,
+                    referrer=Referrer.REDDIT,
+                    region_preference=RegionPreference.EAST,
+                )
 
 
 # --- create_member API ---
@@ -179,9 +177,8 @@ class TestCreateMemberApi:
             mock_api.members_create.side_effect = ApiException(status=400, reason="Bad")
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
-            with patch("rsc.members.members.MembersApi", return_value=mock_api):
-                with pytest.raises(RscException):
-                    await mixin.create_member(mock_guild, member=mock_member)
+            with patch("rsc.members.members.MembersApi", return_value=mock_api), pytest.raises(RscException):
+                await mixin.create_member(mock_guild, member=mock_member)
 
 
 # --- delete_member API ---
@@ -209,9 +206,8 @@ class TestDeleteMemberApi:
             mock_api.members_destroy.side_effect = ApiException(status=404, reason="Not Found")
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
-            with patch("rsc.members.members.MembersApi", return_value=mock_api):
-                with pytest.raises(RscException):
-                    await mixin.delete_member(mock_guild, member=mock_member)
+            with patch("rsc.members.members.MembersApi", return_value=mock_api), pytest.raises(RscException):
+                await mixin.delete_member(mock_guild, member=mock_member)
 
 
 # --- change_member_name API ---
@@ -240,9 +236,8 @@ class TestChangeMemberNameApi:
             mock_api.members_name_change_partial_update.side_effect = ApiException(status=400, reason="Bad")
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
-            with patch("rsc.members.members.MembersApi", return_value=mock_api):
-                with pytest.raises(RscException):
-                    await mixin.change_member_name(mock_guild, id=111, name="Bad")
+            with patch("rsc.members.members.MembersApi", return_value=mock_api), pytest.raises(RscException):
+                await mixin.change_member_name(mock_guild, id=111, name="Bad")
 
     async def test_sends_executor_when_provided(self, mock_guild):
         """The admin who ran the command is attributed, not the bot's API key."""
@@ -468,15 +463,14 @@ class TestMakeLeaguePlayerApi:
             mock_api.members_make_player_create.side_effect = ApiException(status=400, reason="Bad")
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
-            with patch("rsc.members.members.MembersApi", return_value=mock_api):
-                with pytest.raises(RscException):
-                    await mixin.make_league_player(
-                        mock_guild,
-                        member=mock_member,
-                        base_mmr=1000,
-                        current_mmr=1050,
-                        tier=1,
-                    )
+            with patch("rsc.members.members.MembersApi", return_value=mock_api), pytest.raises(RscException):
+                await mixin.make_league_player(
+                    mock_guild,
+                    member=mock_member,
+                    base_mmr=1000,
+                    current_mmr=1050,
+                    tier=1,
+                )
 
 
 # --- drop_player_from_league API ---
@@ -511,9 +505,8 @@ class TestDropPlayerFromLeagueApi:
             mock_api.members_member_league_drop_create.side_effect = ApiException(status=400, reason="Bad")
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
-            with patch("rsc.members.members.MembersApi", return_value=mock_api):
-                with pytest.raises(RscException):
-                    await mixin.drop_player_from_league(mock_guild, member=mock_member)
+            with patch("rsc.members.members.MembersApi", return_value=mock_api), pytest.raises(RscException):
+                await mixin.drop_player_from_league(mock_guild, member=mock_member)
 
 
 # --- elevated role helpers ---
@@ -564,9 +557,8 @@ class TestMemberElevatedRolesApi:
             mock_api.members_elevated_roles_list.side_effect = ApiException(status=500, reason="Error")
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
-            with patch("rsc.members.members.MembersApi", return_value=mock_api):
-                with pytest.raises(RscException):
-                    await mixin.member_elevated_roles(mock_guild, 1234)
+            with patch("rsc.members.members.MembersApi", return_value=mock_api), pytest.raises(RscException):
+                await mixin.member_elevated_roles(mock_guild, 1234)
 
 
 class TestCreateElevatedRoleApi:
@@ -621,9 +613,7 @@ class TestCreateElevatedRoleApi:
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
             with patch("rsc.members.members.MembersApi", return_value=mock_api):
-                await mixin.create_elevated_role(
-                    mock_guild, member=mock_member, executor=mock_executor, position=StaffPositions.NUMBERS
-                )
+                await mixin.create_elevated_role(mock_guild, member=mock_member, executor=mock_executor, position=StaffPositions.NUMBERS)
 
         body = mock_api.members_elevated_roles_create.await_args.kwargs["elevated_role_input"].to_dict()
         assert body["position"] == "NUMS"
@@ -659,9 +649,7 @@ class TestCreateElevatedRoleApi:
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
             with patch("rsc.members.members.MembersApi", return_value=mock_api):
-                await mixin.create_elevated_role(
-                    mock_guild, member=mock_member, executor=mock_executor, position=StaffPositions.NUMBERS
-                )
+                await mixin.create_elevated_role(mock_guild, member=mock_member, executor=mock_executor, position=StaffPositions.NUMBERS)
 
         assert mock_member.id not in cache[mock_guild.id]
         assert 999 in cache[mock_guild.id]
@@ -678,11 +666,8 @@ class TestCreateElevatedRoleApi:
             mock_api.members_elevated_roles_create.side_effect = ApiException(status=403, reason="Forbidden")
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
-            with patch("rsc.members.members.MembersApi", return_value=mock_api):
-                with pytest.raises(RscException):
-                    await mixin.create_elevated_role(
-                    mock_guild, member=mock_member, executor=mock_executor, position=StaffPositions.NUMBERS
-                )
+            with patch("rsc.members.members.MembersApi", return_value=mock_api), pytest.raises(RscException):
+                await mixin.create_elevated_role(mock_guild, member=mock_member, executor=mock_executor, position=StaffPositions.NUMBERS)
 
 
 class TestDeleteElevatedRoleApi:
@@ -723,9 +708,8 @@ class TestDeleteElevatedRoleApi:
             mock_api.members_elevated_roles_destroy.side_effect = ApiException(status=404, reason="Not Found")
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
-            with patch("rsc.members.members.MembersApi", return_value=mock_api):
-                with pytest.raises(RscException):
-                    await mixin.delete_elevated_role(mock_guild, discord_id=555, role_id=9)
+            with patch("rsc.members.members.MembersApi", return_value=mock_api), pytest.raises(RscException):
+                await mixin.delete_elevated_role(mock_guild, discord_id=555, role_id=9)
 
 
 class TestInvalidateElevatedRoleCache:

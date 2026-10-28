@@ -70,10 +70,7 @@ def _used_rscapi_endpoints() -> list[tuple[str, str, str]]:
             rel_path = call_path.relative_to(SOURCE_ROOT.parents[0])
             endpoints[(api_class, method_name)].add(f"{rel_path}:{line_number}")
 
-    return [
-        (api_class, method_name, ", ".join(sorted(locations)))
-        for (api_class, method_name), locations in sorted(endpoints.items())
-    ]
+    return [(api_class, method_name, ", ".join(sorted(locations))) for (api_class, method_name), locations in sorted(endpoints.items())]
 
 
 @pytest.mark.parametrize(("api_class_name", "method_name", "locations"), _used_rscapi_endpoints())

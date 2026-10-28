@@ -28,7 +28,7 @@ from rscapi import (
 from rscapi.models.league_player import LeaguePlayer
 from rscapi.models.tier import Tier
 
-API_KEY = os.environ.get("RSC_API_KEY")
+API_KEY = os.environ.get("RSC_API_KEY", "")
 API_HOST = "https://staging-api.rscna.com/api/v1"
 LOG_LEVEL = os.environ.get("RSC_DRAFT_LOG_LEVEL", "INFO").upper()
 
@@ -64,6 +64,7 @@ CONF = Configuration(
     api_key_prefix={"Api-Key": "Api-Key"},
 )
 
+
 class Status(StrEnum):
     DRAFT_ELIGIBLE = "DE"  # Draft Eligible
     FREE_AGENT = "FA"  # Free Agent
@@ -81,6 +82,7 @@ class Status(StrEnum):
     WAIVER_RELEASE = "WR"  # Waiver Release
     DROPPED = "DR"  # Dropped
 
+
 async def tiers() -> list[Tier]:
     """Fetch a list of tiers"""
     async with ApiClient(CONF) as client:
@@ -89,10 +91,10 @@ async def tiers() -> list[Tier]:
         tiers.sort(key=lambda t: t.position, reverse=True)
 
         # Populate cache
-        if tiers:
-            if not all(t.name for t in tiers):
-                raise AttributeError("API returned a tier with no name.")
+        if tiers and not all(t.name for t in tiers):
+            raise AttributeError("API returned a tier with no name.")
         return tiers
+
 
 async def draft(
     player: int,
@@ -127,6 +129,7 @@ async def draft(
         api = TransactionsApi(client)
         return await api.transactions_draft_create(draft_pick)
 
+
 async def teams(
     seasons: list[int] | None = None,
     franchise: str | None = None,
@@ -144,7 +147,6 @@ async def teams(
             league=1,
         )
         return teams
-
 
 
 async def players(
@@ -182,8 +184,7 @@ async def players(
                 return results
 
 
-
-async def parse_csv(csv: str, tier:str|None=None) -> pd.DataFrame:
+async def parse_csv(csv: str, tier: str | None = None) -> pd.DataFrame:
     df: pd.DataFrame = pd.read_csv(csv, dtype={"Discord ID": str})
     # for idx, row in df.iterrows():
     #     if df[idx]["Player Id"] == "#N/A":
@@ -203,7 +204,7 @@ async def parse_csv(csv: str, tier:str|None=None) -> pd.DataFrame:
         df = df.loc[df["Tier"].str.casefold() == tier.casefold()]
 
     # df["Player Id"] = df["Player Id"].apply(lambda x: int(x) if not pd.isna(x) else None)
-    df["Discord ID"] = df["Discord ID"].astype('Int64')
+    df["Discord ID"] = df["Discord ID"].astype("Int64")
     df["Pick #"] = df["Pick #"].astype(int)
     df["Round #"] = df["Round #"].astype(int)
 
@@ -213,12 +214,13 @@ async def parse_csv(csv: str, tier:str|None=None) -> pd.DataFrame:
     # print(df.dtypes)
     return df
 
-async def process_tier_random(season: int, layout: pd.DataFrame, tier: str, pick:int, dry:bool=False, delay:float=0.0, override:bool=False) -> None:
+
+async def process_tier_random(
+    season: int, layout: pd.DataFrame, tier: str, pick: int, dry: bool = False, delay: float = 0.0, override: bool = False
+) -> None:
     tier_layout = layout.loc[layout["Tier"].astype("string").str.casefold() == tier.casefold()].copy()
     manual_skip_for_tier = {
-        (skip_round, skip_pick)
-        for skip_tier, skip_round, skip_pick in MANUAL_SKIP
-        if skip_tier.casefold() == tier.casefold()
+        (skip_round, skip_pick) for skip_tier, skip_round, skip_pick in MANUAL_SKIP if skip_tier.casefold() == tier.casefold()
     }
 
     logger.info("Getting player list for %s", tier)
@@ -240,9 +242,7 @@ async def process_tier_random(season: int, layout: pd.DataFrame, tier: str, pick
     plist = [lp for lp in resp if lp.status not in blocked_statuses]
     filtered_count = original_count - len(plist)
     if filtered_count:
-        dropped = collections.Counter(
-            getattr(lp.status, "value", str(lp.status)) for lp in resp if lp.status in blocked_statuses
-        )
+        dropped = collections.Counter(getattr(lp.status, "value", str(lp.status)) for lp in resp if lp.status in blocked_statuses)
         logger.info(
             "Filtered out %s blocked-status players from draft pool (%s)",
             filtered_count,
@@ -264,7 +264,7 @@ async def process_tier_random(season: int, layout: pd.DataFrame, tier: str, pick
     eligible.sort(key=lambda p: p.id or 0)
     logger.info("Total FA/DE players: %s", len(eligible))
 
-    is_redraft = True if len(eligible) < len(plist) else False
+    is_redraft = len(eligible) < len(plist)
     if is_redraft:
         logger.warning("Redraft detected. Drafting from entire player list instead of eligible pool")
 
@@ -297,7 +297,7 @@ async def process_tier_random(season: int, layout: pd.DataFrame, tier: str, pick
 
     logger.info("Starting draft at pick: %s", pick)
     unfilled: list[int] = []
-    for idx, pos in tier_layout.iterrows():
+    for _idx, pos in tier_layout.iterrows():
         logger.info("[%s] Round: %s Pick: %s", tier, pos["Round #"], pos["Pick #"])
 
         round_no = int(pos["Round #"])
@@ -396,8 +396,6 @@ async def process_tier_random(season: int, layout: pd.DataFrame, tier: str, pick
             draftee.status if draftee else "KEEPER",
         )
 
-
-
         try:
             tresp = await draft(player=pid, team=dst.name, round=pos["Round #"], pick=pos["Pick #"], override=override, dry=dry)
             if not dry and not tresp:
@@ -433,7 +431,7 @@ async def process_tier_random(season: int, layout: pd.DataFrame, tier: str, pick
         )
 
 
-async def test_draft(season: int, draftcsv: str, tier: str, pick: int, dry:bool=False, delay:float=0.0, override:bool=False):
+async def test_draft(season: int, draftcsv: str, tier: str, pick: int, dry: bool = False, delay: float = 0.0, override: bool = False):
     layout = await parse_csv(draftcsv, tier=tier)
     tierlist = await tiers()
 
@@ -447,34 +445,39 @@ async def test_draft(season: int, draftcsv: str, tier: str, pick: int, dry:bool=
         await process_tier_random(season=season, layout=layout, tier=t.name, pick=pick, dry=dry, delay=delay, override=override)
 
 
-
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description='Test RSC draft on staging')
-    parser.add_argument(
-        'season', type=int, default=None,
-        help='Season Number')
-    parser.add_argument(
-        'draftcsv', type=str, default=None,
-        help='CSV file from Draft Layout (Bot Command Tab)')
+    parser = argparse.ArgumentParser(description="Test RSC draft on staging")
+    parser.add_argument("season", type=int, default=None, help="Season Number")
+    parser.add_argument("draftcsv", type=str, default=None, help="CSV file from Draft Layout (Bot Command Tab)")
 
+    parser.add_argument("-t", "--tier", type=str, default=None, help="Tier")
+    parser.add_argument("-p", "--pick", dest="pick", type=int, default=1, help="Start at pick within tier (Resume from error)")
+    parser.add_argument("--dry", action="store_true", default=False, help="Dry run. (Do not send draft pick to API)")
     parser.add_argument(
-        "-t", "--tier", type=str, default=None,
-        help='Tier')
+        "-d",
+        "--delay",
+        dest="delay",
+        type=float,
+        default=0.0,
+        metavar="SECONDS",
+        help="Wait SECONDS between picks so each one can be watched land on the draft page (e.g. 2 or 1.5). Default: no delay",
+    )
     parser.add_argument(
-        '-p', '--pick', dest="pick", type=int, default=1,
-        help='Start at pick within tier (Resume from error)')
+        "-o",
+        "--override",
+        action="store_true",
+        default=False,
+        help=(
+            "Send picks with admin_override so the API skips draft validation. "
+            "Needed to re-run a draft without resetting the staging DB. Default: off"
+        ),
+    )
     parser.add_argument(
-        '--dry', action="store_true", default=False,
-        help='Dry run. (Do not send draft pick to API)')
-    parser.add_argument(
-        '-d', '--delay', dest="delay", type=float, default=0.0, metavar="SECONDS",
-        help='Wait SECONDS between picks so each one can be watched land on the draft page (e.g. 2 or 1.5). Default: no delay')
-    parser.add_argument(
-        '-o', '--override', action="store_true", default=False,
-        help='Send picks with admin_override so the API skips draft validation. Needed to re-run a draft without resetting the staging DB. Default: off')
-    parser.add_argument(
-        '--debug', action="store_true", default=False,
-        help='Enable debug logging, including the DraftInput payload sent for each pick. Overrides RSC_DRAFT_LOG_LEVEL')
+        "--debug",
+        action="store_true",
+        default=False,
+        help="Enable debug logging, including the DraftInput payload sent for each pick. Overrides RSC_DRAFT_LOG_LEVEL",
+    )
     argv = parser.parse_args()
 
     if argv.pick < 1:
@@ -493,4 +496,6 @@ if __name__ == "__main__":
     if argv.override:
         logger.warning("Admin override enabled. API-side draft validation will be skipped.")
 
-    asyncio.run(test_draft(argv.season, argv.draftcsv, tier=argv.tier, pick=argv.pick, dry=argv.dry, delay=argv.delay, override=argv.override))
+    asyncio.run(
+        test_draft(argv.season, argv.draftcsv, tier=argv.tier, pick=argv.pick, dry=argv.dry, delay=argv.delay, override=argv.override)
+    )

@@ -3,12 +3,12 @@
 import asyncio
 import os
 import sys
-from typing import AsyncIterator
+from collections.abc import AsyncIterator
 
 from rscapi import ApiClient, Configuration, LeaguePlayersApi
 from rscapi.models.league_player import LeaguePlayer
 
-API_KEY = os.environ.get("RSC_API_KEY")
+API_KEY = os.environ.get("RSC_API_KEY", "")
 API_HOST = "https://api.rscna.com/api/v1"
 # API_HOST = "http://127.0.0.1:8000/api/v1"
 
@@ -108,8 +108,7 @@ async def get_paged_rostered_players():
 
 async def get_rostered_players():
     total = 0
-    synced = 0
-    for api_player in await players(season_number=25):
+    for _api_player in await players(season_number=25):
         total += 1
 
     print(f"Total players returned from non-paged players: {total}")

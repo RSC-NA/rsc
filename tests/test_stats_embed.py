@@ -1,5 +1,6 @@
 """Tests for the /playerstats and /teamstats embed."""
 
+from typing import Any
 from unittest.mock import MagicMock
 
 from rscapi.models.player_season_stats import PlayerSeasonStats
@@ -8,7 +9,7 @@ from rsc.stats.stats import StatsMixIn
 
 
 def _player_stats(**overrides) -> PlayerSeasonStats:
-    values = {
+    values: dict[str, Any] = {
         "player": "Striker",
         "season": 27,
         "games_played": 40,

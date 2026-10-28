@@ -1,17 +1,9 @@
-import sys
-from pathlib import Path
-
 import pytest
-
-# Add the project root to the path so we can import the modules
-project_root = Path(__file__).parent.parent
-sys.path.insert(0, str(project_root))
 
 from rsc.core import RSC
 from rsc.enums import TransactionType
 from rsc.exceptions import RscException
 from rscapi import LeaguePlayersApi, TransactionsApi
-from rscapi.models.franchise_identifier import FranchiseIdentifier
 
 pytestmark = pytest.mark.integration
 
@@ -19,7 +11,7 @@ pytestmark = pytest.mark.integration
 class TestTransactionsApiContract:
     """Verify all expected rscapi TransactionsApi methods exist without calling them."""
 
-    EXPECTED_METHODS = [
+    EXPECTED_METHODS = (
         "transactions_sign_create",
         "transactions_cut_create",
         "transactions_resign_create",
@@ -33,7 +25,7 @@ class TestTransactionsApiContract:
         "transactions_trade_create",
         "transactions_trade_validate_futures_create",
         "transactions_draft_create",
-    ]
+    )
 
     @pytest.mark.parametrize("method_name", EXPECTED_METHODS)
     def test_method_exists(self, method_name: str):
@@ -45,9 +37,7 @@ class TestTransactionsApiContract:
 class TestTransactionsLeaguePlayersApiContract:
     """Verify LeaguePlayersApi methods used by the transactions module exist."""
 
-    EXPECTED_METHODS = [
-        "league_players_set_captain_create",
-    ]
+    EXPECTED_METHODS = ("league_players_set_captain_create",)
 
     @pytest.mark.parametrize("method_name", EXPECTED_METHODS)
     def test_method_exists(self, method_name: str):
@@ -73,7 +63,7 @@ class TestTransactionsApiCalls:
             if not team.name:
                 pytest.skip("Team has no name")
 
-            result = await rsc_bot.sign(
+            await rsc_bot.sign(
                 guild=mock_guild, player=mock_member, team=team.name, executor=mock_member, notes="Development Bot Pytest", override=True
             )
             print(f"✓ sign() succeeded for player {mock_member.id}")
@@ -88,9 +78,7 @@ class TestTransactionsApiCalls:
     async def test_cut_api_call(self, rsc_bot: RSC, mock_guild, mock_member):
         """Test that cut() API call doesn't raise exceptions."""
         try:
-            result = await rsc_bot.cut(
-                guild=mock_guild, player=mock_member, executor=mock_member, notes="Development Bot Pytest", override=True
-            )
+            await rsc_bot.cut(guild=mock_guild, player=mock_member, executor=mock_member, notes="Development Bot Pytest", override=True)
             print(f"✓ cut() succeeded for player {mock_member.id}")
         except RscException as e:
             if e.status in [400, 404, 409]:
@@ -112,7 +100,7 @@ class TestTransactionsApiCalls:
             if not team.name:
                 pytest.skip("Team has no name")
 
-            result = await rsc_bot.resign(
+            await rsc_bot.resign(
                 guild=mock_guild, player=mock_member, team=team.name, executor=mock_member, notes="Development Bot Pytest", override=True
             )
             print(f"✓ resign() succeeded for player {mock_member.id}")
@@ -136,7 +124,7 @@ class TestTransactionsApiCalls:
             if not player.id:
                 pytest.skip("Player has no ID")
 
-            result = await rsc_bot.set_captain(mock_guild, player.id)
+            await rsc_bot.set_captain(mock_guild, player.id)
             print(f"✓ set_captain() succeeded for player {player.id}")
         except RscException as e:
             if e.status in [400, 404, 409]:
@@ -149,7 +137,7 @@ class TestTransactionsApiCalls:
     async def test_substitution_api_call(self, rsc_bot: RSC, mock_guild, mock_member, generated_discord_member):
         """Test that substitution() API call doesn't raise exceptions."""
         try:
-            result = await rsc_bot.substitution(
+            await rsc_bot.substitution(
                 guild=mock_guild,
                 player_in=generated_discord_member,
                 player_out=mock_member,
@@ -169,7 +157,7 @@ class TestTransactionsApiCalls:
     async def test_expire_sub_api_call(self, rsc_bot: RSC, mock_guild, mock_member):
         """Test that expire_sub() API call doesn't raise exceptions."""
         try:
-            result = await rsc_bot.expire_sub(guild=mock_guild, player=mock_member, executor=mock_member)
+            await rsc_bot.expire_sub(guild=mock_guild, player=mock_member, executor=mock_member)
             print(f"✓ expire_sub() succeeded for player {mock_member.id}")
         except RscException as e:
             if e.status in [400, 404, 409]:
@@ -182,9 +170,7 @@ class TestTransactionsApiCalls:
     async def test_retire_api_call(self, rsc_bot: RSC, mock_guild, mock_member):
         """Test that retire() API call doesn't raise exceptions."""
         try:
-            result = await rsc_bot.retire(
-                guild=mock_guild, player=mock_member, executor=mock_member, notes="Development Bot Pytest", override=True
-            )
+            await rsc_bot.retire(guild=mock_guild, player=mock_member, executor=mock_member, notes="Development Bot Pytest", override=True)
             print(f"✓ retire() succeeded for player {mock_member.id}")
         except RscException as e:
             if e.status in [400, 404, 409]:
@@ -197,7 +183,7 @@ class TestTransactionsApiCalls:
     async def test_inactive_reserve_api_call(self, rsc_bot: RSC, mock_guild, mock_member):
         """Test that inactive_reserve() API call doesn't raise exceptions."""
         try:
-            result = await rsc_bot.inactive_reserve(
+            await rsc_bot.inactive_reserve(
                 guild=mock_guild, player=mock_member, executor=mock_member, notes="Test IR", override=True, redshirt=False, remove=False
             )
             print(f"✓ inactive_reserve() succeeded for player {mock_member.id}")
@@ -237,7 +223,7 @@ class TestTransactionsApiCalls:
         if not transaction.id:
             pytest.skip("Transaction has no ID")
 
-        result = await rsc_bot.transaction_history_by_id(mock_guild, transaction.id)
+        await rsc_bot.transaction_history_by_id(mock_guild, transaction.id)
         print(f"✓ transaction_history_by_id() succeeded for transaction {transaction.id}")
 
     @pytest.mark.asyncio
@@ -250,18 +236,10 @@ class TestTransactionsApiCalls:
             if len(franchises) < 2:
                 pytest.skip("Need at least 2 franchises to test trade")
 
-            source_franchise = FranchiseIdentifier(
-                id=franchises[0].id, name=franchises[0].name, gm=franchises[0].gm.discord_id if franchises[0].gm else None
-            )
-
-            dest_franchise = FranchiseIdentifier(
-                id=franchises[1].id, name=franchises[1].name, gm=franchises[1].gm.discord_id if franchises[1].gm else None
-            )
-
             # Mock trade item - this is just for testing API structure
             trade_items = []  # Empty list since this will likely fail anyway
 
-            result = await rsc_bot.trade(guild=mock_guild, trades=trade_items, executor=mock_member, notes="Test trade", override=True)
+            await rsc_bot.trade(guild=mock_guild, trades=trade_items, executor=mock_member, notes="Test trade", override=True)
             print("✓ trade() succeeded unexpectedly")
         except RscException as e:
             if e.status in [400, 404, 409]:
@@ -283,9 +261,7 @@ class TestTransactionsApiCalls:
             if not team.name:
                 pytest.skip("Team has no name")
 
-            result = await rsc_bot.draft(
-                guild=mock_guild, player=mock_member, executor=mock_member, team=team.name, round=1, pick=1, override=True
-            )
+            await rsc_bot.draft(guild=mock_guild, player=mock_member, executor=mock_member, team=team.name, round=1, pick=1, override=True)
             print(f"✓ draft() succeeded for player {mock_member.id}")
         except RscException as e:
             if e.status in [400, 404, 409]:
@@ -295,7 +271,6 @@ class TestTransactionsApiCalls:
 
 
 class TestTransactionsPrivilegedApiCalls:
-
     @pytest.mark.asyncio
     async def test_cut_privileged_api_call(self, rsc_bot_no_key: RSC, rsc_bot_invalid_key: RSC, mock_guild, mock_member):
         """Test that cut() API call raises NotImplementedError."""
@@ -314,6 +289,7 @@ class TestTransactionsPrivilegedApiCalls:
         assert exc.value.response.reason == "Forbidden"
         assert exc.value.status == 403
         assert exc.value.response.status == 403
+
 
 class TestTransactionsApiDataStructures:
     """Test that API responses have expected structure."""
@@ -344,6 +320,7 @@ class TestTransactionsApiHelperFunctions:
 
         result = await rsc_bot.parse_trade_text(guild=mock_guild, data=test_trade_text)
         print(f"✓ parse_trade_text() returned {len(result)} trade item(s)")
+
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v", "-s"])

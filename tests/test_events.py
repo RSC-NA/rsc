@@ -1,13 +1,6 @@
-import sys
-from datetime import UTC, datetime
-from pathlib import Path
-
 import discord
 import pytest
-
-# Add the project root to the path so we can import the modules
-project_root = Path(__file__).parent.parent
-sys.path.insert(0, str(project_root))
+from rscapi.models.league_event_list import LeagueEventList
 
 from rsc.embeds import BlueEmbed, EmbedLimits
 from rsc.enums import EventAction, EventCategory
@@ -189,14 +182,10 @@ class TestLeagueEventData:
         assert event.event_action is None
 
     def test_from_api_rejects_an_event_without_an_id(self):
-        from rscapi.models.league_event_list import LeagueEventList
-
         assert LeagueEventData.from_api(LeagueEventList(category="TRN")) is None
 
     def test_from_api_normalizes_enums_to_plain_str(self):
         """Filters compare against config values, which are plain strings."""
-        from rscapi.models.league_event_list import LeagueEventList
-
         event = LeagueEventData.from_api(LeagueEventList(id=1, category="TRN", action="PTR"))
         assert event is not None
         assert type(event.category) is str
@@ -285,9 +274,7 @@ class TestFormatters:
         assert build_event_embed(event).color == discord.Color.red()
 
     def test_system_event_renders_with_severity_field(self):
-        embed = build_event_embed(
-            evt(1, category="SYS", action="TKF", severity="ERR", payload={"task": "mmr_pull"})
-        )
+        embed = build_event_embed(evt(1, category="SYS", action="TKF", severity="ERR", payload={"task": "mmr_pull"}))
         assert embed.title == "Task Failed"
         assert any(f.name == "Severity" for f in embed.fields)
 
@@ -377,6 +364,7 @@ class TestTrackerConflictFormatter:
         embed = build_event_embed(self.tmf(payload))
 
         note = next(f.value for f in embed.fields if f.name == "Note")
+        assert note is not None
         assert "35 more not shown" in note
         assert "truncated" in note
 
@@ -390,7 +378,7 @@ class TestTrackerConflictFormatter:
         payload = {"failures": [self.merge_failure() for _ in range(25)], "failure_count": 25}
         embed = build_event_embed(self.tmf(payload))
 
-        assert sum(1 for f in embed.fields if f.name.startswith("Failure ")) == MAX_RENDERED_ENTRIES
+        assert sum(1 for f in embed.fields if f.name and f.name.startswith("Failure ")) == MAX_RENDERED_ENTRIES
 
     def test_stays_within_embed_limits_at_full_size(self):
         """25 entries is the emitter's own cap, so this is the worst real case."""
@@ -404,7 +392,7 @@ class TestTrackerConflictFormatter:
 
         assert len(embed) <= EmbedLimits.Total
         assert len(embed.fields) <= EmbedLimits.Fields
-        assert all(len(f.value) <= EmbedLimits.Field.Value for f in embed.fields)
+        assert all(f.value is not None and len(f.value) <= EmbedLimits.Field.Value for f in embed.fields)
 
     def test_link_conflict_renders_its_own_shape(self):
         """`TLC` carries `conflicts`, not `failures`."""
@@ -431,7 +419,7 @@ class TestTrackerConflictFormatter:
         )
 
         assert embed.title == "Tracker Link Conflict"
-        rendered = " ".join(f.value for f in embed.fields)
+        rendered = " ".join(f.value or "" for f in embed.fields)
         assert "76561198000000000" in rendered
         # Both sides of the conflict have to be present to action it.
         assert "555" in rendered
@@ -458,7 +446,7 @@ class TestTrackerConflictFormatter:
             )
         )
 
-        assert "none" in " ".join(f.value for f in embed.fields)
+        assert "none" in " ".join(f.value or "" for f in embed.fields)
 
     def test_missing_entries_falls_back_to_generic(self):
         """Nothing this formatter can say that the payload dump cannot say better."""
@@ -467,17 +455,15 @@ class TestTrackerConflictFormatter:
         assert any(f.name == "Payload" for f in embed.fields)
 
     def test_malformed_payload_does_not_raise(self):
-        assert build_event_embed(self.tmf("not a dict")).title is not None
+        assert build_event_embed(self.tmf("not a dict")).title is not None  # ty: ignore[invalid-argument-type]
         assert build_event_embed(self.tlc({"conflicts": "not a list"})).title is not None
         assert build_event_embed(self.tmf({"failures": [None, "junk"]})).title is not None
 
     def test_payload_text_is_escaped(self):
         """Untrusted JSON on its way to a Discord message."""
-        embed = build_event_embed(
-            self.tmf({"failures": [self.merge_failure(group_key="**bold**")], "failure_count": 1})
-        )
+        embed = build_event_embed(self.tmf({"failures": [self.merge_failure(group_key="**bold**")], "failure_count": 1}))
 
-        assert "\\*\\*bold\\*\\*" in " ".join(f.value for f in embed.fields)
+        assert "\\*\\*bold\\*\\*" in " ".join(f.value or "" for f in embed.fields)
 
 
 class TestFilters:

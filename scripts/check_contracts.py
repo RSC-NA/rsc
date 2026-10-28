@@ -9,7 +9,7 @@ from pprint import pprint
 import pandas
 import requests
 
-API_KEY = os.environ.get("RSC_API_KEY")
+API_KEY = os.environ.get("RSC_API_KEY", "")
 API_HOST = "https://api.rscna.com/api/v1"
 
 auth = {"Authorization": f"Api-Key: {API_KEY}"}
@@ -35,26 +35,22 @@ def api_fa_players():
     return api_get_all(f"{API_HOST}/league-players/?status=FA&limit=500")
 
 
-def check_invalid_fa(players, df: pandas.DataFrame):
+def check_invalid_fa(players: list[dict], df: pandas.DataFrame) -> list[str]:
     invalid = []
     for player in players:
-        fa = df[
-            df["Player Name"].str.fullmatch(
-                player["player"]["name"], na=False, case=False
-            )
-        ]
+        fa = df[df["Player Name"].str.fullmatch(player["player"]["name"], na=False, case=False)]
         if not fa.empty:
             # print(f"Invalid FA: {fa['Player Name'].item()}")
             invalid.append(fa["Player Name"].item())
     return invalid
 
 
-def remove_cut_players(players, season):
+def remove_cut_players(players: list[str], season: int) -> list[str]:
     transactions = api_get_all(f"{API_HOST}/transactions/history/?season_number={season}&league=1&transaction_type=CUT&limit=500")
 
     cut_players = []
     for r in transactions:
-        tmp = r["player_updates"].pop(0)  # type: ignore
+        tmp = r["player_updates"].pop(0)
         try:
             cut_players.append(tmp["player"]["player"]["name"])
         except Exception as exc:

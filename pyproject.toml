@@ -31,6 +31,15 @@ dev = [
     "pytest-asyncio>=1.3.0",
     "pytest-timeout>=2.4.0",
 ]
+# Third-party imports of the one-off utilities in scripts/. The bot itself does not need them.
+scripts = [
+    "imutils>=0.5.4",
+    "matplotlib>=3.11.2",
+    "opencv-python>=5.0.0.93",
+    "pytesseract>=0.3.13",
+    "requests>=2.34.2",
+    "scipy>=1.17.1",
+]
 
 [tool.mypy]
 check_untyped_defs = true
@@ -46,7 +55,7 @@ profile = "black"
 [tool.ruff]
 line-length = 140
 indent-width = 4
-exclude = ["scripts/", "data/", "tests/"]
+exclude = ["data/"]
 
 [tool.ruff.lint]
 select = [
@@ -113,6 +122,8 @@ ignore = [
 [tool.ruff.lint.per-file-ignores]
 # Discord message copy. Wrapping would insert line breaks into the rendered output.
 "rsc/const.py" = ["E501"]
+# Tests assert freely, take unannotated pytest fixtures, and use fake credentials and non-crypto randomness.
+"tests/**" = ["S101", "ANN", "S105", "S106", "S107", "S311"]
 
 [tool.ruff.format]
 # Like Black, use double quotes for strings.
@@ -150,9 +161,6 @@ filterwarnings = [
 markers = [
     "integration: marks tests that make real API calls to the staging server",
 ]
-
-[tool.ty.src]
-exclude = ["scripts", "tests"]
 
 [tool.ty.environment]
 extra-paths = [

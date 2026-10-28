@@ -116,8 +116,11 @@ class TestNonPlayingAgmReconcile:
         assert guild_roles.league in added
         assert guild_roles.franchise in added
 
-        roles.utils.update_discord_name.assert_awaited_once()
-        kwargs = roles.utils.update_discord_name.await_args.kwargs
+        update_name = roles.utils.update_discord_name
+        assert isinstance(update_name, AsyncMock)
+        update_name.assert_awaited_once()
+        assert update_name.await_args is not None
+        kwargs = update_name.await_args.kwargs
         assert kwargs["prefix"] == "OCE"
         assert kwargs["name"] == "nickm"
 
@@ -156,7 +159,9 @@ class TestNonPlayingAgmReconcile:
 
         await roles.update_nonplaying_discord(guild=mock_guild, member=member, tiers=[], agm_franchise=_franchise(gm=None))
 
-        roles.utils.franchise_role_from_name.assert_awaited_once()
+        role_from_name = roles.utils.franchise_role_from_name
+        assert isinstance(role_from_name, AsyncMock)
+        role_from_name.assert_awaited_once()
         assert guild_roles.franchise in _added(member)
         assert guild_roles.agm in _added(member)
 
@@ -185,7 +190,10 @@ class TestNonPlayingAgmReconcile:
 
         await roles.update_nonplaying_discord(guild=mock_guild, member=member, tiers=[], agm_franchise=_franchise(rsc_name=None))
 
-        assert roles.utils.update_discord_name.await_args.kwargs["name"] == "nickm"
+        update_name = roles.utils.update_discord_name
+        assert isinstance(update_name, AsyncMock)
+        assert update_name.await_args is not None
+        assert update_name.await_args.kwargs["name"] == "nickm"
 
 
 class TestNonPlayingNonAgm:
@@ -296,6 +304,7 @@ class TestDispatcher:
 
         await roles.update_league_player_discord(guild=mock_guild, player=member, agm_franchise=f)
 
+        assert sync.await_args is not None
         assert sync.await_args.kwargs["agm_franchise"] is f
 
     @pytest.mark.parametrize("status", [Status.DROPPED, Status.FORMER, Status.BANNED])
@@ -308,6 +317,7 @@ class TestDispatcher:
 
         await roles.update_league_player_discord(guild=mock_guild, player=member, league_player=lp, agm_franchise=f)
 
+        assert sync.await_args is not None
         assert sync.await_args.kwargs["agm_franchise"] is f
 
     async def test_conflicting_status_is_logged_and_still_dispatched(self, mock_guild, member, monkeypatch, caplog):

@@ -64,7 +64,9 @@ This should not be appended to the final rule.
     assert docs["2.4.3.1"].metadata["parent_rule_number"] == "2.4.3"
     assert docs["2.4.3.1"].metadata["ancestor_rule_numbers"] == "2|2.4|2.4.3"
     assert docs["2.4.3.1"].metadata["depth"] == 4
-    assert "2 League Format > 2.4 Regular season > 2.4.3" in docs["2.4.3.1"].metadata["rule_path"]
+    rule_path = docs["2.4.3.1"].metadata["rule_path"]
+    assert isinstance(rule_path, str)
+    assert "2 League Format > 2.4 Regular season > 2.4.3" in rule_path
     assert "Parent Rule: 2.4.3" in docs["2.4.3.1"].page_content
     assert "This continuation should stay attached" in docs["2.4.3.1"].page_content
     assert "Direct Subrules:\n- 2.4.3.1" in docs["2.4.3"].page_content
@@ -75,11 +77,11 @@ def test_old_zero_width_rule_markers_are_normalized(tmp_path: Path) -> None:
     file_path = write_rulebook(
         tmp_path,
         """
-## 1.​ Introduction
+## 1.\u200b Introduction
 
-#### 1.1.​ Signing-up for RSC
+#### 1.1.\u200b Signing-up for RSC
 
-1.1.1.​ Players must have their own discord account.
+1.1.1.\u200b Players must have their own discord account.
 """,
     )
 

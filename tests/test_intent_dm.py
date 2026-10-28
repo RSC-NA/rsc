@@ -12,6 +12,8 @@ from rsc.admin.views import INTENT_DM_TEMPLATE, IntentDMButton, build_intent_dm_
 from rsc.core import RSC
 from rsc.exceptions import RscException
 
+from .utils import custom_ids
+
 # Called unbound with a stub `self`; the mixin needs a full cog to instantiate.
 resolve_missing_members = AdminIntentsMixIn._resolve_missing_members
 
@@ -154,7 +156,8 @@ class TestIntentDMButton:
 
     async def test_from_custom_id_parses_all_fields(self):
         match = TEMPLATE.fullmatch(f"intent_dm:{GUILD_ID}:{SEASON}:no")
-        button = await IntentDMButton.from_custom_id(None, None, match)  # type: ignore[arg-type]
+        assert match
+        button = await IntentDMButton.from_custom_id(MagicMock(), MagicMock(), match)
         assert button.guild_id == GUILD_ID
         assert button.season == SEASON
         assert button.returning is False
@@ -166,15 +169,16 @@ class TestIntentDMButton:
         implementation ever started reaching into them.
         """
         match = TEMPLATE.fullmatch(f"intent_dm:{GUILD_ID}:{SEASON}:yes")
-        button = await IntentDMButton.from_custom_id(None, None, match)  # type: ignore[arg-type]
+        assert match
+        button = await IntentDMButton.from_custom_id(MagicMock(), MagicMock(), match)
         assert button.returning is True
 
 
 class TestBuildIntentDMView:
     def test_contains_both_buttons(self):
         view = build_intent_dm_view(GUILD_ID, SEASON)
-        custom_ids = {item.custom_id for item in view.children}  # type: ignore[attr-defined]
-        assert custom_ids == {
+        ids = set(custom_ids(view))
+        assert ids == {
             f"intent_dm:{GUILD_ID}:{SEASON}:yes",
             f"intent_dm:{GUILD_ID}:{SEASON}:no",
         }
@@ -187,17 +191,13 @@ class TestBuildIntentDMView:
         """Season is in the ID so a stale click can be told apart from a live one."""
         current = build_intent_dm_view(GUILD_ID, SEASON)
         previous = build_intent_dm_view(GUILD_ID, SEASON - 1)
-        assert {i.custom_id for i in current.children}.isdisjoint(  # type: ignore[attr-defined]
-            {i.custom_id for i in previous.children}  # type: ignore[attr-defined]
-        )
+        assert set(custom_ids(current)).isdisjoint(custom_ids(previous))
 
     def test_guilds_produce_distinct_custom_ids(self):
         """Two RSC leagues must not collide on the same custom_id."""
         a = build_intent_dm_view(GUILD_ID, SEASON)
         b = build_intent_dm_view(GUILD_ID + 1, SEASON)
-        assert {i.custom_id for i in a.children}.isdisjoint(  # type: ignore[attr-defined]
-            {i.custom_id for i in b.children}  # type: ignore[attr-defined]
-        )
+        assert set(custom_ids(a)).isdisjoint(custom_ids(b))
 
 
 class TestModmailReference:
@@ -346,7 +346,7 @@ class TestResolveMissingMembers:
         guild = _mock_resolve_guild(cached=[1])
         cog = _stub_cog([_mock_intent(None), _mock_intent(1)])
 
-        to_dm, left, failed = await resolve_missing_members(cog, guild, 100)
+        to_dm, _left, _failed = await resolve_missing_members(cog, guild, 100)
 
         assert len(to_dm) == 1
         guild.fetch_member.assert_not_awaited()
@@ -455,7 +455,9 @@ class TestCallbackGuards:
         cog.next_signup_season.assert_not_awaited()
         cog.declare_intent.assert_not_awaited()
         interaction.followup.send.assert_awaited_once()
-        assert "Something Went Wrong" in _retry_embed(interaction).title
+        embed = _retry_embed(interaction)
+        assert embed.title is not None
+        assert "Something Went Wrong" in embed.title
 
     async def test_missing_guild_is_handled(self):
         cog = _mock_cog(season=_mock_season())
@@ -484,6 +486,7 @@ class TestCallbackGuards:
         interaction.followup.send.assert_awaited_once()
         embed = _retry_embed(interaction)
         assert embed.colour == discord.Colour.red()
+        assert embed.description is not None
         assert str(MODMAIL_ID) in embed.description
 
     async def test_player_error_falls_back_to_default_modmail(self):
@@ -494,7 +497,9 @@ class TestCallbackGuards:
 
         await IntentDMButton(GUILD_ID, SEASON, returning=True).callback(interaction)
 
-        assert str(MODMAIL_ID) in _retry_embed(interaction).description
+        embed = _retry_embed(interaction)
+        assert embed.description is not None
+        assert str(MODMAIL_ID) in embed.description
 
 
 class TestCallbackSignupWindow:
@@ -507,7 +512,9 @@ class TestCallbackSignupWindow:
         cog.declare_intent.assert_not_awaited()
         embed = _final_embed(interaction)
         assert embed.colour == discord.Colour.orange()
+        assert embed.title is not None
         assert "Signups Are Closed" in embed.title
+        assert embed.description is not None
         assert str(MODMAIL_ID) in embed.description
 
     async def test_no_signup_season_records_nothing(self):
@@ -529,6 +536,7 @@ class TestCallbackSignupWindow:
         cog.declare_intent.assert_not_awaited()
         embed = _final_embed(interaction)
         assert embed.colour == discord.Colour.yellow()
+        assert embed.description is not None
         assert f"Season {SEASON}" in embed.description
         assert f"Season {SEASON + 1}" in embed.description
         assert "/signup" in embed.description
@@ -566,6 +574,7 @@ class TestCallbackDeclare:
 
         embed = _final_embed(interaction)
         assert embed.colour == colour
+        assert embed.description is not None
         assert expected in embed.description
         # Terminal outcome strips the buttons from that one message
         assert interaction.edit_original_response.call_args.kwargs["view"] is None
@@ -581,6 +590,7 @@ class TestCallbackDeclare:
 
         embed = _final_embed(interaction)
         assert embed.colour == discord.Colour.yellow()
+        assert embed.description is not None
         assert "Already declared." in embed.description
 
     async def test_late_failure_does_not_claim_the_intent_was_lost(self):
@@ -593,7 +603,9 @@ class TestCallbackDeclare:
         await button.callback(interaction)
 
         assert button.declared is True
-        description = _retry_embed(interaction).description.lower()
+        description = _retry_embed(interaction).description
+        assert description is not None
+        description = description.lower()
         assert "recorded" in description
         assert "try the buttons again" not in description
 
@@ -606,7 +618,9 @@ class TestCallbackDeclare:
         await button.callback(interaction)
 
         assert button.declared is False
-        assert "try the buttons again" in _retry_embed(interaction).description.lower()
+        description = _retry_embed(interaction).description
+        assert description is not None
+        assert "try the buttons again" in description.lower()
 
     async def test_declare_failure_keeps_buttons_and_hides_internals(self):
         cog = _mock_cog(
@@ -621,4 +635,5 @@ class TestCallbackDeclare:
         embed = _retry_embed(interaction)
         # Players should not see raw API failure text
         assert "upstream exploded" not in (embed.description or "")
+        assert embed.description is not None
         assert str(MODMAIL_ID) in embed.description

@@ -79,8 +79,8 @@ class AdminFranchiseMixIn(AdminMixIn):
     @_franchise.command(name="addteam", description="Add a new team to a franchise")
     @app_commands.describe(franchise="Franchise name", tier="Team Tier", name="Team Name")
     @app_commands.autocomplete(
-        franchise=FranchiseMixIn.franchise_autocomplete,  # ty:ignore[invalid-argument-type]
-        tier=TierMixIn.tier_autocomplete,  # ty:ignore[invalid-argument-type]
+        franchise=FranchiseMixIn.franchise_autocomplete,
+        tier=TierMixIn.tier_autocomplete,
     )
     async def _franchise_addteam_cmd(self, interaction: discord.Interaction, franchise: str, tier: str, name: str):
         guild = interaction.guild
@@ -113,9 +113,9 @@ class AdminFranchiseMixIn(AdminMixIn):
     @_franchise.command(name="delteam", description="Remove a team from a franchise")
     @app_commands.describe(franchise="Franchise name", tier="Team Tier", team="Team to delete")
     @app_commands.autocomplete(
-        franchise=FranchiseMixIn.franchise_autocomplete,  # ty:ignore[invalid-argument-type]
-        tier=TierMixIn.tier_autocomplete,  # ty:ignore[invalid-argument-type]
-        team=TeamMixIn.teams_autocomplete,  # ty:ignore[invalid-argument-type]
+        franchise=FranchiseMixIn.franchise_autocomplete,
+        tier=TierMixIn.tier_autocomplete,
+        team=TeamMixIn.teams_autocomplete,
     )
     async def _franchise_rmteam_cmd(self, interaction: discord.Interaction, franchise: str, tier: str, team: str):
         guild = interaction.guild

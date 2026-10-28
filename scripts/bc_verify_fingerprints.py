@@ -26,20 +26,19 @@ from dotenv import load_dotenv
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from rsc.ballchasing import process  # noqa: E402
+from rsc.ballchasing import process
 
 
-def _local_lines(parsed) -> list[str]:
+def _local_lines(parsed: process.ParsedReplay) -> list[str]:
     return sorted(
-        ":".join([str(p.get("Name")), *[process._stat(p.get(prop)) for prop, _ in process.STAT_FIELDS]])
-        for p in parsed.player_stats or []
+        ":".join([str(p.get("Name")), *[process._stat(p.get(prop)) for prop, _ in process.STAT_FIELDS]]) for p in parsed.player_stats or []
     )
 
 
 def _bc_lines(replay: ballchasing.models.Replay) -> list[str]:
     lines = []
     for team in (replay.blue, replay.orange):
-        for player in (team.players if team else []):
+        for player in team.players if team else []:
             core = player.stats.core if player.stats else None
             stats = [process._stat(getattr(core, attr, None)) for _, attr in process.STAT_FIELDS]
             lines.append(":".join([str(player.name), *stats]))

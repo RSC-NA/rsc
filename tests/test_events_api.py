@@ -1,12 +1,8 @@
-import sys
+import inspect
+import json
 from pathlib import Path
 
 import pytest
-
-# Add the project root to the path so we can import the modules
-project_root = Path(__file__).parent.parent
-sys.path.insert(0, str(project_root))
-
 from rscapi import IntegrationsApi
 from rscapi.models.league_event_list import LeagueEventList
 from rscapi.models.paginated_league_event_list_list import PaginatedLeagueEventListList
@@ -18,10 +14,10 @@ class TestIntegrationsApiContract:
     Cheap guard against generated-client drift. Nothing here calls the API.
     """
 
-    EXPECTED_METHODS = [
+    EXPECTED_METHODS = (
         "integrations_events_list",
         "integrations_events_retrieve",
-    ]
+    )
 
     @pytest.mark.parametrize("method_name", EXPECTED_METHODS)
     def test_method_exists(self, method_name: str):
@@ -48,15 +44,11 @@ class TestIntegrationsApiContract:
         order means new events append past the window instead of shifting rows
         out of it, so a single bounded request per tick is sufficient.
         """
-        import inspect
-
         sig = inspect.signature(IntegrationsApi.integrations_events_list)
         assert param in sig.parameters, f"integrations_events_list is missing the `{param}` parameter"
 
     def test_list_returns_a_paginated_envelope(self):
         """The poller reads `count` off page one to size a backlog cheaply."""
-        import inspect
-
         ret = inspect.signature(IntegrationsApi.integrations_events_list).return_annotation
         assert ret is PaginatedLeagueEventListList
 
@@ -72,8 +64,6 @@ class TestIntegrationsApiContract:
         own tests cannot catch that because they stub the API with a `**kwargs`
         fake, so the real signature is checked here.
         """
-        import inspect
-
         sig = inspect.signature(IntegrationsApi.integrations_events_list)
         # Mirrors EventMixIn._request_events exactly.
         sig.bind(
@@ -90,8 +80,6 @@ class TestIntegrationsApiContract:
 
     def test_retrieve_kwargs_bind_against_the_real_signature(self):
         """Mirrors `EventMixIn.league_event`, used by `/rsc events replay`."""
-        import inspect
-
         sig = inspect.signature(IntegrationsApi.integrations_events_retrieve)
         sig.bind(None, id=1, _request_timeout=30.0)
 
@@ -103,9 +91,6 @@ class TestIntegrationsApiContract:
         would process newest-first while advancing an ascending cursor - which
         skips events rather than erroring.
         """
-        import json
-        from pathlib import Path
-
         spec_path = Path.home() / "dev" / "web-rsc-website" / "openapi" / "openapi.json"
         if not spec_path.exists():
             pytest.skip("API repo not checked out alongside the bot")

@@ -1,14 +1,10 @@
 #!/usr/bin/env python3
 
 import argparse
-import os
 import sys
 from pathlib import Path
 
 import cv2
-import imutils
-import matplotlib.pyplot as plt
-import numpy as np
 import pytesseract
 from PIL import Image
 
@@ -17,6 +13,8 @@ def parse(screenshot: str):
 
     # load the image and convert it to grayscale
     image = cv2.imread(screenshot)
+    if image is None:
+        raise ValueError(f"Unable to read image: {screenshot}")
     # cv2.imshow("Original", image)
 
     gray = cv2.threshold(image, 200, 255, cv2.THRESH_BINARY)[1]
@@ -24,6 +22,8 @@ def parse(screenshot: str):
     gray = cv2.medianBlur(gray, 9)
 
     image2 = cv2.imread(screenshot, cv2.IMREAD_COLOR)
+    if image2 is None:
+        raise ValueError(f"Unable to read image: {screenshot}")
     gray2 = cv2.cvtColor(image2, cv2.COLOR_BGR2GRAY)
     # sharpen_kernel = np.array([[-1,-1,-1], [-1,9,-1], [-1,-1,-1]])
     # sharpen = cv2.filter2D(gray2, -1, sharpen_kernel)
@@ -57,17 +57,17 @@ def parse(screenshot: str):
     # print(f"Data: {gdata}")
 
 
-def roi(screenshot):
+def roi(screenshot: str):
     im = cv2.imread(screenshot)
+    if im is None:
+        raise ValueError(f"Unable to read image: {screenshot}")
     im = cv2.resize(im, (2000, 1000))
     # cv2.imshow("Resize", im)
     # cv2.waitKey()
 
     gray = cv2.cvtColor(im, cv2.COLOR_BGR2GRAY)
     blur = cv2.GaussianBlur(gray, (9, 9), 0)
-    thresh = cv2.adaptiveThreshold(
-        blur, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 11, 30
-    )
+    thresh = cv2.adaptiveThreshold(blur, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 11, 30)
     # thresh = cv2.threshold(gray,0, 255, cv2.THRESH_BINARY_INV | cv2.THRESH_OTSU)[1]
 
     # Display thresh image
@@ -107,17 +107,12 @@ def roi(screenshot):
         # cv2.imshow("ROI", imutils.resize(roi, width=28))
         # key = cv2.waitKey(0)
 
-        if y >= 600 and x <= 1000:
-            if area > 10000:
-                image = cv2.rectangle(
-                    im, (x, y), (2200, y + h), color=(255, 0, 255), thickness=3
-                )
-                line_items_coordinates.append([(x, y), (2200, y + h)])
+        if y >= 600 and x <= 1000 and area > 10000:
+            image = cv2.rectangle(im, (x, y), (2200, y + h), color=(255, 0, 255), thickness=3)
+            line_items_coordinates.append([(x, y), (2200, y + h)])
 
         if y >= 2400 and x <= 2000:
-            image = cv2.rectangle(
-                im, (x, y), (2200, y + h), color=(255, 0, 255), thickness=3
-            )
+            image = cv2.rectangle(im, (x, y), (2200, y + h), color=(255, 0, 255), thickness=3)
             line_items_coordinates.append([(x, y), (2200, y + h)])
 
     return image, line_items_coordinates
@@ -125,9 +120,7 @@ def roi(screenshot):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Parse RL lobby stats from screenshot")
-    parser.add_argument(
-        "screenshot", type=str, help="Screenshot of final lobby scoreboard"
-    )
+    parser.add_argument("screenshot", type=str, help="Screenshot of final lobby scoreboard")
     argv = parser.parse_args()
 
     if not Path(argv.screenshot).exists():

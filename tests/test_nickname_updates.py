@@ -57,7 +57,7 @@ async def test_too_long_name_raises_without_touching_the_member(member):
 async def test_too_long_name_is_still_a_value_error(member):
     """Every sync path already funnels `ValueError` into a report to whoever ran
     it. Narrowing the type must not drop this out of those handlers."""
-    with pytest.raises(ValueError):  # noqa: PT011
+    with pytest.raises(ValueError):
         await update_discord_name(member, name="a" * 40)
 
 

@@ -3,13 +3,13 @@
 import argparse
 import asyncio
 import os
-from typing import AsyncIterator
+from collections.abc import AsyncIterator
 
 from rscapi import ApiClient, Configuration, LeaguePlayersApi, MembersApi
 from rscapi.models.league_player import LeaguePlayer
 from rscapi.models.member import Member
 
-API_KEY = os.environ.get("RSC_API_KEY")
+API_KEY = os.environ.get("RSC_API_KEY", "")
 API_HOST = "https://api.rscna.com/api/v1"
 
 CONF = Configuration(
@@ -68,10 +68,7 @@ async def check_inactive(season_number: int):
 
         if not lp.player.discord_id:
             flagged += 1
-            print(
-                f"NO DISCORD ID: {lp.player.name} "
-                f"(RSC ID: {lp.player.rsc_id}, LP ID: {lp.id}, Status: {lp.status})"
-            )
+            print(f"NO DISCORD ID: {lp.player.name} (RSC ID: {lp.player.rsc_id}, LP ID: {lp.id}, Status: {lp.status})")
             continue
 
         member = await get_member(lp.player.discord_id)

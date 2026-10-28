@@ -85,7 +85,7 @@ def staging_reachable() -> bool:
     transport failure counts as unreachable.
     """
     try:
-        with urllib.request.urlopen(STAGING_URL, timeout=HEALTHCHECK_TIMEOUT):
+        with urllib.request.urlopen(STAGING_URL, timeout=HEALTHCHECK_TIMEOUT):  # noqa: S310
             return True
     except urllib.error.HTTPError:
         return True
@@ -192,6 +192,7 @@ class MockBot(RSC):
 @pytest.fixture
 def rsc_bot(mock_guild, api_conf) -> RSC:
     return MockBot(mock_guild, api_conf)
+
 
 @pytest.fixture
 def rsc_bot_no_key(mock_guild, staging_reachable) -> RSC:

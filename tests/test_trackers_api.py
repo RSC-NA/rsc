@@ -1,12 +1,4 @@
-import sys
-from pathlib import Path
-
 import pytest
-
-# Add the project root to the path so we can import the modules
-project_root = Path(__file__).parent.parent
-sys.path.insert(0, str(project_root))
-
 from rscapi import TrackerLinksApi
 
 from rsc.core import RSC
@@ -19,7 +11,7 @@ pytestmark = pytest.mark.integration
 class TestTrackerLinksApiContract:
     """Verify all expected rscapi TrackerLinksApi methods exist without calling them."""
 
-    EXPECTED_METHODS = [
+    EXPECTED_METHODS = (
         "tracker_links_list",
         "tracker_links_list_without_preload_content",
         "tracker_links_links_stats_list",
@@ -30,7 +22,7 @@ class TestTrackerLinksApiContract:
         "tracker_links_link_create",
         "tracker_links_retrieve",
         "tracker_links_migrate_pulls_create",
-    ]
+    )
 
     @pytest.mark.parametrize("method_name", EXPECTED_METHODS)
     def test_method_exists(self, method_name: str):
@@ -192,6 +184,7 @@ class TestTrackerMutationApiCalls:
             print(f"✓ add_tracker() created tracker - ID: {result.id}")
 
             # Clean up
+            assert result.id is not None
             await rsc_bot.rm_tracker(mock_guild, tracker_id=result.id)
             print(f"✓ Cleaned up tracker {result.id}")
         except RscException as e:

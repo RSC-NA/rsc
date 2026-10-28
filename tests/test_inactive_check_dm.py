@@ -18,9 +18,11 @@ from rsc.admin.admin import AdminMixIn
 from rsc.admin.inactivity import AdminInactivityMixIn
 from rsc.core import RSC
 
+from .utils import command_callback
+
 # Called unbound with a stub `self`; the mixin needs a full cog to instantiate.
 fetch_missing = AdminInactivityMixIn._fetch_missing_activity_checks
-dm_cmd = AdminInactivityMixIn._admin_inactive_check_dm_cmd.callback
+dm_cmd = command_callback(AdminInactivityMixIn._admin_inactive_check_dm_cmd)
 still_missing = AdminInactivityMixIn._still_missing_activity_check
 build_embed = AdminInactivityMixIn._build_activity_check_dm_embed
 

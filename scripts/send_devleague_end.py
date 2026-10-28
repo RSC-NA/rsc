@@ -11,7 +11,7 @@ def send_finished(match_id: int):
     json_path = Path(__file__).resolve().parent.parent / "data/devleague/devleague_event_game_finished.json"
     print(f"JSON Path: {json_path}")
 
-    with open(json_path) as fd:
+    with json_path.open() as fd:
         data = json.load(fd)
 
     data["match_id"] = match_id

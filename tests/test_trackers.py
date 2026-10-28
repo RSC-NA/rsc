@@ -45,9 +45,8 @@ class TestTrackersApi:
             mock_api.tracker_links_list.side_effect = ApiException(status=500, reason="Error")
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
-            with patch("rsc.trackers.trackers.TrackerLinksApi", return_value=mock_api):
-                with pytest.raises(RscException):
-                    await mixin.trackers(mock_guild)
+            with patch("rsc.trackers.trackers.TrackerLinksApi", return_value=mock_api), pytest.raises(RscException):
+                await mixin.trackers(mock_guild)
 
     async def test_accepts_member_player(self, mock_guild, mock_member):
         resp = MagicMock()

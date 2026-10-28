@@ -1,11 +1,4 @@
-import sys
-from pathlib import Path
-
 import pytest
-
-# Add the project root to the path so we can import the modules
-project_root = Path(__file__).parent.parent
-sys.path.insert(0, str(project_root))
 
 from rsc.core import RSC
 from rsc.enums import Status
@@ -18,12 +11,12 @@ pytestmark = pytest.mark.integration
 class TestLeaguesApiContract:
     """Verify all expected rscapi LeaguesApi methods exist without calling them."""
 
-    EXPECTED_METHODS = [
+    EXPECTED_METHODS = (
         "leagues_list",
         "leagues_retrieve",
         "leagues_current_season_retrieve",
         "leagues_seasons_list",
-    ]
+    )
 
     @pytest.mark.parametrize("method_name", EXPECTED_METHODS)
     def test_method_exists(self, method_name: str):
@@ -35,10 +28,10 @@ class TestLeaguesApiContract:
 class TestLeaguePlayersApiContract:
     """Verify all expected rscapi LeaguePlayersApi methods exist without calling them."""
 
-    EXPECTED_METHODS = [
+    EXPECTED_METHODS = (
         "league_players_list",
         "league_players_partial_update",
-    ]
+    )
 
     @pytest.mark.parametrize("method_name", EXPECTED_METHODS)
     def test_method_exists(self, method_name: str):
@@ -104,8 +97,8 @@ class TestPlayersApiCalls:
         assert isinstance(result, list)
         print(f"✓ player_intents() returned {len(result)} intent(s)")
 
-class TestPlayersPrivilegedApiCalls:
 
+class TestPlayersPrivilegedApiCalls:
     @pytest.mark.asyncio
     async def test_patch_player_privileged_api_call(self, rsc_bot_no_key: RSC, rsc_bot_invalid_key: RSC, mock_guild, mock_member):
         """Test that patch_player() API call raises NotImplementedError."""
@@ -116,6 +109,7 @@ class TestPlayersPrivilegedApiCalls:
         player = plist.pop(0)
 
         with pytest.raises(RscException) as exc:
+            assert player.id is not None
             await rsc_bot_no_key.update_league_player(guild=mock_guild, player_id=player.id, executor=mock_member, current_mmr=600)
         assert exc.type == RscException
         assert exc.value.type == "NotAuthenticated"
@@ -124,12 +118,14 @@ class TestPlayersPrivilegedApiCalls:
         assert exc.value.response.status == 403
 
         with pytest.raises(RscException) as exc:
+            assert player.id is not None
             await rsc_bot_invalid_key.update_league_player(guild=mock_guild, player_id=player.id, executor=mock_member, current_mmr=600)
         assert exc.type == RscException
         assert exc.value.type == "NotAuthenticated"
         assert exc.value.response.reason == "Forbidden"
         assert exc.value.status == 403
         assert exc.value.response.status == 403
+
 
 class TestPlayersApiDataStructures:
     """Test that API responses have expected structure."""

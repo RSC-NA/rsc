@@ -5,14 +5,13 @@ import json
 import os
 from enum import StrEnum
 from pathlib import Path
-from typing import AsyncIterator
+from collections.abc import AsyncIterator
 
 import aiofiles
-from rscapi import ApiClient, ApiException, Configuration, TrackerLinksApi
-from rscapi.models.league_player import LeaguePlayer
+from rscapi import ApiClient, Configuration, TrackerLinksApi
 from rscapi.models.tracker_link import TrackerLink
 
-API_KEY = os.environ.get("RSC_API_KEY")
+API_KEY = os.environ.get("RSC_API_KEY", "")
 API_HOST = "https://api.rscna.com/api/v1"
 
 CONF = Configuration(
@@ -20,6 +19,7 @@ CONF = Configuration(
     api_key={"Api-Key": API_KEY},
     api_key_prefix={"Api-Key": "Api-Key"},
 )
+
 
 class TrackerLinksStatus(StrEnum):
     NEW = "NEW"  # New
@@ -32,6 +32,7 @@ class TrackerLinksStatus(StrEnum):
     @property
     def full_name(self) -> str:
         return self.name.capitalize()
+
 
 async def paged_trackers(
     status: TrackerLinksStatus | None = None,
@@ -82,16 +83,19 @@ async def validate_trackers():
     await save_trackers(trackers)
     await check_dupliates(trackers)
 
-async def save_trackers(trackers: dict[int|None, str]):
-    async with aiofiles.open(Path("./data/trackers.json").resolve(), "w") as f:
+
+async def save_trackers(trackers: dict[int | None, str]):
+    async with aiofiles.open(Path("./data/trackers.json"), "w") as f:
         await f.write(json.dumps(trackers, indent=4))
 
-async def check_dupliates(trackers: dict[int|None, str]):
+
+async def check_dupliates(trackers: dict[int | None, str]):
     for k, v in trackers.items():
         for k2, v2 in trackers.items():
             if v2.lower() == v.lower() and k != k2:
                 print(f"Duplicate Found: {k} - {v}")
                 print(f"Duplicate Found: {k2} - {v2}")
+
 
 if __name__ == "__main__":
     print("Starting event loop.")

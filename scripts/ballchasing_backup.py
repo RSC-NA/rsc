@@ -8,7 +8,7 @@ import sys
 from pydantic import ValidationError
 from pathlib import Path
 
-import aiohttp
+import aiofiles.os
 import ballchasing
 import ballchasing.exceptions
 from dotenv import load_dotenv
@@ -18,13 +18,14 @@ load_dotenv()
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
 
-bckey = os.environ.get("BALLCHASING_KEY")
+bckey = os.environ.get("BALLCHASING_KEY", "")
 if not bckey:
     print("Unable to find Ballchasing API key (BALLCHASING_KEY)")
     sys.exit(1)
 
+
 async def download_group(
-    bapi: ballchasing.Api, group_id: str, folder: str, recursive=True, skip_errors: bool=False
+    bapi: ballchasing.Api, group_id: str, folder: str, recursive: bool = True, skip_errors: bool = False
 ) -> tuple[int, int]:
     """
     Download an entire group.
@@ -33,17 +34,15 @@ async def download_group(
     :param folder: the folder in which to create the group folder.
     :param recursive: whether or not to create new folders for child groups.
     """
-    folder = os.path.join(folder, group_id)
+    folder = str(Path(folder) / group_id)
     group_count = 0
     replay_count = 0
     log.debug("Processing group %s into %s", group_id, folder)
     try:
         if recursive:
-            os.makedirs(folder, exist_ok=True)
+            await aiofiles.os.makedirs(folder, exist_ok=True)
             async for child_group in bapi.get_groups(group=group_id):
-                child_group_count, child_replay_count = await download_group(
-                    bapi, child_group.id, folder, recursive=True
-                )
+                child_group_count, child_replay_count = await download_group(bapi, child_group.id, folder, recursive=True)
                 group_count += child_group_count + 1
                 replay_count += child_replay_count
             async for replay in bapi.get_replays(group_id=group_id):
@@ -63,26 +62,18 @@ async def download_group(
     return group_count, replay_count
 
 
-async def process_group(group: str, output_directory: str, recursive: bool=False, skip_errors: bool=False) -> tuple[int, int]:
+async def process_group(group: str, output_directory: str, recursive: bool = False, skip_errors: bool = False) -> tuple[int, int]:
     async with ballchasing.Api(auth_key=bckey, patreon_type=ballchasing.PatreonType.ORG) as bapi:
         log.info("Checking if group exists: %s", group)
         base_group = await bapi.get_group(group)
         if not base_group:
             log.error("Group does not exist: %s", group)
             return 0, 0
-        return await download_group(
-            bapi,
-            group_id=group,
-            folder=output_directory,
-            recursive=recursive
-        )
+        return await download_group(bapi, group_id=group, folder=output_directory, recursive=recursive)
 
 
 if __name__ == "__main__":
-
-    parser = argparse.ArgumentParser(
-        description="Bulk download replays from ballchasing group."
-    )
+    parser = argparse.ArgumentParser(description="Bulk download replays from ballchasing group.")
     parser.add_argument("group", type=str, help="Ballchasing group")
     parser.add_argument("output", type=str, help="Output directory")
     parser.add_argument("-r", "--recursive", action="store_true", help="Download replays recursively", default=False)

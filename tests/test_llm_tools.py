@@ -10,6 +10,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from openai.types.responses import ResponseFunctionToolCall
 
 from rsc.llm.agent.context import AgentContext, UserIdentity
 from rsc.llm.agent.loop import _dispatch
@@ -23,12 +24,12 @@ from rsc.llm.agent.tools.league import (
 from rsc.llm.agent.tools.rules import ask_rulebook, get_rule, search_rules_tool
 from rsc.llm.agent.tools.stats import get_player_stats, get_team_stats, top_players, top_teams
 from rsc.llm.config import TOOL_RESULT_MAX_CHARS
-from rsc.llm.rulebook import RuleBook, load_rulebooks
+from rsc.llm.rulebook import load_rulebooks
 
 
-def fn_call(name: str, args: dict) -> SimpleNamespace:
-    """A tool call in the shape the Responses API emits one."""
-    return SimpleNamespace(type="function_call", name=name, arguments=json.dumps(args), call_id="call_1")
+def fn_call(name: str, args: dict) -> ResponseFunctionToolCall:
+    """A tool call as the Responses API emits one."""
+    return ResponseFunctionToolCall(type="function_call", name=name, arguments=json.dumps(args), call_id="call_1")
 
 
 def franchise(
@@ -429,6 +430,7 @@ async def test_ask_rulebook_sends_only_scoped_sections(ctx):
 
     await ask_rulebook(ctx, "can a permFA sub twice in a row", book="competitive")
 
+    assert ctx.client.responses.create.await_args is not None
     sent = ctx.client.responses.create.await_args.kwargs["input"][0]["content"]
     assert len(sent) < 25_000, "sub-agent context should be section scoped, not the whole book"
 

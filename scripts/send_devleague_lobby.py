@@ -10,7 +10,7 @@ def send_webhook():
     json_path = Path(__file__).resolve().parent.parent / "data/devleague/devleague_webhook.json"
     print(f"JSON Path: {json_path}")
 
-    with open(json_path) as fd:
+    with json_path.open() as fd:
         data = json.load(fd)
 
     print("Sending mock dev league game data...")

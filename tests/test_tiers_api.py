@@ -1,11 +1,4 @@
-import sys
-from pathlib import Path
-
 import pytest
-
-# Add the project root to the path so we can import the modules
-project_root = Path(__file__).parent.parent
-sys.path.insert(0, str(project_root))
 
 from rsc.core import RSC
 from rscapi import TiersApi
@@ -16,14 +9,14 @@ pytestmark = pytest.mark.integration
 class TestTiersApiContract:
     """Verify all expected rscapi TiersApi methods exist without calling them."""
 
-    EXPECTED_METHODS = [
+    EXPECTED_METHODS = (
         "tiers_list",
         "tiers_retrieve",
         "tiers_standings_list",
         "tiers_playoffs_retrieve",
         "tiers_create",
         "tiers_destroy",
-    ]
+    )
 
     @pytest.mark.parametrize("method_name", EXPECTED_METHODS)
     def test_method_exists(self, method_name: str):
@@ -72,13 +65,14 @@ class TestTiersApiCalls:
     @pytest.mark.skip(reason="Creating tiers may have side effects; enable when safe to test.")
     async def test_create_tier_api_call(self, rsc_bot: RSC, mock_guild):
         """Test that create_tier() API call doesn't raise exceptions."""
-        await rsc_bot.create_tier(mock_guild, "test_tier", "test_color")
+        await rsc_bot.create_tier(mock_guild, name="test_tier", color=0xFFFFFF, position=99)
 
     @pytest.mark.asyncio
     @pytest.mark.skip(reason="Deleting tiers may have side effects; enable when safe to test.")
     async def test_delete_tier_api_call(self, rsc_bot: RSC, mock_guild):
         """Test that delete_tier() API call doesn't raise exceptions."""
-        await rsc_bot.delete_tier(mock_guild, "test_tier")
+        tier_id = await rsc_bot.tier_id_by_name(mock_guild, "test_tier")
+        await rsc_bot.delete_tier(mock_guild, id=tier_id)
 
 
 class TestTiersApiDataStructures:

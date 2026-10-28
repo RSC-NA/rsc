@@ -1,11 +1,4 @@
-import sys
-from pathlib import Path
-
 import pytest
-
-# Add the project root to the path so we can import the modules
-project_root = Path(__file__).parent.parent
-sys.path.insert(0, str(project_root))
 
 from rsc.core import RSC
 from rsc.exceptions import RscException
@@ -20,14 +13,14 @@ pytestmark = pytest.mark.integration
 class TestMatchesApiContract:
     """Verify all expected rscapi MatchesApi methods exist without calling them."""
 
-    EXPECTED_METHODS = [
+    EXPECTED_METHODS = (
         "matches_list",
         "matches_find_match_retrieve",
         "matches_retrieve",
         "matches_score_report_create",
         "matches_create",
         "matches_results_retrieve",
-    ]
+    )
 
     @pytest.mark.parametrize("method_name", EXPECTED_METHODS)
     def test_method_exists(self, method_name: str):
@@ -39,9 +32,7 @@ class TestMatchesApiContract:
 class TestMatchesTeamsApiContract:
     """Verify TeamsApi methods used by the matches module exist."""
 
-    EXPECTED_METHODS = [
-        "teams_match_retrieve",
-    ]
+    EXPECTED_METHODS = ("teams_match_retrieve",)
 
     @pytest.mark.parametrize("method_name", EXPECTED_METHODS)
     def test_method_exists(self, method_name: str):
@@ -61,8 +52,8 @@ class TestMatchesApiCalls:
         assert isinstance(result, list)
         print(f"✓ matches() returned {len(result)} match(es)")
         for m in result:
-            home_team = m.home_team if m.home_team else "Unknown"
-            away_team = m.away_team if m.away_team else "Unknown"
+            home_team = m.home_team or "Unknown"
+            away_team = m.away_team or "Unknown"
             print(f"  - ID: {m.id}, Home: {home_team}, Away: {away_team}")
 
     @pytest.mark.asyncio
@@ -138,9 +129,8 @@ class TestMatchesApiCalls:
         assert isinstance(results, MatchResults), f"Expected MatchResults type, got {type(results)}"
         assert isinstance(results.home_wins, int), "home_score should be an integer"
         assert isinstance(results.away_wins, int), "away_score should be an integer"
-        assert isinstance(results.ballchasing_group, str) , "Ballchasing group should be a string"
+        assert isinstance(results.ballchasing_group, str), "Ballchasing group should be a string"
         print(f"✓ match_results() succeeded for match ID {MATCH_ID}")
-
 
     @pytest.mark.asyncio
     async def test_fetch_match_results_not_found(self, rsc_bot: RSC, mock_guild):
@@ -148,7 +138,7 @@ class TestMatchesApiCalls:
         # Test NotFound 404 handling
         INVALID_MATCH_ID = 2  # Assuming this ID does not exist
         try:
-            result = await rsc_bot.match_results(mock_guild, INVALID_MATCH_ID)
+            await rsc_bot.match_results(mock_guild, INVALID_MATCH_ID)
             pytest.fail(f"match_results() should have raised RscException for invalid ID {INVALID_MATCH_ID}")
         except RscException as e:
             print(f"Match results status code for invalid ID {INVALID_MATCH_ID}: {e.status} {e.reason}")
@@ -156,8 +146,6 @@ class TestMatchesApiCalls:
                 print(f"✓ match_results() correctly raised 404 for invalid ID {INVALID_MATCH_ID}")
             else:
                 raise
-
-
 
 
 class TestMatchesApiDataStructures:
