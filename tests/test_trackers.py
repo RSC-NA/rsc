@@ -6,6 +6,8 @@ from rscapi.exceptions import ApiException
 from rsc.exceptions import RscException
 from rsc.trackers.trackers import TrackerMixIn
 
+from .utils import command_callback
+
 GUILD_ID = 395806681994493964
 
 
@@ -220,6 +222,6 @@ class TestAccountsCommand:
         interaction.response.defer = AsyncMock()
         interaction.followup.send = AsyncMock()
 
-        await TrackerMixIn._accounts.callback(mixin, interaction, MagicMock())
+        await command_callback(TrackerMixIn._accounts)(mixin, interaction, MagicMock())
 
         interaction.followup.send.assert_awaited_once()
