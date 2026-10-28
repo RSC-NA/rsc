@@ -49,7 +49,7 @@ from rsc.exceptions import DiscordNameTooLong, LeagueNotConfigured, RscException
 from rsc.franchises import FranchiseMixIn
 from rsc.logs import GuildLogAdapter
 from rsc.members.views.intent import IntentState, IntentToPlayView
-from rsc.members.views.player_info import player_info_view
+from rsc.members.views.player_info import PlayerCard
 from rsc.members.views.signup import (
     AlreadySignedUp,
     AlreadySignedUpView,
@@ -760,41 +760,34 @@ class MemberMixIn(RSCMixIn):
             )
             return
 
-        embed = BlueEmbed(title=f"Player Info: {p.player.name}")
-        embed.add_field(name="Player", value=player.mention, inline=True)
-
+        colour = discord.Colour.blue()
         if p.tier and p.tier.name:
-            tier_color = await utils.tier_color_by_name(guild, p.tier.name)
-            embed.colour = tier_color
-            embed.add_field(name="Tier", value=p.tier.name, inline=True)
+            colour = await utils.tier_color_by_name(guild, p.tier.name)
 
-        embed.add_field(name="Status", value=Status(p.status).full_name, inline=True)
+        franchise = p.team.franchise if p.team and p.team.franchise else None
+        franchise_mention = None
+        logo_url = None
+        if franchise and franchise.name:
+            frole = await utils.franchise_role_from_name(guild, franchise.name)
+            franchise_mention = frole.mention if frole else None
+        if franchise and franchise.id:
+            logo_url = await self.franchise_logo(guild, franchise.id)
 
-        embed.add_field(name="", value="", inline=False)  # Line Break
-
-        if p.team:
-            embed.add_field(name="Team", value=p.team.name, inline=True)
-
-        if p.team and p.team.franchise and p.team.franchise.name and p.team.franchise.id:
-            frole = await utils.franchise_role_from_name(guild, p.team.franchise.name)
-            f_fmt = frole.mention if frole else p.team.franchise.name
-            embed.add_field(name="Franchise", value=f_fmt, inline=True)
-
-            flogo = await self.franchise_logo(guild, p.team.franchise.id)
-            if flogo:
-                embed.set_thumbnail(url=flogo)
-
-        if not embed.thumbnail.url and player.avatar:
-            embed.set_thumbnail(url=player.avatar.url)
-
-        playerinfo_view = None
-        if p.team and p.team.name and p.team.franchise and p.team.franchise.name:
-            playerinfo_view = player_info_view(team=p.team.name, franchise=p.team.franchise.name)
-
-        if playerinfo_view:
-            await interaction.followup.send(embed=embed, view=playerinfo_view)
-        else:
-            await interaction.followup.send(embed=embed)
+        card = PlayerCard(
+            name=p.player.name,
+            discord_id=player.id,
+            status=Status(p.status).full_name,
+            colour=colour,
+            tier=p.tier.name if p.tier else None,
+            team=p.team.name if p.team else None,
+            franchise=franchise.name if franchise else None,
+            franchise_mention=franchise_mention,
+            logo_url=logo_url or player.display_avatar.url,
+            current_mmr=p.current_mmr,
+            base_mmr=p.base_mmr,
+        )
+        # The card names the player and their franchise role; neither should ping
+        await interaction.followup.send(view=card.render(), allowed_mentions=discord.AllowedMentions.none())
 
     @app_commands.command(name="waivers", description="Display players currently on waivers")
     @app_commands.describe(tier='Waiver tier name (Ex: "Elite")')

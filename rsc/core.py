@@ -48,7 +48,7 @@ from rsc.llm.rulebook import load_rulebooks
 from rsc.logs import GuildLogAdapter
 from rsc.matches import MatchMixIn
 from rsc.members import MemberMixIn
-from rsc.members.views import PlayerInfoButton
+from rsc.members.views import PlayerInfoButton, PlayerTrackersButton
 from rsc.moderator import ModeratorMixIn, ThreadMixIn
 from rsc.numbers import NumberMixIn
 from rsc.seasons import SeasonsMixIn
@@ -78,6 +78,10 @@ defaults_guild = {
     "ModmailBot": None,
     "TimeZone": "UTC",
 }
+
+
+# Persistent buttons, answered by custom_id template after a restart. Registered on the bot, not the cog.
+DYNAMIC_ITEMS = (IntentDMButton, ActivityCheckDMButton, PermFAPollButton, PlayerInfoButton, PlayerTrackersButton, ReplayLocationButton)
 
 
 class RSC(
@@ -181,7 +185,7 @@ class RSC(
         # Registered on the bot, not the cog, so they outlive a reload. The next
         # setup() replaces them only if the template is unchanged. Remove them so an
         # edited template cannot leave the old class answering old buttons.
-        self.bot.remove_dynamic_items(IntentDMButton, ActivityCheckDMButton, PermFAPollButton, PlayerInfoButton, ReplayLocationButton)
+        self.bot.remove_dynamic_items(*DYNAMIC_ITEMS)
         # Discard rather than drain. Draining sends one DM per `rate` seconds, so a
         # large queued batch would block the reload for many minutes.
         await self._dm_helper.stop(drain=False)
@@ -207,7 +211,7 @@ class RSC(
             # Registered once globally, not per guild and not per message. The guild
             # and season (or poll, or team) live in the custom_id and are matched by
             # regex, so buttons keep dispatching after a restart instead of dying.
-            self.bot.add_dynamic_items(IntentDMButton, ActivityCheckDMButton, PermFAPollButton, PlayerInfoButton, ReplayLocationButton)
+            self.bot.add_dynamic_items(*DYNAMIC_ITEMS)
 
             await self.prepare_application_emojis()
 

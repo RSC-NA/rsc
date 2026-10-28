@@ -14,7 +14,6 @@ from rscapi.models.tracker_link_stats import TrackerLinkStats
 
 from rsc.abc import RSCMixIn
 from rsc.checks import elevated_role_required
-from rsc.const import RSC_TRACKER_URL
 from rsc.embeds import (
     ApiExceptionErrorEmbed,
     BlueEmbed,
@@ -24,7 +23,7 @@ from rsc.embeds import (
 )
 from rsc.enums import StaffPositions, TrackerLinksStatus
 from rsc.exceptions import RscException
-from rsc.utils import utils
+from rsc.trackers.views import tracker_accounts_card
 from rsc.pagination import API_MAX_PAGE_SIZE, check_page_limit, iter_pages
 from rsc.views import LinkButton
 
@@ -403,34 +402,14 @@ class TrackerMixIn(RSCMixIn):
             await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc))
             return
 
-        if not trackers:
-            await interaction.followup.send(
-                embed=YellowEmbed(description=f"{player.mention} does not have any registered RL trackers."),
-                ephemeral=False,
-            )
-            return
-
-        desc = ""
-        for t in trackers:
-            url = await utils.fix_tracker_url(t.link)
-            platform = t.platform.value if t.platform else "Unknown"
-            if t.platform == "STEAM":
-                desc += f"- [{platform} - {t.platform_id}]({url})\n"
-            else:
-                desc += f"- [{platform} - {t.name}]({url})\n"
-
-        embed = BlueEmbed(title=f"{player.display_name} Accounts", description=desc)
-
-        if player.avatar:
-            embed.set_thumbnail(url=player.avatar.url)
-        elif interaction.guild.icon:
-            embed.set_thumbnail(url=interaction.guild.icon.url)
-
-        link_button = LinkButton(label="RSC Tracker Links", url=RSC_TRACKER_URL)
-        account_view = discord.ui.View()
-        account_view.add_item(link_button)
-
-        await interaction.followup.send(embed=embed, view=account_view, ephemeral=False)
+        view = await tracker_accounts_card(
+            name=player.display_name,
+            mention=player.mention,
+            trackers=trackers,
+            avatar_url=player.display_avatar.url,
+        )
+        # Names the player without pinging them, as the old embed did
+        await interaction.followup.send(view=view, ephemeral=False, allowed_mentions=discord.AllowedMentions.none())
 
     # Functions
 

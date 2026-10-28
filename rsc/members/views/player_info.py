@@ -1,5 +1,6 @@
 import logging
 import re
+from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any
 
@@ -10,6 +11,7 @@ from rsc.abc import RSCMixIn
 from rsc.const import RSC_COG_NAME
 from rsc.embeds import ApiExceptionErrorEmbed, ErrorEmbed, ExceptionErrorEmbed
 from rsc.exceptions import RscException
+from rsc.trackers.views import tracker_accounts_card
 
 log = logging.getLogger("red.rsc.members.views.player_info")
 
@@ -38,7 +40,8 @@ class PlayerInfoButton(discord.ui.DynamicItem[discord.ui.Button], template=PLAYE
         self.name = name
         super().__init__(
             discord.ui.Button(
-                label="Team Roster" if kind is PlayerInfoKind.ROSTER else "Franchise Info",
+                # Short, so Team, Franchise and Trackers fit one row on a phone
+                label="Team" if kind is PlayerInfoKind.ROSTER else "Franchise",
                 style=discord.ButtonStyle.primary,
                 custom_id=_PLAYER_INFO_PREFIX.format(kind=kind) + name,
             )
@@ -67,16 +70,8 @@ class PlayerInfoButton(discord.ui.DynamicItem[discord.ui.Button], template=PLAYE
         if not guild:
             return
 
-        bot = interaction.client
-        cog = bot.get_cog(RSC_COG_NAME) if isinstance(bot, Red) else None
-        # The API wrappers index `_api_conf`/`_league` directly, so a click before
-        # setup() finishes after a restart would raise KeyError, not RscException.
-        if not isinstance(cog, RSCMixIn) or not (cog._api_conf.get(guild.id) and cog._league.get(guild.id)):
-            log.warning(f"[{guild.name}] Player info button clicked before {RSC_COG_NAME} was ready")
-            await interaction.followup.send(
-                embed=ErrorEmbed(description="The bot is still starting up. Please try again in a minute."),
-                ephemeral=True,
-            )
+        cog = await _ready_cog(interaction, guild)
+        if not cog:
             return
 
         if self.kind is PlayerInfoKind.ROSTER:
@@ -114,18 +109,124 @@ class PlayerInfoButton(discord.ui.DynamicItem[discord.ui.Button], template=PLAYE
         await interaction.followup.send(embed=embed, ephemeral=True)
 
 
-def player_info_view(team: str, franchise: str) -> discord.ui.View | None:
-    """Buttons for a `/playerinfo` card, or None if neither name fits a custom_id.
+PLAYER_TRACKERS_TEMPLATE = r"player_info:trackers:(?P<discord_id>\d{15,20})"
 
-    Deliberately not registered with `add_view()`. Dispatch happens through the
-    `PlayerInfoButton` template registered once via `add_dynamic_items()`.
+
+class PlayerTrackersButton(discord.ui.DynamicItem[discord.ui.Button], template=PLAYER_TRACKERS_TEMPLATE):
+    """Trackers button on a `/playerinfo` card: the player's tracker accounts, privately.
+
+    A DynamicItem rather than a link button, because link buttons can only be grey.
     """
-    targets = ((PlayerInfoKind.ROSTER, team), (PlayerInfoKind.FRANCHISE, franchise))
-    buttons = [PlayerInfoButton(kind, name) for kind, name in targets if PlayerInfoButton.fits(kind, name)]
-    if not buttons:
-        return None
 
-    view = discord.ui.View(timeout=None)
-    for button in buttons:
-        view.add_item(button)
-    return view
+    def __init__(self, discord_id: int):
+        self.discord_id = discord_id
+        super().__init__(
+            discord.ui.Button(label="Trackers", style=discord.ButtonStyle.success, custom_id=f"player_info:trackers:{discord_id}")
+        )
+
+    @classmethod
+    async def from_custom_id(
+        cls,
+        interaction: discord.Interaction,
+        item: discord.ui.Item[Any],
+        match: re.Match[str],
+        /,
+    ) -> "PlayerTrackersButton":
+        return cls(discord_id=int(match["discord_id"]))
+
+    async def callback(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+
+        guild = interaction.guild
+        if not guild:
+            return
+        cog = await _ready_cog(interaction, guild)
+        if not cog:
+            return
+
+        try:
+            trackers = await cog.trackers(guild, player=self.discord_id)
+        except RscException as exc:
+            return await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc), ephemeral=True)
+
+        member = guild.get_member(self.discord_id)
+        view = await tracker_accounts_card(
+            name=member.display_name if member else str(self.discord_id),
+            mention=f"<@{self.discord_id}>",
+            trackers=trackers,
+            avatar_url=member.display_avatar.url if member else None,
+        )
+        await interaction.followup.send(view=view, ephemeral=True, allowed_mentions=discord.AllowedMentions.none())
+
+
+@dataclass(frozen=True)
+class PlayerCard:
+    """The `/playerinfo` card. Sent with `AllowedMentions.none()`: the old embed never pinged anyone."""
+
+    name: str
+    discord_id: int
+    status: str
+    colour: discord.Colour
+    tier: str | None = None
+    team: str | None = None
+    franchise: str | None = None
+    # The franchise role's mention, which Discord draws in the role's colour
+    franchise_mention: str | None = None
+    # Franchise logo, or the player's avatar
+    logo_url: str | None = None
+    current_mmr: int | None = None
+    base_mmr: int | None = None
+
+    def render(self) -> discord.ui.LayoutView:
+        title = discord.ui.TextDisplay(f"## {discord.utils.escape_markdown(self.name)}\n-# <@{self.discord_id}>")
+        container = discord.ui.Container(accent_colour=self.colour)
+        if self.logo_url:
+            container.add_item(discord.ui.Section(title, accessory=discord.ui.Thumbnail(self.logo_url)))
+        else:
+            container.add_item(title)
+
+        # Full width, outside the Section, so the logo doesn't squeeze it on phones
+        headline = " · ".join(discord.utils.escape_markdown(x) for x in (self.tier, self.team) if x)
+        affiliation = " · ".join(filter(None, [self.franchise_mention or _escaped(self.franchise), f"**{self.status}**"]))
+        container.add_item(discord.ui.TextDisplay(f"### {headline}\n{affiliation}" if headline else affiliation))
+
+        mmr = " · ".join(
+            filter(None, [f"{self.current_mmr} MMR" if self.current_mmr else None, f"base {self.base_mmr}" if self.base_mmr else None])
+        )
+        if mmr:
+            container.add_item(discord.ui.Separator())
+            container.add_item(discord.ui.TextDisplay(f"-# {mmr}"))
+
+        buttons = discord.ui.ActionRow()
+        targets = ((PlayerInfoKind.ROSTER, self.team), (PlayerInfoKind.FRANCHISE, self.franchise))
+        for kind, name in targets:
+            if name and PlayerInfoButton.fits(kind, name):
+                buttons.add_item(PlayerInfoButton(kind, name))
+        buttons.add_item(PlayerTrackersButton(self.discord_id))
+        container.add_item(buttons)
+
+        view = discord.ui.LayoutView(timeout=None)
+        view.add_item(container)
+        return view
+
+
+def _escaped(text: str | None) -> str | None:
+    return discord.utils.escape_markdown(text) if text else None
+
+
+async def _ready_cog(interaction: discord.Interaction, guild: discord.Guild) -> RSCMixIn | None:
+    """The RSC cog, or None after telling the clicker the bot is still starting.
+
+    The API wrappers index `_api_conf`/`_league` directly, so a click before
+    setup() finishes after a restart would raise KeyError, not RscException.
+    """
+    bot = interaction.client
+    cog = bot.get_cog(RSC_COG_NAME) if isinstance(bot, Red) else None
+    if isinstance(cog, RSCMixIn) and cog._api_conf.get(guild.id) and cog._league.get(guild.id):
+        return cog
+    log.warning(f"[{guild.name}] Player info button clicked before {RSC_COG_NAME} was ready")
+    await interaction.followup.send(
+        embed=ErrorEmbed(description="The bot is still starting up. Please try again in a minute."),
+        ephemeral=True,
+    )
+    return None

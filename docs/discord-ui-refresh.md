@@ -319,6 +319,15 @@ Each spec uses only what discord.py 2.7.1 supports. Mockups are in the published
   - it's sent with `AllowedMentions.none()`, so the player mention doesn't ping. Today's embed mention doesn't ping either.
 - Alternatives A1 (label lines) and A2 (tier as a role-mention chip, the only coloured text Discord draws) are kept for reference.
 
+- **Implemented (2026-10-28, branch `discord-ui-phase-3`):** `PlayerCard` and `PlayerTrackersButton` in `rsc/members/views/player_info.py`, and `tracker_accounts_card()` in `rsc/trackers/views.py`, shared by the Trackers button and `/accounts`. Persistent buttons are now registered from one `DYNAMIC_ITEMS` tuple in `rsc/core.py`. Preview with `/pingtest style:player` and `accounts`.
+  - **Calls made while building, for review:**
+    - Both cards are sent with `AllowedMentions.none()`: the player mention and franchise role chip render but don't ping, as with the old embeds.
+    - The thumbnail is the franchise logo, else the player's avatar, as the old embed did.
+    - Without a team or franchise (e.g. a free agent), the headline is just the tier, then `**Free Agent**`. The Team and Franchise buttons drop out, and Trackers stays.
+    - The MMR line is skipped when the API has neither value.
+    - The tracker card reads `### Monty's accounts`, then one `- [Steam · 7656…](link)` line per account (Steam by Steam64ID, others by name, platform names from `Platform.label`), capped at 25. It has the grey "RSC Tracker Links" button, plus the avatar as thumbnail. The button reply and `/accounts` are identical, so the builder needs no `ephemeral` flag.
+    - `player_info_view()` (the old legacy View) is removed; the card builds its own buttons. "Is the bot ready" is one `_ready_cog()` helper shared by all three buttons.
+
 ### 06 — Match result (`build_match_result_embed`, `rsc/ballchasing/ballchasing.py:862`) — **LOCKED: option B, scoreboard** (2026-10-28)
 
 - `Container(accent_colour=tier colour)` holding:

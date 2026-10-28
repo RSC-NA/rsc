@@ -16,10 +16,9 @@ from rsc.ballchasing.modals import ReportMatchModal
 from rsc.core import RSC
 from rsc.enums import BulkRoleAction
 from rsc.freeagents.views import CheckInView, CheckOutView
-from rsc.members.views.player_info import PLAYER_INFO_TEMPLATE, PlayerInfoButton, PlayerInfoKind, player_info_view
+from rsc.members.views.player_info import PLAYER_INFO_TEMPLATE, PlayerCard, PlayerInfoButton, PlayerInfoKind
 from rsc.utils.views.bulk_role import BulkRoleConfirmView
 
-from .utils import custom_ids
 
 GUILD_ID = 395806681994493964
 TEMPLATE = re.compile(PLAYER_INFO_TEMPLATE)
@@ -51,6 +50,18 @@ def _interaction(cog=None, *, configured=True):
     return interaction
 
 
+PLAYER_ID = 138778232802508801
+
+
+def _player_card(franchise: str) -> PlayerCard:
+    colour = discord.Colour.blue()
+    return PlayerCard(name="Monty", discord_id=PLAYER_ID, status="Rostered", colour=colour, team="Quantum", franchise=franchise)
+
+
+def _dynamic_ids(view: discord.ui.LayoutView) -> list[str]:
+    return [item.custom_id for item in view.walk_children() if isinstance(item, discord.ui.DynamicItem)]
+
+
 class TestPlayerInfoButton:
     @pytest.mark.parametrize("kind", list(PlayerInfoKind))
     def test_custom_id_round_trips(self, kind):
@@ -64,18 +75,18 @@ class TestPlayerInfoButton:
         assert TEMPLATE.fullmatch("intent_dm:1:2:yes") is None
         assert TEMPLATE.fullmatch("player_info:trophies:Quantum") is None
 
-    def test_view_never_times_out(self):
-        view = player_info_view(team="Quantum", franchise="Hex Systems")
-        assert view is not None
+    def test_card_never_times_out(self):
+        view = _player_card(franchise="Hex Systems").render()
         assert view.timeout is None
-        assert custom_ids(view) == ["player_info:roster:Quantum", "player_info:franchise:Hex Systems"]
+        assert _dynamic_ids(view) == [
+            "player_info:roster:Quantum",
+            "player_info:franchise:Hex Systems",
+            f"player_info:trackers:{PLAYER_ID}",
+        ]
 
     def test_skips_names_too_long_for_a_custom_id(self):
-        long_name = "x" * 90
-        view = player_info_view(team="Quantum", franchise=long_name)
-        assert view is not None
-        assert custom_ids(view) == ["player_info:roster:Quantum"]
-        assert player_info_view(team=long_name, franchise=long_name) is None
+        card = _player_card(franchise="x" * 90)
+        assert _dynamic_ids(card.render()) == ["player_info:roster:Quantum", f"player_info:trackers:{PLAYER_ID}"]
 
     async def test_roster_click_replies_ephemerally(self):
         cog = create_autospec(RSC, instance=True)
