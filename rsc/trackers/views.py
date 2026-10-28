@@ -43,11 +43,12 @@ async def tracker_accounts_card(
 
     container = ui.Container(accent_colour=discord.Colour.blue())
     if avatar_url:
-        container.add_item(ui.Section(heading, accessory=ui.Thumbnail(avatar_url)))
+        # The list sits beside the avatar too: a Section is as tall as its thumbnail, so the heading
+        # alone would leave a blank band under it
+        container.add_item(ui.Section(heading, body, accessory=ui.Thumbnail(avatar_url)))
     else:
         container.add_item(heading)
-    # Full width, outside the Section, so long account names aren't squeezed beside the avatar on phones
-    container.add_item(body)
+        container.add_item(body)
     container.add_item(ui.ActionRow(ui.Button(label="RSC Tracker Links", url=RSC_TRACKER_URL)))
 
     view = ui.LayoutView(timeout=None)
