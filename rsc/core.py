@@ -32,7 +32,7 @@ from rsc.combines import CombineMixIn
 from rsc.developer import DeveloperMixIn
 from rsc.devleague import DevLeagueMixIn
 from rsc.checks import bot_owner_required
-from rsc.const import API_RETRIES, API_RETRY_EXCEPTIONS, DEFAULT_MODMAIL_BOT_ID
+from rsc.const import API_RETRIES, API_RETRY_EXCEPTIONS, DEFAULT_MODMAIL_BOT_ID, MODAL_TIMEOUT
 from rsc.embeds import BlueEmbed, ErrorEmbed, SuccessEmbed
 from rsc.enums import LogLevel
 from rsc.events import EventMixIn
@@ -45,6 +45,7 @@ from rsc.llm.rulebook import load_rulebooks
 from rsc.logs import GuildLogAdapter
 from rsc.matches import MatchMixIn
 from rsc.members import MemberMixIn
+from rsc.members.views import PlayerInfoButton
 from rsc.moderator import ModeratorMixIn, ThreadMixIn
 from rsc.numbers import NumberMixIn
 from rsc.seasons import SeasonsMixIn
@@ -169,7 +170,7 @@ class RSC(
         # Registered on the bot, not the cog, so they outlive a reload. The next
         # setup() replaces them only if the template is unchanged. Remove them so an
         # edited template cannot leave the old class answering old buttons.
-        self.bot.remove_dynamic_items(IntentDMButton, ActivityCheckDMButton, PermFAPollButton)
+        self.bot.remove_dynamic_items(IntentDMButton, ActivityCheckDMButton, PermFAPollButton, PlayerInfoButton)
         # Discard rather than drain. Draining sends one DM per `rate` seconds, so a
         # large queued batch would block the reload for many minutes.
         await self._dm_helper.stop(drain=False)
@@ -188,12 +189,13 @@ class RSC(
             # Start runners
             await self.start_webapp()
 
-            # Intent to Play, activity check and PermFA poll DM buttons.
+            # Intent to Play, activity check and PermFA poll DM buttons, plus the
+            # public /playerinfo card buttons.
             #
             # Registered once globally, not per guild and not per message. The guild
-            # and season (or poll) live in the custom_id and are matched by regex, so
-            # buttons from any season keep dispatching after a restart instead of dying.
-            self.bot.add_dynamic_items(IntentDMButton, ActivityCheckDMButton, PermFAPollButton)
+            # and season (or poll, or team) live in the custom_id and are matched by
+            # regex, so buttons keep dispatching after a restart instead of dying.
+            self.bot.add_dynamic_items(IntentDMButton, ActivityCheckDMButton, PermFAPollButton, PlayerInfoButton)
 
             # Per guild setup.
             #
@@ -538,9 +540,10 @@ class RSC(
         if not interaction.guild:
             return
 
-        setup_modal = RSCSetupModal()
+        setup_modal = RSCSetupModal(timeout=MODAL_TIMEOUT)
         await interaction.response.send_modal(setup_modal)
-        await setup_modal.wait()
+        if await setup_modal.wait():
+            return
         setup_modal.stop()
 
         if not (setup_modal.url and setup_modal.key):

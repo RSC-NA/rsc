@@ -5,6 +5,10 @@ from aiohttp import ClientOSError, ServerDisconnectedError
 
 # Views
 DEFAULT_TIMEOUT = 30.0
+# Discord sends nothing when a modal is dismissed, so without a timeout the
+# command awaiting it waits forever. Stays inside the 15 minute interaction
+# token so a caller can still follow up on the original interaction.
+MODAL_TIMEOUT = 600.0
 
 # RSC API
 #

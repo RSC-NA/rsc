@@ -31,6 +31,7 @@ class CheckInView(AuthorOnlyView):
         await self.wait()
 
     async def confirm(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
         self.result = True
         await self.interaction.edit_original_response(
             embed=SuccessEmbed(
@@ -42,6 +43,7 @@ class CheckInView(AuthorOnlyView):
         self.stop()
 
     async def decline(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
         self.result = False
         await self.interaction.edit_original_response(
             embed=ErrorEmbed(
@@ -82,6 +84,7 @@ class CheckOutView(AuthorOnlyView):
         await self.wait()
 
     async def confirm(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
         self.result = True
         await self.interaction.edit_original_response(
             embed=SuccessEmbed(
@@ -93,6 +96,7 @@ class CheckOutView(AuthorOnlyView):
         self.stop()
 
     async def decline(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
         self.result = False
         await self.interaction.edit_original_response(
             embed=ErrorEmbed(

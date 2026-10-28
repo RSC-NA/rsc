@@ -8,6 +8,7 @@ from rscapi.models.season import Season
 from rsc.admin import AdminMixIn
 from rsc.admin.modals import IntentMissingModal
 from rsc.admin.views import DMConfirmView, build_intent_dm_view
+from rsc.const import MODAL_TIMEOUT
 from rsc.embeds import (
     ApiExceptionErrorEmbed,
     BlueEmbed,
@@ -173,9 +174,10 @@ class AdminIntentsMixIn(AdminMixIn):
         if not guild:
             return
 
-        intent_modal = IntentMissingModal()
+        intent_modal = IntentMissingModal(timeout=MODAL_TIMEOUT)
         await interaction.response.send_modal(intent_modal)
-        await intent_modal.wait()
+        if await intent_modal.wait():
+            return
 
         await self._set_intent_missing_message(guild, intent_modal.intent_msg.value)
 

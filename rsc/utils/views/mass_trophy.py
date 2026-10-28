@@ -14,10 +14,6 @@ TROPHY_OPTIONS = [
     ),
 ]
 
-# A mass assignment can run for a while. Give the operator plenty of time to
-# paste a list, but don't wait forever if they dismiss the modal.
-MODAL_TIMEOUT = 600.0
-
 
 class MassTrophyModal(discord.ui.Modal, title="Mass Accolade Assignment"):
     """Modal to add accolades to multiple users by their Discord IDs"""
@@ -29,7 +25,7 @@ class MassTrophyModal(discord.ui.Modal, title="Mass Accolade Assignment"):
         required=True,
     )
 
-    def __init__(self, timeout: float | None = MODAL_TIMEOUT):
+    def __init__(self, timeout: float | None = const.MODAL_TIMEOUT):
         super().__init__(timeout=timeout)
         # Submit interaction, stored so the caller can report progress against
         # the response deferred below instead of leaving it spinning forever.

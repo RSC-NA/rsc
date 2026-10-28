@@ -47,6 +47,7 @@ class BulkRoleConfirmView(AuthorOnlyView):
         self.stop()
 
     async def decline(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
         log.debug("User cancelled bulk role change")
         self.result = False
         await self.interaction.edit_original_response(

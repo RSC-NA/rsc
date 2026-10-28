@@ -352,13 +352,14 @@ class AdminFranchiseMixIn(AdminMixIn):
             return
 
         # Send modal
-        rebrand_modal = FranchiseRebrandModal()
+        rebrand_modal = FranchiseRebrandModal(timeout=const.MODAL_TIMEOUT)
         await interaction.response.send_modal(rebrand_modal)
 
         # Fetch franchise and league tier data while user is in modal
         fl = await self.franchises(guild, name=franchise)
         league_tiers = await self.tiers(guild)
-        await rebrand_modal.wait()
+        if await rebrand_modal.wait():
+            return
 
         # Validate original franchise exists
         if not fl:

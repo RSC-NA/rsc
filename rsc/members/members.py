@@ -48,7 +48,7 @@ from rsc.exceptions import DiscordNameTooLong, LeagueNotConfigured, RscException
 from rsc.franchises import FranchiseMixIn
 from rsc.logs import GuildLogAdapter
 from rsc.members.views.intent import IntentState, IntentToPlayView
-from rsc.members.views.player_info import PlayerInfoView
+from rsc.members.views.player_info import player_info_view
 from rsc.members.views.signup import PermFASignupView, SignupState, SignupView
 from rsc.teams import TeamMixIn
 from rsc.tiers import TierMixIn
@@ -534,8 +534,9 @@ class MemberMixIn(RSCMixIn):
         except RscException as exc:
             log.warning(f"MemberCreate exception during sign-up for {interaction.user} ({interaction.user.id}). {exc}", guild=guild)
 
-        # Wait for embed finish.
-        await signup_view.wait()
+        # Wait for embed finish. A timed out view has already told the player.
+        if await signup_view.wait():
+            return
 
         if signup_view.state == SignupState.CANCELLED:
             return await interaction.edit_original_response(
@@ -655,8 +656,9 @@ class MemberMixIn(RSCMixIn):
         except RscException as exc:
             log.warning(f"MemberCreate exception during PermFA sign-up: {exc.response.body}")
 
-        # Wait for embed finish.
-        await signup_view.wait()
+        # Wait for embed finish. A timed out view has already told the player.
+        if await signup_view.wait():
+            return
 
         if signup_view.state == SignupState.CANCELLED:
             return await interaction.edit_original_response(
@@ -813,13 +815,11 @@ class MemberMixIn(RSCMixIn):
         if not embed.thumbnail.url and player.avatar:
             embed.set_thumbnail(url=player.avatar.url)
 
+        playerinfo_view = None
         if p.team and p.team.name and p.team.franchise and p.team.franchise.name:
-            playerinfo_view = PlayerInfoView(
-                mixin=self,
-                player=player,
-                team=p.team.name,
-                franchise=p.team.franchise.name,
-            )
+            playerinfo_view = player_info_view(team=p.team.name, franchise=p.team.franchise.name)
+
+        if playerinfo_view:
             await interaction.followup.send(embed=embed, view=playerinfo_view)
         else:
             await interaction.followup.send(embed=embed)
@@ -883,7 +883,9 @@ class MemberMixIn(RSCMixIn):
         # User prompts
         intent_view = IntentToPlayView(interaction)
         await intent_view.prompt()
-        await intent_view.wait()
+        # A timed out view has already told the player
+        if await intent_view.wait():
+            return
 
         match intent_view.state:
             case IntentState.CANCELLED:

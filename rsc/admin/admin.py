@@ -10,6 +10,7 @@ from redbot.core.app_commands import Transform
 from rsc.abc import RSCMixIn
 from rsc.admin.modals import BulkRetireModal, LeagueDatesModal
 from rsc.admin.models import BulkRetireResult
+from rsc.const import MODAL_TIMEOUT
 from rsc.embeds import (
     ApiExceptionErrorEmbed,
     BlueEmbed,
@@ -119,9 +120,10 @@ class AdminMixIn(RSCMixIn):
         if not interaction.guild:
             return
 
-        dates_modal = LeagueDatesModal()
+        dates_modal = LeagueDatesModal(timeout=MODAL_TIMEOUT)
         await interaction.response.send_modal(dates_modal)
-        await dates_modal.wait()
+        if await dates_modal.wait():
+            return
 
         await self._set_dates(interaction.guild, value=dates_modal.date_input.value)
 
@@ -199,7 +201,7 @@ class AdminMixIn(RSCMixIn):
         if not guild or not isinstance(interaction.user, discord.Member):
             return
 
-        bulk_modal = BulkRetireModal()
+        bulk_modal = BulkRetireModal(timeout=MODAL_TIMEOUT)
         await interaction.response.send_modal(bulk_modal)
         timed_out = await bulk_modal.wait()
         if timed_out or not bulk_modal.interaction:

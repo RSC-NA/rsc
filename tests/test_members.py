@@ -742,3 +742,24 @@ class TestInvalidateElevatedRoleCache:
 
         assert mock_guild.id not in cache
         assert 999 in cache
+
+
+# --- _intent_to_play_flow ---
+
+
+class TestIntentToPlayFlowTimeout:
+    """A timed out view has already shown "Time Out". The flow must not replace it."""
+
+    async def test_timeout_keeps_time_out_message(self, mock_guild):
+        mixin = _create_mixin(declare_intent=AsyncMock())
+        interaction = MagicMock()
+        interaction.edit_original_response = AsyncMock()
+
+        with patch("rsc.members.members.IntentToPlayView") as view_cls:
+            view = view_cls.return_value
+            view.prompt = AsyncMock()
+            view.wait = AsyncMock(return_value=True)
+            await mixin._intent_to_play_flow(interaction, mock_guild, MagicMock())
+
+        interaction.edit_original_response.assert_not_awaited()
+        mixin.declare_intent.assert_not_awaited()

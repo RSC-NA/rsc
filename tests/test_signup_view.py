@@ -8,6 +8,7 @@ from rsc.members.views.signup import (
     AgreementPhase,
     PermFAAgreementPhase,
     PermFASignupView,
+    PlayerInfoModal,
     SelectPhase,
     SignupState,
     SignupView,
@@ -23,7 +24,30 @@ def _interaction():
     interaction.guild.id = GUILD_ID
     interaction.response = MagicMock()
     interaction.response.edit_message = AsyncMock()
+    interaction.response.send_modal = AsyncMock()
+    interaction.edit_original_response = AsyncMock()
     return interaction
+
+
+async def _view_at_trackers(interaction) -> SignupView:
+    """A signup view that has finished every select, with its modal still open."""
+    view = SignupView(interaction)
+    for step in (SignupState.TIMES, SignupState.RULES):
+        await view.complete_step(interaction, step)
+    assert view._selects is not None
+    for step in (SignupState.PLAYER_TYPE, SignupState.REGION, SignupState.PLATFORM):
+        view._selects.complete_step(step)
+    view.state = view._selects.complete_step(SignupState.REFERRER)
+    return view
+
+
+def _modal(*, timed_out: bool, submitted: bool, name: str = "Xentrick", links: str = "a\nb") -> PlayerInfoModal:
+    modal = PlayerInfoModal()
+    modal.wait = AsyncMock(return_value=timed_out)
+    modal.submitted = submitted
+    modal.name_input._value = name
+    modal.links_input._value = links
+    return modal
 
 
 def _text(container: Container) -> str:
@@ -93,3 +117,68 @@ class TestPermFASignupView:
 
         assert view.state == SignupState.PLAYER_TYPE
         assert isinstance(view._selects, SelectPhase)
+
+
+class TestPlayerInfoModal:
+    async def test_info_button_locked_until_referrer(self):
+        phase = SelectPhase()
+        assert phase.info_btn.disabled
+        assert phase.info_btn in _buttons(phase.referrer_container)
+
+        for step in (SignupState.PLAYER_TYPE, SignupState.REGION, SignupState.PLATFORM):
+            phase.complete_step(step)
+        assert phase.complete_step(SignupState.REFERRER) == SignupState.TRACKERS
+        assert not phase.info_btn.disabled
+
+    async def test_referrer_opens_modal_and_shows_reopen_button(self):
+        interaction = _interaction()
+        view = SignupView(interaction)
+        for step in (SignupState.TIMES, SignupState.RULES, SignupState.PLAYER_TYPE, SignupState.REGION, SignupState.PLATFORM):
+            await view.complete_step(interaction, step)
+
+        view.collect_player_info = AsyncMock()
+        await view.complete_step(interaction, SignupState.REFERRER)
+
+        modal = interaction.response.send_modal.await_args.args[0]
+        assert isinstance(modal, PlayerInfoModal)
+        # A dismissed modal must not be waited on forever
+        assert modal.timeout == view.timeout
+        interaction.edit_original_response.assert_awaited_once_with(view=view)
+        assert view._selects is not None
+        assert not view._selects.info_btn.disabled
+
+    async def test_dismissed_modal_leaves_signup_open(self):
+        interaction = _interaction()
+        view = await _view_at_trackers(interaction)
+
+        await view.collect_player_info(_modal(timed_out=True, submitted=False))
+
+        assert view.state == SignupState.TRACKERS
+        assert not view.is_finished()
+        assert view._selects is not None
+        assert not view._selects.info_btn.disabled
+        interaction.edit_original_response.assert_not_awaited()
+
+    async def test_submitted_modal_finishes_signup(self):
+        interaction = _interaction()
+        view = await _view_at_trackers(interaction)
+
+        await view.collect_player_info(_modal(timed_out=False, submitted=True, links="https://a\nhttps://b"))
+
+        assert view.state == SignupState.FINISHED
+        assert view.is_finished()
+        assert view.rsc_name == "Xentrick"
+        assert view.trackers == ["https://a", "https://b"]
+        assert view._selects is not None
+        assert view._selects.info_btn.disabled
+        interaction.edit_original_response.assert_awaited_once_with(view=view)
+
+    async def test_only_first_submission_counts(self):
+        interaction = _interaction()
+        view = await _view_at_trackers(interaction)
+
+        await view.collect_player_info(_modal(timed_out=False, submitted=True, name="First"))
+        await view.collect_player_info(_modal(timed_out=False, submitted=True, name="Second"))
+
+        assert view.rsc_name == "First"
+        interaction.edit_original_response.assert_awaited_once()

@@ -8,6 +8,7 @@ from redbot.core import app_commands
 
 from rsc.admin import AdminMixIn
 from rsc.admin.modals import BulkMatchModal
+from rsc.const import MODAL_TIMEOUT
 from rsc.embeds import (
     ApiExceptionErrorEmbed,
     BlueEmbed,
@@ -239,9 +240,10 @@ class AdminMatchMixIn(AdminMixIn):
         if not guild:
             return
 
-        bulk_modal = BulkMatchModal()
+        bulk_modal = BulkMatchModal(timeout=MODAL_TIMEOUT)
         await interaction.response.send_modal(bulk_modal)
-        await bulk_modal.wait()
+        if await bulk_modal.wait():
+            return
         log.debug("Modal finished.")
 
         # Loading embed

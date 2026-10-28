@@ -5,6 +5,7 @@ from redbot.core import app_commands
 
 from rsc.admin import AdminMixIn
 from rsc.admin.modals import AgmMessageModal
+from rsc.const import MODAL_TIMEOUT
 from rsc.embeds import ApiExceptionErrorEmbed, BlueEmbed, ErrorEmbed
 from rsc.enums import Status
 from rsc.exceptions import RscException
@@ -36,9 +37,10 @@ class AdminAGMMixIn(AdminMixIn):
         if not interaction.guild:
             return
 
-        agm_msg_modal = AgmMessageModal()
+        agm_msg_modal = AgmMessageModal(timeout=MODAL_TIMEOUT)
         await interaction.response.send_modal(agm_msg_modal)
-        await agm_msg_modal.wait()
+        if await agm_msg_modal.wait():
+            return
 
         await self._set_agm_message(interaction.guild, value=agm_msg_modal.agm_msg.value)
 

@@ -936,9 +936,6 @@ class RSCMixIn(ABC):
     async def _set_devleague_announce_channel(self, guild: discord.Guild, channel: discord.TextChannel): ...
 
 
-class MixInMetaClass(RSCMixIn, ABCMeta): ...
-
-
 class CompositeMetaClass(DPYCogMeta, ABCMeta):
     """
     This allows the metaclass used for proper type detection to

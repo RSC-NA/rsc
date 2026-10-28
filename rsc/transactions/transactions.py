@@ -32,6 +32,7 @@ from rscapi.models.paginated_transaction_response_list import PaginatedTransacti
 from rscapi.models.transaction_response import TransactionResponse
 
 from rsc.abc import RSCMixIn
+from rsc.const import MODAL_TIMEOUT
 from rsc.embeds import (
     ApiExceptionErrorEmbed,
     BlueEmbed,
@@ -720,9 +721,10 @@ class TransactionMixIn(RSCMixIn):
         if not interaction.guild:
             return
 
-        cutmsg_modal = CutMsgModal()
+        cutmsg_modal = CutMsgModal(timeout=MODAL_TIMEOUT)
         await interaction.response.send_modal(cutmsg_modal)
-        await cutmsg_modal.wait()
+        if await cutmsg_modal.wait():
+            return
 
         cutmsg = cutmsg_modal.cutmsg.value
 
@@ -1186,9 +1188,10 @@ class TransactionMixIn(RSCMixIn):
             )
             return
 
-        announce_modal = TransactionAnnouncementModal()
+        announce_modal = TransactionAnnouncementModal(timeout=MODAL_TIMEOUT)
         await interaction.response.send_modal(announce_modal)
-        await announce_modal.wait()
+        if await announce_modal.wait():
+            return
 
         if not announce_modal.message.value:
             await interaction.followup.send(content="No announcement content provided... Try again.", ephemeral=True)
@@ -1222,9 +1225,10 @@ class TransactionMixIn(RSCMixIn):
             )
             return
 
-        trade_modal = TradeAnnouncementModal()
+        trade_modal = TradeAnnouncementModal(timeout=MODAL_TIMEOUT)
         await interaction.response.send_modal(trade_modal)
-        await trade_modal.wait()
+        if await trade_modal.wait():
+            return
 
         if not trade_modal.trade.value:
             await interaction.followup.send(content="No trade information provided... Try again.", ephemeral=True)
@@ -1273,11 +1277,12 @@ class TransactionMixIn(RSCMixIn):
             )
             return
 
-        trade_modal = TradeAnnouncementModal()
+        trade_modal = TradeAnnouncementModal(timeout=MODAL_TIMEOUT)
         await interaction.response.send_modal(trade_modal)
-        await trade_modal.wait()
+        if await trade_modal.wait():
+            return
 
-        if not trade_modal.trade:
+        if not trade_modal.trade.value:
             await interaction.followup.send(content="No trade information provided... Try again.", ephemeral=True)
             return
 

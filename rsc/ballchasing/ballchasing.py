@@ -21,6 +21,7 @@ from rscapi.models.match_results import MatchResults
 from rsc.abc import RSCMixIn
 from rsc.ballchasing import groups, process, validation
 from rsc.ballchasing.modals import ReportMatchModal
+from rsc.const import MODAL_TIMEOUT
 from rsc.embeds import (
     ApiExceptionErrorEmbed,
     ErrorEmbed,
@@ -417,11 +418,12 @@ class BallchasingMixIn(RSCMixIn):
                 embed=ErrorEmbed(description="You do not have permission to override a match result.")
             )
 
-        report_modal = ReportMatchModal(home_team=home, away_team=away)
+        report_modal = ReportMatchModal(home_team=home, away_team=away, timeout=MODAL_TIMEOUT)
         await interaction.response.send_modal(report_modal)
 
         modal_timed_out = await report_modal.wait()
-        if modal_timed_out:
+        # An invalid submission has already been answered by the modal
+        if modal_timed_out or not report_modal.valid:
             return
         log.debug("Report match modal finished...")
 

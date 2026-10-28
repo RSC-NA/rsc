@@ -15,6 +15,9 @@ class ReportMatchModal(discord.ui.Modal, title="Report Match"):
         self.home_wins = 0
         self.away_wins = 0
         self.replays: list[discord.Attachment] = []
+        # discord.py stops the modal after any clean on_submit, rejected or not,
+        # so the caller needs this to tell a usable submission from a rejected one.
+        self.valid = False
         self.add_components()
 
     def add_components(self) -> None:
@@ -72,5 +75,6 @@ class ReportMatchModal(discord.ui.Modal, title="Report Match"):
 
         # Fetch replays
         self.replays = self.upload_replays.component.values
+        self.valid = True
 
         await interaction.response.defer(ephemeral=True)

@@ -47,22 +47,23 @@ class PlayerInfoModal(discord.ui.Modal, title="RSC Sign Up Information"):
     Includes instructional text so the user knows exactly what to provide.
     """
 
-    def __init__(self, *, is_2v2: bool = False):
-        super().__init__()
+    def __init__(self, *, is_2v2: bool = False, timeout: float | None = None):
+        super().__init__(timeout=timeout)
         self.submitted = False
 
         # In-game Name
 
+        self.name_input: TextInput = TextInput(
+            style=discord.TextStyle.short,
+            placeholder="Your in-game name...",
+            min_length=2,
+            max_length=25,
+            required=True,
+        )
         self.rsc_name = Label(
             text="In-game Name",
             description="Must match the name you play matches on exactly — no exceptions.",
-            component=TextInput(
-                style=discord.TextStyle.short,
-                placeholder="Your in-game name...",
-                min_length=2,
-                max_length=25,
-                required=True,
-            ),
+            component=self.name_input,
         )
         self.add_item(self.rsc_name)
 
@@ -82,15 +83,16 @@ class PlayerInfoModal(discord.ui.Modal, title="RSC Sign Up Information"):
             )
         )
 
+        self.links_input: TextInput = TextInput(
+            style=discord.TextStyle.paragraph,
+            placeholder=("https://rocketleague.tracker.network/rocket-league/profile/steam/76561197960409023/overview"),
+            min_length=50,  # rough validation to prevent accidental non-link input
+            required=True,
+        )
         self.links = Label(
             text="\N{BAR CHART} Tracker Links",
             description="One link per line for every account you own.",
-            component=TextInput(
-                style=discord.TextStyle.paragraph,
-                placeholder=("https://rocketleague.tracker.network/rocket-league/profile/steam/76561197960409023/overview"),
-                min_length=50,  # rough validation to prevent accidental non-link input
-                required=True,
-            ),
+            component=self.links_input,
         )
         self.add_item(self.links)
 
@@ -125,6 +127,29 @@ class _CancelButton(discord.ui.Button):
         view.state = SignupState.CANCELLED
         view.stop()
         await interaction.response.defer(ephemeral=True)
+
+
+class _PlayerInfoButton(discord.ui.Button["SignupLayoutView"]):
+    """Opens the in-game name and tracker modal.
+
+    The referrer select opens the modal automatically, but Discord sends nothing
+    when a modal is closed. This button stays enabled so a player who dismissed
+    it can open it again.
+    """
+
+    def __init__(self, *, disabled: bool = True):
+        super().__init__(
+            label="Enter name & trackers",
+            style=discord.ButtonStyle.primary,
+            emoji="\N{MEMO}",
+            disabled=disabled,
+        )
+
+    async def callback(self, interaction: discord.Interaction):
+        if self.view is None:
+            return
+        info_modal = await self.view.send_info_modal(interaction)
+        await self.view.collect_player_info(info_modal)
 
 
 class _EnumSelect(discord.ui.Select):
@@ -336,6 +361,7 @@ class SelectPhase:
         self.region_select = _RegionSelect()
         self.platform_select = _PlatformSelect()
         self.referrer_select = _ReferrerSelect()
+        self.info_btn = _PlayerInfoButton()
 
         self.player_type_container = Container(
             TextDisplay("## \N{BUST IN SILHOUETTE}  New or Returning Player"),
@@ -363,6 +389,7 @@ class SelectPhase:
             TextDisplay("How did you find out about RSC?"),
             Separator(spacing=discord.SeparatorSpacing.small),
             ActionRow(self.referrer_select),
+            ActionRow(self.info_btn),
             accent_colour=discord.Colour.dark_grey(),
         )
 
@@ -401,8 +428,13 @@ class SelectPhase:
                 return SignupState.REFERRER
             case SignupState.REFERRER:
                 self.referrer_select.disabled = True
-                self.referrer_container.accent_colour = completed
+                self.referrer_container.accent_colour = unlocked
+                self.info_btn.disabled = False
                 return SignupState.TRACKERS
+            case SignupState.TRACKERS:
+                self.info_btn.disabled = True
+                self.referrer_container.accent_colour = completed
+                return SignupState.FINISHED
             case _:
                 raise ValueError(f"SelectPhase cannot handle step {step!r}")
 
@@ -479,27 +511,39 @@ class SignupLayoutView(AuthorOnlyLayoutView):
 
         if next_state == SignupState.TRACKERS:
             # Transition: open the tracker modal (Phase 3)
-            info_modal = PlayerInfoModal(is_2v2=self._is_2v2)
-            await interaction.response.send_modal(info_modal)
-            await info_modal.wait()
-
-            if not info_modal.submitted:
-                # User dismissed the modal
-                self.state = SignupState.CANCELLED
-                self.stop()
-                return
-
-            rsc_name_input = cast("TextInput", info_modal.rsc_name.component)
-            links_input = cast("TextInput", info_modal.links.component)
-            self.rsc_name = rsc_name_input.value
-            self.trackers = links_input.value.splitlines()
-
-            self.state = SignupState.FINISHED
-            self.stop()
+            info_modal = await self.send_info_modal(interaction)
+            # The modal used up this interaction's response. Show the unlocked
+            # button behind it so a player who closes the modal can reopen it.
             await self.interaction.edit_original_response(view=self)
+            await self.collect_player_info(info_modal)
             return
 
         await interaction.response.edit_message(view=self)
+
+    async def send_info_modal(self, interaction: discord.Interaction) -> PlayerInfoModal:
+        """Open the in-game name and tracker modal (Phase 3)."""
+        # Without a timeout a dismissed modal would be waited on forever
+        info_modal = PlayerInfoModal(is_2v2=self._is_2v2, timeout=self.timeout)
+        await interaction.response.send_modal(info_modal)
+        return info_modal
+
+    async def collect_player_info(self, info_modal: PlayerInfoModal) -> None:
+        """Finish the signup from a submitted modal.
+
+        A dismissed modal only ends here by timing out. By then the player may
+        have reopened and submitted another copy, or the whole view may have
+        timed out, so only the first submission while the view is live counts.
+        """
+        timed_out = await info_modal.wait()
+        if timed_out or not info_modal.submitted or self.is_finished() or self._selects is None:
+            return
+
+        self.rsc_name = info_modal.name_input.value
+        self.trackers = info_modal.links_input.value.splitlines()
+
+        self.state = self._selects.complete_step(SignupState.TRACKERS)
+        self.stop()
+        await self.interaction.edit_original_response(view=self)
 
 
 class PermFASignupView(SignupLayoutView):

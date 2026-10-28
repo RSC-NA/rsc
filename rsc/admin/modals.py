@@ -38,8 +38,8 @@ class BulkRetireModal(discord.ui.Modal, title="Bulk Retire Players"):
         max_length=4000,
     )
 
-    def __init__(self):
-        super().__init__()
+    def __init__(self, timeout: float | None = None):
+        super().__init__(timeout=timeout)
         self.interaction: discord.Interaction | None = None
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
@@ -127,8 +127,8 @@ class FranchiseRebrandModal(discord.ui.Modal, title="Franchise Rebrand"):
         required=True,
     )
 
-    def __init__(self):
-        super().__init__()
+    def __init__(self, timeout: float | None = None):
+        super().__init__(timeout=timeout)
         self.name: str = ""
         self.prefix: str = ""
         self.teams: list[str] = []

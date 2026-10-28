@@ -784,10 +784,11 @@ class ConfirmSyncView(AuthorOnlyView):
         self.stop()
 
     async def decline(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
         self.result = False
         await self.interaction.edit_original_response(
             embed=RedEmbed(
-                title="Sync Canelled",
+                title="Sync Cancelled",
                 description="You have cancelled syncing from the API.",
             ),
             view=None,
@@ -882,18 +883,19 @@ class RebrandFranchiseView(AuthorOnlyView):
         )
 
     async def confirm(self, interaction: discord.Interaction):
-        log.debug("User confirmed franchise deletion")
+        log.debug("User confirmed franchise rebrand")
         await interaction.response.defer(ephemeral=True)
         self.result = True
         self.stop()
 
     async def decline(self, interaction: discord.Interaction):
-        log.debug("Franchise deletion cancelled by user...")
+        await interaction.response.defer(ephemeral=True)
+        log.debug("Franchise rebrand cancelled by user...")
         self.result = False
         await self.interaction.edit_original_response(
             embed=RedEmbed(
                 title="Cancelled",
-                description="You have cancelled deleting this franchise.",
+                description="You have cancelled rebranding this franchise.",
             ),
             view=None,
         )
@@ -928,11 +930,13 @@ class DeleteFranchiseView(AuthorOnlyView):
         )
 
     async def confirm(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
         log.debug("User confirmed franchise deletion")
         self.result = True
         self.stop()
 
     async def decline(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
         log.debug("Franchise deletion cancelled by user...")
         self.result = False
         await self.interaction.edit_original_response(
@@ -975,11 +979,13 @@ class CreateFranchiseView(AuthorOnlyView):
         )
 
     async def confirm(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
         log.debug("User confirmed franchise creation")
         self.result = True
         self.stop()
 
     async def decline(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
         log.debug("Franchise creation cancelled by user...")
         self.result = False
         await self.interaction.edit_original_response(
@@ -1028,6 +1034,7 @@ class TransferFranchiseView(AuthorOnlyView):
         self.stop()
 
     async def decline(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
         log.debug("Franchise transfer cancelled by user...")
         self.result = False
         await self.interaction.edit_original_response(
