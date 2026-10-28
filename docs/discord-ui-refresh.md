@@ -209,7 +209,7 @@ Each spec uses only what discord.py 2.7.1 supports. Mockups are in the published
     - a `-#` footer, `Discord ID: 138778232802508801 · <t:…:f>`.
   - The ID wording is exactly today's footer, so one search finds old and new posts. **Search indexing of V2 text is unverified**; test it with `/pingtest` before Phase 3.
 - No thumbnail. The 84px V2 thumbnail squeezed the text on phones, which is the "too much stacked text" the user rejected. The franchise is named in the facts line. A `Section` + `Thumbnail` could add a logo later.
-- Same template for every type. Released: "X has been released to Free Agency by Team (Tier)" with the `Released.png` banner and that tier's accent.
+- Same template for every type. Released: "X has been released by Team (Tier)", today's wording (kept 2026-10-28 over "released to Free Agency"), with the `Released.png` banner and that tier's accent.
 - Trades still need their own layout (one section per franchise, with an overflow link past 4,000 characters). **Deferred to a later piece (decided 2026-10-28)**: `trade_announce.py` keeps its embed until that layout is mocked up and locked.
 - **Decided 2026-10-28 while building:**
   - Everyone the card names is pinged: player, GM and the subbed-out starter. The GM now pings on re-signs, retirements and temporary contracts too, where the old embed only showed them.
