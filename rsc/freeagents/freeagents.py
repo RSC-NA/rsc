@@ -127,7 +127,7 @@ class FreeAgentMixIn(RSCMixIn):
             if not fmember:
                 continue
 
-            fstr = fmember.display_name
+            fstr = discord.utils.escape_markdown(fmember.display_name)
             if fa.status == Status.PERM_FA:
                 fstr += " (PermFA)"
             fa_fmt_list.append((fstr, fa.current_mmr))
@@ -317,7 +317,7 @@ class FreeAgentMixIn(RSCMixIn):
         else:
             embed.add_field(
                 name="Players",
-                value="\n".join([m.display_name for m in available]),
+                value="\n".join([discord.utils.escape_markdown(m.display_name) for m in available]),
                 inline=False,
             )
         await interaction.response.send_message(embed=embed)
