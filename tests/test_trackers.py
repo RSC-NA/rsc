@@ -143,7 +143,7 @@ class TestRmTrackerApi:
             with patch("rsc.trackers.trackers.TrackerLinksApi", return_value=mock_api):
                 await mixin.rm_tracker(mock_guild, tracker_id=5)
 
-        mock_api.tracker_links_destroy.assert_awaited_once_with("5")
+        mock_api.tracker_links_destroy.assert_awaited_once_with(5)
 
 
 class TestUnlinkTrackerApi:

@@ -543,7 +543,7 @@ class TrackerMixIn(RSCMixIn):
             api = TrackerLinksApi(client)
             log.debug(f"Tracker Delete: {tracker_id}")
             try:
-                return await api.tracker_links_destroy(str(tracker_id))
+                return await api.tracker_links_destroy(tracker_id)
             except ApiException as exc:
                 raise RscException(response=exc)
 
@@ -560,7 +560,7 @@ class TrackerMixIn(RSCMixIn):
             data = TrackerLinkLinking(member=player.id, executor=executor.id)
             log.debug(f"Tracker Unlink: {tracker_id} (Member: {player})")
             try:
-                return await api.tracker_links_unlink_create(str(tracker_id), data)
+                return await api.tracker_links_unlink_create(tracker_id, data)
             except ApiException as exc:
                 raise RscException(response=exc)
 
@@ -577,7 +577,7 @@ class TrackerMixIn(RSCMixIn):
             data = TrackerLinkLinking(member=player.id, executor=executor.id)
             log.debug(f"Tracker Link: {tracker_id} (Member: {player})")
             try:
-                return await api.tracker_links_link_create(str(tracker_id), data)
+                return await api.tracker_links_link_create(tracker_id, data)
             except ApiException as exc:
                 raise RscException(response=exc)
 
@@ -591,7 +591,7 @@ class TrackerMixIn(RSCMixIn):
             api = TrackerLinksApi(client)
             log.debug(f"Fetch Tracker ID: {tracker_id}")
             try:
-                return await api.tracker_links_retrieve(str(tracker_id))
+                return await api.tracker_links_retrieve(tracker_id)
             except ApiException as exc:
                 raise RscException(response=exc)
 
@@ -607,6 +607,6 @@ class TrackerMixIn(RSCMixIn):
             log.debug(f"Merging {source} pulls into {dest}")
             try:
                 data = TrackerIDInput(tracker_id=source)
-                return await api.tracker_links_migrate_pulls_create(id=str(dest), tracker_id_input=data)
+                return await api.tracker_links_migrate_pulls_create(id=dest, tracker_id_input=data)
             except ApiException as exc:
                 raise RscException(response=exc)
