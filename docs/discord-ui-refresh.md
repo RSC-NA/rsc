@@ -47,7 +47,7 @@ This file is the working record for the refresh. Update the status table as phas
 
 ### Next steps, in order
 
-1. **Sign-up redesign: waiting on the user's pick.**
+1. **Sign-up redesign: option B chosen (2026-10-28).** Gate, then choices, then one form. The user added: **more separators in step 2 ("About you")**, a thin line between each question rather than only between the HOW YOU PLAY and YOUR SETUP groups. Handed to rsc-15 to build. The open questions below are still unanswered.
    - **Mockups:** https://claude.ai/artifact/XxQ7yNyQeijx5iC84nUmMo. Three flows; every choice in one ephemeral V2 message edited in place, then ONE form (name, tracker help, tracker links):
      - **A** one sheet (35/40 components);
      - **B** gate then choices: "Before you start" (match nights + rules, each confirmed with a toggle button) → "About you" (five choices) → form. Recommended.
@@ -70,7 +70,8 @@ This file is the working record for the refresh. Update the status table as phas
      - website trades (`PTR` event, and `/transactions announce <id>`) → `build_trade_embed_from_response` and `announce_trade` (`rsc/transactions/trade_announce.py`). This one groups by GM discord id and handles pick sources and truncation.
    - **Spec note from 01:** one section per franchise, with an overflow link past 4,000 characters.
    - **Plan:** mockups first (one background agent, desktop + phone), user picks, then one shared card builder for both paths, pings from a TextDisplay, and a `/pingtest style:trade` preview.
-3. **Phases 4–6** (table above).
+3. **`/playoffs` redesign: mockups requested (2026-10-28, for review the next day).** The command is `_playoffs_cmd` / `create_playoff_hunt_embed` in `rsc/stats/stats.py`. Today it posts one embed, with a field per playoff group, monospaced rank/record and a cut line. The data is `TierPlayoffHunt` (groups → teams with seed, record, clinch/magic-number/delta labels, franchise logo). A background agent is drawing 3–4 Components V2 options (race view, own-team focus, rendered standings image, projected bracket, group switcher), desktop and phone, published as a new artifact.
+4. **Phases 4–6** (table above).
 
 ### Unanswered offers (ask again only if relevant)
 - Status "pills" (e.g. LIVE / FINAL) as app emoji.
