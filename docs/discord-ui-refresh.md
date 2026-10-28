@@ -414,6 +414,9 @@ Mockups: https://claude.ai/artifact/U1MT35ybTVDssnV1rFhfEm (round 3, variant S).
 - **Match nights:** 3v3 Monday and Wednesday, 2v2 Thursday, both 10 PM ET. The review shows the next match night in the player's own time.
 - **Previews:** `/pingtest` styles `signup`, `permfa`, `signup_fix`, `signup_success`, `permfa_success`, `signup_already`, `permfa_already`, `permfa_waiting`, `signup_timeout`, `signup_cancelled`. The flows are dry runs: nothing is sent to the API.
 
+- **Redesign requested (2026-10-28, after live review):** the form → message → form hand-off is "really bad". The new direction is Components V2 messages for every choice (selects and toggle buttons; radios and checkboxes only exist in forms), with the player actively confirming the match nights and the rules before Continue enables. Exactly one form at the end holds the typed answers (in-game name, tracker links), followed by the existing review and success cards. Mockups of 2–3 flow options are being drawn. rsc-15 has paused the two-form build until one is chosen.
+  - **Requirement for the build (not the mockups):** the in-game name field needs a short hint that the name must match the one on the player's tracker link, e.g. Label description "Must match the name on your tracker link."
+
 ## 4. Action item: website match link on the report result (requested 2026-10-28)
 
 `build_match_result_embed` (`rsc/ballchasing/ballchasing.py:862`) already returns a link-only `View` with a "Ballchasing Group" button. Adding a second link button for the frontend match page is straightforward: link buttons need no handler, and they work in both legacy views and V2 `ActionRow`s.
