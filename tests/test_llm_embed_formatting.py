@@ -1,6 +1,6 @@
 """Tests for long value handling in LLM query embeds."""
 
-from rsc.embeds import BlueEmbed, EmbedLimits, chunk_field_value
+from rsc.embeds import BetterEmbed, BlueEmbed, EmbedLimits, chunk_field_value
 from rsc.llm.llm import LLMMixIn
 
 
@@ -40,6 +40,53 @@ class TestChunkFieldValue:
 
     def test_empty_text_returns_single_chunk(self):
         assert chunk_field_value("") == [""]
+
+
+class TestPaginate:
+    def test_short_description_returns_self(self):
+        embed = BlueEmbed(title="RSC AI", description="short answer")
+
+        assert embed.paginate() == [embed]
+        assert embed.description == "short answer"
+
+    def test_empty_description_returns_self(self):
+        embed = BlueEmbed(title="RSC AI")
+
+        assert embed.paginate() == [embed]
+
+    def test_splits_on_paragraph_before_newline(self):
+        first = "\n".join(f"`1300` FA | player{i}" for i in range(120))
+        second = "\n".join(f"`1300` PFA | player{i}" for i in range(120))
+        assert len(first) < EmbedLimits.Description < len(first) + len(second)
+        embed = BetterEmbed(title="Rival Free Agents", description=f"{first}\n\n{second}")
+
+        pages = embed.paginate()
+
+        assert [(p.description or "").strip() for p in pages] == [first, second]
+        assert all(p.title == "Rival Free Agents" for p in pages)
+
+    def test_oversized_paragraph_splits_on_newlines(self):
+        text = "\n".join(f"line {i} " + "z" * 60 for i in range(200))
+        assert len(text) > EmbedLimits.Description * 2
+
+        pages = BlueEmbed(title="RSC AI", description=text).paginate(continued_title="RSC AI (continued)")
+
+        assert len(pages) > 2
+        assert all(not p.exceeds_limits() for p in pages)
+        assert "".join(p.description or "" for p in pages).split() == text.split()
+        assert [p.title for p in pages[1:]] == ["RSC AI (continued)"] * (len(pages) - 1)
+
+    def test_continuations_keep_color_only(self):
+        embed = BlueEmbed(title="RSC AI", description="\n".join("z" * 70 for _ in range(100)))
+        embed.set_thumbnail(url="https://example.com/icon.png")
+        embed.set_footer(text="footer")
+
+        first, *rest = embed.paginate()
+
+        assert first is embed
+        assert rest
+        assert all(p.color == embed.color for p in rest)
+        assert all(p.thumbnail.url is None and p.footer.text is None for p in rest)
 
 
 class TestAddLongField:

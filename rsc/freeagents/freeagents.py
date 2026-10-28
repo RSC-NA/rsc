@@ -7,7 +7,7 @@ from redbot.core import Config, app_commands
 from rscapi.models.league_player import LeaguePlayer
 
 from rsc.abc import RSCMixIn
-from rsc.embeds import BetterEmbed, EmbedLimits, ErrorEmbed, SuccessEmbed
+from rsc.embeds import BetterEmbed, ErrorEmbed, SuccessEmbed
 from rsc.enums import Status
 from rsc.freeagents.views import CheckInView, CheckOutView
 from rsc.tiers import TierMixIn
@@ -145,17 +145,15 @@ class FreeAgentMixIn(RSCMixIn):
             lines = [f"`{mmr if mmr is not None else 'N/A'}` {name}" for name, mmr in players]
             sections.append(f"**{title} ({len(players)})**\n" + "\n".join(lines))
 
-        description = "\n\n".join(sections) or "No free agents available"
-        if len(description) > EmbedLimits.Description:
-            log.warning(f"Truncated {tier} free agent list, exceeded embed limits")
-            description = description[: EmbedLimits.Description].rsplit("\n", 1)[0]
-
         embed = BetterEmbed(
             title=f"{tier} Free Agents",
-            description=description,
+            description="\n\n".join(sections) or "No free agents available",
             color=tier_role.color if tier_role else discord.Color.blue(),
         )
-        await interaction.followup.send(embed=embed)
+        # Too long for one embed: paginate breaks on the blank line between sections first,
+        # so FA and PermFA land in their own embeds before a section is split on newlines.
+        for page in embed.paginate():
+            await interaction.followup.send(embed=page)
 
     @_free_agent_group.command(
         name="checkin",

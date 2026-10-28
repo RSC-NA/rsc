@@ -24,8 +24,8 @@ class EmbedLimits:
         Name = 256
 
 
-def chunk_field_value(value: str) -> list[str]:
-    """Split text into chunks that each fit within an embed field value.
+def chunk_text(value: str, limit: int) -> list[str]:
+    """Split text into chunks of at most `limit` characters.
 
     Breaks on paragraphs, then newlines, then spaces. Falls back to a hard
     split if no delimiter is found in a page.
@@ -39,7 +39,7 @@ def chunk_field_value(value: str) -> list[str]:
             delims=("\n\n", "\n", " "),
             priority=True,
             shorten_by=0,
-            page_length=EmbedLimits.Field.Value,
+            page_length=limit,
         )
     )
 
@@ -47,9 +47,36 @@ def chunk_field_value(value: str) -> list[str]:
     return chunks or [value]
 
 
+def chunk_field_value(value: str) -> list[str]:
+    """Split text into chunks that each fit within an embed field value."""
+    return chunk_text(value, EmbedLimits.Field.Value)
+
+
 class BetterEmbed(discord.Embed):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+
+    def paginate(self, continued_title: str | None = None) -> list["BetterEmbed"]:
+        """Split a description too long for one embed across continuation embeds.
+
+        Breaks on paragraphs, then newlines, then spaces. This embed keeps the
+        first page and everything else it has (fields, thumbnail, footer...).
+        Continuation embeds get the same color and `continued_title`, or this
+        embed's title if not given.
+
+        Send each embed as its own message. The 6000 character total applies
+        across every embed in a message, and two full descriptions exceed it.
+
+        Returns:
+            This embed alone if the description fits, otherwise it followed by continuation embeds.
+        """
+        if not self.description or len(self.description) <= EmbedLimits.Description:
+            return [self]
+
+        pages = chunk_text(self.description, EmbedLimits.Description)
+        self.description = pages[0]
+        title = continued_title or self.title
+        return [self, *(BetterEmbed(title=title, description=page, color=self.color) for page in pages[1:])]
 
     def add_long_field(self, name: str, value: str, inline: bool = False) -> str:
         """Add a field, splitting the value across multiple fields if needed.

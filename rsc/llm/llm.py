@@ -9,7 +9,7 @@ import discord
 from redbot.core import app_commands, commands
 
 from rsc.abc import RSCMixIn
-from rsc.embeds import BetterEmbed, BlueEmbed, EmbedLimits, ErrorEmbed, GreenEmbed, SuccessEmbed, YellowEmbed
+from rsc.embeds import BetterEmbed, BlueEmbed, ErrorEmbed, GreenEmbed, SuccessEmbed, YellowEmbed
 from rsc.llm.agent import AgentError, CooldownTracker, ToolCache, run_agent
 from rsc.llm.agent.service import (
     BudgetError,
@@ -652,31 +652,15 @@ class LLMMixIn(RSCMixIn):
         The answer is the embed description. A response too large for one
         description spills into continuation embeds.
         """
-        pages = list(
-            Pagify(
-                text=response,
-                delims=("\n\n", "\n", " "),
-                priority=True,
-                shorten_by=0,
-                page_length=EmbedLimits.Description,
-            )
-        )
-        # Pagify skips whitespace only pages. Always return something.
-        if not pages:
-            pages = [response]
+        embed = BlueEmbed(title="RSC AI", description=response)
+        if icon_url:
+            embed.set_thumbnail(url=icon_url)
+        pages = embed.paginate(continued_title="RSC AI (continued)")
 
         max_embeds = LLM_QUERY_MAX_CONTINUATIONS + 1
-        embeds: list[BetterEmbed] = []
-        for idx, page in enumerate(pages[:max_embeds]):
-            embed = BlueEmbed(
-                title="RSC AI" if idx == 0 else "RSC AI (continued)",
-                description=page,
-            )
-            if idx == 0 and icon_url:
-                embed.set_thumbnail(url=icon_url)
-            embeds.append(embed)
+        embeds = pages[:max_embeds]
 
-        dropped = sum(len(p) for p in pages[max_embeds:])
+        dropped = sum(len(p.description or "") for p in pages[max_embeds:])
         if dropped:
             log.warning(f"LLM response truncated after {len(embeds)} embeds. (Remaining: {dropped})")
             embeds[-1].set_footer(text="Response was too long to display in full.")
