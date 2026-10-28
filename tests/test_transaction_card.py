@@ -38,7 +38,11 @@ def _texts(view: ui.LayoutView) -> list[str]:
 class TestRender:
     def test_layout(self):
         view, files = _card().render()
-        title, facts, gallery, footer = _container(view).children
+        title, gap1, facts, gap2, gallery, gap3, footer = _container(view).children
+        # Invisible gaps between the parts, so the card isn't one stacked block
+        for gap in (gap1, gap2, gap3):
+            assert isinstance(gap, ui.Separator)
+            assert (gap.visible, gap.spacing) == (False, discord.SeparatorSpacing.large)
         assert isinstance(title, ui.TextDisplay) and title.content == "### Monty has been signed by Quantum (Elite)"
         assert isinstance(facts, ui.TextDisplay) and facts.content == "<@111> · Hex Systems · GM <@222>"
         assert isinstance(gallery, ui.MediaGallery)

@@ -28,6 +28,11 @@ class TradeAnnouncementModal(discord.ui.Modal, title="Trade Announcement"):
         self.stop()
 
 
+def _gap() -> ui.Separator:
+    """Blank space between the card's parts, so it doesn't read as one stacked block."""
+    return ui.Separator(visible=False, spacing=discord.SeparatorSpacing.large)
+
+
 @dataclass(frozen=True)
 class TransactionCard:
     """One player's transaction: signed, released, re-signed, subbed, retired or moved on or off IR."""
@@ -59,9 +64,12 @@ class TransactionCard:
         footer = f"-# Discord ID: {self.player_id} · {discord.utils.format_dt(self.created_at, 'f')}"
         container = ui.Container(
             ui.TextDisplay(f"### {self.title}"),
+            _gap(),
             # A TextDisplay, so these mentions ping; embed mentions never do
             ui.TextDisplay(facts),
+            _gap(),
             ui.MediaGallery(discord.MediaGalleryItem(banner)),
+            _gap(),
             ui.TextDisplay(footer),
             accent_colour=self.colour,
         )

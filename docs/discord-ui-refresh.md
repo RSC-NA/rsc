@@ -220,6 +220,7 @@ Each spec uses only what discord.py 2.7.1 supports. Mockups are in the published
   - The title keeps today's wording ("has been released by Team (Tier)"). A missing team name reads "Unknown team" instead of "None".
   - The admin bulk-retire path passes a `discord.User` straight through, so its `cast()` is gone.
   - Preview it live with `/pingtest style:transaction`.
+  - **Spacing (after the live test, 2026-10-28):** invisible large `Separator`s sit between the title, facts, banner and footer, because the card read as one stacked block.
 
 ### 02 — Combine / Dev League lobby ready (`rsc/combines/runner.py:302`, `rsc/devleague/runner.py:314`) — **LOCKED: option A, Join beside each team** (2026-10-28)
 
