@@ -4,6 +4,7 @@ from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import discord
+import pytest
 
 from rsc.utils.dm import MAX_FAILED_MEMBERS, DMHelper, DMOutcome, DMTask
 
@@ -137,6 +138,26 @@ class TestDMHelperSend:
         await helper.stop()
         member.send.assert_awaited_once_with(embed=embed, view=view)
         assert helper.success == 1
+
+    async def test_sends_layout_view_alone(self):
+        """A Components V2 DM goes out with only the view."""
+        helper = DMHelper(rate=0)
+        helper.start()
+        member = _mock_member()
+        view = discord.ui.LayoutView()
+        view.add_item(discord.ui.TextDisplay("hi"))
+        await helper.enqueue(member, view=view)
+        await helper.stop()
+        member.send.assert_awaited_once_with(view=view)
+        assert helper.success == 1
+
+    @pytest.mark.parametrize("extra", [{"content": "hi"}, {"embed": discord.Embed(title="hi")}])
+    async def test_rejects_layout_view_with_content_or_embed(self, extra):
+        helper = DMHelper(rate=0)
+        view = discord.ui.LayoutView()
+        with pytest.raises(ValueError, match="LayoutView"):
+            await helper.enqueue(_mock_member(), view=view, **extra)
+        assert helper.total == 0
 
     async def test_accepts_discord_user(self):
         """DM targets need not be guild members - `send()` is Messageable.send."""

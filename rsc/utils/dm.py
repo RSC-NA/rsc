@@ -34,7 +34,9 @@ class DMTask:
     member: discord.Member | discord.User
     content: str | None = None
     embed: discord.Embed | None = None
-    view: discord.ui.View | None = None
+    # A LayoutView (Components V2) carries all the text itself, so it is sent
+    # without content or embed. `enqueue` rejects the combination up front.
+    view: discord.ui.View | discord.ui.LayoutView | None = None
     send_at: datetime | None = None
     # Evaluated immediately before sending. Returning False drops the message.
     # Lets a batch queued minutes ago skip recipients who are no longer relevant.
@@ -202,7 +204,7 @@ class DMHelper:
         member: discord.Member | discord.User,
         content: str | None = None,
         embed: discord.Embed | None = None,
-        view: discord.ui.View | None = None,
+        view: discord.ui.View | discord.ui.LayoutView | None = None,
         send_at: datetime | None = None,
         precheck: Callable[[], Awaitable[bool]] | None = None,
         on_result: Callable[[DMOutcome, discord.Message | None], Awaitable[None]] | None = None,
@@ -214,7 +216,15 @@ class DMHelper:
         is provided it is awaited just before sending; a False result drops the
         message. If ``on_result`` is provided it is awaited with the final
         outcome, and the sent message when there is one.
+
+        Raises:
+            ValueError: ``view`` is a LayoutView and ``content`` or ``embed`` is also set.
+                Discord rejects that send, and here it would surface minutes later as
+                a failed DM instead of at the call site.
         """
+        if isinstance(view, discord.ui.LayoutView) and (content or embed):
+            raise ValueError("A LayoutView DM cannot also have content or an embed.")
+
         self._total += 1
         task = DMTask(
             member=member,
