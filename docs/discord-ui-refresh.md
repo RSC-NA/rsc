@@ -320,6 +320,21 @@ Each spec uses only what discord.py 2.7.1 supports. Mockups are in the published
 
 ---
 
+### 07 — Sign-up and PermFA (`/signup`, `/permfa`) — **BUILT: variant S** (2026-10-28, branch `signup-redesign`)
+
+Mockups: https://claude.ai/artifact/U1MT35ybTVDssnV1rFhfEm (round 3, variant S). Code: `rsc/members/views/signup.py`, `rsc/members/tracker_links.py`, `render_signup_banner` in `rsc/utils/images.py`.
+
+- **Every message is ephemeral.** The command answers with Form 1. Form 1's Submit sends the only message (`ephemeral=True`), and everything after edits it.
+- **Form 1** (`AboutYouModal`, 5 items): match nights and rules link (TextDisplay), "Before you start" as a required 2-of-2 `CheckboxGroup`, "How do you want to play?" (Free Agent or Permanent Free Agent radio, no default on `/signup`), played before (radio, preset to returning for dropped players), region (radio).
+- **Bridge:** one line, "Step 1 of 2 done", with Continue and Cancel. Discord can't open a modal from a modal submit, so this tap stays.
+- **Form 2** (`NameTrackersModal`, 5 items): in-game name, platform select, referrer select (the middle item), tracker help, tracker links.
+- **Review:** one Section per form, each with Edit, which reopens that form filled in. Tracker lines are parsed (`profile/{platform}/{id}`, Steam needs a Steam64ID). Any bad line disables Submit and swaps Edit for Fix, which opens a trackers-only form with the problem spelled out.
+- **Prefill:** while Form 1 is open, the member lookup and trackers are fetched (and the member is created if missing). The name is prefilled only for members that already existed. Existing trackers are prefilled for everyone; leaving one out never removes it from the API.
+- **`/permfa`** stays as a shortcut: the same flow with PermFA preselected, after a status check (`PF` shows E3, `PW` shows E3W). `/signup` keeps its season check and intent redirect. Choosing PermFA in `/signup` calls `permfa_signup`.
+- **E1:** a per-player animated WebP banner (1200×600, Apotek font, pink for sign-up, gold for PermFA, season number on `/signup`), then "What happens next". A failed render still reports success, without the banner.
+- **Match nights:** 3v3 Monday and Wednesday, 2v2 Thursday, both 10 PM ET. The review shows the next match night in the player's own time.
+- **Previews:** `/pingtest` styles `signup`, `permfa`, `signup_fix`, `signup_success`, `permfa_success`, `signup_already`, `permfa_already`, `permfa_waiting`, `signup_timeout`, `signup_cancelled`. The flows are dry runs: nothing is sent to the API.
+
 ## 4. Action item: website match link on the report result (requested 2026-10-28)
 
 `build_match_result_embed` (`rsc/ballchasing/ballchasing.py:862`) already returns a link-only `View` with a "Ballchasing Group" button. Adding a second link button for the frontend match page is straightforward: link buttons need no handler, and they work in both legacy views and V2 `ActionRow`s.

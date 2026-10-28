@@ -476,6 +476,17 @@ class PlayerType(StrEnum):
     NEW = "NEW"
     FORMER = "FORMER"
 
+    @property
+    def label(self) -> str:
+        """Player-facing name"""
+        match self:
+            case PlayerType.NEW:
+                return "New player"
+            case PlayerType.FORMER:
+                return "Returning player"
+            case _:
+                raise ValueError(f"Unknown Player Type: {self}")
+
 
 class Platform(StrEnum):
     STEAM = "STEAM"
@@ -483,6 +494,23 @@ class Platform(StrEnum):
     XBOX = "XBOX"
     EPIC = "EPIC"
     SWITCH = "SWTCH"
+
+    @property
+    def label(self) -> str:
+        """Player-facing name"""
+        match self:
+            case Platform.STEAM:
+                return "Steam"
+            case Platform.PLAYSTATION:
+                return "PlayStation"
+            case Platform.XBOX:
+                return "Xbox"
+            case Platform.EPIC:
+                return "Epic Games"
+            case Platform.SWITCH:
+                return "Nintendo Switch"
+            case _:
+                raise ValueError(f"Unknown Platform: {self}")
 
 
 class Referrer(StrEnum):
@@ -492,6 +520,25 @@ class Referrer(StrEnum):
     MLE = "MLE"
     BALLCHASING = "BALLCHASING"
     OTHER = "OTHER"
+
+    @property
+    def label(self) -> str:
+        """Player-facing name"""
+        match self:
+            case Referrer.REDDIT:
+                return "Reddit"
+            case Referrer.TWITCH:
+                return "Twitch"
+            case Referrer.FRIEND:
+                return "A friend"
+            case Referrer.MLE:
+                return "MLE"
+            case Referrer.BALLCHASING:
+                return "Ballchasing"
+            case Referrer.OTHER:
+                return "Somewhere else"
+            case _:
+                raise ValueError(f"Unknown Referrer: {self}")
 
 
 # Game Enums (originally for RapidApi which has been deprecated)

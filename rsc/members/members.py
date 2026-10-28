@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import time
 from collections.abc import AsyncIterator
@@ -49,11 +50,22 @@ from rsc.franchises import FranchiseMixIn
 from rsc.logs import GuildLogAdapter
 from rsc.members.views.intent import IntentState, IntentToPlayView
 from rsc.members.views.player_info import player_info_view
-from rsc.members.views.signup import PermFASignupView, SignupState, SignupView
+from rsc.members.views.signup import (
+    AlreadySignedUp,
+    AlreadySignedUpView,
+    SignupContext,
+    SignupFlowView,
+    SignupKind,
+    SignupOutcome,
+    SignupPrefill,
+    SignupSuccessView,
+    banner_text,
+)
 from rsc.teams import TeamMixIn
 from rsc.tiers import TierMixIn
 from rsc.transactions.roles import update_league_player_discord
 from rsc.utils import utils
+from rsc.utils.images import signup_banner_file
 from rsc.pagination import API_MAX_PAGE_SIZE, check_page_limit, iter_pages
 from rsc.views import ResultView
 
@@ -64,11 +76,6 @@ log = GuildLogAdapter(logger)
 ELEVATED_ROLE_TTL = 300.0
 # Appended to a sign up confirmation when the member's RSC name and prefix do
 # not fit in a discord nickname. The sign up worked, the rename did not.
-NICKNAME_TOO_LONG_NOTE = (
-    "\n\nYour nickname could not be updated because your RSC name is too long "
-    f"for discord ({utils.NICKNAME_MAX_LENGTH} characters including the franchise prefix). "
-    "Please open a modmail ticket to have it shortened."
-)
 
 
 class MemberMixIn(RSCMixIn):
@@ -126,6 +133,10 @@ class MemberMixIn(RSCMixIn):
     @app_commands.command(name="signupstatus", description="Check your status for the next RSC season")
     @app_commands.guild_only
     async def _member_signup_status(self, interaction: discord.Interaction):
+        await self._signup_status_flow(interaction)
+
+    async def _signup_status_flow(self, interaction: discord.Interaction):
+        """Reply with the player's sign-up status. Also used by the sign-up "My status" button."""
         guild = interaction.guild
         if not guild:
             return
@@ -523,119 +534,12 @@ class MemberMixIn(RSCMixIn):
             return await self._intent_to_play_flow(interaction, guild, interaction.user)
 
         log.debug(f"{interaction.user} is signing up for the league")
-
-        # User prompts
-        signup_view = SignupView(interaction)
-        await signup_view.prompt()
-
-        # Create a member just in case
-        try:
-            await self.create_member(guild, interaction.user, rsc_name=interaction.user.display_name)
-        except RscException as exc:
-            log.warning(f"MemberCreate exception during sign-up for {interaction.user} ({interaction.user.id}). {exc}", guild=guild)
-
-        # Wait for embed finish. A timed out view has already told the player.
-        if await signup_view.wait():
-            return
-
-        if signup_view.state == SignupState.CANCELLED:
-            return await interaction.edit_original_response(
-                view=ResultView(
-                    title="Signup Cancelled",
-                    description="You have cancelled signing up for RSC. Please try again if this was a mistake.",
-                    colour=discord.Colour.red(),
-                )
-            )
-        if signup_view.state != SignupState.FINISHED:
-            return await interaction.edit_original_response(
-                view=ResultView(
-                    title="Signup Failed",
-                    description="Signup failed for an unknown reason. Please try again, if the issue persists contact a staff member.",
-                    colour=discord.Colour.red(),
-                )
-            )
-
-        # Filter empty new lines
-        tracker_list = list(filter(None, signup_view.trackers))
-        # Process signup if state is finished
-        try:
-            result = await self.signup(
-                guild=guild,
-                member=interaction.user,
-                rsc_name=signup_view.rsc_name,
-                trackers=tracker_list,
-                player_type=signup_view.player_type,
-                platform=signup_view.platform,
-                referrer=signup_view.referrer,
-                region_preference=signup_view.region,
-                accepted_rules=True,
-                accepted_match_nights=True,
-            )
-            log.debug(f"Signup result: {result}")
-        except RscException as exc:
-            match exc.status:
-                case 409:
-                    return await interaction.edit_original_response(
-                        view=ResultView(
-                            title="RSC Sign-up",
-                            description=(
-                                "You are already signed up for the league. "
-                                "Please use `/intent declare` to declare your intent for next season."
-                            ),
-                            colour=discord.Colour.yellow(),
-                        )
-                    )
-                case 405:
-                    return await interaction.edit_original_response(
-                        view=ResultView(
-                            title="RSC Sign-up",
-                            description=exc.reason or "Request not allowed.",
-                            colour=discord.Colour.yellow(),
-                        )
-                    )
-                case _:
-                    return await interaction.edit_original_response(
-                        view=ResultView(
-                            title="API Error",
-                            description=exc.reason or "An unexpected error occurred.",
-                            colour=discord.Colour.red(),
-                        )
-                    )
-
-        # Check should get devleague role (only add to users one time in their career)
-        add_devleague_role = await self.should_get_devleague_role(interaction.user)
-        log.debug(f"Add Dev League Role: {add_devleague_role}")
-
-        # Sync roles and name in discord.
-        #
-        # A signup lands as DE or PermFA, neither of which an AGM can hold, so
-        # there is no franchise staff record to preserve here.
-        # The sign up itself is already recorded in the API, so a discord
-        # problem here must not be reported back as a failed sign up.
-        nickname_note = ""
-        try:
-            await update_league_player_discord(
-                guild=guild,
-                player=interaction.user,
-                league_player=result,
-                devleague=add_devleague_role,
-                agm_franchise=None,
-            )
-        except DiscordNameTooLong as exc:
-            log.warning(f"Unable to update nickname for {interaction.user.id}: {exc}", guild=guild)
-            nickname_note = NICKNAME_TOO_LONG_NOTE
-
-        await interaction.edit_original_response(
-            view=ResultView(
-                title="Success",
-                description=(
-                    "You have successfully signed up for the next season of RSC!\n\n"
-                    "Please keep up to date with league notices for information on the upcoming Draft and Combines."
-                    f"{nickname_note}"
-                ),
-                colour=discord.Colour.green(),
-            )
+        context = SignupContext.for_guild(
+            guild,
+            season_number=signup_season.number,
+            player_type=PlayerType.FORMER if prev_lp else None,
         )
+        await self._signup_flow(interaction, guild, interaction.user, context)
 
     @app_commands.command(name="permfa", description="Sign up as a permanent free agent")
     @app_commands.guild_only
@@ -646,30 +550,59 @@ class MemberMixIn(RSCMixIn):
 
         log.debug(f"{interaction.user} is signing up as PermFA")
 
-        # User prompts
-        signup_view = PermFASignupView(interaction)
-        await signup_view.prompt()
-
-        # Create a member just in case
-        try:
-            await self.create_member(guild, interaction.user, rsc_name=interaction.user.display_name)
-        except RscException as exc:
-            log.warning(f"MemberCreate exception during PermFA sign-up: {exc.response.body}")
-
-        # Wait for embed finish. A timed out view has already told the player.
-        if await signup_view.wait():
-            return
-
-        if signup_view.state == SignupState.CANCELLED:
-            return await interaction.edit_original_response(
-                view=ResultView(
-                    title="Signup Cancelled",
-                    description="You have cancelled signing up for RSC. Please try again if this was a mistake.",
-                    colour=discord.Colour.red(),
-                )
+        # Check first, so an existing PermFA isn't asked to fill in both forms for nothing
+        state, member = await self._permfa_precheck(guild, interaction.user)
+        if state:
+            return await interaction.response.send_message(
+                view=AlreadySignedUpView(state, interaction=interaction, on_status=self._signup_status_flow),
+                ephemeral=True,
             )
-        if signup_view.state != SignupState.FINISHED:
-            return await interaction.edit_original_response(
+
+        context = SignupContext.for_guild(guild, command="permfa", kind=SignupKind.PERMFA)
+        await self._signup_flow(interaction, guild, interaction.user, context, member=member, looked_up=True)
+
+    async def _permfa_precheck(self, guild: discord.Guild, user: discord.Member) -> tuple[AlreadySignedUp | None, Member | None]:
+        """Whether the player is already a PermFA (`PF`) or waiting on one (`PW`). Also returns their RSC member."""
+        try:
+            found = await self.members(guild, discord_id=user.id, limit=1)
+        except RscException as exc:
+            log.warning(f"Member lookup failed before PermFA sign-up for {user.id}: {exc}", guild=guild)
+            return None, None
+        member = found[0] if found else None
+        league_player = await self.league_player_from_member(guild, member) if member else None
+        match league_player.status if league_player else None:
+            case Status.PERM_FA:
+                return AlreadySignedUp.PERMFA, member
+            case Status.PERMFA_W:
+                return AlreadySignedUp.PERMFA_WAITING, member
+            case _:
+                return None, member
+
+    async def _signup_flow(
+        self,
+        interaction: discord.Interaction,
+        guild: discord.Guild,
+        user: discord.Member,
+        context: SignupContext,
+        member: Member | None = None,
+        looked_up: bool = False,
+    ):
+        """Run the two-form sign-up for `/signup` and `/permfa`. Every message in it is ephemeral."""
+        flow = SignupFlowView(interaction, context)
+        await flow.start()
+        # Runs while Form 1 is open. It also makes sure the RSC member exists before the sign-up is sent.
+        flow.prefill = asyncio.create_task(self._signup_prefill(guild, user, member, looked_up))
+
+        # Cancel and time outs have already been shown to the player
+        if await flow.wait_for_outcome() is not SignupOutcome.SUBMITTED or flow.submit_interaction is None:
+            return
+        reply = flow.submit_interaction
+        answers = flow.answers
+        await flow.prefill
+
+        if not (answers.kind and answers.player_type and answers.region and answers.platform and answers.referrer):
+            log.error(f"Sign-up submitted without every answer: {answers}", guild=guild)
+            return await reply.edit_original_response(
                 view=ResultView(
                     title="Signup Failed",
                     description="Signup failed for an unknown reason. Please try again, if the issue persists contact a staff member.",
@@ -677,44 +610,52 @@ class MemberMixIn(RSCMixIn):
                 )
             )
 
-        # Filter empty new lines
-        tracker_list = list(filter(None, signup_view.trackers))
-
-        # Process signup if state is finished
+        permfa = answers.kind is SignupKind.PERMFA
         try:
-            result = await self.permfa_signup(
-                guild=guild,
-                member=interaction.user,
-                rsc_name=signup_view.rsc_name,
-                trackers=tracker_list,
-                player_type=signup_view.player_type,
-                platform=signup_view.platform,
-                referrer=signup_view.referrer,
-                region_preference=signup_view.region,
-                accepted_rules=True,
-                accepted_match_nights=True,
-            )
+            if permfa:
+                result = await self.permfa_signup(
+                    guild=guild,
+                    member=user,
+                    rsc_name=answers.rsc_name,
+                    trackers=answers.tracker_urls,
+                    player_type=answers.player_type,
+                    platform=answers.platform,
+                    referrer=answers.referrer,
+                    region_preference=answers.region,
+                    accepted_rules=True,
+                    accepted_match_nights=True,
+                )
+            else:
+                result = await self.signup(
+                    guild=guild,
+                    member=user,
+                    rsc_name=answers.rsc_name,
+                    trackers=answers.tracker_urls,
+                    player_type=answers.player_type,
+                    platform=answers.platform,
+                    referrer=answers.referrer,
+                    region_preference=answers.region,
+                    accepted_rules=True,
+                    accepted_match_nights=True,
+                )
             log.debug(f"Signup result: {result}")
         except RscException as exc:
+            title = "RSC PermFA Sign-up" if permfa else "RSC Sign-up"
             match exc.status:
                 case 409:
-                    return await interaction.edit_original_response(
-                        view=ResultView(
-                            title="RSC PermFA Sign-up",
-                            description="You are already signed up as a permanent free agent.",
-                            colour=discord.Colour.yellow(),
-                        )
+                    view = AlreadySignedUpView(
+                        AlreadySignedUp.PERMFA if permfa else AlreadySignedUp.SIGNUP,
+                        interaction=reply,
+                        on_status=self._signup_status_flow,
+                        on_intent=None if permfa else lambda i: self._intent_to_play_flow(i, guild, user),
                     )
+                    return await reply.edit_original_response(view=view)
                 case 405:
-                    return await interaction.edit_original_response(
-                        view=ResultView(
-                            title="RSC PermFA Sign-up",
-                            description=exc.reason or "Request not allowed.",
-                            colour=discord.Colour.yellow(),
-                        )
+                    return await reply.edit_original_response(
+                        view=ResultView(title=title, description=exc.reason or "Request not allowed.", colour=discord.Colour.yellow())
                     )
                 case _:
-                    return await interaction.edit_original_response(
+                    return await reply.edit_original_response(
                         view=ResultView(
                             title="API Error",
                             description=exc.reason or "An unexpected error occurred.",
@@ -723,7 +664,7 @@ class MemberMixIn(RSCMixIn):
                     )
 
         # Check should get devleague role (only add to users one time in their career)
-        add_devleague_role = await self.should_get_devleague_role(interaction.user)
+        add_devleague_role = await self.should_get_devleague_role(user)
         log.debug(f"Add Dev League Role: {add_devleague_role}")
 
         # Sync roles and name in discord.
@@ -732,31 +673,62 @@ class MemberMixIn(RSCMixIn):
         # there is no franchise staff record to preserve here.
         # The sign up itself is already recorded in the API, so a discord
         # problem here must not be reported back as a failed sign up.
-        nickname_note = ""
+        nickname_too_long = False
         try:
             await update_league_player_discord(
                 guild=guild,
-                player=interaction.user,
+                player=user,
                 league_player=result,
                 devleague=add_devleague_role,
                 agm_franchise=None,
             )
         except DiscordNameTooLong as exc:
-            log.warning(f"Unable to update nickname for {interaction.user.id}: {exc}", guild=guild)
-            nickname_note = NICKNAME_TOO_LONG_NOTE
+            log.warning(f"Unable to update nickname for {user.id}: {exc}", guild=guild)
+            nickname_too_long = True
 
-        await interaction.edit_original_response(
-            view=ResultView(
-                title="PermFA Sign-Up Success",
-                description=(
-                    "You have successfully signed up as a permanent free agent in RSC!\n\n"
-                    "As a PermFA you can sub for teams, but will not be signed to a team's roster.\n\n"
-                    "Please be patient while we process your request."
-                    f"{nickname_note}"
-                ),
-                colour=discord.Colour.green(),
+        # The banner is a nice-to-have. A failed render still shows the sign-up went through.
+        text = banner_text(answers, context)
+        banner: discord.File | None = None
+        try:
+            banner = await signup_banner_file(
+                kicker=text.kicker, headline=text.headline, name=text.name, chips=text.chips, permfa=text.permfa
             )
+        except Exception:
+            log.exception("Unable to render the sign-up banner", guild=guild)
+
+        await reply.edit_original_response(
+            view=SignupSuccessView(answers, context, banner=banner is not None, nickname_too_long=nickname_too_long),
+            attachments=[banner] if banner else [],
         )
+
+    async def _signup_prefill(
+        self,
+        guild: discord.Guild,
+        user: discord.Member,
+        member: Member | None,
+        looked_up: bool,
+    ) -> SignupPrefill:
+        """What RSC already has on file for the sign-up forms. Creates the RSC member if there isn't one yet."""
+        if not looked_up:
+            try:
+                found = await self.members(guild, discord_id=user.id, limit=1)
+                member = found[0] if found else None
+            except RscException as exc:
+                log.warning(f"Member lookup failed during sign-up for {user.id}: {exc}", guild=guild)
+
+        if member is None:
+            try:
+                await self.create_member(guild, user, rsc_name=user.display_name)
+            except RscException as exc:
+                log.warning(f"MemberCreate exception during sign-up for {user} ({user.id}). {exc}", guild=guild)
+
+        # Existing trackers are shown so they can be kept. Leaving one out never removes it.
+        try:
+            links = tuple(t.link for t in await self.trackers(guild, player=user))
+        except RscException as exc:
+            log.warning(f"Tracker lookup failed during sign-up for {user.id}: {exc}", guild=guild)
+            links = ()
+        return SignupPrefill(rsc_name=member.rsc_name if member else None, trackers=links)
 
     @app_commands.command(name="playerinfo", description="Display league information about a player")
     @app_commands.describe(player="Player discord name to query")
