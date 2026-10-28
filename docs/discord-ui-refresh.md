@@ -286,6 +286,7 @@ Each spec uses only what discord.py 2.7.1 supports. Mockups are in the published
     - Not built: the optional per-player DM opt-out.
   - **Credential alignment tried and dropped (2026-10-28):** same-width label code chips lined up the lobby name and password, but the user found the label chips ugly. The labels are now bold, `**Lobby** `rsc4812``; the values stay as code chips, as the spec has them.
   - **Join buttons named (after the live review, 2026-10-28):** two identical grey "Join VC" buttons were hard to tell apart, so they now read "Join Home VC" and "Join Away VC". Link buttons can't be coloured, so the label is the only way to tell them apart.
+  - **Rosters full width (2026-10-28):** inside the team Section, the player list shared its width with the Join button, so long names wrapped mid-list on phones. Each team is now a Section with just its name and role beside the Join button, then a full-width TextDisplay with one player per line. When Final, it's the team name, then the roster.
 
 ### 03 — Combines guide (`send_combines_how_to_play`, `rsc/combines/manager.py:363`) — **LOCKED: option A, step sections** (2026-10-28)
 

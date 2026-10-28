@@ -89,8 +89,9 @@ class LobbyCard(BaseModel):
             container.add_item(ui.TextDisplay(f"-# Started {discord.utils.format_dt(self.started_at, 'R')}"))
 
         container.add_item(ui.Separator())
-        container.add_item(self._team(LobbyTeam.HOME, final=final))
-        container.add_item(self._team(LobbyTeam.AWAY, final=final))
+        for team in (LobbyTeam.HOME, LobbyTeam.AWAY):
+            for item in self._team(team, final=final):
+                container.add_item(item)
 
         if self.kind is LobbyKind.COMBINE and not final:
             container.add_item(ui.TextDisplay("-# Lost these details? Run `/combines lobbyinfo`."))
@@ -108,22 +109,23 @@ class LobbyCard(BaseModel):
             return f"You're on **{team}** · your team uploads the replays"
         return f"You're on **{team}**"
 
-    def _team(self, team: LobbyTeam, *, final: bool) -> ui.Section | ui.TextDisplay:
+    def _team(self, team: LobbyTeam, *, final: bool) -> list[ui.Item]:
         players, vc_url = (self.home, self.home_vc_url) if team is LobbyTeam.HOME else (self.away, self.away_vc_url)
-        texts = [f"**{team}**"]
+        header = [f"**{team}**"]
         if not final:
             if team is LobbyTeam.HOME and self.lobby_maker:
-                texts.append(f"-# {self.lobby_maker} makes the lobby")
+                header.append(f"-# {self.lobby_maker} makes the lobby")
             elif team is LobbyTeam.AWAY and self.kind is LobbyKind.COMBINE:
-                texts.append("-# Uploads the replays")
-        # A TextDisplay, so these mentions ping; embed mentions never do
-        texts.append(" · ".join(players) or "No players")
+                header.append("-# Uploads the replays")
+        # One player per line, full width under the header rather than beside the Join button,
+        # so long names don't wrap mid-list on phones. A TextDisplay, so these mentions ping.
+        roster = ui.TextDisplay("\n".join(players) or "No players")
 
         if final or not vc_url:
             # The voice channels are gone once the match is over, so no Join button
-            return ui.TextDisplay("\n".join(texts))
+            return [ui.TextDisplay("\n".join(header)), roster]
         # Link buttons can only be grey, so the label alone tells Home from Away
-        return ui.Section(*(ui.TextDisplay(t) for t in texts), accessory=ui.Button(label=f"Join {team} VC", url=vc_url))
+        return [ui.Section(*(ui.TextDisplay(t) for t in header), accessory=ui.Button(label=f"Join {team} VC", url=vc_url)), roster]
 
 
 def _code(text: str) -> str:

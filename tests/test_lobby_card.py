@@ -72,9 +72,15 @@ class TestRenderLive:
         assert texts[-1] == "-# Lost these details? Run `/combines lobbyinfo`."
 
     def test_teams_ping_from_text_and_join_their_voice_channel(self):
-        _, home, away = _sections(_card().render())
-        assert _texts(home) == ["**Home**", "-# Nova makes the lobby", "<@1> · <@2> · <@3>"]
-        assert _texts(away) == ["**Away**", "-# Uploads the replays", r"<@4> · <@5> · Off\_server"]
+        view = _card().render()
+        _, home, away = _sections(view)
+        assert _texts(home) == ["**Home**", "-# Nova makes the lobby"]
+        assert _texts(away) == ["**Away**", "-# Uploads the replays"]
+        # Each roster sits full width under its team's header, one player per line
+        children = _container(view).children
+        for section, roster in ((home, "<@1>\n<@2>\n<@3>"), (away, "<@4>\n<@5>\nOff\\_server")):
+            after = children[children.index(section) + 1]
+            assert isinstance(after, ui.TextDisplay) and after.content == roster
         for section, label, url in (
             (home, "Join Home VC", "https://discord.com/channels/1/10"),
             (away, "Join Away VC", "https://discord.com/channels/1/11"),
@@ -130,7 +136,7 @@ class TestRenderFinal:
         assert not any("Password" in t or "Started" in t or "lobbyinfo" in t or "makes the lobby" in t for t in texts)
         (header,) = _sections(view)
         assert isinstance(header.accessory, ui.Button) and header.accessory.label == "Match"
-        assert "**Home**\n<@1> · <@2> · <@3>" in texts
+        assert texts[-4:] == ["**Home**", "<@1>\n<@2>\n<@3>", "**Away**", "<@4>\n<@5>\nOff\\_server"]
 
     def test_final_without_score(self):
         texts = _texts(_container(_card().render(final=True)))
