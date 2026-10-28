@@ -93,6 +93,9 @@ class RSCMixIn(ABC):
 
     _dm_helper: "DMHelper"
 
+    # Application emoji, resolved at startup. None until then, or if unavailable.
+    _live_emoji: discord.Emoji | None
+
     # Core
 
     @asynccontextmanager
@@ -650,6 +653,11 @@ class RSCMixIn(ABC):
         executor: discord.Member | int | None = None,
         override: bool = False,
     ) -> ActivityCheck: ...
+
+    # Application emojis
+
+    @abstractmethod
+    def live_emoji(self) -> str: ...
 
     # Seasons
 

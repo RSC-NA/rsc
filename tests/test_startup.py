@@ -3,6 +3,7 @@
 import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import discord
 import pytest
 from rscapi.rest import ALLOW_RETRY_METHODS
 from aiohttp import (
@@ -363,6 +364,7 @@ class TestSetupIsolation:
             bot=bot,
             _setup_lock=asyncio.Lock(),
             start_webapp=AsyncMock(),
+            prepare_application_emojis=AsyncMock(),
             _setup_guild=fake_setup_guild,
         )
 
@@ -392,6 +394,7 @@ class TestSetupIsolation:
             bot=bot,
             _setup_lock=asyncio.Lock(),
             start_webapp=AsyncMock(),
+            prepare_application_emojis=AsyncMock(),
             _setup_guild=fake_setup_guild,
         )
 
@@ -462,3 +465,52 @@ class TestStartWebapp:
         routes = {c.args[0]: c.args[1] for c in mock_web.Application.return_value.router.add_post.call_args_list}
         assert routes["/devleague_match"] == cog.start_devleague_game
         assert routes["/devleague_event"] == cog.devleague_event_handler
+
+
+class TestApplicationEmojis:
+    """The LIVE dot is cosmetic, so resolving it must never fail setup."""
+
+    def _cog(self, *, existing=(), create=None, fetch_exc=None):
+        bot = MagicMock()
+        bot.fetch_application_emojis = AsyncMock(return_value=list(existing), side_effect=fetch_exc)
+        bot.create_application_emoji = AsyncMock(return_value=create)
+        return _create_cog(bot=bot, _live_emoji=None)
+
+    def _emoji(self, name="live"):
+        emoji = MagicMock(spec=discord.Emoji)
+        emoji.name = name
+        emoji.__str__.return_value = f"<a:{name}:123>"
+        return emoji
+
+    async def test_uses_existing_emoji(self):
+        live = self._emoji()
+        cog = self._cog(existing=[self._emoji("other"), live])
+        await cog.prepare_application_emojis()
+        assert cog._live_emoji is live
+        cog.bot.create_application_emoji.assert_not_awaited()
+        assert cog.live_emoji() == "<a:live:123>"
+
+    async def test_uploads_when_missing(self):
+        created = self._emoji()
+        cog = self._cog(create=created)
+        await cog.prepare_application_emojis()
+        kwargs = cog.bot.create_application_emoji.await_args.kwargs
+        assert kwargs["name"] == "live"
+        assert kwargs["image"].startswith(b"GIF89a")
+        assert cog._live_emoji is created
+
+    async def test_resolves_only_once(self):
+        cog = self._cog(existing=[self._emoji()])
+        await cog.prepare_application_emojis()
+        await cog.prepare_application_emojis()
+        cog.bot.fetch_application_emojis.assert_awaited_once()
+
+    @pytest.mark.parametrize(
+        "exc",
+        [discord.MissingApplicationID(), discord.HTTPException(MagicMock(status=500, reason="Error"), "boom")],
+    )
+    async def test_failure_falls_back_to_no_emoji(self, exc):
+        cog = self._cog(fetch_exc=exc)
+        await cog.prepare_application_emojis()
+        assert cog._live_emoji is None
+        assert cog.live_emoji() == ""

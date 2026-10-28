@@ -64,6 +64,11 @@ PERM_FA_WAITING_ROLE = "PermFA in Waiting"
 # by this name at click time, so a rename here must match the class name.
 RSC_COG_NAME = "RSC"
 
+# Animated application emoji shown on live combine and Dev League lobby cards.
+# Uploaded from rsc/resources/emoji/live.gif (scripts/make_live_emoji.py) if the
+# application doesn't have it yet.
+LIVE_EMOJI_NAME = "live"
+
 # NICKM
 NICKM_ID = 138778232802508801
 

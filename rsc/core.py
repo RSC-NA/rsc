@@ -1,8 +1,10 @@
 import asyncio
 import itertools
 import logging
+from pathlib import Path
 from zoneinfo import ZoneInfo
 
+import aiofiles
 from aiohttp import web
 from aiohttp_retry import ExponentialRetry
 import discord
@@ -32,7 +34,7 @@ from rsc.combines import CombineMixIn
 from rsc.developer import DeveloperMixIn
 from rsc.devleague import DevLeagueMixIn
 from rsc.checks import bot_owner_required
-from rsc.const import API_RETRIES, API_RETRY_EXCEPTIONS, DEFAULT_MODMAIL_BOT_ID, MODAL_TIMEOUT
+from rsc.const import API_RETRIES, API_RETRY_EXCEPTIONS, DEFAULT_MODMAIL_BOT_ID, LIVE_EMOJI_NAME, MODAL_TIMEOUT
 from rsc.embeds import BlueEmbed, ErrorEmbed, SuccessEmbed
 from rsc.enums import LogLevel
 from rsc.events import EventMixIn
@@ -63,6 +65,8 @@ from rsc.welcome import WelcomeMixIn
 
 logger = logging.getLogger("red.rsc.core")
 log = GuildLogAdapter(logger)
+
+LIVE_EMOJI_PATH = Path(__file__).parent / "resources" / "emoji" / "live.gif"
 
 HIDDEN_COMMANDS = ["feet"]
 
@@ -136,6 +140,9 @@ class RSC(
         # reconnect firing mid-setup cannot interleave with the first run.
         self._setup_lock = asyncio.Lock()
 
+        # Resolved by prepare_application_emojis()
+        self._live_emoji: discord.Emoji | None = None
+
         # Shared rate-limited DM queue
         self._dm_helper = DMHelper()
         self._dm_helper.start()
@@ -197,6 +204,8 @@ class RSC(
             # regex, so buttons keep dispatching after a restart instead of dying.
             self.bot.add_dynamic_items(IntentDMButton, ActivityCheckDMButton, PermFAPollButton, PlayerInfoButton)
 
+            await self.prepare_application_emojis()
+
             # Per guild setup.
             #
             # Guilds share no state, so prepare them concurrently instead of
@@ -225,6 +234,37 @@ class RSC(
                         guild=guild,
                     )
             log.info("Finished preparing caches.")
+
+    async def prepare_application_emojis(self):
+        """Resolve the bot's application emojis, uploading the LIVE dot if it's missing.
+
+        Application emojis belong to the bot, not a guild, so they work in every
+        server and in DMs. A miss is cosmetic: `live_emoji()` falls back to "", so
+        this logs and moves on rather than failing setup. Before login the
+        application ID isn't known yet, and setup() runs again on_ready.
+        """
+        if self._live_emoji is not None:
+            return
+
+        try:
+            emoji = discord.utils.get(await self.bot.fetch_application_emojis(), name=LIVE_EMOJI_NAME)
+            if emoji is None:
+                async with aiofiles.open(LIVE_EMOJI_PATH, mode="rb") as fd:
+                    image = await fd.read()
+                emoji = await self.bot.create_application_emoji(name=LIVE_EMOJI_NAME, image=image)
+                log.info(f"Uploaded the {LIVE_EMOJI_NAME!r} application emoji")
+        except discord.MissingApplicationID:
+            log.debug("Application ID not known yet. Resolving application emojis on ready.")
+            return
+        except (discord.HTTPException, OSError) as exc:
+            log.warning(f"Unable to resolve the {LIVE_EMOJI_NAME!r} application emoji: {exc}")
+            return
+
+        self._live_emoji = emoji
+
+    def live_emoji(self) -> str:
+        """The animated LIVE dot as message markup, or "" when it isn't available."""
+        return str(self._live_emoji) if self._live_emoji else ""
 
     async def _setup_guild(self, guild: discord.Guild):
         """Prepare the API configuration and caches for a single guild."""
