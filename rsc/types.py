@@ -134,6 +134,8 @@ class CombineSettings(TypedDict):
     Active: bool
     CombinesApi: str | None
     CombinesCategory: discord.CategoryChannel | None
+    # Lobby id -> its card and message ids, kept until teardown (rsc/combines/lobby.py)
+    LobbyMessages: dict[str, dict]
 
 
 class DevLeagueSettings(TypedDict):
@@ -141,6 +143,8 @@ class DevLeagueSettings(TypedDict):
     Active: bool
     DevLeagueCategory: int | None
     DevLeagueAnnounceChannel: int | None
+    # Match id -> its card and message ids, kept until teardown (rsc/combines/lobby.py)
+    LobbyMessages: dict[str, dict]
 
 
 class LLMSettings(TypedDict):

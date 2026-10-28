@@ -19,6 +19,7 @@ defaults_guild = DevLeagueSettings(
     Active=False,
     DevLeagueCategory=None,
     DevLeagueAnnounceChannel=None,
+    LobbyMessages={},
 )
 
 BUFMAX = 1984

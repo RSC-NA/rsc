@@ -9,13 +9,13 @@ import pydantic
 from aiohttp import web
 
 from rsc.abc import RSCMixIn
+from rsc.combines.lobby import finish_lobby, lobby_card, lobby_messages, post_lobby
+from rsc.combines.views import LobbyKind
 from rsc.devleague import models
 from rsc.devleague.api import DEVLEAGUE_API_URL
 from rsc.devleague.tiers import channel_sort_key, lobby_channel_name, parse_lobby_channel
-from rsc.embeds import BlueEmbed
 from rsc.exceptions import DevLeagueNotActive, NotInGuild
 from rsc.utils import utils
-from rsc.views import LinkButton
 
 if TYPE_CHECKING:
     from discord.types.guild import ChannelPositionUpdate
@@ -291,41 +291,15 @@ class DevLeagueRunnerMixIn(RSCMixIn):
         if len(channels) != 2:
             raise ValueError("Must provide 2 voice channels to announce a dev league lobby.")
 
-        def fmt_team(team: list) -> list[str]:
-            fmt = []
-            for player in team:
-                m = guild.get_member(player.discord_id)
-                fmt.append(m.mention if m else player.name)
-            return fmt
-
-        home_fmt = fmt_team(lobby.home)
-        away_fmt = fmt_team(lobby.away)
-
-        # Define who creates lobby
-        if home_fmt:
-            home_fmt[0] += " (Makes Lobby)"
-
-        players = await self.combine_players_from_lobby(guild, lobby)
-        players_fmt = " ".join([m.mention for m in players])
-
-        game_info_fmt = f"Name: **{lobby.lobby_user}**\nPassword: **{lobby.lobby_pass}**"
-        channel_fmt = f"Home: {channels[0].mention}\nAway: {channels[1].mention}"
-
-        embed = BlueEmbed(title=f"Dev League {lobby.tier} Match {lobby.id} Ready!")
-        embed.add_field(name="Tier", value=lobby.tier, inline=False)
-        embed.add_field(name="Lobby Info", value=game_info_fmt, inline=False)
-        embed.add_field(name="Voice Channels", value=channel_fmt, inline=False)
-        embed.add_field(name="Home Team", value="\n".join(home_fmt) or "None", inline=True)
-        embed.add_field(name="Away Team", value="\n".join(away_fmt) or "None", inline=True)
-
-        if guild.icon:
-            embed.set_thumbnail(url=guild.icon.url)
-
-        match_link = LinkButton(label="Match Link", url=f"{DEVLEAGUE_API_URL}/match/{lobby.id}")
-        link_view = discord.ui.View()
-        link_view.add_item(match_link)
-
-        return await announce_channel.send(content=players_fmt, embed=embed, view=link_view)
+        card = lobby_card(
+            guild,
+            lobby,
+            kind=LobbyKind.DEV_LEAGUE,
+            channels=channels,
+            match_url=f"{DEVLEAGUE_API_URL}/match/{lobby.id}",
+            started_at=discord.utils.utcnow(),
+        )
+        return await post_lobby(self, guild, lobby, card, announce_channel, self.config.custom("DevLeague", str(guild.id)), active_lobbies)
 
     async def teardown_devleague_lobby(self, guild: discord.Guild, lobby_id: int):
         # Make teardown less abrupt for players
@@ -333,6 +307,12 @@ class DevLeagueRunnerMixIn(RSCMixIn):
 
         log.debug(f"Tearing down dev league lobby: {lobby_id}")
         active_lobbies.discard((guild.id, lobby_id))
+
+        # Dev League has no score endpoint, so the Final card shows no score
+        store = self.config.custom("DevLeague", str(guild.id))
+        entry = await lobby_messages(store, lobby_id)
+        if entry:
+            await finish_lobby(self, entry, store, score=None)
 
         category = await self._get_devleague_category(guild)
         if not category:

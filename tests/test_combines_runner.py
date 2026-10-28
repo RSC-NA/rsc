@@ -6,8 +6,11 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import discord
 import pytest
 
-from rsc.combines import runner
+from rsc.combines import models, runner
+from rsc.combines.lobby import LobbyMessages
 from rsc.combines.runner import CombineRunnerMixIn
+from rsc.combines.views import LobbyCard, LobbyKind, LobbyScore
+from rsc.exceptions import BadGateway
 
 GUILD_ID = 395806681994493964
 
@@ -67,6 +70,9 @@ def _mixin(guild=None, *, active=True):
     m.bot.get_guild.return_value = guild
     m._get_combines_active = AsyncMock(return_value=active)
     m.create_combine_lobby_channel = AsyncMock(return_value=[])
+    # No stored lobby card, so teardown has nothing to mark Final
+    m.config = MagicMock()
+    m.config.custom.return_value.LobbyMessages = AsyncMock(return_value={})
     return m
 
 
@@ -161,3 +167,57 @@ class TestDuplicateLobbies:
         await asyncio.gather(*runner.background_tasks)
 
         assert m.create_combine_lobby_channel.await_count == 2
+
+
+def _entry(executor_id: int | None = 1) -> LobbyMessages:
+    card = LobbyCard(
+        kind=LobbyKind.COMBINE,
+        lobby_id=101,
+        tier="Premier",
+        lobby_name="rsc",
+        lobby_pass="rsc",
+        home=("<@1>",),
+        away=("<@4>",),
+        lobby_maker="P1",
+        home_vc_url=None,
+        away_vc_url=None,
+        match_url="https://devleague.rscna.com/combine/101",
+        started_at=discord.utils.utcnow(),
+    )
+    return LobbyMessages(card=card, channel_id=1, message_id=2, executor_id=executor_id)
+
+
+class TestCombineFinalScore:
+    def _mixin(self) -> CombineRunnerMixIn:
+        m = _mixin()
+        m._get_combines_api = AsyncMock(return_value="https://combines.example/api/")
+        return m
+
+    def _guild(self) -> MagicMock:
+        guild = MagicMock()
+        guild.get_member.return_value = MagicMock(spec=discord.Member)
+        return guild
+
+    async def test_reads_the_score_from_the_api(self):
+        finished = models.CombinesLobby.model_validate({**_lobby_payload(), "home_wins": 3, "away_wins": 1, "completed": True})
+        with patch("rsc.combines.runner.api.combines_lobby", AsyncMock(return_value=finished)) as lookup:
+            score = await self._mixin()._combine_final_score(self._guild(), _entry())
+        assert score == LobbyScore(home_wins=3, away_wins=1)
+        assert lookup.await_args is not None and lookup.await_args.kwargs["lobby_id"] == 101
+
+    async def test_cancelled_lobby_has_no_score(self):
+        cancelled = models.CombinesLobby.model_validate({**_lobby_payload(), "cancelled": True})
+        with patch("rsc.combines.runner.api.combines_lobby", AsyncMock(return_value=cancelled)):
+            assert await self._mixin()._combine_final_score(self._guild(), _entry()) is None
+
+    async def test_api_status_reply_or_error_has_no_score(self):
+        status = models.CombinesStatus(status="error", message="nope")
+        with patch("rsc.combines.runner.api.combines_lobby", AsyncMock(return_value=status)):
+            assert await self._mixin()._combine_final_score(self._guild(), _entry()) is None
+        with patch("rsc.combines.runner.api.combines_lobby", AsyncMock(side_effect=BadGateway("down"))):
+            assert await self._mixin()._combine_final_score(self._guild(), _entry()) is None
+
+    async def test_no_executor_skips_the_lookup(self):
+        with patch("rsc.combines.runner.api.combines_lobby", AsyncMock()) as lookup:
+            assert await self._mixin()._combine_final_score(self._guild(), _entry(executor_id=None)) is None
+        lookup.assert_not_awaited()

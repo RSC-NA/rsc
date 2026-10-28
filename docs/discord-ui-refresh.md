@@ -250,6 +250,17 @@ Each spec uses only what discord.py 2.7.1 supports. Mockups are in the published
   - No lobbyinfo hint (Dev League has no such command) and no "uploads replays" role. Green accent, since there's no letter-grade colour map yet.
   - DMs work the same way.
 
+- **Implemented (2026-10-28, branch `discord-ui-phase-3`):** `LobbyCard` in `rsc/combines/views.py` (a frozen pydantic model, so it's stored as JSON) and `rsc/combines/lobby.py` (`lobby_card`, `post_lobby`, `lobby_messages`, `finish_lobby`), used by both runners. Preview with `/pingtest style:lobby`, `devleague_lobby` and `lobby_final`.
+  - **Calls made while building, for review:**
+    - Lobby DMs go through their own `DMHelper` lane, `_lobby_dm_helper`, so a running mass DM can't hold up lobby details. The two lanes together can send two DMs per ~1.5 s.
+    - Team sections read `**Home**`, then `-# Nova makes the lobby` (or `-# Uploads the replays` for combines Away), then the players. A player not in the server shows their escaped name instead of a dead mention.
+    - DM lines: "You're on **Home** · you make the lobby", "You're on **Away** · your team uploads the replays" (combines only), otherwise "You're on **Home**"; after teardown, "You were on **Home**".
+    - Combines keep a `-# Lost these details? Run /combines lobbyinfo.` footer while live.
+    - **Final:** the lobby details, the Started line, the roles and the lobbyinfo footer go with the Join buttons. The score comes from `combines_lobby`, asked as one of the lobby's players (stored as `executor_id`). It's left off for a cancelled lobby, on any API failure, and always for Dev League, which has no score endpoint.
+    - A DM that lands after teardown is edited straight to Final, since it missed teardown's pass.
+    - Records live in Config as `LobbyMessages` under the `Combines` and `DevLeague` custom groups, keyed by lobby id, and are removed at teardown.
+    - Not built: the optional per-player DM opt-out.
+
 ### 03 — Combines guide (`send_combines_how_to_play`, `rsc/combines/manager.py:363`) — **LOCKED: option A, step sections** (2026-10-28)
 
 - Replace the five messages with one Container titled "How to play combines". Steps 1–4 are each a `Section` with that step's screenshot as a `Thumbnail` (`attachment://combines_login.png` etc.). Step 5 is a TextDisplay. Then a Separator, an ActionRow with "Open Dev League" (link) and "Where are my replays?" (persistent `DynamicItem`, ephemeral `Demos` path), and a `-#` credit line. That's 20 of 40 components, sent with `AllowedMentions.none()` so the credit line doesn't ping on re-posts.

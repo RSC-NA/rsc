@@ -146,6 +146,9 @@ class RSC(
         # Shared rate-limited DM queue
         self._dm_helper = DMHelper()
         self._dm_helper.start()
+        # A separate lane for lobby DMs, so a running mass DM can't hold players' lobby details back
+        self._lobby_dm_helper = DMHelper()
+        self._lobby_dm_helper.start()
 
         super().__init__()
         log.info("RSC Bot has been started.")
@@ -181,6 +184,7 @@ class RSC(
         # Discard rather than drain. Draining sends one DM per `rate` seconds, so a
         # large queued batch would block the reload for many minutes.
         await self._dm_helper.stop(drain=False)
+        await self._lobby_dm_helper.stop(drain=False)
         await self.close_ballchasing_sessions()
         await self.close_api_clients()
         if self._web_runner is not None:

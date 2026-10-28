@@ -3,16 +3,17 @@ import json
 import logging
 from pprint import pformat
 
+import aiohttp
 from aiohttp import web
 import discord
 import pydantic
 
 from rsc.abc import RSCMixIn
-from rsc.combines import models
-from rsc.embeds import BlueEmbed
-from rsc.exceptions import CombinesNotActive, NotInGuild
+from rsc.combines import api, models
+from rsc.combines.lobby import LobbyMessages, finish_lobby, lobby_card, lobby_messages, post_lobby
+from rsc.combines.views import LobbyKind, LobbyScore
+from rsc.exceptions import BadGateway, CombinesNotActive, NotInGuild
 from rsc.utils import utils
-from rsc.views import LinkButton
 
 log = logging.getLogger("red.rsc.combines.runner")
 
@@ -273,52 +274,15 @@ class CombineRunnerMixIn(RSCMixIn):
         if not isinstance(announce_channel, discord.TextChannel):
             raise RuntimeError("Combine lobbies announcement channel is not of type `disord.TextChannel`")
 
-        home_fmt = []
-        for player in lobby.home:
-            m = guild.get_member(player.discord_id)
-            if not m:
-                home_fmt.append(player.name)
-            else:
-                home_fmt.append(m.mention)
-
-        # Define who creates lobby
-        home_fmt[0] += " (Makes Lobby)"
-
-        away_fmt = []
-        for player in lobby.away:
-            m = guild.get_member(player.discord_id)
-            if not m:
-                away_fmt.append(player.name)
-            else:
-                away_fmt.append(m.mention)
-
-        players = await self.combine_players_from_lobby(guild, lobby)
-        players_fmt = " ".join([m.mention for m in players])
-
-        game_info_fmt = f"Name: **{lobby.lobby_user}**\nPassword: **{lobby.lobby_pass}**"
-
-        channel_fmt = f"Home: {channels[0].mention}\nAway: {channels[1].mention}"
-
-        embed = BlueEmbed(title=f"Combine {lobby.id} Ready!")
-
-        embed.add_field(name="Lobby Info", value=game_info_fmt, inline=False)
-        embed.add_field(name="Voice Channels", value=channel_fmt, inline=False)
-
-        embed.add_field(name="Home Team", value="\n".join(home_fmt), inline=True)
-        embed.add_field(name="Away Team", value="\n".join(away_fmt), inline=True)
-
-        embed.set_footer(text="You can check your active game info with `/combines lobbyinfo`")
-
-        if guild.icon:
-            embed.set_thumbnail(url=guild.icon.url)
-
-        match_link = LinkButton(label="Match Link", url=f"https://devleague.rscna.com/combine/{lobby.id}")
-        link_view = discord.ui.View()
-        link_view.add_item(match_link)
-
-        msg = await announce_channel.send(content=players_fmt, embed=embed, view=link_view)
-
-        return msg
+        card = lobby_card(
+            guild,
+            lobby,
+            kind=LobbyKind.COMBINE,
+            channels=channels,
+            match_url=f"https://devleague.rscna.com/combine/{lobby.id}",
+            started_at=discord.utils.utcnow(),
+        )
+        return await post_lobby(self, guild, lobby, card, announce_channel, self.config.custom("Combines", str(guild.id)), active_lobbies)
 
     async def teardown_combine_lobby(self, guild: discord.Guild, lobby_id: int):
         # Make teardown less abrupt for players
@@ -326,6 +290,12 @@ class CombineRunnerMixIn(RSCMixIn):
 
         log.debug(f"Tearing down combine lobby: {lobby_id}")
         active_lobbies.discard((guild.id, lobby_id))
+
+        # The voice channels and lobby details are done with, so the card turns Final
+        store = self.config.custom("Combines", str(guild.id))
+        entry = await lobby_messages(store, lobby_id)
+        if entry:
+            await finish_lobby(self, entry, store, await self._combine_final_score(guild, entry))
 
         # Loop guild since we don't know the lobby tier
         gchannels = guild.channels
@@ -344,3 +314,18 @@ class CombineRunnerMixIn(RSCMixIn):
             if channel.name.endswith(f"{lobby_id}-away"):
                 log.debug(f"Deleting {channel.name}")
                 await channel.delete(reason="Combine lobby has finished.")
+
+    async def _combine_final_score(self, guild: discord.Guild, entry: LobbyMessages) -> LobbyScore | None:
+        """The series score from the combines API, or None when it can't be read."""
+        url = await self._get_combines_api(guild)
+        executor = guild.get_member(entry.executor_id) if entry.executor_id else None
+        if not (url and executor):
+            return None
+        try:
+            result = await api.combines_lobby(url, executor=executor, lobby_id=entry.card.lobby_id)
+        except (aiohttp.ClientError, BadGateway, ValueError, pydantic.ValidationError) as exc:
+            log.warning(f"Unable to fetch the final score for combine {entry.card.lobby_id}: {exc}")
+            return None
+        if not isinstance(result, models.CombinesLobby) or result.cancelled:
+            return None
+        return LobbyScore(home_wins=result.home_wins, away_wins=result.away_wins)

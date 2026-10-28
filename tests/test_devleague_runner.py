@@ -131,6 +131,9 @@ def _mixin(guild=None, category=None, *, active=True, announce_channel=None, pla
     m._get_devleague_category = AsyncMock(return_value=category)
     m._get_devleague_announce_channel = AsyncMock(return_value=announce_channel)
     m.combine_players_from_lobby = AsyncMock(return_value=players if players is not None else [_member(i) for i in range(1, 7)])
+    # No stored lobby card, so teardown has nothing to mark Final
+    m.config = MagicMock()
+    m.config.custom.return_value.LobbyMessages = AsyncMock(return_value={})
     return m
 
 

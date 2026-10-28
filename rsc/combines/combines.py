@@ -20,6 +20,7 @@ defaults_guild = CombineSettings(
     Active=False,
     CombinesApi=None,
     CombinesCategory=None,
+    LobbyMessages={},
 )
 
 
