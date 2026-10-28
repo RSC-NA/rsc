@@ -72,6 +72,10 @@ class CombineRunnerMixIn(RSCMixIn):
             log.warning("Received combines webhook with no JSON data")
             return web.Response(status=400)  # 400 Bad Request
 
+        if not isinstance(data, dict):
+            log.warning("Received combines webhook that is not a JSON object")
+            return web.Response(status=400)  # 400 Bad Request
+
         log.debug("Processing combine lobbies")
         lobby_list: list[models.CombinesLobby] = []
         try:
@@ -86,16 +90,34 @@ class CombineRunnerMixIn(RSCMixIn):
             log.warning("Received combines HTTP request with no data")
             return web.Response(status=400)  # 400 Bad Request
 
+        # Checked up front so the caller still gets a 503 when nothing can be created.
+        for guild_id in {lobby.guild_id for lobby in lobby_list}:
+            guild = self.bot.get_guild(guild_id)
+            if not guild:
+                log.warning(f"Bot is not in the specified combine guild ID: {guild_id}")
+                return web.Response(status=503)  # 503 Service Unavailable
+            if not await self._get_combines_active(guild):
+                log.warning(f"Combines are not active in guild ID: {guild_id}")
+                return web.Response(status=503)  # 503 Service Unavailable
+
+        # Channel creation is rate limited by Discord and can outlast the caller's
+        # HTTP timeout. Respond now so a timed out request is not retried into
+        # duplicate lobbies.
         log.debug("Sending combine lobbies to creation")
-        for lobby in lobby_list:
+        task = asyncio.create_task(self._create_combine_lobbies(lobby_list))
+        background_tasks.add(task)
+        task.add_done_callback(background_tasks.discard)
+        return web.Response(status=200)
+
+    async def _create_combine_lobbies(self, lobbies: list[models.CombinesLobby]):
+        # One failed lobby must not stop the rest from being created.
+        for lobby in lobbies:
             try:
                 await self.create_combine_lobby_channel(lobby)
             except (NotInGuild, CombinesNotActive):
-                return web.Response(status=503)  # 503 Service Unavailable
-
-        # Send HTTP 200 OK
-        log.debug("Sending HTTP response.")
-        return web.Response(status=200)
+                log.warning(f"Combines became unavailable before lobby {lobby.id} was created")
+            except Exception as exc:
+                log.exception(f"Error creating combine lobby {lobby.id}", exc_info=exc)
 
     async def create_combine_lobby_channel(
         self,

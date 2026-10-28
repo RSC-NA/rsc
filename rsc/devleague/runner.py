@@ -91,13 +91,33 @@ class DevLeagueRunnerMixIn(RSCMixIn):
             log.warning("Received dev league game webhook with no lobbies")
             return web.Response(status=400)  # 400 Bad Request
 
-        for lobby in lobby_list:
+        # Checked up front so the caller still gets a 503 when nothing can be created.
+        for guild_id in {lobby.guild_id for lobby in lobby_list}:
+            guild = self.bot.get_guild(guild_id)
+            if not guild:
+                log.warning(f"Bot is not in the dev league guild ID: {guild_id}")
+                return web.Response(status=503)  # 503 Service Unavailable
+            if not await self._get_devleague_active(guild):
+                log.warning(f"Dev League is not active in guild ID: {guild_id}")
+                return web.Response(status=503)  # 503 Service Unavailable
+
+        # Channel creation is rate limited by Discord and can outlast the caller's
+        # HTTP timeout. Respond now so a timed out request is not retried into
+        # duplicate lobbies.
+        task = asyncio.create_task(self._create_devleague_lobbies(lobby_list))
+        background_tasks.add(task)
+        task.add_done_callback(background_tasks.discard)
+        return web.Response(status=200)
+
+    async def _create_devleague_lobbies(self, lobbies: list[models.DevLeagueLobby]):
+        # One failed lobby must not stop the rest from being created.
+        for lobby in lobbies:
             try:
                 await self.create_devleague_lobby_channels(lobby)
             except (NotInGuild, DevLeagueNotActive):
-                return web.Response(status=503)  # 503 Service Unavailable
-
-        return web.Response(status=200)
+                log.warning(f"Dev League became unavailable before match {lobby.id} was created")
+            except Exception as exc:
+                log.exception(f"Error creating dev league match {lobby.id}", exc_info=exc)
 
     async def create_devleague_lobby_channels(self, lobby: models.DevLeagueLobby) -> list[discord.VoiceChannel]:
         log.debug(f"Creating dev league lobby channels for match {lobby.id}")

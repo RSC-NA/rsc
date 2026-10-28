@@ -162,10 +162,34 @@ class TestStartDevLeagueGame:
         m.create_devleague_lobby_channels = AsyncMock(return_value=[])
 
         resp = await m.start_devleague_game(_request({"101": _lobby_payload(101, "S+"), "102": _lobby_payload(102, "B")}))
+        await asyncio.gather(*runner.background_tasks)
 
         assert resp.status == 200
         tiers = [c.args[0].tier for c in m.create_devleague_lobby_channels.await_args_list]
         assert tiers == ["S+", "B"]
+
+    async def test_responds_before_lobbies_are_created(self):
+        m = _mixin(_guild())
+        m.create_devleague_lobby_channels = AsyncMock(return_value=[])
+
+        resp = await m.start_devleague_game(_request({"101": _lobby_payload()}))
+
+        assert resp.status == 200
+        m.create_devleague_lobby_channels.assert_not_called()
+        await asyncio.gather(*runner.background_tasks)
+        m.create_devleague_lobby_channels.assert_awaited_once()
+
+    async def test_failed_lobby_does_not_stop_the_rest(self):
+        m = _mixin(_guild())
+        m.create_devleague_lobby_channels = AsyncMock(
+            side_effect=[discord.HTTPException(MagicMock(status=500), "boom"), []]
+        )
+
+        resp = await m.start_devleague_game(_request({"101": _lobby_payload(101), "102": _lobby_payload(102)}))
+        await asyncio.gather(*runner.background_tasks)
+
+        assert resp.status == 200
+        assert [c.args[0].id for c in m.create_devleague_lobby_channels.await_args_list] == [101, 102]
 
 
 class TestCreateDevLeagueLobbyChannels:

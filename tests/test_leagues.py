@@ -300,3 +300,12 @@ class TestUpdateLeaguePlayer:
                 )
 
         assert result is updated
+
+
+# --- league_player_update webhook ---
+
+
+class TestLeaguePlayerUpdateHandler:
+    async def test_returns_a_response(self):
+        resp = await _create_mixin().league_player_update_handler(MagicMock())
+        assert resp.status == 501

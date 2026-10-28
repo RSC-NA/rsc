@@ -35,6 +35,8 @@ class LeagueMixIn(RSCMixIn):
 
     async def league_player_update_handler(self, request: web.Request):
         log.debug("Got league player update event.")
+        # Not handled yet. Without a response aiohttp drops the connection.
+        return web.Response(status=501)  # 501 Not Implemented
 
     # Commands
 
