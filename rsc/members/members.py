@@ -548,7 +548,7 @@ class MemberMixIn(RSCMixIn):
 
         log.debug(f"{interaction.user} is signing up as PermFA")
 
-        # Check first, so an existing PermFA isn't asked to fill in both forms for nothing
+        # Check first, so an existing PermFA isn't walked through the sign-up for nothing
         state, member = await self._permfa_precheck(guild, interaction.user)
         if state:
             return await interaction.response.send_message(
@@ -585,10 +585,11 @@ class MemberMixIn(RSCMixIn):
         member: Member | None = None,
         looked_up: bool = False,
     ):
-        """Run the two-form sign-up for `/signup` and `/permfa`. Every message in it is ephemeral."""
+        """Run the sign-up for `/signup` and `/permfa`: two steps on one message, then one form. Every message in it is ephemeral."""
         flow = SignupFlowView(interaction, context)
         await flow.start()
-        # Runs while Form 1 is open. It also makes sure the RSC member exists before the sign-up is sent.
+        # Runs while steps 1 and 2 are on screen, so the form can open prefilled.
+        # It also makes sure the RSC member exists before the sign-up is sent.
         flow.prefill = asyncio.create_task(self._signup_prefill(guild, user, member, looked_up))
 
         # Cancel and time outs have already been shown to the player
@@ -598,7 +599,7 @@ class MemberMixIn(RSCMixIn):
         answers = flow.answers
         await flow.prefill
 
-        if not (answers.kind and answers.player_type and answers.region and answers.platform and answers.referrer):
+        if not (answers.ready and answers.kind and answers.player_type and answers.region and answers.platform and answers.referrer):
             log.error(f"Sign-up submitted without every answer: {answers}", guild=guild)
             return await reply.edit_original_response(
                 view=ResultView(
@@ -620,8 +621,8 @@ class MemberMixIn(RSCMixIn):
                     platform=answers.platform,
                     referrer=answers.referrer,
                     region_preference=answers.region,
-                    accepted_rules=True,
-                    accepted_match_nights=True,
+                    accepted_rules=answers.rules_accepted,
+                    accepted_match_nights=answers.nights_confirmed,
                 )
             else:
                 result = await self.signup(
@@ -633,8 +634,8 @@ class MemberMixIn(RSCMixIn):
                     platform=answers.platform,
                     referrer=answers.referrer,
                     region_preference=answers.region,
-                    accepted_rules=True,
-                    accepted_match_nights=True,
+                    accepted_rules=answers.rules_accepted,
+                    accepted_match_nights=answers.nights_confirmed,
                 )
             log.debug(f"Signup result: {result}")
         except RscException as exc:
@@ -706,7 +707,7 @@ class MemberMixIn(RSCMixIn):
         member: Member | None,
         looked_up: bool,
     ) -> SignupPrefill:
-        """What RSC already has on file for the sign-up forms. Creates the RSC member if there isn't one yet."""
+        """What RSC already has on file for the sign-up form. Creates the RSC member if there isn't one yet."""
         if not looked_up:
             try:
                 found = await self.members(guild, discord_id=user.id, limit=1)

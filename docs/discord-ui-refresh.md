@@ -47,23 +47,19 @@ This file is the working record for the refresh. Update the status table as phas
 
 ### Next steps, in order
 
-1. **Sign-up redesign: option B chosen (2026-10-28).** Gate, then choices, then one form. The user added: **more separators in step 2 ("About you")**, a thin line between each question rather than only between the HOW YOU PLAY and YOUR SETUP groups. Handed to rsc-15 to build. The open questions below are still unanswered.
-   - **Mockups:** https://claude.ai/artifact/XxQ7yNyQeijx5iC84nUmMo. Three flows; every choice in one ephemeral V2 message edited in place, then ONE form (name, tracker help, tracker links):
-     - **A** one sheet (35/40 components);
-     - **B** gate then choices: "Before you start" (match nights + rules, each confirmed with a toggle button) → "About you" (five choices) → form. Recommended.
-     - **C** one question per screen.
-   - **Open questions to settle:**
-     1. Keep the switchable Free Agent / PermFA question on `/permfa`?
-     2. Can confirm buttons be toggled back off?
-     3. Move platform and "heard about us" into the review card's About you line?
-     4. Strip the leftover emoji (✏️ ✅ ⚠️ ✓ ⏱️) from the review, success and timeout cards? (User preference: no decorative emoji.)
-     5. Drop the inline-code chips for tracker IDs on the review card?
-     6. Skip the review step when every tracker parses?
-     7. Selects in the message, or back in the form?
-   - **Already required:** a hint on the in-game name field like "Must match the name on your tracker link."
-   - **Who builds it:** session **rsc-15** in its worktree `~/dev/rsc-signup` (branch `signup-redesign`). It paused at the user's request and is waiting for the chosen option.
-   - **Carries over:** `tracker_links.py`, the banner renderer, the success/already/timeout/cancel cards, `SignupContext`/`MatchNights`, `_permfa_precheck` and `_signup_prefill` (the prefill must be ready within the 3 s ack when the form opens).
-   - **Rebuilt:** `AboutYouModal`, `NameTrackersModal` and the bridge message.
+1. **Sign-up redesign (option B): built, approved and committed (2026-10-28).** It's `SignupFlowView` in `rsc/members/views/signup.py`. The user approved `/signup`, `/permfa` and everything related.
+   - **Step 1, "Before you start":** the match nights (no "your next one" timestamp) and the rules link, each confirmed with a toggle button (grey, then green with the label changed). Continue unlocks once both are confirmed.
+   - **Step 2, "About you":**
+     - button rows for **Draft eligible** / **Permanent Free Agent**, each explained in one line (signing up makes you draft eligible, not a "Free Agent"), then played before and region;
+     - selects for platform and "how did you hear about RSC";
+     - a thin line between every question and a footer naming what's missing;
+     - a Continue + red Cancel row, with Back (to step 1, answers kept) on its own row underneath. A row can't be right-aligned.
+   - **Step 3:** ONE form: in-game name (hint "Must match your in-game name on your tracker link."), the tracker help text and tracker links, prefilled within `PREFILL_WAIT` (1.5 s).
+   - **Review:** Submit, a red Cancel, and Back to step 2 on its own row. Then the success card.
+   - The flow message times out after 14 minutes, under the interaction token's 15-minute limit.
+   - **Switches at the top of `signup.py`** for the open questions: `PERMFA_ASKS_KIND = True`, `CONFIRMS_CAN_UNDO = True`, `SKIP_REVIEW_WHEN_VALID = False`.
+   - **Still open:** the emoji left on the review, success and timeout cards (✏️ ✅ ⚠️ ✓ ⏱️), and the code chips for tracker IDs on the review. Neither has been raised again.
+   - The older two-form build and worktrees (`~/dev/rsc-signup`, `~/dev/rsc-signup-b`) are superseded.
 2. **Trade announcement: not started.**
    - **Two paths** still post the old "Trade Confirmed" embed, one field per receiving franchise, players as `@player to Team`, picks like `Future 1st Round Elite`, GM pings sent as content then edited out:
      - `/transactions trade` → `TransactionMixIn.build_trade_embed` (`rsc/transactions/transactions.py`);

@@ -9,13 +9,10 @@ from zoneinfo import ZoneInfo
 import discord
 from discord.ui import (
     ActionRow,
-    CheckboxGroup,
     Container,
     Label,
     MediaGallery,
-    RadioGroup,
     Section,
-    Select,
     Separator,
     TextDisplay,
     TextInput,
@@ -43,8 +40,20 @@ FIX_COLOUR = discord.Colour(0xF0B232)
 TRACKER_SITE_URL = "https://rocketleague.tracker.network"
 STEAM_ID_URL = "https://steamidfinder.com/"
 
-# How long opening Form 2 waits on the prefill lookup. Discord wants the modal within 3 seconds.
+# How long opening the form waits on the prefill lookup. Discord wants the modal within 3 seconds.
 PREFILL_WAIT = 1.5
+
+# Inactivity before the sign-up message times out. Kept under the 15 minute life of an
+# interaction token, so the timeout card can still be drawn, and over MODAL_TIMEOUT.
+FLOW_TIMEOUT = 14 * 60.0
+
+# Open design choices, kept as switches so they're easy to flip.
+# /permfa still shows "How do you want to play?", with PermFA picked
+PERMFA_ASKS_KIND = True
+# A second click on a confirm button turns it grey again
+CONFIRMS_CAN_UNDO = True
+# Send straight from the form when every tracker parses, instead of showing the review card
+SKIP_REVIEW_WHEN_VALID = False
 
 
 class SignupKind(StrEnum):
@@ -54,17 +63,28 @@ class SignupKind(StrEnum):
     @property
     def label(self) -> str:
         match self:
+            # Signing up puts a player in the draft; nobody signs up as a Free Agent
             case SignupKind.FREE_AGENT:
-                return "Free Agent"
+                return "Draft eligible"
             case SignupKind.PERMFA:
                 return "Permanent Free Agent"
             case _:
                 raise ValueError(f"Unknown Signup Kind: {self}")
 
 
+KIND_QUESTION = (
+    "**How do you want to play?**\n"
+    "-# **Draft eligible:** you enter the draft, and a team can draft you onto its roster for the season.\n"
+    "-# **Permanent Free Agent:** you skip the draft and sub for teams in your tier. You're never signed to a roster."
+)
+
+# Every answer picked on the message rather than typed in the form
+Choice = SignupKind | PlayerType | RegionPreference | Platform | Referrer
+
+
 class SignupStage(Enum):
-    FORM = auto()  # Form 1 is open and nothing has been posted yet
-    BRIDGE = auto()  # Form 1 is done, waiting on Form 2
+    GATE = auto()  # Step 1: confirm match nights and rules
+    ABOUT = auto()  # Step 2: how they play and their setup
     REVIEW = auto()
     SUBMITTING = auto()
 
@@ -136,6 +156,8 @@ class SignupPrefill:
 
 @dataclass
 class SignupAnswers:
+    nights_confirmed: bool = False
+    rules_accepted: bool = False
     kind: SignupKind | None = None
     player_type: PlayerType | None = None
     region: RegionPreference | None = None
@@ -143,6 +165,39 @@ class SignupAnswers:
     platform: Platform | None = None
     referrer: Referrer | None = None
     trackers: list[TrackerLine] = field(default_factory=list)
+
+    def pick(self, choice: Choice) -> None:
+        match choice:
+            case SignupKind():
+                self.kind = choice
+            case PlayerType():
+                self.player_type = choice
+            case RegionPreference():
+                self.region = choice
+            case Platform():
+                self.platform = choice
+            case Referrer():
+                self.referrer = choice
+
+    @property
+    def missing_confirmations(self) -> list[str]:
+        missing = []
+        if not self.nights_confirmed:
+            missing.append("match nights")
+        if not self.rules_accepted:
+            missing.append("the rules")
+        return missing
+
+    @property
+    def missing_choices(self) -> list[str]:
+        answers = [
+            (self.kind, "how you'll play"),
+            (self.player_type, "played before"),
+            (self.region, "region"),
+            (self.platform, "platform"),
+            (self.referrer, "how you heard about RSC"),
+        ]
+        return [name for answer, name in answers if answer is None]
 
     @property
     def bad_trackers(self) -> list[TrackerLine]:
@@ -159,7 +214,9 @@ class SignupAnswers:
     @property
     def ready(self) -> bool:
         return bool(
-            self.kind
+            self.nights_confirmed
+            and self.rules_accepted
+            and self.kind
             and self.player_type
             and self.region
             and self.rsc_name
@@ -177,6 +234,13 @@ def referrer_phrase(referrer: Referrer) -> str:
             return referrer.label.lower()
         case _:
             return referrer.label
+
+
+def joined(items: list[str]) -> str:
+    """'a', 'a and b', 'a, b and c'"""
+    if len(items) < 2:
+        return "".join(items)
+    return ", ".join(items[:-1]) + " and " + items[-1]
 
 
 def _code(text: str, limit: int = 80) -> str:
@@ -229,102 +293,22 @@ def tracker_summary(answers: SignupAnswers, limit: int = 10) -> str:
 # ── Forms ────────────────────────────────────────────────────────────────
 
 
-class AboutYouModal(discord.ui.Modal):
-    """Form 1: agreements, how they want to play, experience and region."""
-
-    def __init__(self, flow: "SignupFlowView"):
-        if flow.stage is not SignupStage.FORM:
-            title = "Edit your details"
-        elif flow.context.kind is SignupKind.PERMFA:
-            title = "Sign up as a Permanent Free Agent"
-        else:
-            title = "Sign up for RSC"
-        super().__init__(title=title, timeout=MODAL_TIMEOUT)
-        self.flow = flow
-        answers = flow.answers
-        nights = flow.context.match_nights
-        agreed = flow.stage is not SignupStage.FORM
-
-        self.add_item(TextDisplay(f"**Match nights:** {nights.days} at 10 PM ET.\n[Read the RSC behaviour rules]({BEHAVIOR_RULES_URL})"))
-
-        # Both boxes must be ticked
-        self.agreements: CheckboxGroup = CheckboxGroup(required=True, min_values=2, max_values=2)
-        self.agreements.add_option(
-            label="I can play on match nights", value="nights", description=f"{nights.days} at 10 PM ET", default=agreed
-        )
-        self.agreements.add_option(
-            label="I agree to the RSC behaviour rules",
-            value="rules",
-            description="In our Discord, on the website and in every RSC match",
-            default=agreed,
-        )
-        self.add_item(Label(text="Before you start", component=self.agreements))
-
-        kind = answers.kind or flow.context.kind
-        self.kind: RadioGroup = RadioGroup(required=True)
-        self.kind.add_option(
-            label=SignupKind.FREE_AGENT.label,
-            value=SignupKind.FREE_AGENT,
-            description="Can be drafted and signed to a team",
-            default=kind is SignupKind.FREE_AGENT,
-        )
-        self.kind.add_option(
-            label=SignupKind.PERMFA.label,
-            value=SignupKind.PERMFA,
-            description="Sub for teams in your tier, never signed to a roster",
-            default=kind is SignupKind.PERMFA,
-        )
-        self.add_item(Label(text="How do you want to play?", component=self.kind))
-
-        played = answers.player_type or flow.context.player_type
-        self.played: RadioGroup = RadioGroup(required=True)
-        self.played.add_option(label="No, this is my first season", value=PlayerType.NEW, default=played is PlayerType.NEW)
-        self.played.add_option(
-            label="Yes, I've played before",
-            value=PlayerType.FORMER,
-            description="In any earlier RSC season",
-            default=played is PlayerType.FORMER,
-        )
-        self.add_item(Label(text="Have you played in RSC before?", component=self.played))
-
-        self.region: RadioGroup = RadioGroup(required=True)
-        for region in RegionPreference:
-            self.region.add_option(label=region.full_name, value=region, default=region is answers.region)
-        self.add_item(Label(text="Where do you usually play from?", component=self.region))
-
-    async def on_submit(self, interaction: discord.Interaction):
-        await self.flow.about_you_submitted(interaction, self)
-
-    async def on_timeout(self):
-        await self.flow.form_timed_out()
-
-
 class NameTrackersModal(discord.ui.Modal):
-    """Form 2: in-game name, platform, how they found RSC and tracker links."""
+    """Step 3, the only form: in-game name and tracker links. Everything else is picked on the message."""
 
     def __init__(self, flow: "SignupFlowView", prefill: SignupPrefill):
-        super().__init__(title="Name & trackers", timeout=MODAL_TIMEOUT)
+        # Reopened from the review card once it's been filled in
+        title = "Name & trackers" if flow.answers.rsc_name else "Step 3 of 3: Name & trackers"
+        super().__init__(title=title, timeout=MODAL_TIMEOUT)
         self.flow = flow
         answers = flow.answers
 
         name = answers.rsc_name or prefill.rsc_name
         self.name_input: TextInput = TextInput(placeholder="Your in-game name", default=name or None, min_length=2, max_length=25)
-        name_hint = (
-            "From your RSC profile. Change it if you play under a new name."
-            if prefill.rsc_name and not answers.rsc_name
-            else "Exactly as it shows in your matches."
-        )
+        name_hint = "Must match your in-game name on your tracker link."
+        if prefill.rsc_name and not answers.rsc_name:
+            name_hint = f"From your RSC profile. {name_hint}"
         self.add_item(Label(text="In-game name", description=name_hint, component=self.name_input))
-
-        self.platform: Select = Select(placeholder="Choose one", required=True)
-        for platform in Platform:
-            self.platform.add_option(label=platform.label, value=platform, default=platform is answers.platform)
-        self.add_item(Label(text="Main platform", description="The one you play RSC matches on.", component=self.platform))
-
-        self.referrer: Select = Select(placeholder="Choose one", required=True)
-        for referrer in Referrer:
-            self.referrer.add_option(label=referrer.label, value=referrer, default=referrer is answers.referrer)
-        self.add_item(Label(text="How did you hear about RSC?", component=self.referrer))
 
         self.add_item(
             TextDisplay(
@@ -378,19 +362,49 @@ class _FlowButton(discord.ui.Button["SignupFlowView"]):
         await self.action(self.view, interaction)
 
 
-class SignupFlowView(AuthorOnlyLayoutView):
-    """Sign-up as two forms joined by one ephemeral message.
+class _ChoiceButton(discord.ui.Button["SignupFlowView"]):
+    """One answer to a button-row question. The picked one is blurple."""
 
-    The command opens :class:`AboutYouModal` straight away. Its Submit posts the one-line bridge,
-    whose button opens :class:`NameTrackersModal`. That form turns the bridge into the review card,
-    where either form can be reopened filled in. Every message here is ephemeral.
+    def __init__(self, choice: Choice, label: str, picked: Choice | None):
+        style = discord.ButtonStyle.primary if choice is picked else discord.ButtonStyle.secondary
+        super().__init__(label=label, style=style)
+        self.choice = choice
+
+    async def callback(self, interaction: discord.Interaction):
+        if self.view is None:
+            return
+        await self.view.choose(interaction, self.choice)
+
+
+class _ChoiceSelect(discord.ui.Select["SignupFlowView"]):
+    """A select-menu question. Each redraw shows the pick as the default, so it isn't lost."""
+
+    def __init__(self, placeholder: str, choices: list[tuple[Choice, str]], picked: Choice | None):
+        options = [discord.SelectOption(label=label, value=choice.value, default=choice is picked) for choice, label in choices]
+        super().__init__(placeholder=placeholder, options=options)
+        self.choices = {choice.value: choice for choice, _ in choices}
+
+    async def callback(self, interaction: discord.Interaction):
+        if self.view is None:
+            return
+        await self.view.choose(interaction, self.choices[self.values[0]])
+
+
+class SignupFlowView(AuthorOnlyLayoutView):
+    """Sign-up as one ephemeral message, edited in place, and one form.
+
+    The command posts step 1, "Before you start": Continue stays disabled until both confirm buttons
+    are green. It redraws the message as step 2, "About you", whose Continue opens
+    :class:`NameTrackersModal`. That form turns the message into the review card, where any answer
+    can be changed. Every message here is ephemeral.
     """
 
-    def __init__(self, interaction: discord.Interaction, context: SignupContext, timeout: float = MODAL_TIMEOUT * 2):
+    def __init__(self, interaction: discord.Interaction, context: SignupContext, timeout: float = FLOW_TIMEOUT):
         super().__init__(interaction=interaction, timeout=timeout)
         self.context = context
-        self.answers = SignupAnswers()
-        self.stage = SignupStage.FORM
+        # /permfa preselects PermFA, and dropped players are preset as returning
+        self.answers = SignupAnswers(kind=context.kind, player_type=context.player_type)
+        self.stage = SignupStage.GATE
         self.outcome = SignupOutcome.PENDING
         self.prefill: asyncio.Task[SignupPrefill] | None = None
         self.submit_interaction: discord.Interaction | None = None
@@ -400,32 +414,47 @@ class SignupFlowView(AuthorOnlyLayoutView):
     # ── entry points ──
 
     async def start(self) -> None:
-        await self.interaction.response.send_modal(AboutYouModal(self))
+        self.render()
+        await self.interaction.response.send_message(view=self, ephemeral=True)
+        self.message_interaction = self.interaction
 
     async def wait_for_outcome(self) -> SignupOutcome:
         if await self.wait() and self.outcome is SignupOutcome.PENDING:
             self.outcome = SignupOutcome.TIMED_OUT
         return self.outcome
 
-    # ── forms ──
+    # ── step 1: before you start ──
 
-    async def about_you_submitted(self, interaction: discord.Interaction, form: AboutYouModal) -> None:
-        if self.is_finished():
-            await interaction.response.defer()
-            return
-        a = self.answers
-        a.kind = SignupKind(form.kind.value) if form.kind.value else a.kind
-        a.player_type = PlayerType(form.played.value) if form.played.value else a.player_type
-        a.region = RegionPreference(form.region.value) if form.region.value else a.region
+    async def toggle_nights(self, interaction: discord.Interaction) -> None:
+        self.answers.nights_confirmed = not self.answers.nights_confirmed if CONFIRMS_CAN_UNDO else True
+        await self._redraw(interaction)
 
-        if self.stage is SignupStage.FORM:
-            self.stage = SignupStage.BRIDGE
-            self.render()
-            await interaction.response.send_message(view=self, ephemeral=True)
+    async def toggle_rules(self, interaction: discord.Interaction) -> None:
+        self.answers.rules_accepted = not self.answers.rules_accepted if CONFIRMS_CAN_UNDO else True
+        await self._redraw(interaction)
+
+    async def to_about(self, interaction: discord.Interaction) -> None:
+        if not self.answers.missing_confirmations:
+            self.stage = SignupStage.ABOUT
+        await self._redraw(interaction)
+
+    # ── step 2: about you ──
+
+    async def choose(self, interaction: discord.Interaction, choice: Choice) -> None:
+        self.answers.pick(choice)
+        await self._redraw(interaction)
+
+    async def to_form(self, interaction: discord.Interaction) -> None:
+        if self.answers.missing_choices:
+            await self._redraw(interaction)
+        elif self.answers.rsc_name:
+            # Back from the review card's Edit: the form is already filled in
+            self.stage = SignupStage.REVIEW
+            await self._redraw(interaction)
         else:
-            self.render()
-            await interaction.response.edit_message(view=self)
-        self._touch(interaction)
+            await self.open_name_trackers(interaction)
+
+    # ── forms ──
 
     async def name_trackers_submitted(self, interaction: discord.Interaction, form: NameTrackersModal) -> None:
         if self.is_finished():
@@ -433,30 +462,22 @@ class SignupFlowView(AuthorOnlyLayoutView):
             return
         a = self.answers
         a.rsc_name = form.name_input.value.strip()
-        a.platform = Platform(form.platform.values[0]) if form.platform.values else a.platform
-        a.referrer = Referrer(form.referrer.values[0]) if form.referrer.values else a.referrer
         a.trackers = await parse_tracker_links(form.links_input.value)
+        if SKIP_REVIEW_WHEN_VALID and a.ready:
+            await self.submit(interaction)
+            return
         self.stage = SignupStage.REVIEW
-        self.render()
-        await interaction.response.edit_message(view=self)
-        self._touch(interaction)
+        await self._redraw(interaction)
 
     async def trackers_fixed(self, interaction: discord.Interaction, form: FixTrackersModal) -> None:
         if self.is_finished():
             await interaction.response.defer()
             return
         self.answers.trackers = await parse_tracker_links(form.links_input.value)
-        self.render()
-        await interaction.response.edit_message(view=self)
-        self._touch(interaction)
-
-    async def form_timed_out(self) -> None:
-        """Only Form 1, before anything is posted, ends the sign-up. Later forms can be reopened."""
-        if self.stage is SignupStage.FORM and self.outcome is SignupOutcome.PENDING:
-            self.outcome = SignupOutcome.TIMED_OUT
-            self.stop()
+        await self._redraw(interaction)
 
     async def prefill_result(self) -> SignupPrefill:
+        """Whatever the lookup has within PREFILL_WAIT. The form opens either way."""
         if self.prefill is None:
             return SignupPrefill()
         try:
@@ -467,8 +488,14 @@ class SignupFlowView(AuthorOnlyLayoutView):
 
     # ── buttons ──
 
-    async def open_about_you(self, interaction: discord.Interaction) -> None:
-        await interaction.response.send_modal(AboutYouModal(self))
+    async def back_to_gate(self, interaction: discord.Interaction) -> None:
+        # Answers are kept, so going forward again needs no re-picking
+        self.stage = SignupStage.GATE
+        await self._redraw(interaction)
+
+    async def back_to_about(self, interaction: discord.Interaction) -> None:
+        self.stage = SignupStage.ABOUT
+        await self._redraw(interaction)
 
     async def open_name_trackers(self, interaction: discord.Interaction) -> None:
         await interaction.response.send_modal(NameTrackersModal(self, await self.prefill_result()))
@@ -483,8 +510,7 @@ class SignupFlowView(AuthorOnlyLayoutView):
 
     async def submit(self, interaction: discord.Interaction) -> None:
         if not self.answers.ready:
-            self.render()
-            await interaction.response.edit_message(view=self)
+            await self._redraw(interaction)
             return
         self.outcome = SignupOutcome.SUBMITTED
         self.stage = SignupStage.SUBMITTING
@@ -504,6 +530,11 @@ class SignupFlowView(AuthorOnlyLayoutView):
 
     # ── rendering ──
 
+    async def _redraw(self, interaction: discord.Interaction) -> None:
+        self.render()
+        await interaction.response.edit_message(view=self)
+        self._touch(interaction)
+
     def _touch(self, interaction: discord.Interaction) -> None:
         """Remember the message's latest interaction and restart the inactivity timer"""
         self.message_interaction = interaction
@@ -511,21 +542,149 @@ class SignupFlowView(AuthorOnlyLayoutView):
 
     def render(self) -> None:
         self.clear_items()
-        if self.stage is SignupStage.BRIDGE:
-            self.add_item(TextDisplay("✅ **Step 1 of 2 done.** Next: your in-game name and trackers."))
-            self.add_item(
-                ActionRow(
-                    _FlowButton(
-                        SignupFlowView.open_name_trackers,
-                        label="Continue to step 2",
-                        style=discord.ButtonStyle.primary,
-                        emoji="\N{MEMO}",
+        match self.stage:
+            case SignupStage.GATE:
+                self.add_item(self._gate())
+            case SignupStage.ABOUT:
+                self.add_item(self._about())
+            case SignupStage.REVIEW | SignupStage.SUBMITTING:
+                self.add_item(self._review())
+
+    @property
+    def _kicker(self) -> str:
+        return "RSC PERMFA SIGN-UP" if self.answers.kind is SignupKind.PERMFA else "RSC SIGN-UP"
+
+    def _accent(self, ready: bool) -> discord.Colour:
+        if ready:
+            return READY_COLOUR
+        return PERMFA_COLOUR if self.answers.kind is SignupKind.PERMFA else FLOW_COLOUR
+
+    @staticmethod
+    def _confirm(action: FlowAction, done: bool, *, ask: str, confirmed: str) -> ActionRow:
+        """Grey until clicked, then green with its label changed, so colour isn't the only signal"""
+        if done:
+            return ActionRow(_FlowButton(action, label=confirmed, style=discord.ButtonStyle.success))
+        return ActionRow(_FlowButton(action, label=ask, style=discord.ButtonStyle.secondary))
+
+    @staticmethod
+    def _continue_row(action: FlowAction, ready: bool) -> ActionRow:
+        return ActionRow(
+            _FlowButton(action, label="Continue", style=discord.ButtonStyle.primary, disabled=not ready),
+            _FlowButton(SignupFlowView.cancel, label="Cancel", style=discord.ButtonStyle.danger),
+        )
+
+    @staticmethod
+    def _back_row(action: FlowAction, disabled: bool = False) -> ActionRow:
+        """Back sits on its own row under Continue and Cancel. A row can't be right-aligned."""
+        return ActionRow(_FlowButton(action, label="Back", style=discord.ButtonStyle.secondary, disabled=disabled))
+
+    @staticmethod
+    def _questions(header: str, questions: list[tuple[str, ActionRow]]) -> list[discord.ui.Item]:
+        """Each question above its answers, a thin line between questions. The header sits above the first."""
+        items: list[discord.ui.Item] = []
+        for number, (text, answers) in enumerate(questions):
+            if number:
+                items.append(Separator())
+            items += [TextDisplay(f"-# {header}\n{text}" if number == 0 else text), answers]
+        return items
+
+    def _gate(self) -> Container:
+        """Step 1: the match nights and the rules, each confirmed with its own button"""
+        a = self.answers
+        nights = self.context.match_nights
+        missing = a.missing_confirmations
+        if not missing:
+            footer = "Next: a few questions about how you play."
+        elif len(missing) == 2:
+            footer = "Confirm both to continue."
+        else:
+            footer = f"Still to confirm: {missing[0]}."
+
+        nights_text = f"-# MATCH NIGHTS\n**{nights.days} at 10 PM ET**"
+        if self.context.kind is SignupKind.PERMFA:
+            nights_text += "\n-# Subs play on these nights too."
+        rules_text = (
+            "-# BEHAVIOUR RULES\n"
+            "They apply in our Discord, on the website and in every RSC match.\n"
+            f"[Read the RSC behaviour rules]({BEHAVIOR_RULES_URL})"
+        )
+
+        return Container(
+            TextDisplay(f"-# {self._kicker} · STEP 1 OF 3\n## Before you start"),
+            Separator(),
+            TextDisplay(nights_text),
+            self._confirm(
+                SignupFlowView.toggle_nights, a.nights_confirmed, ask="I can play on match nights", confirmed="Match nights confirmed"
+            ),
+            Separator(),
+            TextDisplay(rules_text),
+            self._confirm(SignupFlowView.toggle_rules, a.rules_accepted, ask="I agree to the rules", confirmed="Rules accepted"),
+            Separator(),
+            TextDisplay(f"-# {footer}"),
+            self._continue_row(SignupFlowView.to_about, ready=not missing),
+            accent_colour=self._accent(ready=not missing),
+        )
+
+    def _about(self) -> Container:
+        """Step 2: three button-row questions and two selects"""
+        a = self.answers
+        missing = a.missing_choices
+        if not missing:
+            footer = "All set. Next: check your details." if a.rsc_name else "All set. Next: your in-game name and trackers."
+        elif len(missing) == 5:
+            footer = "Answer each question to continue."
+        else:
+            footer = f"Still to answer: {joined(missing)}."
+
+        play: list[tuple[str, ActionRow]] = []
+        if PERMFA_ASKS_KIND or self.context.kind is not SignupKind.PERMFA:
+            play.append(
+                (
+                    KIND_QUESTION,
+                    ActionRow(
+                        _ChoiceButton(SignupKind.FREE_AGENT, "Draft eligible", a.kind),
+                        _ChoiceButton(SignupKind.PERMFA, "Permanent Free Agent", a.kind),
                     ),
-                    _FlowButton(SignupFlowView.cancel, label="Cancel", style=discord.ButtonStyle.secondary),
                 )
             )
-        elif self.stage in (SignupStage.REVIEW, SignupStage.SUBMITTING):
-            self.add_item(self._review())
+        play.append(
+            (
+                "**Have you played in RSC before?**",
+                ActionRow(
+                    _ChoiceButton(PlayerType.NEW, "No, first season", a.player_type),
+                    _ChoiceButton(PlayerType.FORMER, "Yes, I've played", a.player_type),
+                ),
+            )
+        )
+        play.append(
+            (
+                "**Where do you usually play from?**",
+                ActionRow(*(_ChoiceButton(region, region.full_name, a.region) for region in RegionPreference)),
+            )
+        )
+        setup = [
+            (
+                "**Main platform**\n-# The one you play RSC matches on.",
+                ActionRow(_ChoiceSelect("Choose your platform", [(p, p.label) for p in Platform], a.platform)),
+            ),
+            (
+                "**How did you hear about RSC?**",
+                ActionRow(_ChoiceSelect("Choose one", [(r, r.label) for r in Referrer], a.referrer)),
+            ),
+        ]
+
+        return Container(
+            TextDisplay(f"-# {self._kicker} · STEP 2 OF 3\n## About you"),
+            Separator(),
+            *self._questions("HOW YOU PLAY", play),
+            Separator(),
+            *self._questions("YOUR SETUP", setup),
+            Separator(),
+            TextDisplay(f"-# {footer}"),
+            self._continue_row(SignupFlowView.to_form, ready=not missing),
+            self._back_row(SignupFlowView.back_to_gate),
+            accent_colour=self._accent(ready=not missing),
+        )
 
     def _review(self) -> Container:
         a = self.answers
@@ -534,14 +693,16 @@ class SignupFlowView(AuthorOnlyLayoutView):
         nights = self.context.match_nights
         title = "RSC PERMFA SIGN-UP" if a.kind is SignupKind.PERMFA else "RSC SIGN-UP"
 
+        # Everything picked in step 2, so its Edit goes back there
         about = [part.label for part in (a.kind, a.player_type) if part]
         if a.region:
             about.append(a.region.full_name)
-        details = [f"**{a.rsc_name}**"]
+        setup = []
         if a.platform:
-            details.append(a.platform.label)
+            setup.append(a.platform.label)
         if a.referrer:
-            details.append(f"heard about us from {referrer_phrase(a.referrer)}")
+            setup.append(f"heard about us from {referrer_phrase(a.referrer)}")
+        about_text = "\n".join(" · ".join(line) for line in (about, setup) if line)
 
         if bad:
             tracker_button = _FlowButton(
@@ -559,11 +720,11 @@ class SignupFlowView(AuthorOnlyLayoutView):
         return Container(
             TextDisplay(f"-# {title} · REVIEW\n## Check your details"),
             Section(
-                TextDisplay("**About you**\n" + " · ".join(about)),
-                accessory=_FlowButton(SignupFlowView.open_about_you, label="Edit", emoji="\N{PENCIL}", disabled=busy),
+                TextDisplay(f"**About you**\n{about_text}"),
+                accessory=_FlowButton(SignupFlowView.back_to_about, label="Edit", emoji="\N{PENCIL}", disabled=busy),
             ),
             Separator(),
-            Section(TextDisplay(" · ".join(details) + "\n" + tracker_summary(a)), accessory=tracker_button),
+            Section(TextDisplay(f"**{a.rsc_name}**\n{tracker_summary(a)}"), accessory=tracker_button),
             Separator(),
             TextDisplay(footer),
             ActionRow(
@@ -574,8 +735,9 @@ class SignupFlowView(AuthorOnlyLayoutView):
                     emoji="\N{WHITE HEAVY CHECK MARK}",
                     disabled=bad or busy,
                 ),
-                _FlowButton(SignupFlowView.cancel, label="Cancel", style=discord.ButtonStyle.secondary, disabled=busy),
+                _FlowButton(SignupFlowView.cancel, label="Cancel", style=discord.ButtonStyle.danger, disabled=busy),
             ),
+            self._back_row(SignupFlowView.back_to_about, disabled=busy),
             accent_colour=FIX_COLOUR if bad else READY_COLOUR,
         )
 
@@ -667,7 +829,7 @@ class _StatusButton(discord.ui.Button["AlreadySignedUpView"]):
 
 
 class AlreadySignedUpView(discord.ui.LayoutView):
-    """E3 and E3W. Shown before Form 1 for PermFAs, or when the API rejects a duplicate sign-up."""
+    """E3 and E3W. Shown before step 1 for PermFAs, or when the API rejects a duplicate sign-up."""
 
     def __init__(
         self,

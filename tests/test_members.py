@@ -1,3 +1,4 @@
+import asyncio
 import io
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -11,6 +12,7 @@ from rsc.exceptions import RscException
 from rsc.members.members import MemberMixIn
 from rsc.members.tracker_links import TrackerLine
 from rsc.members.views.signup import (
+    SignupFlowView,
     AlreadySignedUp,
     AlreadySignedUpView,
     SignupAnswers,
@@ -20,6 +22,8 @@ from rsc.members.views.signup import (
     SignupPrefill,
     SignupSuccessView,
 )
+
+from .utils import command_callback
 
 GUILD_ID = 395806681994493964
 
@@ -790,6 +794,8 @@ def _flow_mock(kind: SignupKind | None, outcome: SignupOutcome = SignupOutcome.S
     flow.submit_interaction = MagicMock()
     flow.submit_interaction.edit_original_response = AsyncMock()
     flow.answers = SignupAnswers(
+        nights_confirmed=True,
+        rules_accepted=True,
         kind=kind,
         player_type=PlayerType.NEW,
         region=RegionPreference.EAST,
@@ -821,6 +827,8 @@ class TestSignupFlow:
 
         mixin.signup.assert_awaited_once()
         assert mixin.signup.await_args.kwargs["trackers"] == [EPIC_TRACKER]
+        assert mixin.signup.await_args.kwargs["accepted_rules"] is True
+        assert mixin.signup.await_args.kwargs["accepted_match_nights"] is True
         mixin.permfa_signup.assert_not_awaited()
         assert banner_file.await_args.kwargs["kicker"] == "RSC · SEASON 24"
         kwargs = flow.submit_interaction.edit_original_response.await_args.kwargs
@@ -848,6 +856,24 @@ class TestSignupFlow:
         view = flow.submit_interaction.edit_original_response.await_args.kwargs["view"]
         assert isinstance(view, AlreadySignedUpView)
         assert view.state is AlreadySignedUp.SIGNUP
+
+    async def test_unconfirmed_answers_are_not_sent(self, mock_guild, mock_member):
+        mixin = _signup_mixin()
+        flow = _flow_mock(SignupKind.FREE_AGENT)
+        flow.answers.rules_accepted = False
+        await _run_flow(mixin, mock_guild, mock_member, flow)
+        mixin.signup.assert_not_awaited()
+        view = flow.submit_interaction.edit_original_response.await_args.kwargs["view"]
+        assert "Signup Failed" in view.children[0].children[0].content
+
+    async def test_prefill_starts_once_the_message_is_up(self, mock_guild, mock_member):
+        mixin = _signup_mixin()
+        flow = _flow_mock(SignupKind.FREE_AGENT, outcome=SignupOutcome.CANCELLED)
+        flow.prefill = None
+        await _run_flow(mixin, mock_guild, mock_member, flow)
+        flow.start.assert_awaited_once()
+        assert isinstance(flow.prefill, asyncio.Task)
+        await flow.prefill
 
     async def test_cancelled_sends_nothing(self, mock_guild, mock_member):
         mixin = _signup_mixin()
@@ -907,3 +933,47 @@ class TestPermFAPrecheck:
     async def test_lookup_error_falls_through_to_the_form(self, mock_guild, mock_member):
         mixin = _signup_mixin(members=AsyncMock(side_effect=RscException(response=ApiException(status=500, reason="Down"))))
         assert await mixin._permfa_precheck(mock_guild, mock_member) == (None, None)
+
+
+class TestPermFACommand:
+    """`/permfa`: the status check, then the same flow with PermFA preselected"""
+
+    def _interaction(self, mock_guild, mock_member) -> MagicMock:
+        interaction = MagicMock(spec=discord.Interaction)
+        interaction.guild = mock_guild
+        interaction.user = mock_member
+        interaction.response = MagicMock()
+        interaction.response.send_message = AsyncMock()
+        return interaction
+
+    async def test_existing_permfa_sees_e3_before_step_one(self, mock_guild, mock_member):
+        mixin = _signup_mixin(_permfa_precheck=AsyncMock(return_value=(AlreadySignedUp.PERMFA, None)), _signup_flow=AsyncMock())
+        interaction = self._interaction(mock_guild, mock_member)
+        await command_callback(MemberMixIn._member_permfa_signup)(mixin, interaction)
+
+        mixin._signup_flow.assert_not_awaited()
+        view = interaction.response.send_message.await_args.kwargs["view"]
+        assert isinstance(view, AlreadySignedUpView)
+        assert view.state is AlreadySignedUp.PERMFA
+        assert interaction.response.send_message.await_args.kwargs["ephemeral"] is True
+
+    async def test_waiting_permfa_sees_e3w(self, mock_guild, mock_member):
+        mixin = _signup_mixin(_permfa_precheck=AsyncMock(return_value=(AlreadySignedUp.PERMFA_WAITING, None)), _signup_flow=AsyncMock())
+        interaction = self._interaction(mock_guild, mock_member)
+        await command_callback(MemberMixIn._member_permfa_signup)(mixin, interaction)
+        assert interaction.response.send_message.await_args.kwargs["view"].state is AlreadySignedUp.PERMFA_WAITING
+
+    async def test_anyone_else_starts_with_permfa_picked(self, mock_guild, mock_member):
+        member = MagicMock(spec=Member)
+        mixin = _signup_mixin(_permfa_precheck=AsyncMock(return_value=(None, member)), _signup_flow=AsyncMock())
+        interaction = self._interaction(mock_guild, mock_member)
+        await command_callback(MemberMixIn._member_permfa_signup)(mixin, interaction)
+
+        interaction.response.send_message.assert_not_awaited()
+        args = mixin._signup_flow.await_args
+        context = args.args[3]
+        assert (context.command, context.kind) == ("permfa", SignupKind.PERMFA)
+        assert args.kwargs == {"member": member, "looked_up": True}
+
+        flow = SignupFlowView(interaction, context)
+        assert flow.answers.kind is SignupKind.PERMFA
