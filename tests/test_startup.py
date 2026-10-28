@@ -400,6 +400,29 @@ class TestSetupIsolation:
         assert peak == 3
 
 
+class TestCogUnload:
+    async def test_removes_dm_button_templates(self):
+        """Templates live on the bot, so a reload would otherwise keep the old classes."""
+        bot = MagicMock()
+        cog = _create_cog(
+            bot=bot,
+            expire_sub_contract_loop=MagicMock(),
+            expire_free_agent_checkins_loop=MagicMock(),
+            sync_discord_roles=MagicMock(),
+            rsc_events_loop=MagicMock(),
+            retire_audit_loop=MagicMock(),
+            cancel_permfa_poll_timers=MagicMock(),
+            _dm_helper=AsyncMock(),
+            close_ballchasing_sessions=AsyncMock(),
+            close_api_clients=AsyncMock(),
+            _web_runner=None,
+        )
+
+        await cog.cog_unload()
+
+        bot.remove_dynamic_items.assert_called_once_with(IntentDMButton, ActivityCheckDMButton, PermFAPollButton)
+
+
 class TestStartWebapp:
     async def test_is_idempotent(self):
         """on_ready re-runs setup() on every reconnect; rebinding orphans the runner."""

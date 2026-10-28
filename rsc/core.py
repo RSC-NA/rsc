@@ -166,6 +166,10 @@ class RSC(
         self.retire_audit_loop.cancel()
         # One-shot close timers. Re-armed from Config by the next setup().
         self.cancel_permfa_poll_timers()
+        # Registered on the bot, not the cog, so they outlive a reload. The next
+        # setup() replaces them only if the template is unchanged. Remove them so an
+        # edited template cannot leave the old class answering old buttons.
+        self.bot.remove_dynamic_items(IntentDMButton, ActivityCheckDMButton, PermFAPollButton)
         # Discard rather than drain. Draining sends one DM per `rate` seconds, so a
         # large queued batch would block the reload for many minutes.
         await self._dm_helper.stop(drain=False)
