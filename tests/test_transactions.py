@@ -521,6 +521,8 @@ class TestMemberRemoveListener:
 
 # --- build_transaction_card Tests ---
 
+IR_MOVE = "INACTIVE RESERVE · Elite"
+
 
 def _team(name="Alpha", tier="Elite"):
     team = MagicMock()
@@ -557,19 +559,19 @@ class TestBuildTransactionCard:
             await mixin.build_transaction_card(mock_guild, response, mock_member)
 
     @pytest.mark.parametrize(
-        ("action", "title", "banner"),
+        ("action", "move", "summary", "banner"),
         [
-            (TransactionType.CUT, r"Test\_Player has been released by Alpha (Elite)", "Released.png"),
-            (TransactionType.IR_CUT, r"Test\_Player has been released by Alpha (Elite)", "Released.png"),
-            (TransactionType.INACTIVE_RESERVE, r"Test\_Player has been moved to Inactive Reserve by Alpha (Elite)", "InactiveReserve.png"),
-            (TransactionType.IR_RETURN, r"Test\_Player has been removed from Inactive Reserve by Alpha (Elite)", "InactiveReserve.png"),
+            (TransactionType.CUT, "RELEASED · Elite", "leaves **Alpha** · Hex", "Released.png"),
+            (TransactionType.IR_CUT, "RELEASED · Elite", "leaves **Alpha** · Hex", "Released.png"),
+            (TransactionType.INACTIVE_RESERVE, IR_MOVE, "moves to Inactive Reserve on **Alpha** · Hex", "InactiveReserve.png"),
+            (TransactionType.IR_RETURN, IR_MOVE, "returns from Inactive Reserve to **Alpha** · Hex", "InactiveReserve.png"),
         ],
     )
-    async def test_old_team_types(self, mixin, mock_guild, mock_member, tier_colour, action, title, banner):
+    async def test_old_team_types(self, mixin, mock_guild, mock_member, tier_colour, action, move, summary, banner):
         card = await self._card(mixin, mock_guild, mock_member, action, old_team=_team(), first=_make_franchise_identifier("Hex", 999))
-        assert card.title == title
+        assert (card.move, card.name, card.summary) == (move, r"Test\_Player", summary)
         assert card.banner.name == banner
-        assert (card.player_id, card.franchise, card.gm_id) == (mock_member.id, "Hex", 999)
+        assert (card.player_id, card.gm_id) == (mock_member.id, 999)
         assert card.colour == discord.Colour.orange()
         tier_colour.assert_awaited_once_with(mock_guild, "Elite")
         if action in (TransactionType.CUT, TransactionType.IR_CUT):
@@ -579,32 +581,32 @@ class TestBuildTransactionCard:
             assert card.logo == "https://cdn.example/hex.png"
 
     @pytest.mark.parametrize(
-        ("action", "title", "banner"),
+        ("action", "move", "summary", "banner"),
         [
-            (TransactionType.PICKUP, r"Test\_Player has been signed by Alpha (Elite)", "Signed.png"),
-            (TransactionType.RESIGN, r"Test\_Player has been re-signed by Alpha (Elite)", "Resigned.png"),
-            (TransactionType.TEMP_FA, r"Test\_Player has been signed to a temporary contract by Alpha (Elite)", "Subbed.png"),
-            (TransactionType.SUBSTITUTION, r"Test\_Player has been signed to a temporary contract by Alpha (Elite)", "Subbed.png"),
+            (TransactionType.PICKUP, "SIGNED · Elite", "joins **Alpha** · Hex", "Signed.png"),
+            (TransactionType.RESIGN, "RE-SIGNED · Elite", "re-signs with **Alpha** · Hex", "Resigned.png"),
+            (TransactionType.TEMP_FA, "TEMPORARY CONTRACT · Elite", "joins **Alpha** · Hex", "Subbed.png"),
+            (TransactionType.SUBSTITUTION, "TEMPORARY CONTRACT · Elite", "joins **Alpha** · Hex", "Subbed.png"),
         ],
     )
-    async def test_new_team_types(self, mixin, mock_guild, mock_member, action, title, banner):
+    async def test_new_team_types(self, mixin, mock_guild, mock_member, action, move, summary, banner):
         card = await self._card(mixin, mock_guild, mock_member, action, new_team=_team(), second=_make_franchise_identifier("Hex", 999))
-        assert card.title == title
+        assert (card.move, card.summary) == (move, summary)
         assert card.banner.name == banner
         # The GM is named, and so pinged, on every type that has one
-        assert (card.franchise, card.gm_id) == ("Hex", 999)
+        assert card.gm_id == 999
         assert card.logo == "https://cdn.example/hex.png"
 
     async def test_retire_without_franchise(self, mixin, mock_guild, mock_member):
         card = await self._card(mixin, mock_guild, mock_member, TransactionType.RETIRE)
-        assert card.title == r"Test\_Player has retired from the league"
-        assert (card.franchise, card.gm_id) == (None, None)
+        # No tier, so the label is just the move
+        assert (card.move, card.summary, card.gm_id) == ("RETIRED", "retires from the league", None)
         assert card.colour == discord.Colour.blue()
         assert card.logo == mock_guild.icon.url
 
     async def test_retire_with_franchise(self, mixin, mock_guild, mock_member):
         card = await self._card(mixin, mock_guild, mock_member, TransactionType.RETIRE, first=_make_franchise_identifier("Hex", 999))
-        assert (card.franchise, card.gm_id) == ("Hex", 999)
+        assert (card.summary, card.gm_id) == ("retires from the league · Hex", 999)
 
     async def test_player_out(self, mixin, mock_guild, mock_member, mock_player_out):
         card = await self._card(
@@ -621,7 +623,7 @@ class TestBuildTransactionCard:
     async def test_missing_team_name(self, mixin, mock_guild, mock_member):
         team = _team(name=None)
         card = await self._card(mixin, mock_guild, mock_member, TransactionType.PICKUP, new_team=team, second=_make_franchise_identifier())
-        assert card.title == r"Test\_Player has been signed by Unknown team (Elite)"
+        assert card.summary.startswith("joins **Unknown team**")
 
     async def test_cut_malformed_no_old_team(self, mixin, mock_guild, mock_member):
         with pytest.raises(MalformedTransactionResponse):
@@ -749,12 +751,13 @@ class TestAnnounceTransaction:
     @pytest.fixture
     def card(self):
         return TransactionCard(
-            title="X has been signed by Team Alpha (Elite)",
+            move="SIGNED · Elite",
+            name="X",
+            summary="joins **Alpha** · Hex",
             player_id=111,
             colour=discord.Colour.orange(),
             banner=utils.transaction_banner(TransactionType.PICKUP),
             created_at=discord.utils.utcnow(),
-            franchise="Hex",
             gm_id=222,
         )
 

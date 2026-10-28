@@ -248,6 +248,12 @@ Each spec uses only what discord.py 2.7.1 supports. Mockups are in the published
     - the title and facts sit in a `Section` with the logo as its `Thumbnail`, using the old author icon's sources: franchise logo for signings, re-signs, temporary contracts and IR moves, the tier's free agent badge for releases, the server icon for retirements, and no thumbnail when there's none;
     - one small invisible `Separator` above the banner replaces the large gaps between every part;
     - a single-image `MediaGallery` always spans the card, so the banners in `rsc/resources/transactions/card/` carry transparent right padding to fill ~70% of it, about the old embed's size. `scripts/make_card_banners.py` regenerates them.
+  - **Option B, approved (2026-10-28):** the stacked facts read as cramped, so four layouts were mocked up (artifact "Transaction card options") and the user picked B, "player headline". It's built like the match result:
+    - beside the logo, separate TextDisplays read `-# TEMPORARY CONTRACT · Elite`, `## nickm`, then `joins **Quantum** · Hex Systems`;
+    - a thin line, then `**Player** @nickm · **GM** @Monty`, or for subs `**In** @nickm · **Out** @Starter` with `**GM** @Monty` on the next line;
+    - a small gap, then the banner, then the unchanged `Discord ID:` footer.
+    - Labels and lines per type: SIGNED "joins", RE-SIGNED "re-signs with", TEMPORARY CONTRACT "joins", RELEASED "leaves", INACTIVE RESERVE "moves to Inactive Reserve on" / "returns from Inactive Reserve to", RETIRED "retires from the league". The franchise is added after a `·` when known; the tier goes in the label when known.
+    - `TransactionCard` now carries `move`, `name` and `summary` in place of `title` and `franchise`. `/pingtest style:transaction` previews every type.
 
 ### 02 — Combine / Dev League lobby ready (`rsc/combines/runner.py:302`, `rsc/devleague/runner.py:314`) — **LOCKED: option A, Join beside each team** (2026-10-28)
 

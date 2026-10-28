@@ -128,6 +128,10 @@ def gm_discord_id(franchise: TransactionFranchise | None) -> int | None:
     return franchise.gm.discord_id
 
 
+def _team_name(name: str | None) -> str:
+    return discord.utils.escape_markdown(name or "Unknown team")
+
+
 class TransactionMixIn(RSCMixIn):
     def __init__(self):
         log.debug("Initializing TransactionMixIn")
@@ -2242,15 +2246,14 @@ class TransactionMixIn(RSCMixIn):
         gm_id = None
         logo: str | Path | None = None
         tier = None
-        pname = discord.utils.escape_markdown(ptu_in.player.player.name)
 
+        # `move` names the transaction for the card's small label; `summary` is the line under the name
         match action:
             case TransactionType.CUT | TransactionType.IR_CUT:
                 if not (ptu_in.old_team and ptu_in.old_team.tier and response.first_franchise):
                     raise MalformedTransactionResponse("Old team, tier, or first_franchise was not returned by API.")
                 tier = ptu_in.old_team.tier
-                team = discord.utils.escape_markdown(ptu_in.old_team.name or "Unknown team")
-                title = f"{pname} has been released by {team} ({tier})"
+                move, summary = "RELEASED", f"leaves **{_team_name(ptu_in.old_team.name)}**"
                 logo = await utils.fa_img_path_from_tier(tier, tiny=True)
                 franchise = response.first_franchise.name
                 gm_id = gm_discord_id(response.first_franchise)
@@ -2258,17 +2261,18 @@ class TransactionMixIn(RSCMixIn):
                 if not (ptu_in.new_team and response.second_franchise and response.second_franchise.id):
                     raise MalformedTransactionResponse("New team, second franchise, or second franchise ID was not returned by API.")
                 tier = ptu_in.new_team.tier
-                team = discord.utils.escape_markdown(ptu_in.new_team.name or "Unknown team")
-                verb = {
-                    TransactionType.PICKUP: "signed",
-                    TransactionType.RESIGN: "re-signed",
-                }.get(action, "signed to a temporary contract")
-                title = f"{pname} has been {verb} by {team} ({tier})"
+                team = _team_name(ptu_in.new_team.name)
+                if action is TransactionType.PICKUP:
+                    move, summary = "SIGNED", f"joins **{team}**"
+                elif action is TransactionType.RESIGN:
+                    move, summary = "RE-SIGNED", f"re-signs with **{team}**"
+                else:
+                    move, summary = "TEMPORARY CONTRACT", f"joins **{team}**"
                 logo = await self.franchise_logo(guild, response.second_franchise.id)
                 franchise = response.second_franchise.name
                 gm_id = gm_discord_id(response.second_franchise)
             case TransactionType.RETIRE:
-                title = f"{pname} has retired from the league"
+                move, summary = "RETIRED", "retires from the league"
                 logo = guild.icon.url if guild.icon else None
                 if response.first_franchise:
                     franchise = response.first_franchise.name
@@ -2277,23 +2281,28 @@ class TransactionMixIn(RSCMixIn):
                 if not (ptu_in.old_team and response.first_franchise and response.first_franchise.id):
                     raise MalformedTransactionResponse("Old team, first franchise, or first franchise ID was not returned by API.")
                 tier = ptu_in.old_team.tier
-                team = discord.utils.escape_markdown(ptu_in.old_team.name or "Unknown team")
-                moved = "moved to" if action == TransactionType.INACTIVE_RESERVE else "removed from"
-                title = f"{pname} has been {moved} Inactive Reserve by {team} ({tier})"
+                team = _team_name(ptu_in.old_team.name)
+                if action is TransactionType.INACTIVE_RESERVE:
+                    move, summary = "INACTIVE RESERVE", f"moves to Inactive Reserve on **{team}**"
+                else:
+                    move, summary = "INACTIVE RESERVE", f"returns from Inactive Reserve to **{team}**"
                 logo = await self.franchise_logo(guild, response.first_franchise.id)
                 franchise = response.first_franchise.name
                 gm_id = gm_discord_id(response.first_franchise)
             case _:
                 raise NotImplementedError
 
+        if franchise:
+            summary += f" · {discord.utils.escape_markdown(franchise)}"
         return TransactionCard(
-            title=title,
+            move=f"{move} · {tier}" if tier else move,
+            name=discord.utils.escape_markdown(ptu_in.player.player.name),
+            summary=summary,
             player_id=player_in.id,
             colour=await utils.tier_color_by_name(guild, tier) if tier else discord.Colour.blue(),
             banner=utils.transaction_banner(action),
             created_at=discord.utils.utcnow(),
             player_out_id=player_out.id if player_out else None,
-            franchise=franchise,
             gm_id=gm_id,
             logo=logo,
         )
