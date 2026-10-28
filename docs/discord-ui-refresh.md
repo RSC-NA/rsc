@@ -284,6 +284,7 @@ Each spec uses only what discord.py 2.7.1 supports. Mockups are in the published
     - A DM that lands after teardown is edited straight to Final, since it missed teardown's pass.
     - Records live in Config as `LobbyMessages` under the `Combines` and `DevLeague` custom groups, keyed by lobby id, and are removed at teardown.
     - Not built: the optional per-player DM opt-out.
+  - **Credentials aligned (after the live review, 2026-10-28):** the user wanted the lobby name and password to start in the same column. Text can't be aligned (see [Layout](#layout-what-we-can-and-cant-control-checked-2026-10-28)), so each label is now a code chip padded with no-break spaces to the width of "Password": `` `Lobby   ` `rsc4812` `` over `` `Password` `nova` ``. The monospaced chips match in width, so the values line up.
 
 ### 03 — Combines guide (`send_combines_how_to_play`, `rsc/combines/manager.py:363`) — **LOCKED: option A, step sections** (2026-10-28)
 

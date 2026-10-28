@@ -84,7 +84,10 @@ class LobbyCard(BaseModel):
                 result = f"{score.home_wins}\N{NO-BREAK SPACE}\N{EN DASH}\N{NO-BREAK SPACE}{score.away_wins}"
                 container.add_item(ui.TextDisplay(f"### Home {result} Away"))
         else:
-            container.add_item(ui.TextDisplay(f"Lobby `{_code(self.lobby_name)}`\nPassword `{_code(self.lobby_pass)}`"))
+            # Same-width label chips, so the name and password start in the same column
+            container.add_item(
+                ui.TextDisplay(f"{_label('Lobby')} `{_code(self.lobby_name)}`\n{_label('Password')} `{_code(self.lobby_pass)}`")
+            )
             container.add_item(ui.TextDisplay(f"-# Started {discord.utils.format_dt(self.started_at, 'R')}"))
 
         container.add_item(ui.Separator())
@@ -127,3 +130,12 @@ class LobbyCard(BaseModel):
 def _code(text: str) -> str:
     """Text for an inline code span. Backticks would end the span early."""
     return text.replace("`", "'")
+
+
+def _label(text: str) -> str:
+    """A label as a code chip padded to a fixed width. No-break spaces, since Discord trims ordinary
+    spaces at the ends of inline code."""
+    return f"`{text.ljust(_LABEL_WIDTH, chr(0xA0))}`"
+
+
+_LABEL_WIDTH = len("Password")

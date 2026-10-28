@@ -16,6 +16,7 @@ from rsc.utils.dm import DMOutcome
 STARTED = datetime(2026, 10, 28, 22, 47, tzinfo=UTC)
 SCORE_LINE = "### Home 3\N{NO-BREAK SPACE}\N{EN DASH}\N{NO-BREAK SPACE}1 Away"
 LIVE = "<a:live:123>"
+NBSP = "\N{NO-BREAK SPACE}"
 
 
 def _card(**overrides) -> LobbyCard:
@@ -67,7 +68,8 @@ class TestRenderLive:
         assert isinstance(header.accessory, ui.Button)
         assert (header.accessory.label, header.accessory.url) == ("Match", "https://devleague.rscna.com/combine/4812")
         texts = _texts(container)
-        assert "Lobby `rsc4812`\nPassword `nova`" in texts
+        # Same-width label chips line the values up
+        assert f"`Lobby{NBSP * 3}` `rsc4812`\n`Password` `nova`" in texts
         assert f"-# Started {discord.utils.format_dt(STARTED, 'R')}" in texts
         assert texts[-1] == "-# Lost these details? Run `/combines lobbyinfo`."
 
@@ -85,7 +87,7 @@ class TestRenderLive:
 
     def test_backticks_cannot_break_the_code_span(self):
         texts = _texts(_container(_card(lobby_name="a`b").render()))
-        assert "Lobby `a'b`\nPassword `nova`" in texts
+        assert f"`Lobby{NBSP * 3}` `a'b`\n`Password` `nova`" in texts
 
     @pytest.mark.parametrize(
         ("viewer", "makes_lobby", "line"),
