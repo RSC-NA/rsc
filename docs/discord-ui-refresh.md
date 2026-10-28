@@ -337,6 +337,7 @@ Each spec uses only what discord.py 2.7.1 supports. Mockups are in the published
     - When the reporter types the teams in swapped order, each box's "Home team"/"Away team" description follows the match's real sides. The scores are still normalized after submit, as before.
     - Validation is unchanged. Only the messages changed: "You entered 3–3, which is 6 games. This series has 4, so the wins must add up to 4." and, for best-of, "…This is a best of 5, so the wins must add up to 3–5." In-modal errors now read "Wins must be whole numbers, like 2." and "Wins can't be negative."
     - Team names are cut so "<team> games won" fits Discord's 45-character label limit.
+  - **Approved (2026-10-28):** both versions of the form, with the match found early and the teams-only fallback. The score boxes stay as text inputs (a dropdown was offered and declined); a non-number closes the form with "Wins must be whole numbers, like 2.", since Discord can't keep a form open with an error.
 
 ### 05 — Player card (`/playerinfo`, `rsc/members/members.py:817`) — **LOCKED: refined A** (approved 2026-10-28)
 
