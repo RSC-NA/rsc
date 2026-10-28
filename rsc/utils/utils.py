@@ -477,28 +477,29 @@ async def fa_img_path_from_tier(tier: str, tiny: bool = False) -> Path | None:
     return None
 
 
-async def transaction_image_from_type(action: TransactionType) -> discord.File:
-    root = Path(__file__).parent.parent
+def transaction_banner(action: TransactionType) -> Path:
+    """The banner image for a transaction card."""
+    root = Path(__file__).parent.parent / "resources/transactions"
     match action:
         # A cut off Inactive Reserve is still a release.
         case TransactionType.CUT | TransactionType.IR_CUT:
-            return discord.File(root / "resources/transactions/Released.png")
+            return root / "Released.png"
         case TransactionType.PICKUP:
-            return discord.File(root / "resources/transactions/Signed.png")
+            return root / "Signed.png"
         case TransactionType.RESIGN:
-            return discord.File(root / "resources/transactions/Resigned.png")
+            return root / "Resigned.png"
         case TransactionType.SUBSTITUTION:
-            return discord.File(root / "resources/transactions/Subbed.png")
+            return root / "Subbed.png"
         case TransactionType.TEMP_FA:
-            return discord.File(root / "resources/transactions/Subbed.png")
+            return root / "Subbed.png"
         case TransactionType.TRADE:
-            return discord.File(root / "resources/transactions/Traded.png")
+            return root / "Traded.png"
         case TransactionType.RETIRE:
-            return discord.File(root / "resources/transactions/Retired.png")
+            return root / "Retired.png"
         case TransactionType.INACTIVE_RESERVE:
-            return discord.File(root / "resources/transactions/InactiveReserve.png")
+            return root / "InactiveReserve.png"
         case TransactionType.IR_RETURN:
-            return discord.File(root / "resources/transactions/InactiveReserve.png")
+            return root / "InactiveReserve.png"
         case _:
             raise NotImplementedError
 

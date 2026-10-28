@@ -210,7 +210,16 @@ Each spec uses only what discord.py 2.7.1 supports. Mockups are in the published
   - The ID wording is exactly today's footer, so one search finds old and new posts. **Search indexing of V2 text is unverified**; test it with `/pingtest` before Phase 3.
 - No thumbnail. The 84px V2 thumbnail squeezed the text on phones, which is the "too much stacked text" the user rejected. The franchise is named in the facts line. A `Section` + `Thumbnail` could add a logo later.
 - Same template for every type. Released: "X has been released to Free Agency by Team (Tier)" with the `Released.png` banner and that tier's accent.
-- Trades still need their own layout (one section per franchise, with an overflow link past 4,000 characters).
+- Trades still need their own layout (one section per franchise, with an overflow link past 4,000 characters). **Deferred to a later piece (decided 2026-10-28)**: `trade_announce.py` keeps its embed until that layout is mocked up and locked.
+- **Decided 2026-10-28 while building:**
+  - Everyone the card names is pinged: player, GM and the subbed-out starter. The GM now pings on re-signs, retirements and temporary contracts too, where the old embed only showed them.
+  - The `Discord ID: … · <t:…:f>` footer goes on every type, including temporary contracts, substitutions and retirements, which had no ID before.
+  - Substitutions use two facts lines: `In @Sub · Out @Starter`, then `Hex Systems · GM @Monty`.
+- **Implemented (2026-10-28, branch `discord-ui-phase-3`):** `TransactionCard` in `rsc/transactions/views.py`, built by `TransactionMixIn.build_transaction_card` and sent V2-only by `announce_transaction(guild, card)`. The send-then-edit ping trick is gone.
+  - `utils.transaction_banner(action)` returns the banner's path, so each render opens a fresh `File`.
+  - The title keeps today's wording ("has been released by Team (Tier)"). A missing team name reads "Unknown team" instead of "None".
+  - The admin bulk-retire path passes a `discord.User` straight through, so its `cast()` is gone.
+  - Preview it live with `/pingtest style:transaction`.
 
 ### 02 — Combine / Dev League lobby ready (`rsc/combines/runner.py:302`, `rsc/devleague/runner.py:314`) — **LOCKED: option A, Join beside each team** (2026-10-28)
 

@@ -25,6 +25,7 @@ from rsc.exceptions import (
     RscException,
     TradeParserException,
 )
+from rsc.transactions.views import TransactionCard
 from rsc.transactions.transactions import (
     FUTURE_TRADE_REGEX,
     GM_TRADE_REGEX,
@@ -517,264 +518,136 @@ class TestMemberRemoveListener:
         mixin.announce_to_franchise_transactions.assert_awaited_once()
 
 
-# --- build_transaction_embed Tests ---
+# --- build_transaction_card Tests ---
 
 
-class TestBuildTransactionEmbed:
-    """Test the build_transaction_embed method."""
+def _team(name="Alpha", tier="Elite"):
+    team = MagicMock()
+    team.name = name
+    team.tier = tier
+    return team
+
+
+class TestBuildTransactionCard:
+    """Test the build_transaction_card method."""
 
     @pytest.fixture
     def mixin(self, mock_guild):
         m = _create_mixin()
         m.league_player_from_transaction = AsyncMock()
-        m.franchise_logo = AsyncMock(return_value=None)
         return m
+
+    @pytest.fixture(autouse=True)
+    def tier_colour(self):
+        with patch("rsc.transactions.transactions.utils.tier_color_by_name", new_callable=AsyncMock) as mock:
+            mock.return_value = discord.Colour.orange()
+            yield mock
+
+    async def _card(self, mixin, guild, member, action, *, old_team=None, new_team=None, first=None, second=None, player_out=None):
+        ptu = _make_ptu(member.id, "Test_Player", old_team=old_team, new_team=new_team)
+        mixin.league_player_from_transaction.return_value = ptu
+        response = _make_transaction_response(type=action, player_updates=[ptu], first_franchise=first, second_franchise=second)
+        return await mixin.build_transaction_card(guild, response, member, player_out=player_out)
 
     async def test_raises_on_missing_type(self, mixin, mock_guild, mock_member):
         response = _make_transaction_response(type=None)
         with pytest.raises(MalformedTransactionResponse, match="type not returned"):
-            await mixin.build_transaction_embed(mock_guild, response, mock_member)
+            await mixin.build_transaction_card(mock_guild, response, mock_member)
 
-    @patch("rsc.transactions.transactions.utils.transaction_image_from_type", new_callable=AsyncMock)
-    @patch("rsc.transactions.transactions.utils.fa_img_from_tier", new_callable=AsyncMock)
-    @patch("rsc.transactions.transactions.utils.tier_color_by_name", new_callable=AsyncMock)
-    async def test_cut_embed(self, mock_tier_color, mock_fa_img, mock_trans_img, mixin, mock_guild, mock_member):
-        # Setup
-        mock_img = MagicMock(spec=discord.File)
-        mock_img.filename = "Cut.png"
-        mock_trans_img.return_value = mock_img
-        mock_fa_img.return_value = None
-        mock_tier_color.return_value = discord.Color.blue()
+    @pytest.mark.parametrize(
+        ("action", "title", "banner"),
+        [
+            (TransactionType.CUT, r"Test\_Player has been released by Alpha (Elite)", "Released.png"),
+            (TransactionType.IR_CUT, r"Test\_Player has been released by Alpha (Elite)", "Released.png"),
+            (TransactionType.INACTIVE_RESERVE, r"Test\_Player has been moved to Inactive Reserve by Alpha (Elite)", "InactiveReserve.png"),
+            (TransactionType.IR_RETURN, r"Test\_Player has been removed from Inactive Reserve by Alpha (Elite)", "InactiveReserve.png"),
+        ],
+    )
+    async def test_old_team_types(self, mixin, mock_guild, mock_member, tier_colour, action, title, banner):
+        card = await self._card(mixin, mock_guild, mock_member, action, old_team=_team(), first=_make_franchise_identifier("Hex", 999))
+        assert card.title == title
+        assert card.banner.name == banner
+        assert (card.player_id, card.franchise, card.gm_id) == (mock_member.id, "Hex", 999)
+        assert card.colour == discord.Colour.orange()
+        tier_colour.assert_awaited_once_with(mock_guild, "Elite")
 
-        old_team = MagicMock()
-        old_team.tier = "Elite"
-        old_team.name = "Team Alpha"
+    @pytest.mark.parametrize(
+        ("action", "title", "banner"),
+        [
+            (TransactionType.PICKUP, r"Test\_Player has been signed by Alpha (Elite)", "Signed.png"),
+            (TransactionType.RESIGN, r"Test\_Player has been re-signed by Alpha (Elite)", "Resigned.png"),
+            (TransactionType.TEMP_FA, r"Test\_Player has been signed to a temporary contract by Alpha (Elite)", "Subbed.png"),
+            (TransactionType.SUBSTITUTION, r"Test\_Player has been signed to a temporary contract by Alpha (Elite)", "Subbed.png"),
+        ],
+    )
+    async def test_new_team_types(self, mixin, mock_guild, mock_member, action, title, banner):
+        card = await self._card(mixin, mock_guild, mock_member, action, new_team=_team(), second=_make_franchise_identifier("Hex", 999))
+        assert card.title == title
+        assert card.banner.name == banner
+        # The GM is named, and so pinged, on every type that has one
+        assert (card.franchise, card.gm_id) == ("Hex", 999)
 
-        franchise = _make_franchise_identifier("TestFranchise", 999)
+    async def test_retire_without_franchise(self, mixin, mock_guild, mock_member):
+        card = await self._card(mixin, mock_guild, mock_member, TransactionType.RETIRE)
+        assert card.title == r"Test\_Player has retired from the league"
+        assert (card.franchise, card.gm_id) == (None, None)
+        assert card.colour == discord.Colour.blue()
 
-        ptu = _make_ptu(mock_member.id, "TestPlayer", old_team=old_team)
-        mixin.league_player_from_transaction.return_value = ptu
+    async def test_retire_with_franchise(self, mixin, mock_guild, mock_member):
+        card = await self._card(mixin, mock_guild, mock_member, TransactionType.RETIRE, first=_make_franchise_identifier("Hex", 999))
+        assert (card.franchise, card.gm_id) == ("Hex", 999)
 
-        response = _make_transaction_response(
-            type=TransactionType.CUT,
-            player_updates=[ptu],
-            first_franchise=franchise,
+    async def test_player_out(self, mixin, mock_guild, mock_member, mock_player_out):
+        card = await self._card(
+            mixin,
+            mock_guild,
+            mock_member,
+            TransactionType.SUBSTITUTION,
+            new_team=_team(),
+            second=_make_franchise_identifier(),
+            player_out=mock_player_out,
         )
+        assert card.player_out_id == mock_player_out.id
 
-        embed, files = await mixin.build_transaction_embed(mock_guild, response, mock_member)
-        assert isinstance(embed, discord.Embed)
-        assert len(files) >= 1
+    async def test_missing_team_name(self, mixin, mock_guild, mock_member):
+        team = _team(name=None)
+        card = await self._card(mixin, mock_guild, mock_member, TransactionType.PICKUP, new_team=team, second=_make_franchise_identifier())
+        assert card.title == r"Test\_Player has been signed by Unknown team (Elite)"
 
-    @patch("rsc.transactions.transactions.utils.transaction_image_from_type", new_callable=AsyncMock)
-    @patch("rsc.transactions.transactions.utils.tier_color_by_name", new_callable=AsyncMock)
-    async def test_pickup_embed(self, mock_tier_color, mock_trans_img, mixin, mock_guild, mock_member):
-        mock_img = MagicMock(spec=discord.File)
-        mock_img.filename = "Signed.png"
-        mock_trans_img.return_value = mock_img
-        mock_tier_color.return_value = discord.Color.green()
-
-        new_team = MagicMock()
-        new_team.tier = "Elite"
-        new_team.name = "Team Alpha"
-
-        franchise = _make_franchise_identifier("TestFranchise", 999)
-
-        ptu = _make_ptu(mock_member.id, "TestPlayer", new_team=new_team)
-        mixin.league_player_from_transaction.return_value = ptu
-
-        response = _make_transaction_response(
-            type=TransactionType.PICKUP,
-            player_updates=[ptu],
-            second_franchise=franchise,
-        )
-
-        embed, _files = await mixin.build_transaction_embed(mock_guild, response, mock_member)
-        assert isinstance(embed, discord.Embed)
-
-    @patch("rsc.transactions.transactions.utils.transaction_image_from_type", new_callable=AsyncMock)
-    @patch("rsc.transactions.transactions.utils.tier_color_by_name", new_callable=AsyncMock)
-    async def test_resign_embed(self, mock_tier_color, mock_trans_img, mixin, mock_guild, mock_member):
-        mock_img = MagicMock(spec=discord.File)
-        mock_img.filename = "ReSigned.png"
-        mock_trans_img.return_value = mock_img
-        mock_tier_color.return_value = discord.Color.green()
-
-        new_team = MagicMock()
-        new_team.tier = "Elite"
-        new_team.name = "Team Alpha"
-
-        franchise = _make_franchise_identifier("TestFranchise", 999)
-
-        ptu = _make_ptu(mock_member.id, "TestPlayer", new_team=new_team)
-        mixin.league_player_from_transaction.return_value = ptu
-
-        response = _make_transaction_response(
-            type=TransactionType.RESIGN,
-            player_updates=[ptu],
-            second_franchise=franchise,
-        )
-
-        embed, _files = await mixin.build_transaction_embed(mock_guild, response, mock_member)
-        assert isinstance(embed, discord.Embed)
-
-    @patch("rsc.transactions.transactions.utils.transaction_image_from_type", new_callable=AsyncMock)
-    @patch("rsc.transactions.transactions.utils.tier_color_by_name", new_callable=AsyncMock)
-    async def test_retire_embed(self, mock_tier_color, mock_trans_img, mixin, mock_guild, mock_member):
-        mock_img = MagicMock(spec=discord.File)
-        mock_img.filename = "Retired.png"
-        mock_trans_img.return_value = mock_img
-        mock_tier_color.return_value = discord.Color.blue()
-
-        ptu = _make_ptu(mock_member.id, "TestPlayer")
-        mixin.league_player_from_transaction.return_value = ptu
-
-        franchise = _make_franchise_identifier("TestFranchise", 999)
-
-        response = _make_transaction_response(
-            type=TransactionType.RETIRE,
-            player_updates=[ptu],
-            first_franchise=franchise,
-        )
-
-        embed, _files = await mixin.build_transaction_embed(mock_guild, response, mock_member)
-        assert isinstance(embed, discord.Embed)
-
-    @patch("rsc.transactions.transactions.utils.transaction_image_from_type", new_callable=AsyncMock)
-    @patch("rsc.transactions.transactions.utils.tier_color_by_name", new_callable=AsyncMock)
-    async def test_temp_fa_embed(self, mock_tier_color, mock_trans_img, mixin, mock_guild, mock_member):
-        mock_img = MagicMock(spec=discord.File)
-        mock_img.filename = "TempFA.png"
-        mock_trans_img.return_value = mock_img
-        mock_tier_color.return_value = discord.Color.blue()
-
-        new_team = MagicMock()
-        new_team.tier = "Elite"
-        new_team.name = "Team Alpha"
-
-        franchise = _make_franchise_identifier("TestFranchise", 999)
-
-        ptu = _make_ptu(mock_member.id, "TestPlayer", new_team=new_team)
-        mixin.league_player_from_transaction.return_value = ptu
-
-        response = _make_transaction_response(
-            type=TransactionType.TEMP_FA,
-            player_updates=[ptu],
-            second_franchise=franchise,
-        )
-
-        embed, _files = await mixin.build_transaction_embed(mock_guild, response, mock_member)
-        assert isinstance(embed, discord.Embed)
-
-    @patch("rsc.transactions.transactions.utils.transaction_image_from_type", new_callable=AsyncMock)
-    async def test_cut_embed_malformed_no_old_team(self, mock_trans_img, mixin, mock_guild, mock_member):
-        mock_img = MagicMock(spec=discord.File)
-        mock_img.filename = "Cut.png"
-        mock_trans_img.return_value = mock_img
-
-        ptu = _make_ptu(mock_member.id, "TestPlayer", old_team=None)
-        mixin.league_player_from_transaction.return_value = ptu
-
-        response = _make_transaction_response(
-            type=TransactionType.CUT,
-            player_updates=[ptu],
-            first_franchise=None,
-        )
-
+    async def test_cut_malformed_no_old_team(self, mixin, mock_guild, mock_member):
         with pytest.raises(MalformedTransactionResponse):
-            await mixin.build_transaction_embed(mock_guild, response, mock_member)
+            await self._card(mixin, mock_guild, mock_member, TransactionType.CUT)
 
-    @patch("rsc.transactions.transactions.utils.transaction_image_from_type", new_callable=AsyncMock)
-    async def test_pickup_embed_malformed_no_new_team(self, mock_trans_img, mixin, mock_guild, mock_member):
-        mock_img = MagicMock(spec=discord.File)
-        mock_img.filename = "Signed.png"
-        mock_trans_img.return_value = mock_img
-
-        ptu = _make_ptu(mock_member.id, "TestPlayer", new_team=None)
-        mixin.league_player_from_transaction.return_value = ptu
-
-        response = _make_transaction_response(
-            type=TransactionType.PICKUP,
-            player_updates=[ptu],
-            second_franchise=None,
-        )
-
+    async def test_pickup_malformed_no_new_team(self, mixin, mock_guild, mock_member):
         with pytest.raises(MalformedTransactionResponse):
-            await mixin.build_transaction_embed(mock_guild, response, mock_member)
+            await self._card(mixin, mock_guild, mock_member, TransactionType.PICKUP)
 
-    @patch("rsc.transactions.transactions.utils.transaction_image_from_type", new_callable=AsyncMock)
-    async def test_build_embed_with_player_out(self, mock_trans_img, mixin, mock_guild, mock_member, mock_player_out):
-        mock_img = MagicMock(spec=discord.File)
-        mock_img.filename = "TempFA.png"
-        mock_trans_img.return_value = mock_img
-
-        new_team = MagicMock()
-        new_team.tier = "Elite"
-        new_team.name = "Team Alpha"
-
-        franchise = _make_franchise_identifier("TestFranchise", 999)
-
-        ptu = _make_ptu(mock_member.id, "TestPlayer", new_team=new_team)
-        mixin.league_player_from_transaction.return_value = ptu
-
-        response = _make_transaction_response(
-            type=TransactionType.SUBSTITUTION,
-            player_updates=[ptu],
-            second_franchise=franchise,
-        )
-
-        embed, _files = await mixin.build_transaction_embed(mock_guild, response, mock_member, player_out=mock_player_out)
-        assert isinstance(embed, discord.Embed)
-        # When player_out is provided, embed should have "Player In" and "Player Out" fields
-        field_names = [f.name for f in embed.fields]
-        assert "Player In" in field_names
-        assert "Player Out" in field_names
+    async def test_raises_when_player_missing_from_response(self, mixin, mock_guild, mock_member):
+        mixin.league_player_from_transaction.return_value = None
+        response = _make_transaction_response(type=TransactionType.CUT, player_updates=[])
+        with pytest.raises(MalformedTransactionResponse):
+            await mixin.build_transaction_card(mock_guild, response, mock_member)
 
 
-# --- IR Cut (ICT) Tests ---
-
-
-class TestIrCutTransactionType:
-    """`ICT` (Cut from IR) arrived in rscapi 2.1.4 and rides the cut path."""
-
-    async def test_has_a_transaction_image(self):
-        """The real lookup raises NotImplementedError on an unhandled type, and no
-        `build_transaction_embed` caller catches that -- only the
-        MalformedTransactionResponse the type conversion would have raised first.
-        Every other embed test mocks this call, so it needs its own check."""
-        img = await utils.transaction_image_from_type(TransactionType.IR_CUT)
-        assert img.filename == "Released.png"
-
-    @patch("rsc.transactions.transactions.utils.transaction_image_from_type", new_callable=AsyncMock)
-    @patch("rsc.transactions.transactions.utils.fa_img_from_tier", new_callable=AsyncMock)
-    @patch("rsc.transactions.transactions.utils.tier_color_by_name", new_callable=AsyncMock)
-    async def test_builds_a_release_embed(self, mock_tier_color, mock_fa_img, mock_trans_img, mock_guild, mock_member):
-        """Same roster movement as a plain cut, so it reuses that arm rather than
-        falling through to the `NotImplementedError` default."""
-        mock_img = MagicMock(spec=discord.File)
-        mock_img.filename = "Released.png"
-        mock_trans_img.return_value = mock_img
-        mock_fa_img.return_value = None
-        mock_tier_color.return_value = discord.Color.blue()
-
-        mixin = _create_mixin()
-        mixin.franchise_logo = AsyncMock(return_value=None)
-
-        old_team = MagicMock()
-        old_team.tier = "Elite"
-        old_team.name = "Team Alpha"
-
-        ptu = _make_ptu(mock_member.id, "TestPlayer", old_team=old_team)
-        mixin.league_player_from_transaction = AsyncMock(return_value=ptu)
-
-        response = _make_transaction_response(
-            type=TransactionType.IR_CUT,
-            player_updates=[ptu],
-            first_franchise=_make_franchise_identifier("TestFranchise", 999),
-        )
-
-        embed, _files = await mixin.build_transaction_embed(mock_guild, response, mock_member)
-        assert isinstance(embed, discord.Embed)
-        assert "released by Team Alpha" in embed.author.name
+class TestTransactionBanner:
+    @pytest.mark.parametrize(
+        "action",
+        [
+            TransactionType.CUT,
+            TransactionType.IR_CUT,
+            TransactionType.PICKUP,
+            TransactionType.RESIGN,
+            TransactionType.TEMP_FA,
+            TransactionType.SUBSTITUTION,
+            TransactionType.RETIRE,
+            TransactionType.INACTIVE_RESERVE,
+            TransactionType.IR_RETURN,
+        ],
+    )
+    def test_every_card_type_has_a_banner_on_disk(self, action):
+        """The lookup raises NotImplementedError on an unhandled type, which no caller
+        catches, so every type the card builder handles needs a real file."""
+        assert utils.transaction_banner(action).is_file()
 
 
 # --- send_cut_msg Tests ---
@@ -864,38 +737,38 @@ class TestAnnounceTransaction:
         m._trans_channel = AsyncMock()
         return m
 
-    async def test_returns_none_when_no_channel(self, mixin, mock_guild):
+    @pytest.fixture
+    def card(self):
+        return TransactionCard(
+            title="X has been signed by Team Alpha (Elite)",
+            player_id=111,
+            colour=discord.Colour.orange(),
+            banner=utils.transaction_banner(TransactionType.PICKUP),
+            created_at=discord.utils.utcnow(),
+            franchise="Hex",
+            gm_id=222,
+        )
+
+    async def test_returns_none_when_no_channel(self, mixin, mock_guild, card):
         mixin._trans_channel.return_value = None
-        embed = discord.Embed()
-        result = await mixin.announce_transaction(mock_guild, embed=embed)
-        assert result is None
+        assert await mixin.announce_transaction(mock_guild, card) is None
 
-    async def test_sends_and_edits_message(self, mixin, mock_guild, mock_member):
+    async def test_sends_only_the_card_and_lets_user_pings_through(self, mixin, mock_guild, card):
         mock_msg = MagicMock(spec=discord.Message)
-        mock_msg.edit = AsyncMock()
         mock_channel = MagicMock(spec=discord.TextChannel)
         mock_channel.send = AsyncMock(return_value=mock_msg)
         mixin._trans_channel.return_value = mock_channel
 
-        embed = discord.Embed()
-        result = await mixin.announce_transaction(mock_guild, embed=embed, player=mock_member, gm=999)
-        assert result is mock_msg
-        mock_channel.send.assert_called_once()
-        mock_msg.edit.assert_called_once()
+        assert await mixin.announce_transaction(mock_guild, card) is mock_msg
 
-    async def test_announce_with_int_player_and_gm(self, mixin, mock_guild):
-        mock_msg = MagicMock(spec=discord.Message)
-        mock_msg.edit = AsyncMock()
-        mock_channel = MagicMock(spec=discord.TextChannel)
-        mock_channel.send = AsyncMock(return_value=mock_msg)
-        mixin._trans_channel.return_value = mock_channel
-
-        embed = discord.Embed()
-        result = await mixin.announce_transaction(mock_guild, embed=embed, player=111, gm=222)
-        assert result is mock_msg
-        call_kwargs = mock_channel.send.call_args
-        assert "<@!111>" in call_kwargs.kwargs["content"]
-        assert "<@!222>" in call_kwargs.kwargs["content"]
+        call = mock_channel.send.await_args
+        assert call is not None
+        kwargs = call.kwargs
+        assert isinstance(kwargs["view"], discord.ui.LayoutView)
+        assert [f.filename for f in kwargs["files"]] == ["Signed.png"]
+        assert "content" not in kwargs and "embed" not in kwargs
+        mentions = kwargs["allowed_mentions"]
+        assert (mentions.users, mentions.roles, mentions.everyone) == (True, False, False)
 
 
 # --- announce_to_transaction_committee Tests ---

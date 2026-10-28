@@ -292,12 +292,8 @@ class AdminMixIn(RSCMixIn):
                         agm_franchise=agm_map.get(member.id),
                     )
 
-                embed, files = await transactions.build_transaction_embed(
-                    guild=guild,
-                    response=result,
-                    player_in=cast("discord.Member", player),
-                )
-                await transactions.announce_transaction(guild=guild, embed=embed, files=files, player=player.id)
+                card = await transactions.build_transaction_card(guild=guild, response=result, player_in=player)
+                await transactions.announce_transaction(guild, card)
             except RscException as exc:
                 failed_players.append(f"{player.mention}: {exc}")
                 continue

@@ -63,7 +63,7 @@ from rsc.transactions.roles import (
     update_signed_player_discord,
     update_team_captain_discord,
 )
-from rsc.transactions.views import TradeAnnouncementModal
+from rsc.transactions.views import TradeAnnouncementModal, TransactionCard
 from rsc.types import Substitute, TransactionSettings
 from rsc.utils import utils
 from rsc.pagination import API_MAX_PAGE_SIZE, check_page_limit, iter_pages
@@ -804,11 +804,7 @@ class TransactionMixIn(RSCMixIn):
             await interaction.followup.send(embed=ErrorEmbed(description=str(exc)))
 
         try:
-            embed, files = await self.build_transaction_embed(
-                guild=guild,
-                response=result,
-                player_in=player,
-            )
+            card = await self.build_transaction_card(guild=guild, response=result, player_in=player)
         except MalformedTransactionResponse as exc:
             return await interaction.followup.send(
                 embed=ErrorEmbed(description=f"Unable to announce transaction: `{exc!s}`"),
@@ -817,13 +813,7 @@ class TransactionMixIn(RSCMixIn):
 
         # Announce to transaction channel
         if result.first_franchise and announce:
-            await self.announce_transaction(
-                guild,
-                embed=embed,
-                files=files,
-                player=player,
-                gm=gm_discord_id(result.first_franchise),
-            )
+            await self.announce_transaction(guild, card)
         elif not override:
             await interaction.followup.send(
                 embed=ErrorEmbed(
@@ -915,7 +905,7 @@ class TransactionMixIn(RSCMixIn):
             await interaction.followup.send(embed=ErrorEmbed(description=str(exc)))
 
         try:
-            embed, files = await self.build_transaction_embed(guild=guild, response=result, player_in=player)
+            card = await self.build_transaction_card(guild=guild, response=result, player_in=player)
         except MalformedTransactionResponse as exc:
             return await interaction.followup.send(
                 embed=ErrorEmbed(description=f"Unable to announce transaction: `{exc!s}`"),
@@ -923,13 +913,7 @@ class TransactionMixIn(RSCMixIn):
             )
 
         if result.second_franchise:
-            await self.announce_transaction(
-                guild=guild,
-                embed=embed,
-                files=files,
-                player=player,
-                gm=gm_discord_id(result.second_franchise),
-            )
+            await self.announce_transaction(guild, card)
         else:
             await interaction.followup.send(
                 embed=ErrorEmbed(
@@ -1019,7 +1003,7 @@ class TransactionMixIn(RSCMixIn):
             await interaction.followup.send(embed=ErrorEmbed(description=str(exc)))
 
         try:
-            embed, files = await self.build_transaction_embed(guild=guild, response=result, player_in=player)
+            card = await self.build_transaction_card(guild=guild, response=result, player_in=player)
         except MalformedTransactionResponse as exc:
             return await interaction.followup.send(
                 embed=ErrorEmbed(description=f"Unable to announce transaction: `{exc!s}`"),
@@ -1027,7 +1011,7 @@ class TransactionMixIn(RSCMixIn):
             )
 
         if announce:
-            await self.announce_transaction(guild=guild, embed=embed, files=files, player=player)
+            await self.announce_transaction(guild, card)
 
         # Send result
         if ptu.new_team:
@@ -1099,12 +1083,7 @@ class TransactionMixIn(RSCMixIn):
         await player_out.add_roles(subbed_out_role)
 
         try:
-            embed, files = await self.build_transaction_embed(
-                guild=guild,
-                response=result,
-                player_in=player_in,
-                player_out=player_out,
-            )
+            card = await self.build_transaction_card(guild=guild, response=result, player_in=player_in, player_out=player_out)
         except MalformedTransactionResponse as exc:
             return await interaction.followup.send(
                 embed=ErrorEmbed(description=f"Unable to announce transaction: `{exc!s}`"),
@@ -1137,13 +1116,7 @@ class TransactionMixIn(RSCMixIn):
                 embed=ErrorEmbed(description="Substitution was processed but no team tier was returned. **Announcement was not sent.**")
             )
 
-        await self.announce_transaction(
-            guild=guild,
-            embed=embed,
-            files=files,
-            player=player_in,
-            gm=sub_gm_id,
-        )
+        await self.announce_transaction(guild, card)
 
         # Save sub for expiration later
         tz = await self.timezone(guild)
@@ -1685,7 +1658,7 @@ class TransactionMixIn(RSCMixIn):
                 await player.add_roles(ir_role)
 
         try:
-            embed, files = await self.build_transaction_embed(guild=guild, response=result, player_in=player)
+            card = await self.build_transaction_card(guild=guild, response=result, player_in=player)
         except MalformedTransactionResponse as exc:
             return await interaction.followup.send(
                 embed=ErrorEmbed(description=f"Unable to announce transaction: `{exc!s}`"),
@@ -1695,13 +1668,7 @@ class TransactionMixIn(RSCMixIn):
         if announce:
             ir_gm_id = gm_discord_id(result.first_franchise)
             if ir_gm_id:
-                await self.announce_transaction(
-                    guild=guild,
-                    embed=embed,
-                    files=files,
-                    player=player,
-                    gm=ir_gm_id,
-                )
+                await self.announce_transaction(guild, card)
             else:
                 await interaction.followup.send(
                     content="IR transaction response did not return first_franchise and or GM discord ID. Announcement skipped...",
@@ -1775,14 +1742,14 @@ class TransactionMixIn(RSCMixIn):
         # Announce to Transaction channel
         if announce:
             try:
-                embed, files = await self.build_transaction_embed(guild=guild, response=result, player_in=player)
+                card = await self.build_transaction_card(guild=guild, response=result, player_in=player)
             except MalformedTransactionResponse as exc:
                 return await interaction.followup.send(
                     embed=ErrorEmbed(description=f"Unable to announce transaction: `{exc!s}`"),
                     ephemeral=True,
                 )
 
-            await self.announce_transaction(guild=guild, embed=embed, files=files, player=player)
+            await self.announce_transaction(guild, card)
 
         # Send result
         await interaction.followup.send(
@@ -2233,50 +2200,26 @@ class TransactionMixIn(RSCMixIn):
 
         return embed
 
-    async def announce_transaction(
-        self,
-        guild: discord.Guild,
-        embed: discord.Embed,
-        files: list[discord.File] | None = None,
-        player: discord.Member | int | None = None,
-        gm: discord.Member | int | None = None,
-    ) -> discord.Message | None:
-        if files is None:
-            files = []
+    async def announce_transaction(self, guild: discord.Guild, card: TransactionCard) -> discord.Message | None:
         tchan = await self._trans_channel(guild)
         if not tchan:
             return None
 
-        ping_fmt = None
-        member_fmt = []
-
-        if isinstance(player, discord.Member):
-            member_fmt.append(player.mention)
-        elif isinstance(player, int):
-            member_fmt.append(f"<@!{player}>")
-
-        if isinstance(gm, discord.Member):
-            member_fmt.append(gm.mention)
-        elif isinstance(gm, int):
-            member_fmt.append(f"<@!{gm}>")
-
-        ping_fmt = " ".join(member_fmt)
-        tmsg = await tchan.send(
-            content=ping_fmt,
-            embed=embed,
+        view, files = card.render()
+        # Every member the card names is pinged from its TextDisplay
+        return await tchan.send(
+            view=view,
             files=files,
-            allowed_mentions=discord.AllowedMentions(users=True),
+            allowed_mentions=discord.AllowedMentions(everyone=False, roles=False, users=True),
         )
-        await tmsg.edit(content=None, embed=embed)
-        return tmsg
 
-    async def build_transaction_embed(
+    async def build_transaction_card(
         self,
         guild: discord.Guild,
         response: TransactionResponse,
-        player_in: discord.Member,
+        player_in: discord.Member | discord.User,
         player_out: discord.Member | None = None,
-    ) -> tuple[discord.Embed, list[discord.File]]:
+    ) -> TransactionCard:
         if not response.type:
             raise MalformedTransactionResponse("Transaction response type not returned by API.")
 
@@ -2285,7 +2228,7 @@ class TransactionMixIn(RSCMixIn):
         except ValueError as exc:
             raise MalformedTransactionResponse(f"Unknown transaction response type from API: {response.type}") from exc
 
-        log.debug(f"Building transactions embed for type {action.name}", guild=guild)
+        log.debug(f"Building transaction card for type {action.name}", guild=guild)
 
         # LeaguePlayer Objects
         ptu_in = await self.league_player_from_transaction(response, player_in)
@@ -2295,149 +2238,59 @@ class TransactionMixIn(RSCMixIn):
                 "Announcement and discord updates have not been completed."
             )
 
-        # Locals
-        author_fmt = "Generic Transaction"
-        author_icon: discord.File | str | None = None
-        embed = discord.Embed()
-        files: list[discord.File] = []
         franchise = None
         gm_id = None
-        icon_url = None
-        img = None
         tier = None
-
-        # Image resource
-        img = await utils.transaction_image_from_type(action)
-        embed.set_image(url=f"attachment://{img.filename}")
-        files.append(img)
+        pname = discord.utils.escape_markdown(ptu_in.player.player.name)
 
         match action:
             case TransactionType.CUT | TransactionType.IR_CUT:
                 if not (ptu_in.old_team and ptu_in.old_team.tier and response.first_franchise):
                     raise MalformedTransactionResponse("Old team, tier, or first_franchise was not returned by API.")
-                author_icon = await utils.fa_img_from_tier(ptu_in.old_team.tier, tiny=True)
-                if author_icon:
-                    files.append(author_icon)
-
                 tier = ptu_in.old_team.tier
-
-                author_fmt = f"{ptu_in.player.player.name} has been released by {ptu_in.old_team.name} ({tier})"
-
+                team = discord.utils.escape_markdown(ptu_in.old_team.name or "Unknown team")
+                title = f"{pname} has been released by {team} ({tier})"
                 franchise = response.first_franchise.name
                 gm_id = gm_discord_id(response.first_franchise)
-
-                embed.set_footer(text=f"Discord ID: {player_in.id}")
-            case TransactionType.PICKUP:
+            case TransactionType.PICKUP | TransactionType.RESIGN | TransactionType.TEMP_FA | TransactionType.SUBSTITUTION:
                 if not (ptu_in.new_team and response.second_franchise and response.second_franchise.id):
                     raise MalformedTransactionResponse("New team, second franchise, or second franchise ID was not returned by API.")
-                author_icon = await self.franchise_logo(guild, response.second_franchise.id)
-
                 tier = ptu_in.new_team.tier
-
-                author_fmt = f"{ptu_in.player.player.name} has been signed by {ptu_in.new_team.name} ({tier})"
-
+                team = discord.utils.escape_markdown(ptu_in.new_team.name or "Unknown team")
+                verb = {
+                    TransactionType.PICKUP: "signed",
+                    TransactionType.RESIGN: "re-signed",
+                }.get(action, "signed to a temporary contract")
+                title = f"{pname} has been {verb} by {team} ({tier})"
                 franchise = response.second_franchise.name
                 gm_id = gm_discord_id(response.second_franchise)
-                embed.set_footer(text=f"Discord ID: {player_in.id}")
-            case TransactionType.RESIGN:
-                if not (ptu_in.new_team and response.second_franchise and response.second_franchise.id):
-                    raise MalformedTransactionResponse("New team, second franchise, or second franchise ID was not returned by API.")
-                author_icon = await self.franchise_logo(guild, response.second_franchise.id)
-
-                tier = ptu_in.new_team.tier
-
-                author_fmt = f"{ptu_in.player.player.name} has been re-signed by {ptu_in.new_team.name} ({tier})"
-
-                franchise = response.second_franchise.name
-                gm_id = gm_discord_id(response.second_franchise)
-                embed.set_footer(text=f"Discord ID: {player_in.id}")
-            case TransactionType.TEMP_FA | TransactionType.SUBSTITUTION:
-                if not (ptu_in.new_team and response.second_franchise and response.second_franchise.id):
-                    raise MalformedTransactionResponse("New team, second franchise, or second franchise ID was not returned by API.")
-                author_icon = await self.franchise_logo(guild, response.second_franchise.id)
-
-                tier = ptu_in.new_team.tier
-                pname = ptu_in.player.player.name
-                pteam = ptu_in.new_team.name
-
-                author_fmt = f"{pname} has been signed to a temporary contract by {pteam} ({tier})"
-
-                franchise = response.second_franchise.name
-
             case TransactionType.RETIRE:
-                if guild.icon:
-                    author_icon = guild.icon.url
-
-                author_fmt = f"{ptu_in.player.player.name} has retired from the league"
-
+                title = f"{pname} has retired from the league"
                 if response.first_franchise:
                     franchise = response.first_franchise.name
                     gm_id = gm_discord_id(response.first_franchise)
-
-            case TransactionType.INACTIVE_RESERVE:
+            case TransactionType.INACTIVE_RESERVE | TransactionType.IR_RETURN:
                 if not (ptu_in.old_team and response.first_franchise and response.first_franchise.id):
                     raise MalformedTransactionResponse("Old team, first franchise, or first franchise ID was not returned by API.")
-                author_icon = await self.franchise_logo(guild, response.first_franchise.id)
-
                 tier = ptu_in.old_team.tier
-                pname = ptu_in.player.player.name
-                pteam = ptu_in.old_team.name
-
-                author_fmt = f"{pname} has been moved to Inactive Reserve by {pteam} ({tier})"
-
+                team = discord.utils.escape_markdown(ptu_in.old_team.name or "Unknown team")
+                moved = "moved to" if action == TransactionType.INACTIVE_RESERVE else "removed from"
+                title = f"{pname} has been {moved} Inactive Reserve by {team} ({tier})"
                 franchise = response.first_franchise.name
                 gm_id = gm_discord_id(response.first_franchise)
-                embed.set_footer(text=f"Discord ID: {player_in.id}")
-            case TransactionType.IR_RETURN:
-                if not (ptu_in.old_team and response.first_franchise and response.first_franchise.id):
-                    raise MalformedTransactionResponse("Old team, first franchise, or first franchise ID was not returned by API.")
-                author_icon = await self.franchise_logo(guild, response.first_franchise.id)
-
-                tier = ptu_in.old_team.tier
-                pname = ptu_in.player.player.name
-                pteam = ptu_in.old_team.name
-
-                author_fmt = f"{pname} has been removed from Inactive Reserve by {pteam} ({tier})"
-
-                franchise = response.first_franchise.name
-                gm_id = gm_discord_id(response.first_franchise)
-                embed.set_footer(text=f"Discord ID: {player_in.id}")
             case _:
                 raise NotImplementedError
 
-        # Player Fields
-        if player_out:
-            embed.add_field(name="Player In", value=player_in.mention, inline=True)
-            embed.add_field(name="Player Out", value=player_out.mention, inline=True)
-        else:
-            embed.add_field(name="Player", value=player_in.mention, inline=True)
-
-        # Franchise Field
-        if franchise:
-            embed.add_field(name="Franchise", value=franchise, inline=True)
-
-        # GM Field
-        if gm_id:
-            embed.add_field(
-                name="GM",
-                value=f"<@!{gm_id}>",
-                inline=True,
-            )
-
-        if isinstance(author_icon, discord.File):
-            icon_url = f"attachment://{author_icon.filename}"
-        elif isinstance(author_icon, str):
-            icon_url = author_icon
-
-        embed.set_author(name=author_fmt, icon_url=icon_url or None)
-
-        if tier:
-            color = await utils.tier_color_by_name(guild, tier)
-        else:
-            color = discord.Color.blue()
-
-        embed.colour = color
-        return embed, files
+        return TransactionCard(
+            title=title,
+            player_id=player_in.id,
+            colour=await utils.tier_color_by_name(guild, tier) if tier else discord.Colour.blue(),
+            banner=utils.transaction_banner(action),
+            created_at=discord.utils.utcnow(),
+            player_out_id=player_out.id if player_out else None,
+            franchise=franchise,
+            gm_id=gm_id,
+        )
 
     async def send_cut_msg(self, guild: discord.Guild, player: discord.Member) -> discord.Message | None:
         dm_status = await self._trans_dms_enabled(guild)
