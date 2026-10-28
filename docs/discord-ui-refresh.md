@@ -392,6 +392,7 @@ Each spec uses only what discord.py 2.7.1 supports. Mockups are in the published
   - Preview it live with `/pingtest style:match_result`.
 - **Tied series (decided 2026-10-28):** the headline stays `Quantum 2 – 2 Voltage`, and the thumbnail falls back to the server icon, as today's embed already does when there's no winning franchise logo.
 - **Trimmed after the live test (2026-10-28):** the user dropped the winner line ("Quantum wins the series" / "Series tied"), since the score line already says it, and the `-# Reported <t:…:R>` countdown footer.
+- **Spacing fixes, approved (2026-10-28):** the `-# Elite · Match Day 7 · Final` label and the `## score` are now separate TextDisplays. In one TextDisplay, the heading got extra space above it that pushed the score away from its label. A thin `Separator` also sits between the GMs line and the link buttons (only when there are buttons). The user approved the card live.
 
 ---
 

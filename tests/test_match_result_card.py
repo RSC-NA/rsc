@@ -95,7 +95,9 @@ class TestRender:
         view, files = _card().render()
         section = _section(view)
         assert _texts(section) == [
-            "-# Elite · Match Day 7 · Final\n## Quantum 3\N{NO-BREAK SPACE}\N{EN DASH}\N{WORD JOINER}\N{NO-BREAK SPACE}1 Voltage",
+            # Separate TextDisplays, so the heading doesn't get extra space above it
+            "-# Elite · Match Day 7 · Final",
+            "## Quantum 3\N{NO-BREAK SPACE}\N{EN DASH}\N{WORD JOINER}\N{NO-BREAK SPACE}1 Voltage",
             # No winner line: the score already says it
             "GMs <@11> · <@22>",
         ]
@@ -108,7 +110,7 @@ class TestRender:
         match = _match()
         match.away_team.name = "Under_score"
         view, _ = _card(match=match, result=_result(0, 3)).render()
-        assert _texts(_section(view))[0].endswith(r"3 Under\_score")
+        assert _texts(_section(view))[1].endswith(r"3 Under\_score")
 
     def test_link_buttons(self):
         view, _ = _card().render()
@@ -117,17 +119,23 @@ class TestRender:
             ("Ballchasing", "https://ballchasing.com/group/abc", discord.ButtonStyle.link),
         ]
 
+    def test_line_between_the_header_and_buttons(self):
+        children = _container(_card().render()[0]).children
+        row = next(i for i, c in enumerate(children) if isinstance(c, ui.ActionRow))
+        assert isinstance(children[row - 1], ui.Separator)
+
     def test_no_links_no_row(self):
         view, _ = _card(match_url=None, ballchasing_url=None).render()
-        assert not any(isinstance(c, ui.ActionRow) for c in _container(view).children)
+        children = _container(view).children
+        assert not any(isinstance(c, (ui.ActionRow, ui.Separator)) for c in children)
 
     def test_no_gms_no_gm_line(self):
         view, _ = _card(gm_mentions=[]).render()
-        assert len(_texts(_section(view))) == 1
+        assert len(_texts(_section(view))) == 2
 
     def test_no_tier_drops_it_from_the_label(self):
         view, _ = _card(match=_match(home_tier=None)).render()
-        assert _texts(_section(view))[0].startswith("-# Match Day 7 · Final\n")
+        assert _texts(_section(view))[0] == "-# Match Day 7 · Final"
 
     def test_fallback_logo_is_attached(self):
         view, files = _card(logo_url=None).render()

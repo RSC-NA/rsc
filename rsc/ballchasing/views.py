@@ -64,7 +64,7 @@ class MatchResultCard:
         label = " · ".join(filter(None, [home.tier, match_label(self.match), "Final"]))
         # No-break spaces around the dash, and a word joiner after it, keep the score on one line on phones
         score = f"{home_wins}\N{NO-BREAK SPACE}\N{EN DASH}\N{WORD JOINER}\N{NO-BREAK SPACE}{away_wins}"
-        headline = f"-# {label}\n## {discord.utils.escape_markdown(home.name)} {score} {discord.utils.escape_markdown(away.name)}"
+        headline = f"## {discord.utils.escape_markdown(home.name)} {score} {discord.utils.escape_markdown(away.name)}"
 
         files: list[discord.File] = []
         if self.logo_url:
@@ -74,7 +74,9 @@ class MatchResultCard:
             files.append(logo)
             thumbnail = ui.Thumbnail(logo)
 
-        section = ui.Section(ui.TextDisplay(headline), accessory=thumbnail)
+        # The label and the score are separate TextDisplays: a heading after other text in the same
+        # TextDisplay gets extra space above it, which pushed the score away from its label
+        section = ui.Section(ui.TextDisplay(f"-# {label}"), ui.TextDisplay(headline), accessory=thumbnail)
         if self.gm_mentions:
             # Its own line, and a TextDisplay: mentions here ping, embed mentions never do
             section.add_item(ui.TextDisplay(f"GMs {' · '.join(self.gm_mentions)}"))
@@ -88,6 +90,8 @@ class MatchResultCard:
         if self.ballchasing_url:
             links.add_item(ui.Button(label="Ballchasing", url=self.ballchasing_url))
         if links.children:
+            # A thin line, so the buttons don't crowd the GMs line
+            container.add_item(ui.Separator())
             container.add_item(links)
 
         if replays:
