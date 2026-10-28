@@ -254,6 +254,7 @@ Each spec uses only what discord.py 2.7.1 supports. Mockups are in the published
     - a small gap, then the banner, then the unchanged `Discord ID:` footer.
     - Labels and lines per type: SIGNED "joins", RE-SIGNED "re-signs with", TEMPORARY CONTRACT "joins", RELEASED "leaves", INACTIVE RESERVE "moves to Inactive Reserve on" / "returns from Inactive Reserve to", RETIRED "retires from the league". The franchise is added after a `·` when known; the tier goes in the label when known.
     - `TransactionCard` now carries `move`, `name` and `summary` in place of `title` and `franchise`. `/pingtest style:transaction` previews every type.
+    - **Every type approved (2026-10-28):** re-sign, Inactive Reserve on and off, and retirement were checked live too.
 
 ### 02 — Combine / Dev League lobby ready (`rsc/combines/runner.py:302`, `rsc/devleague/runner.py:314`) — **LOCKED: option A, Join beside each team** (2026-10-28)
 
