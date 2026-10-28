@@ -1,6 +1,5 @@
 import asyncio
 import logging
-import math
 import random
 import string
 import time
@@ -20,7 +19,7 @@ from rscapi.models.match_results import MatchResults
 
 from rsc.abc import RSCMixIn
 from rsc.ballchasing import groups, process, validation
-from rsc.ballchasing.modals import ReportMatchModal
+from rsc.ballchasing.modals import ReportMatchModal, score_error
 from rsc.ballchasing.views import MatchResultCard
 from rsc.const import MODAL_TIMEOUT
 from rsc.embeds import (
@@ -30,7 +29,7 @@ from rsc.embeds import (
     SuccessEmbed,
     YellowEmbed,
 )
-from rsc.enums import MatchFormat, MatchType
+from rsc.enums import MatchType
 from rsc.exceptions import RscException
 from rsc.logs import GuildLogAdapter
 from rsc.teams import TeamMixIn
@@ -39,6 +38,9 @@ from rsc.utils.website import match_page_url, website_url
 
 logger = logging.getLogger("red.rsc.ballchasing")
 log = GuildLogAdapter(logger)
+
+# Seconds /reportmatch waits for the match before opening the modal. Leaves room in the 3 second ack window.
+EARLY_MATCH_LOOKUP = 2.0
 
 defaults_guild = {
     "AuthToken": None,
@@ -386,6 +388,27 @@ class BallchasingMixIn(RSCMixIn):
     ):
         await utils.not_implemented(interaction)
 
+    async def _find_report_match(self, guild: discord.Guild, *, home: str, away: str, day: int | None) -> Match | None:
+        """The match `/reportmatch` is reporting: home vs away within a week either side of today."""
+        tz = await self.timezone(guild)
+        today = datetime.now(tz=tz)
+        start_date = today - timedelta(days=7)
+        end_date = today + timedelta(days=7)
+
+        log.debug(f"Searching for match: {home} vs {away}. Start: {start_date}, End: {end_date}")
+        mlist: list[Match] = await self.find_match(
+            guild,
+            match_type=MatchType.ANY,
+            date_gt=start_date,
+            date_lt=end_date,
+            teams=[home, away],
+            day=day,
+        )
+        if not mlist:
+            return None
+        # Check if we got a match with matching home/away team names
+        return await self.get_match_from_list(home=home, away=away, matches=mlist)
+
     @app_commands.command(
         name="reportmatch",
         description="Report the results of your RSC match",
@@ -419,7 +442,28 @@ class BallchasingMixIn(RSCMixIn):
                 embed=ErrorEmbed(description="You do not have permission to override a match result.")
             )
 
-        report_modal = ReportMatchModal(home_team=home, away_team=away, timeout=MODAL_TIMEOUT)
+        # Look the match up before the modal opens, so it can show the tier and format
+        # and a wrong matchup is caught before anyone picks replay files. It must
+        # finish inside the 3 second ack window; when it's slow, the modal opens with
+        # the teams-only copy and the lookup runs again after submit.
+        early: Match | None = None
+        looked_up = False
+        try:
+            async with asyncio.timeout(EARLY_MATCH_LOOKUP):
+                early = await self._find_report_match(guild, home=home, away=away, day=day)
+                looked_up = True
+        except TimeoutError:
+            log.debug(f"Match lookup for {home} vs {away} was slow. Opening the modal without it.", guild=guild)
+        except RscException as exc:
+            log.warning(f"Early match lookup failed for {home} vs {away}: {exc}", guild=guild)
+
+        if looked_up and not early:
+            return await interaction.response.send_message(
+                embed=ErrorEmbed(description=f"No matches found for **{home}** vs **{away}**."),
+                ephemeral=True,
+            )
+
+        report_modal = ReportMatchModal(home_team=home, away_team=away, match=early, day=day, timeout=MODAL_TIMEOUT)
         await interaction.response.send_modal(report_modal)
 
         modal_timed_out = await report_modal.wait()
@@ -489,36 +533,7 @@ class BallchasingMixIn(RSCMixIn):
                 ephemeral=True,
             )
 
-        # Get match search window
-        tz = await self.timezone(guild)
-        today = datetime.now(tz=tz)
-        start_date = today - timedelta(days=7)
-        end_date = today + timedelta(days=7)
-
-        log.debug(f"Searching for match: {home} vs {away}. Start: {start_date}, End: {end_date}")
-        mlist: list[Match] = await self.find_match(
-            guild,
-            match_type=MatchType.ANY,
-            date_gt=start_date,
-            date_lt=end_date,
-            teams=[home, away],
-            day=day,
-        )
-
-        # No match found
-        if not mlist:
-            return await interaction.followup.send(
-                embed=ErrorEmbed(description=f"No matches found for **{home}** vs **{away}**."),
-                ephemeral=True,
-            )
-
-        log.debug("Searching for valid teams in match data")
-        log.debug(f"Home Team: {home}")
-        log.debug(f"Away Team: {away}")
-
-        # Check if we got a match with matching home/away team names
-        match = await self.get_match_from_list(home=home, away=away, matches=mlist)
-
+        match = early if looked_up else await self._find_report_match(guild, home=home, away=away, day=day)
         if not match:
             return await interaction.followup.send(
                 embed=ErrorEmbed(description=f"No matches found for **{home}** vs **{away}**."),
@@ -541,24 +556,8 @@ class BallchasingMixIn(RSCMixIn):
         log.debug(f"Found match: {match}", match=match)
 
         # Check score against match format for validation
-        total_wins = home_wins + away_wins
-        match match.match_format:
-            case MatchFormat.BEST_OF_THREE | MatchFormat.BEST_OF_FIVE | MatchFormat.BEST_OF_SEVEN:
-                if match.num_games and (total_wins < math.ceil(match.num_games / 2) or total_wins > match.num_games):
-                    return await interaction.followup.send(
-                        embed=ErrorEmbed(
-                            description=f"Invalid score for match format. Total wins must match number of games: {match.num_games}"
-                        ),
-                        ephemeral=True,
-                    )
-            case _:  # Default GMS and anything else to all games must be played
-                if match.num_games and (total_wins < match.num_games or total_wins > match.num_games):
-                    return await interaction.followup.send(
-                        embed=ErrorEmbed(
-                            description=f"Invalid score for match format. Total wins must match number of games: {match.num_games}"
-                        ),
-                        ephemeral=True,
-                    )
+        if problem := score_error(home_wins, away_wins, match):
+            return await interaction.followup.send(embed=ErrorEmbed(description=problem), ephemeral=True)
 
         # Reporter may have swapped home and away team names
         home_wins, away_wins = normalize_scores(home, home_wins, away_wins, match)

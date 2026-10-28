@@ -14,12 +14,12 @@ This file is the working record for the refresh. Update the status table as phas
 |---|---|---|
 | 1 | Fix the bugs listed under [Bugs](#bugs) | **Done** (2026-10-28, branch `discord-ui-phase-1`) |
 | 2 | Shared building blocks (see [Phase 2](#phase-2-shared-building-blocks)) | **Done** (2026-10-28, merged to master `31985f2`) |
-| 3 | Ship the six locked designs, in the order **06 → 01 → 02 → 03 → 05 → 04** (decided 2026-10-28): match result, transactions, lobbies + DMs, combines guide, player card + `/accounts`, Report Match copy | **In progress** (branch `discord-ui-phase-3`) |
+| 3 | Ship the six locked designs, in the order **06 → 01 → 02 → 03 → 05 → 04** (decided 2026-10-28): match result, transactions, lobbies + DMs, combines guide, player card + `/accounts`, Report Match copy | **Built, awaiting live review** (2026-10-28, branch `discord-ui-phase-3`; sign-up redesign merged in for testing) |
 | 4 | Upgrade the other modals: Label descriptions on admin modals, and the `.replay` upload filter once discord.py ships it. (The Report Match copy is in Phase 3.) | Open |
 | 5 | Optional: errors and logs stay as embeds unless `ResultView` gets a one-line constructor | Open |
 | 6 | Move the 12 legacy confirm/decline views to `ConfirmLayoutView`, as a separate change after Phase 3 (decided 2026-10-28) | Open |
 
-> **Remove before the final commit:** the temporary `/pingtest` command in `rsc/developer/developer.py` (added 2026-10-28, uncommitted). It sends a mention as a V2 TextDisplay, an embed, plain content, or a V2 DM, so pings can be checked live.
+> **Remove before the final commit:** the temporary `/pingtest` command in `rsc/developer/developer.py` (added 2026-10-28, never committed). It now takes a free-text `style` and previews each Phase 3 card (`match_result`, `transaction`, `lobby`, `devleague_lobby`, `lobby_final`, `guide`, `player`, `accounts`, `report`, `report_teams_only`) plus the sign-up previews; an unknown style lists them all.
 
 ## Phase 2: shared building blocks
 
@@ -298,6 +298,15 @@ Each spec uses only what discord.py 2.7.1 supports. Mockups are in the published
   - on timeout, use the "teams only" fallback copy.
 
   Bonus: the bot can say "no match found" before anyone picks replay files. Validation is unchanged.
+
+- **Implemented (2026-10-28, branch `discord-ui-phase-3`):** the copy is in `rsc/ballchasing/modals.py` (`ReportMatchModal(home, away, *, match=None, day=None)`, `report_title`, `score_error`). `/reportmatch` runs `_find_report_match` inside `asyncio.timeout(EARLY_MATCH_LOOKUP)` (2 s) before `send_modal`. Preview with `/pingtest style:report` and `report_teams_only`.
+  - **Calls made while building, for review:**
+    - An early lookup that finishes with no match answers "No matches found…" straight away, with no modal. One that is slow or raises opens the teams-only modal and looks again after submit; one that finds the match is reused, so there's no second lookup.
+    - Teams-only copy: `**Match Day 7**` (when given), then "Enter each team's wins and attach one replay per game.", then the ModMail line. The placeholder reads "Number of games won".
+    - Best-of copy: `Best of 5`, "First to 3 wins. Attach one replay per game.", and the upload hint "One .replay file per game played".
+    - When the reporter types the teams in swapped order, each box's "Home team"/"Away team" description follows the match's real sides. The scores are still normalized after submit, as before.
+    - Validation is unchanged. Only the messages changed: "You entered 3–3, which is 6 games. This series has 4, so the wins must add up to 4." and, for best-of, "…This is a best of 5, so the wins must add up to 3–5." In-modal errors now read "Wins must be whole numbers, like 2." and "Wins can't be negative."
+    - Team names are cut so "<team> games won" fits Discord's 45-character label limit.
 
 ### 05 — Player card (`/playerinfo`, `rsc/members/members.py:817`) — **LOCKED: refined A** (approved 2026-10-28)
 
