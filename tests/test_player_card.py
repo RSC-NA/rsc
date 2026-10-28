@@ -19,7 +19,8 @@ from .utils import command_callback
 
 PLAYER_ID = 138778232802508801
 GUILD_ID = 395806681994493964
-ROWS = "**Tier** Premier\n**Team** Singularity\n**Franchise** Hex Systems\n**Status** Rostered"
+TEAM_GROUP = "-# TEAM\n**Tier** Premier\n**Team** Singularity\n**Franchise** Hex Systems"
+RATING_GROUP = "-# RATING\n**Current MMR** 1655\n**Base MMR** 1640"
 
 
 def _card(**overrides) -> PlayerCard:
@@ -67,13 +68,13 @@ class TestPlayerCard:
         section = container.children[0]
         assert isinstance(section, ui.Section)
         assert isinstance(section.accessory, ui.Thumbnail) and section.accessory.media.url == "https://cdn.example/hex.png"
-        assert _texts(view) == [
-            f"## Monty\n-# <@{PLAYER_ID}>",
-            # Labelled, full width outside the Section, so the logo doesn't squeeze it on phones
-            ROWS,
-            "-# Current MMR 1655 · Base MMR 1640",
+        # Player and status sit beside the logo, so the Section isn't left with a blank band under the name
+        assert [t.content for t in section.children if isinstance(t, ui.TextDisplay)] == [
+            "## Monty",
+            f"**Player** <@{PLAYER_ID}>\n**Status** Rostered",
         ]
-        assert isinstance(container.children[1], ui.TextDisplay)
+        assert _texts(view)[2:] == [TEAM_GROUP, RATING_GROUP, f"-# Discord ID {PLAYER_ID}"]
+        assert sum(isinstance(c, ui.Separator) for c in container.children) == 2
 
     def test_buttons_are_coloured(self):
         team, franchise, trackers = _buttons(_card().render())
@@ -85,17 +86,17 @@ class TestPlayerCard:
 
     def test_free_agent_without_team_or_franchise(self):
         view = _card(team=None, franchise=None, status="Free Agent").render()
-        assert _texts(view)[1] == "**Tier** Premier\n**Status** Free Agent"
+        assert _texts(view)[1:3] == [f"**Player** <@{PLAYER_ID}>\n**Status** Free Agent", "-# TEAM\n**Tier** Premier"]
         (trackers,) = _buttons(view)
         assert isinstance(trackers, PlayerTrackersButton)
 
     def test_franchise_is_plain_escaped_text(self):
         view = _card(franchise="Under_score").render()
-        assert "**Franchise** Under\\_score" in _texts(view)[1].splitlines()
+        assert "**Franchise** Under\\_score" in _texts(view)[2].splitlines()
 
-    def test_no_mmr_no_separator(self):
+    def test_no_mmr_still_shows_the_discord_id(self):
         view = _card(current_mmr=None, base_mmr=None).render()
-        assert not any(isinstance(c, ui.Separator) for c in _container(view).children)
+        assert _texts(view)[-1] == f"-# Discord ID {PLAYER_ID}"
 
     def test_no_logo_no_section(self):
         view = _card(logo_url=None).render()
@@ -239,8 +240,7 @@ class TestPlayerInfoCommand:
         assert send is not None
         assert send.kwargs["allowed_mentions"].users is False
         texts = _texts(send.kwargs["view"])
-        assert texts[1] == ROWS
-        assert texts[2] == "-# Current MMR 1655 · Base MMR 1640"
+        assert texts[2:] == [TEAM_GROUP, RATING_GROUP, f"-# Discord ID {mock_member.id}"]
 
 
 class TestAccountsCommand:

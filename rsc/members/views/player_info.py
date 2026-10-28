@@ -175,31 +175,27 @@ class PlayerCard:
     base_mmr: int | None = None
 
     def render(self) -> discord.ui.LayoutView:
-        title = discord.ui.TextDisplay(f"## {discord.utils.escape_markdown(self.name)}\n-# <@{self.discord_id}>")
+        esc = discord.utils.escape_markdown
+        title = discord.ui.TextDisplay(f"## {esc(self.name)}")
+        # The mention leads, so the card doubles as a quick way to grab it
+        who = discord.ui.TextDisplay(f"**Player** <@{self.discord_id}>\n**Status** {esc(self.status)}")
         container = discord.ui.Container(accent_colour=self.colour)
         if self.logo_url:
-            container.add_item(discord.ui.Section(title, accessory=discord.ui.Thumbnail(self.logo_url)))
+            # Player and status sit beside the logo too: a Section is as tall as its thumbnail, so the
+            # name alone would leave a blank band under it
+            container.add_item(discord.ui.Section(title, who, accessory=discord.ui.Thumbnail(self.logo_url)))
         else:
             container.add_item(title)
+            container.add_item(who)
 
-        # One labelled fact per line, full width outside the Section so the logo doesn't squeeze it on phones
-        facts = (("Tier", self.tier), ("Team", self.team), ("Franchise", self.franchise), ("Status", self.status))
-        container.add_item(
-            discord.ui.TextDisplay("\n".join(f"**{label}** {discord.utils.escape_markdown(value)}" for label, value in facts if value))
-        )
-
-        mmr = " · ".join(
-            filter(
-                None,
-                [
-                    f"Current MMR {self.current_mmr}" if self.current_mmr else None,
-                    f"Base MMR {self.base_mmr}" if self.base_mmr else None,
-                ],
-            )
-        )
-        if mmr:
-            container.add_item(discord.ui.Separator())
-            container.add_item(discord.ui.TextDisplay(f"-# {mmr}"))
+        placement = (("Tier", self.tier), ("Team", self.team), ("Franchise", self.franchise))
+        team = [(label, esc(value)) for label, value in placement if value]
+        mmr = (("Current MMR", self.current_mmr), ("Base MMR", self.base_mmr))
+        rating = [(label, str(value)) for label, value in mmr if value]
+        for heading, rows in (("TEAM", team), ("RATING", rating)):
+            if rows:
+                container.add_item(discord.ui.Separator())
+                container.add_item(discord.ui.TextDisplay("\n".join([f"-# {heading}", *(f"**{label}** {value}" for label, value in rows)])))
 
         buttons = discord.ui.ActionRow()
         targets = ((PlayerInfoKind.ROSTER, self.team), (PlayerInfoKind.FRANCHISE, self.franchise))
@@ -208,6 +204,8 @@ class PlayerCard:
                 buttons.add_item(PlayerInfoButton(kind, name))
         buttons.add_item(PlayerTrackersButton(self.discord_id))
         container.add_item(buttons)
+        # The plain Discord ID is there to copy
+        container.add_item(discord.ui.TextDisplay(f"-# Discord ID {self.discord_id}"))
 
         view = discord.ui.LayoutView(timeout=None)
         view.add_item(container)
