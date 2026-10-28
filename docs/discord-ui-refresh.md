@@ -288,6 +288,7 @@ Each spec uses only what discord.py 2.7.1 supports. Mockups are in the published
   - **Join buttons named (after the live review, 2026-10-28):** two identical grey "Join VC" buttons were hard to tell apart, so they now read "Join Home VC" and "Join Away VC". Link buttons can't be coloured, so the label is the only way to tell them apart.
   - **Rosters full width (2026-10-28):** inside the team Section, the player list shared its width with the Join button, so long names wrapped mid-list on phones. Each team is now a Section with just its name and role beside the Join button, then a full-width TextDisplay with one player per line. When Final, it's the team name, then the roster.
   - **Approved layout (2026-10-28):** each button sits beside its title or team name. The Match button is beside the `## LIVE · …` title (plus the DM's "You're on …" line), and each Join button beside the team name and role. Lobby details and rosters run full width below, since Discord pins a Section's button to the top and can't centre it; putting more text in the Section only narrowed the column. There's a thin line above each team, and the footer reads `-# Started <t:R>` and, for combines, the lobbyinfo hint. The user approved the combine and Dev League cards live.
+  - **Final state approved (2026-10-28).**
 
 ### 03 — Combines guide (`send_combines_how_to_play`, `rsc/combines/manager.py:363`) — **LOCKED: option A, step sections** (2026-10-28)
 
@@ -307,6 +308,7 @@ Each spec uses only what discord.py 2.7.1 supports. Mockups are in the published
     - Blue accent. Step 1 links devleague.rscna.com. Step 5 is a `### 5 · Queue again` TextDisplay.
     - The replays reply gives the PC path, plus a `-#` line for console players to ask a teammate or the home team, carried over from the old step 4.
     - The old `COMBINES_HOW_TO_PLAY_1`–`5` strings are removed from `rsc/const.py`.
+  - **Approved (2026-10-28).** The step 3 screenshot (`rsc/resources/combines/combines_announcement.png`) now shows the new lobby card, cropped from a live `/pingtest` post, with red boxes on the lobby and password lines and the two Join buttons, like the old image's highlights.
 
 ### 04 — Report Match modal (`rsc/ballchasing/modals.py`) — **LOCKED: improved copy, same layout** (approved 2026-10-28)
 
