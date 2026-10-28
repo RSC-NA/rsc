@@ -21,6 +21,7 @@ from rscapi.models.match_results import MatchResults
 from rsc.abc import RSCMixIn
 from rsc.ballchasing import groups, process, validation
 from rsc.ballchasing.modals import ReportMatchModal
+from rsc.ballchasing.views import MatchResultCard
 from rsc.const import MODAL_TIMEOUT
 from rsc.embeds import (
     ApiExceptionErrorEmbed,
@@ -29,12 +30,12 @@ from rsc.embeds import (
     SuccessEmbed,
     YellowEmbed,
 )
-from rsc.enums import MatchFormat, MatchType, PostSeasonType
+from rsc.enums import MatchFormat, MatchType
 from rsc.exceptions import RscException
 from rsc.logs import GuildLogAdapter
 from rsc.teams import TeamMixIn
 from rsc.utils import utils
-from rsc.views import LinkButton
+from rsc.utils.website import match_page_url, website_url
 
 logger = logging.getLogger("red.rsc.ballchasing")
 log = GuildLogAdapter(logger)
@@ -645,52 +646,29 @@ class BallchasingMixIn(RSCMixIn):
 
         await self.report_upload_failures(guild, match=match, upload=upload)
 
-        # Final embed
-        result_embed, result_view = await self.build_match_result_embed(
+        # Result card. Gathered once so the channel post and the reporter's copy match.
+        card = await self.match_result_card(
             guild,
             match=match,
             result=match_result,
             link=await self.bc_group_full_url(upload.group),
         )
 
-        # Try to get GMs
-        gms: list[str] = []
-        if match.home_team.gm and match.home_team.gm.discord_id:
-            home_gm = guild.get_member(match.home_team.gm.discord_id)
-            if home_gm:
-                gms.append(home_gm.mention)
+        # Announce to score reporting. The GM line in the card carries the pings,
+        # and upload accounting is only useful to the person who submitted the files.
+        view, files = card.render()
+        await self.announce_to_score_reporting(guild, tier=match.home_team.tier, view=view, files=files)
 
-        if match.away_team.gm and match.away_team.gm.discord_id:
-            away_gm = guild.get_member(match.away_team.gm.discord_id)
-            if away_gm:
-                gms.append(away_gm.mention)
-
-        gm_fmt = None
-        if gms:
-            gm_fmt = " ".join(gms)
-
-        # Announce to score reporting. The public embed stays clean, upload
-        # accounting is only useful to the person who submitted the files.
-        await self.announce_to_score_reporting(
-            guild,
-            tier=match.home_team.tier,
-            embed=result_embed,
-            view=result_view,
-            content=gm_fmt,
-        )
-
-        reporter_embed = result_embed.copy()
-        reporter_embed.add_field(name="Replays", value=upload_summary(upload), inline=False)
-
-        # Send to user
+        # Replace the reporter's "Processing Match" embed with their copy of the card.
+        # It was an embed, so the edit must clear it: a V2 message can't carry one.
+        view, files = card.render(replays=upload_summary(upload))
         try:
-            await interaction.edit_original_response(embed=reporter_embed, view=result_view)
+            await interaction.edit_original_response(content=None, embed=None, attachments=files, view=view)
         except discord.errors.NotFound:
-            # Original message not found, send a new one
-            if result_view:
-                await interaction.followup.send(embed=reporter_embed, view=result_view, ephemeral=True)
-            else:
-                await interaction.followup.send(embed=reporter_embed, ephemeral=True)
+            # Original message not found, send a new one. Render again, since the
+            # failed edit may have consumed the files.
+            view, files = card.render(replays=upload_summary(upload))
+            await interaction.followup.send(view=view, files=files, ephemeral=True)
 
     # Functions
 
@@ -859,65 +837,55 @@ class BallchasingMixIn(RSCMixIn):
         embed.add_field(name="Group", value=await self.bc_group_full_url(upload.group), inline=False)
         await self.announce_to_stats_committee(guild, embed=embed)
 
-    async def build_match_result_embed(
+    async def match_result_card(
         self,
         guild: discord.Guild,
         match: Match,
         result: MatchResults,
         link: str | None = None,
-    ) -> tuple[discord.Embed, discord.ui.View | None]:
-        tier_color = discord.Color.default()
-        if match.home_team.tier:
-            tier_color = await utils.tier_color_by_name(guild, match.home_team.tier)
+    ) -> MatchResultCard:
+        """Gather what the match result card shows. See `MatchResultCard.render`."""
+        home, away = match.home_team, match.away_team
 
-        embed = discord.Embed(
-            description=(f"Match Summary:\n**{match.home_team.name}** {result.home_wins} - {result.away_wins} **{match.away_team.name}**"),
-            color=tier_color,
+        colour = discord.Colour.default()
+        if home.tier:
+            colour = await utils.tier_color_by_name(guild, home.tier)
+
+        # The winning franchise's logo, else the server icon. A tie has no winner.
+        home_wins, away_wins = result.home_wins or 0, result.away_wins or 0
+        logo_url = None
+        winning_franchise = None if home_wins == away_wins else (home.franchise if home_wins > away_wins else away.franchise)
+        if winning_franchise:
+            fsearch = await self.franchises(guild, name=winning_franchise)
+            if fsearch and fsearch[0].id:
+                logo_url = await self.franchise_logo(guild=guild, id=fsearch[0].id)
+        if not logo_url and guild.icon:
+            logo_url = guild.icon.url
+
+        gm_mentions = [
+            member.mention for team in (home, away) if team.gm and team.gm.discord_id and (member := guild.get_member(team.gm.discord_id))
+        ]
+
+        return MatchResultCard(
+            match=match,
+            result=result,
+            colour=colour,
+            logo_url=logo_url,
+            gm_mentions=gm_mentions,
+            match_url=await self.match_page_link(guild, match),
+            ballchasing_url=link,
+            reported_at=discord.utils.utcnow(),
         )
 
-        # This is an `ValueError` but we still want to display the report
-        if not match.day:
-            match.day = 0
-
-        # Format embed title by match type
-        if match.match_type == MatchType.PRESEASON:
-            embed.title = f"Pre {match.day}: {match.home_team.name} vs {match.away_team.name}"
-        elif match.match_type == MatchType.POSTSEASON:
-            playoff_round = PostSeasonType(match.day).name.capitalize()
-            embed.title = f"{playoff_round}: {match.home_team.name} vs {match.away_team.name}"
-        else:
-            embed.title = f"MD {match.day}: {match.home_team.name} vs {match.away_team.name}"
-
-        # Ballchasing group link button
-        bc_view = None
-        if link:
-            bc_view = discord.ui.View()
-            bcbutton = LinkButton(label="Ballchasing Group", url=link)
-            bc_view.add_item(bcbutton)
-
-        # Get franchise logo
-        tie = False
-        if result.home_wins is not None and result.away_wins is not None and result.home_wins > result.away_wins:
-            winning_franchise = match.home_team.franchise
-        elif result.home_wins is not None and result.away_wins is not None and result.home_wins == result.away_wins:
-            tie = True
-        else:
-            winning_franchise = match.away_team.franchise
-
-        flogo = None
-        if not tie:
-            fsearch = await self.franchises(guild, name=winning_franchise)
-            if fsearch:
-                f = fsearch.pop()
-                if f.id:
-                    flogo = await self.franchise_logo(guild=guild, id=f.id)
-
-        if flogo:
-            embed.set_thumbnail(url=flogo)
-        elif guild.icon:
-            embed.set_thumbnail(url=guild.icon.url)
-
-        return embed, bc_view
+    async def match_page_link(self, guild: discord.Guild, match: Match) -> str | None:
+        """The match's page on the league website, or None if it can't be built."""
+        conf = self._api_conf.get(guild.id)
+        league_id = self._league.get(guild.id)
+        site = website_url(conf.host) if conf else None
+        if not (site and league_id and match.id):
+            return None
+        season_id = await self.season_id_for_number(guild, match.season_number) if match.season_number else None
+        return match_page_url(site, match.id, league_id=league_id, season_id=season_id)
 
     async def announce_to_stats_committee(
         self,
@@ -938,18 +906,21 @@ class BallchasingMixIn(RSCMixIn):
     async def announce_to_score_reporting(
         self,
         guild: discord.Guild,
-        tier: str,
-        embed: discord.Embed,
-        view: discord.ui.View | None = None,
-        content: str | None = None,
+        tier: str | None,
+        view: discord.ui.LayoutView,
         files: list[discord.File] | None = None,
     ) -> discord.Message | None:
-        if files is None:
-            files = []
+        """Post a result card to the tier's score reporting channel.
 
+        Mentions in the card's TextDisplays ping, so users are allowed through.
+        """
         category = await self._get_score_reporting_category(guild)
         if not category:
             log.warning(f"[{guild.name}] Ballchasing score report category is not configured")
+            return None
+
+        if not tier:
+            log.warning(f"[{guild.name}] Match has no tier, so there is no score reporting channel to post to")
             return None
 
         cname = f"{tier.lower()}-score-reporting"
@@ -962,21 +933,11 @@ class BallchasingMixIn(RSCMixIn):
         if not isinstance(score_channel, discord.TextChannel):
             return None
 
-        if view:
-            return await score_channel.send(
-                content=content,
-                embed=embed,
-                view=view,
-                files=files,
-                allowed_mentions=discord.AllowedMentions(users=True),
-            )
-        else:
-            return await score_channel.send(
-                content=content,
-                embed=embed,
-                files=files,
-                allowed_mentions=discord.AllowedMentions(users=True),
-            )
+        return await score_channel.send(
+            view=view,
+            files=files or [],
+            allowed_mentions=discord.AllowedMentions(everyone=False, roles=False, users=True),
+        )
 
     async def has_bc_permissions(self, member: discord.Member) -> bool:
         """Determine if member is able to manage guild or part of manager role"""

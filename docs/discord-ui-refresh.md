@@ -303,6 +303,11 @@ Each spec uses only what discord.py 2.7.1 supports. Mockups are in the published
 - No login note. The user removed the "needs an rscna.com login" subtext.
 - The score uses no-break spaces and a word joiner around the en dash, so on a phone it never wraps mid-score.
 - Match page URL and season id as decided in §4 (API URL base, startup season cache).
+- **Implemented (2026-10-28, branch `discord-ui-phase-3`):** `rsc/ballchasing/views.py` (`MatchResultCard`, `match_label`) and `BallchasingMixIn.match_result_card` / `match_page_link`.
+  - Labels are spelled out: "Preseason 2", "Wildcard", "Quarterfinals", "Semifinals", "Finals", or "Playoffs" for the generic round; `MatchType.FINALS` reads "Finals".
+  - The reporter's private copy adds `-# Replays: …` above the footer.
+  - Thumbnail fallback order: winning franchise logo, then server icon, then the bundled `rsc/resources/rsc_logo.png`, a 256px trim of `2021_rsc_logo_v3_600dpi-01.png`.
+  - Preview it live with `/pingtest style:match_result`.
 - **Tied series (decided 2026-10-28):** the headline stays `Quantum 2 – 2 Voltage`, the winner line reads **"Series tied"**, and the thumbnail falls back to the server icon, as today's embed already does when there's no winning franchise logo.
 
 ---
