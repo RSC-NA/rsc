@@ -74,11 +74,12 @@ class LobbyCard(BaseModel):
         """
         container = ui.Container(accent_colour=FINAL_COLOUR if final else LIVE_COLOUR)
         state = "Final" if final else " ".join(filter(None, [live_emoji, "LIVE"]))
-        container.add_item(ui.Section(ui.TextDisplay(f"## {state} · {self.name}"), accessory=ui.Button(label="Match", url=self.match_url)))
-
+        title = f"## {state} · {self.name}"
         if viewer:
-            container.add_item(ui.TextDisplay(self._viewer_line(viewer, viewer_makes_lobby, final=final)))
-
+            title += f"\n{self._viewer_line(viewer, viewer_makes_lobby, final=final)}"
+        # Discord pins a Section's button to its first line, so the Section holds only the title and the
+        # details below get the full width
+        container.add_item(ui.Section(ui.TextDisplay(title), accessory=ui.Button(label="Match", url=self.match_url)))
         if final:
             if score:
                 # No-break spaces keep the score on one line on phones
@@ -86,15 +87,18 @@ class LobbyCard(BaseModel):
                 container.add_item(ui.TextDisplay(f"### Home {result} Away"))
         else:
             container.add_item(ui.TextDisplay(f"**Lobby** `{_code(self.lobby_name)}`\n**Password** `{_code(self.lobby_pass)}`"))
-            container.add_item(ui.TextDisplay(f"-# Started {discord.utils.format_dt(self.started_at, 'R')}"))
 
-        container.add_item(ui.Separator())
+        # A line above each team, so the two rosters read as separate blocks
         for team in (LobbyTeam.HOME, LobbyTeam.AWAY):
+            container.add_item(ui.Separator())
             for item in self._team(team, final=final):
                 container.add_item(item)
 
-        if self.kind is LobbyKind.COMBINE and not final:
-            container.add_item(ui.TextDisplay("-# Lost these details? Run `/combines lobbyinfo`."))
+        if not final:
+            footer = [f"-# Started {discord.utils.format_dt(self.started_at, 'R')}"]
+            if self.kind is LobbyKind.COMBINE:
+                footer.append("-# Lost these details? Run `/combines lobbyinfo`.")
+            container.add_item(ui.TextDisplay("\n".join(footer)))
 
         view = ui.LayoutView(timeout=None)
         view.add_item(container)
@@ -117,15 +121,17 @@ class LobbyCard(BaseModel):
                 header.append(f"-# {self.lobby_maker} makes the lobby")
             elif team is LobbyTeam.AWAY and self.kind is LobbyKind.COMBINE:
                 header.append("-# Uploads the replays")
-        # One player per line, full width under the header rather than beside the Join button,
-        # so long names don't wrap mid-list on phones. A TextDisplay, so these mentions ping.
+        # One player per line. A TextDisplay, so these mentions ping.
         roster = ui.TextDisplay("\n".join(players) or "No players")
 
         if final or not vc_url:
             # The voice channels are gone once the match is over, so no Join button
             return [ui.TextDisplay("\n".join(header)), roster]
-        # Link buttons can only be grey, so the label alone tells Home from Away
-        return [ui.Section(*(ui.TextDisplay(t) for t in header), accessory=ui.Button(label=f"Join {team} VC", url=vc_url)), roster]
+        # The Join button sits beside the team name (Discord pins it to the Section's first line), and the
+        # roster runs full width below so long names don't wrap on phones.
+        # Link buttons can only be grey, so the label alone tells Home from Away.
+        button = ui.Button(label=f"Join {team} VC", url=vc_url)
+        return [ui.Section(*(ui.TextDisplay(t) for t in header), accessory=button), roster]
 
 
 def _code(text: str) -> str:

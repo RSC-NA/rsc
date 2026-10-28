@@ -53,6 +53,10 @@ def _texts(item: ui.Container | ui.Section) -> list[str]:
     return out
 
 
+def _lines(item: ui.Container | ui.Section) -> list[str]:
+    return [line for text in _texts(item) for line in text.split("\n")]
+
+
 def _sections(view: ui.LayoutView) -> list[ui.Section]:
     return [c for c in _container(view).children if isinstance(c, ui.Section)]
 
@@ -63,20 +67,21 @@ class TestRenderLive:
         container = _container(view)
         assert container.accent_colour == LIVE_COLOUR
         header, _, _ = _sections(view)
+        # Only the title sits beside the Match button; the lobby details run full width below
         assert _texts(header) == [f"## {LIVE} LIVE · Combine 4812"]
         assert isinstance(header.accessory, ui.Button)
         assert (header.accessory.label, header.accessory.url) == ("Match", "https://devleague.rscna.com/combine/4812")
         texts = _texts(container)
         assert "**Lobby** `rsc4812`\n**Password** `nova`" in texts
-        assert f"-# Started {discord.utils.format_dt(STARTED, 'R')}" in texts
-        assert texts[-1] == "-# Lost these details? Run `/combines lobbyinfo`."
+        # The start time sits in the footer, above the lobbyinfo hint
+        assert texts[-1] == f"-# Started {discord.utils.format_dt(STARTED, 'R')}\n-# Lost these details? Run `/combines lobbyinfo`."
 
     def test_teams_ping_from_text_and_join_their_voice_channel(self):
         view = _card().render()
         _, home, away = _sections(view)
         assert _texts(home) == ["**Home**", "-# Nova makes the lobby"]
         assert _texts(away) == ["**Away**", "-# Uploads the replays"]
-        # Each roster sits full width under its team's header, one player per line
+        # Each roster runs full width under its team's header, one player per line
         children = _container(view).children
         for section, roster in ((home, "<@1>\n<@2>\n<@3>"), (away, "<@4>\n<@5>\nOff\\_server")):
             after = children[children.index(section) + 1]
@@ -90,7 +95,7 @@ class TestRenderLive:
 
     def test_missing_emoji_reads_plain_live(self):
         header = _sections(_card().render())[0]
-        assert _texts(header) == ["## LIVE · Combine 4812"]
+        assert _texts(header)[0] == "## LIVE · Combine 4812"
 
     def test_backticks_cannot_break_the_code_span(self):
         texts = _texts(_container(_card(lobby_name="a`b").render()))
@@ -106,7 +111,8 @@ class TestRenderLive:
     )
     def test_dm_personal_line(self, viewer, makes_lobby, line):
         view = _card().render(viewer=viewer, viewer_makes_lobby=makes_lobby)
-        assert _texts(_container(view))[1] == line
+        # The DM line sits under the title, in the same TextDisplay
+        assert _lines(_container(view))[1] == line
 
     def test_within_component_limits(self):
         view = _card().render(live_emoji=LIVE, viewer=LobbyTeam.HOME, viewer_makes_lobby=True)
@@ -118,10 +124,10 @@ class TestRenderDevLeague:
         card = _card(kind=LobbyKind.DEV_LEAGUE, tier="A", lobby_id=2207, match_url="https://devleague.rscna.com/match/2207")
         view = card.render(live_emoji=LIVE, viewer=LobbyTeam.AWAY)
         texts = _texts(_container(view))
-        assert texts[0] == f"## {LIVE} LIVE · Dev League A Match 2207"
-        assert texts[1] == "You're on **Away**"
+        assert _lines(_container(view))[:2] == [f"## {LIVE} LIVE · Dev League A Match 2207", "You're on **Away**"]
         assert "-# Uploads the replays" not in texts
         assert not any("lobbyinfo" in t for t in texts)
+        assert texts[-1] == f"-# Started {discord.utils.format_dt(STARTED, 'R')}"
 
 
 class TestRenderFinal:
@@ -144,8 +150,7 @@ class TestRenderFinal:
         assert not any(t.startswith("### Home") for t in texts)
 
     def test_final_dm_line(self):
-        texts = _texts(_container(_card().render(viewer=LobbyTeam.AWAY, final=True)))
-        assert texts[1] == "You were on **Away**"
+        assert _lines(_container(_card().render(viewer=LobbyTeam.AWAY, final=True)))[1] == "You were on **Away**"
 
 
 class TestStorage:
@@ -276,7 +281,7 @@ class TestPostLobby:
 
         dms = cog._lobby_dm_helper.enqueue.await_args_list
         assert [c.args[0].id for c in dms] == [1, 2, 4]
-        lines = [_texts(_container(c.kwargs["view"]))[1] for c in dms]
+        lines = [_lines(_container(c.kwargs["view"]))[1] for c in dms]
         assert lines == [
             "You're on **Home** · you make the lobby",
             "You're on **Home**",
@@ -310,7 +315,7 @@ class TestPostLobby:
 
         edit = msg.edit.await_args
         assert edit is not None
-        assert _texts(_container(edit.kwargs["view"]))[:2] == ["## Final · Combine 4812", "You were on **Home**"]
+        assert _lines(_container(edit.kwargs["view"]))[:2] == ["## Final · Combine 4812", "You were on **Home**"]
 
     async def test_failed_dm_is_ignored(self):
         store = _store({"4812": {}})
@@ -343,8 +348,25 @@ class TestFinishLobby:
         dm = partials[5].edit.await_args
         assert post is not None and dm is not None
         assert _texts(_container(post.kwargs["view"]))[:2] == ["## Final · Combine 4812", SCORE_LINE]
-        assert _texts(_container(dm.kwargs["view"]))[1] == "You were on **Away**"
+        assert _lines(_container(dm.kwargs["view"]))[1] == "You were on **Away**"
         assert store.LobbyMessages.data == {}
 
     async def test_unreadable_record_is_skipped(self):
         assert await lobby_messages(_store({"4812": {"card": "nope"}}), 4812) is None
+
+
+class TestTeamSeparators:
+    @pytest.mark.parametrize("final", [False, True])
+    def test_a_line_above_each_team(self, final):
+        children = _container(_card().render(final=final)).children
+        for label in ("**Home**", "**Away**"):
+            index = next(i for i, c in enumerate(children) if label in _texts_of(c))
+            assert isinstance(children[index - 1], ui.Separator)
+
+
+def _texts_of(item: ui.Item) -> str:
+    if isinstance(item, ui.TextDisplay):
+        return item.content
+    if isinstance(item, ui.Section):
+        return "\n".join(t.content for t in item.children if isinstance(t, ui.TextDisplay))
+    return ""
