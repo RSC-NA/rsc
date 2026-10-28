@@ -2,12 +2,12 @@
 
 import asyncio
 import os
-from typing import AsyncIterator
+from collections.abc import AsyncIterator
 
 from rscapi import ApiClient, Configuration, LeaguePlayersApi
 from rscapi.models.league_player import LeaguePlayer
 
-API_KEY = os.environ.get("RSC_API_KEY")
+API_KEY = os.environ.get("RSC_API_KEY", "")
 API_HOST = "https://api.rscna.com/api/v1"
 
 CONF = Configuration(
@@ -98,9 +98,7 @@ async def get_paged_rostered_players():
             print(f"No discord ID: {api_player.player.name}")
             continue
 
-        print(
-            f"[{api_player.id}] Syncing Player: {api_player.player.name} ({api_player.player.discord_id})"
-        )
+        print(f"[{api_player.id}] Syncing Player: {api_player.player.name} ({api_player.player.discord_id})")
         synced += 1
 
 
@@ -113,9 +111,7 @@ async def get_rostered_players():
             print(f"No discord ID: {api_player.player.name}")
             continue
 
-        print(
-            f"[{api_player.id}] Syncing Player: {api_player.player.name} ({api_player.player.discord_id})"
-        )
+        print(f"[{api_player.id}] Syncing Player: {api_player.player.name} ({api_player.player.discord_id})")
         synced += 1
 
 

@@ -1,11 +1,4 @@
-import sys
-from pathlib import Path
-
 import pytest
-
-# Add the project root to the path so we can import the modules
-project_root = Path(__file__).parent.parent
-sys.path.insert(0, str(project_root))
 
 from rsc.core import RSC
 from rscapi import TeamsApi
@@ -16,7 +9,7 @@ pytestmark = pytest.mark.integration
 class TestTeamsApiContract:
     """Verify all expected rscapi TeamsApi methods exist without calling them."""
 
-    EXPECTED_METHODS = [
+    EXPECTED_METHODS = (
         "teams_list",
         "teams_retrieve",
         "teams_players_list",
@@ -25,7 +18,7 @@ class TestTeamsApiContract:
         "teams_stats_retrieve",
         "teams_create",
         "teams_destroy",
-    ]
+    )
 
     @pytest.mark.parametrize("method_name", EXPECTED_METHODS)
     def test_method_exists(self, method_name: str):
@@ -91,7 +84,7 @@ class TestTeamsApiCalls:
         new_team_data = {
             "name": "Test Team",
             "franchise": "Test Franchise",
-            "players": [],  # Assuming we can create a team without players for this test
+            "tier": "Premier",
         }
 
         # Create the team

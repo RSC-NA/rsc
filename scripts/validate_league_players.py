@@ -3,12 +3,12 @@
 import asyncio
 import os
 from enum import StrEnum
-from typing import AsyncIterator
+from collections.abc import AsyncIterator
 
 from rscapi import ApiClient, Configuration, LeaguePlayersApi
 from rscapi.models.league_player import LeaguePlayer
 
-API_KEY = os.environ.get("RSC_API_KEY")
+API_KEY = os.environ.get("RSC_API_KEY", "")
 API_HOST = "https://api.rscna.com/api/v1"
 
 CONF = Configuration(
@@ -80,7 +80,6 @@ async def paged_players(
         offset += per_page
 
 
-
 async def validate_league_players():
     print("Validating RSC IDs")
     c = 0
@@ -94,7 +93,7 @@ async def validate_league_players():
             print(f"RSC{p.id} ({p.player.discord_id}) missing MMR value")
 
         if not (p.tier and p.tier.name) and p.status not in (Status.PERMFA_W, Status.DROPPED):
-                print(f"RSC{p.id} ({p.player.discord_id}) has no tier data")
+            print(f"RSC{p.id} ({p.player.discord_id}) has no tier data")
 
         # Check Rostered but no team
         if p.status == Status.ROSTERED:
@@ -105,14 +104,13 @@ async def validate_league_players():
 
         # Check if FA and on team
         if p.status == Status.FREE_AGENT:
-            if (p.team and p.team.name):
+            if p.team and p.team.name:
                 print(f"RSC{p.id} ({p.player.discord_id}) is a Free Agent but has a team")
 
             if p.contract_length:
                 print(f"RSC{p.id} ({p.player.discord_id}) is free agent with a contract length")
 
         # Check contract length
-
 
 
 if __name__ == "__main__":

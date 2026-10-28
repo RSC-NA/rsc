@@ -165,9 +165,8 @@ class TestTierIdByName:
             mock_api.tiers_list.return_value = []
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
-            with patch("rsc.tiers.tiers.TiersApi", return_value=mock_api):
-                with pytest.raises(ValueError, match="does not exist"):
-                    await mixin.tier_id_by_name(mock_guild, "Nonexistent")
+            with patch("rsc.tiers.tiers.TiersApi", return_value=mock_api), pytest.raises(ValueError, match="does not exist"):
+                await mixin.tier_id_by_name(mock_guild, "Nonexistent")
 
     async def test_raises_when_multiple_tiers_match(self, mock_guild):
         tier1 = _make_tier(id=1, name="Premier")
@@ -182,9 +181,8 @@ class TestTierIdByName:
             mock_api.tiers_list.return_value = [tier1, tier2]
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
-            with patch("rsc.tiers.tiers.TiersApi", return_value=mock_api):
-                with pytest.raises(ValueError, match="more than one"):
-                    await mixin.tier_id_by_name(mock_guild, "Premier")
+            with patch("rsc.tiers.tiers.TiersApi", return_value=mock_api), pytest.raises(ValueError, match="more than one"):
+                await mixin.tier_id_by_name(mock_guild, "Premier")
 
     async def test_raises_when_tier_has_no_id(self, mock_guild):
         tier = _make_tier(id=None, name="Premier")
@@ -198,9 +196,8 @@ class TestTierIdByName:
             mock_api.tiers_list.return_value = [tier]
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
-            with patch("rsc.tiers.tiers.TiersApi", return_value=mock_api):
-                with pytest.raises(ValueError, match="does not have an ID"):
-                    await mixin.tier_id_by_name(mock_guild, "Premier")
+            with patch("rsc.tiers.tiers.TiersApi", return_value=mock_api), pytest.raises(ValueError, match="does not have an ID"):
+                await mixin.tier_id_by_name(mock_guild, "Premier")
 
 
 # --- API method tests ---
@@ -356,9 +353,8 @@ class TestTiersApi:
             mock_api.tiers_list.return_value = [t1, t2]
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
-            with patch("rsc.tiers.tiers.TiersApi", return_value=mock_api):
-                with pytest.raises(AttributeError, match="no name"):
-                    await mixin.tiers(mock_guild)
+            with patch("rsc.tiers.tiers.TiersApi", return_value=mock_api), pytest.raises(AttributeError, match="no name"):
+                await mixin.tiers(mock_guild)
 
     async def test_passes_name_filter(self, mock_guild):
         t1 = _make_tier(id=1, name="Premier", position=1)
@@ -423,9 +419,8 @@ class TestTierStandings:
             mock_api.tiers_standings_list.side_effect = exc
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
-            with patch("rsc.tiers.tiers.TiersApi", return_value=mock_api):
-                with pytest.raises(RscException):
-                    await mixin.tier_standings(mock_guild, tier_id=999, season=1)
+            with patch("rsc.tiers.tiers.TiersApi", return_value=mock_api), pytest.raises(RscException):
+                await mixin.tier_standings(mock_guild, tier_id=999, season=1)
 
     async def test_returns_empty_standings(self, mock_guild):
         mixin = _create_mixin(_api_conf={mock_guild.id: MagicMock()})
@@ -465,9 +460,8 @@ class TestTierPlayoffHunt:
             mock_api.tiers_playoffs_retrieve.side_effect = ApiException(status=404, reason="Not Found")
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
-            with patch("rsc.tiers.tiers.TiersApi", return_value=mock_api):
-                with pytest.raises(RscException):
-                    await mixin.tier_playoff_hunt(mock_guild, tier_id=999)
+            with patch("rsc.tiers.tiers.TiersApi", return_value=mock_api), pytest.raises(RscException):
+                await mixin.tier_playoff_hunt(mock_guild, tier_id=999)
 
 
 class TestCreateTier:
@@ -495,9 +489,8 @@ class TestCreateTier:
             mock_api.tiers_create.side_effect = exc
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
-            with patch("rsc.tiers.tiers.TiersApi", return_value=mock_api):
-                with pytest.raises(RscException):
-                    await mixin.create_tier(mock_guild, name="Bad", color=0, position=0)
+            with patch("rsc.tiers.tiers.TiersApi", return_value=mock_api), pytest.raises(RscException):
+                await mixin.create_tier(mock_guild, name="Bad", color=0, position=0)
 
 
 class TestDeleteTier:
@@ -524,9 +517,8 @@ class TestDeleteTier:
             mock_api.tiers_destroy.side_effect = exc
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
-            with patch("rsc.tiers.tiers.TiersApi", return_value=mock_api):
-                with pytest.raises(RscException):
-                    await mixin.delete_tier(mock_guild, id=999)
+            with patch("rsc.tiers.tiers.TiersApi", return_value=mock_api), pytest.raises(RscException):
+                await mixin.delete_tier(mock_guild, id=999)
 
 
 # --- Autocomplete tests ---

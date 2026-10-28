@@ -3,20 +3,19 @@
 import asyncio
 import os
 import sys
-from typing import AsyncIterator
 
 from rscapi import ApiClient, Configuration, MembersApi
-from rscapi.models.league_player import LeaguePlayer
 
-API_KEY = os.environ.get("RSC_API_KEY")
+API_KEY = os.environ.get("RSC_API_KEY", "")
 API_HOST = "https://api.rscna.com/api/v1"
-#API_HOST = "http://127.0.0.1:8000/api/v1"
+# API_HOST = "http://127.0.0.1:8000/api/v1"
 
 CONF = Configuration(
     host=API_HOST,
     api_key={"Api-Key": API_KEY},
     api_key_prefix={"Api-Key": "Api-Key"},
 )
+
 
 async def paged_members(
     rsc_name: str | None = None,
@@ -56,7 +55,6 @@ async def paged_members(
                 break
 
 
-
 async def get_paged_members_list():
     total = 0
     seen = []
@@ -70,8 +68,6 @@ async def get_paged_members_list():
             seen.append(api_member.rsc_id)
 
     print(f"Total players returned from paged players: {total}")
-
-
 
 
 if __name__ == "__main__":

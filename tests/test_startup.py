@@ -4,6 +4,7 @@ import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from rscapi.rest import ALLOW_RETRY_METHODS
 from aiohttp import (
     ClientConnectorError,
     ClientOSError,
@@ -199,8 +200,6 @@ class TestPrepareApiInvalidation:
 
     async def test_post_is_never_retried(self):
         """Transactions must not be replayed, whatever the retry config says."""
-        from rscapi.rest import ALLOW_RETRY_METHODS
-
         assert "POST" not in ALLOW_RETRY_METHODS
 
     async def test_no_config_written_when_unconfigured(self, mock_guild):

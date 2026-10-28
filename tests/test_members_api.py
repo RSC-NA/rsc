@@ -1,20 +1,14 @@
 import os
 import sys
-from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
 import discord
 
-
-# Add the project root to the path so we can import the modules
-project_root = Path(__file__).parent.parent
-sys.path.insert(0, str(project_root))
-
 from rsc.core import RSC
 from rsc.enums import Platform, PlayerType, Referrer, RegionPreference, StaffPositions
 from rsc.exceptions import RscException
-from rscapi import MembersApi
+from rscapi import ApiClient, ElevatedRolesApi, MembersApi
 
 from .utils import random_string
 
@@ -24,7 +18,7 @@ pytestmark = pytest.mark.integration
 class TestMembersApiContract:
     """Verify all expected rscapi MembersApi methods exist without calling them."""
 
-    EXPECTED_METHODS = [
+    EXPECTED_METHODS = (
         "members_list",
         "members_signup_create",
         "members_create",
@@ -43,7 +37,7 @@ class TestMembersApiContract:
         "members_elevated_roles_list",
         "members_elevated_roles_create",
         "members_elevated_roles_destroy",
-    ]
+    )
 
     @pytest.mark.parametrize("method_name", EXPECTED_METHODS)
     def test_method_exists(self, method_name: str):
@@ -85,9 +79,6 @@ class TestMembersApiCalls:
         covering a label, permission checks silently match nothing and the whole
         committee loses access.
         """
-        from rsc.enums import StaffPositions
-        from rscapi import ApiClient, ElevatedRolesApi
-
         async with ApiClient(rsc_bot._api_conf[mock_guild.id]) as client:
             roles = await ElevatedRolesApi(client).elevated_roles_list(limit=500)
 
@@ -112,6 +103,7 @@ class TestMembersApiCalls:
         if not franchises:
             pytest.skip("No franchises on the API")
         franchise_id = franchises[0].id
+        assert franchise_id is not None
 
         # The server checks the executor, not just the API key: a member with no
         # ADM row gets "Executor cannot modify staff roles for this league."
@@ -149,6 +141,7 @@ class TestMembersApiCalls:
             pytest.skip("No franchises on the API")
 
         with pytest.raises(RscException) as exc:
+            assert franchises[0].id is not None
             await rsc_bot.remove_agm(mock_guild, franchises[0].id, agm=mock_member, executor=mock_member)
         assert exc.value.status in (403, 404), f"Unexpected status for a non-AGM removal: {exc.value.status}"
 
@@ -199,6 +192,7 @@ class TestMembersApiCalls:
 
             member = members[0]
             new_name = random_string()
+            assert member.discord_id is not None
             result = await rsc_bot.change_member_name(guild=mock_guild, id=member.discord_id, name=new_name, override=True)
             assert result is not None
             print(f"✓ change_member_name() succeeded for member {member.discord_id}")
@@ -250,7 +244,7 @@ class TestMembersApiCalls:
         """Test that transfer_membership() API call doesn't raise exceptions."""
         try:
             # This will likely fail due to business rules, but should not raise unexpected exceptions
-            result = await rsc_bot.transfer_membership(
+            await rsc_bot.transfer_membership(
                 guild=mock_guild,
                 old=mock_member.id,  # Non-existent member
                 new=mock_member,
@@ -265,7 +259,7 @@ class TestMembersApiCalls:
         """Test that delete_member() API call doesn't raise exceptions."""
         try:
             # This will likely fail for non-existent member, but should handle it gracefully
-            member = await rsc_bot.create_member(guild=mock_guild, member=generated_discord_member, rsc_name="Temp Player")
+            await rsc_bot.create_member(guild=mock_guild, member=generated_discord_member, rsc_name="Temp Player")
             await rsc_bot.delete_member(guild=mock_guild, member=generated_discord_member)
             print("✓ delete_member() succeeded")
         except RscException as e:
@@ -313,7 +307,7 @@ class TestMembersApiBusinessLogic:
         """Test that signup() API call handles various scenarios."""
         try:
             await rsc_bot.create_member(guild=mock_guild, member=generated_discord_member, rsc_name=generated_discord_member.name)
-            result = await rsc_bot.signup(
+            await rsc_bot.signup(
                 guild=mock_guild,
                 member=generated_discord_member,
                 rsc_name=generated_discord_member.name,
@@ -338,7 +332,7 @@ class TestMembersApiBusinessLogic:
         """Test that permfa_signup() API call handles various scenarios."""
         try:
             await rsc_bot.create_member(guild=mock_guild, member=generated_discord_member, rsc_name=generated_discord_member.name)
-            result = await rsc_bot.permfa_signup(
+            await rsc_bot.permfa_signup(
                 guild=mock_guild,
                 member=generated_discord_member,
                 rsc_name=generated_discord_member.name,
@@ -366,8 +360,7 @@ class TestMembersApiBusinessLogic:
             if not players:
                 pytest.skip("No player found to test declare_intent")
 
-            player = players[0]
-            result = await rsc_bot.declare_intent(guild=mock_guild, member=mock_member, returning=True)
+            await rsc_bot.declare_intent(guild=mock_guild, member=mock_member, returning=True)
             print(f"✓ declare_intent() succeeded for member {mock_member.id}")
         except RscException as e:
             # Expected scenarios: not eligible, already declared, etc.

@@ -5,8 +5,12 @@ in a mention, a rule document or a ticket transcript can talk the model out of
 an instruction; it cannot talk a regex out of anything.
 """
 
+import inspect
+
 import pytest
 
+from rsc.llm.agent import loop, prompts
+from rsc.llm.agent.prompts import PERSONA
 from rsc.llm.agent.safety import (
     defang_mass_mentions,
     neutralize_commands,
@@ -238,8 +242,6 @@ def test_sanitize_leaves_a_normal_answer_alone() -> None:
 
 def test_agent_loop_sanitizes_its_output() -> None:
     """The guard must sit at the loop's single exit, not at each call site."""
-    from rsc.llm.agent import loop
-
     assert "sanitize_response" in loop._output_text.__code__.co_names
 
 
@@ -250,17 +252,11 @@ def test_credentials_never_enter_the_prompt() -> None:
     should be able to see one, so redaction only ever has to catch a credential
     that a *user* pasted.
     """
-    import inspect
-
-    from rsc.llm.agent import prompts
-
     assert "api_key" not in inspect.getsource(prompts)
 
 
 def test_system_prompt_states_the_hard_limits() -> None:
     """Enforcement is in code, but the model should not be trying in the first place."""
-    from rsc.llm.agent.prompts import PERSONA
-
     lowered = PERSONA.lower()
     assert "command prefix" in lowered
     assert "@everyone" in lowered

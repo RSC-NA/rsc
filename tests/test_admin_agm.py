@@ -8,6 +8,8 @@ from rsc.admin.agm import AdminAGMMixIn
 from rsc.enums import Status
 from rsc.exceptions import RscException
 
+from .utils import command_callback, subcommands
+
 FRANCHISE = "The Ocean"
 FRANCHISE_ID = 7
 OTHER_FRANCHISE = "The Desert"
@@ -125,13 +127,13 @@ def _sent_embed(interaction):
 
 
 # The decorator turns the method into an app command, so reach through to the callback
-CMD_ADD = AdminAGMMixIn._franchise_promote_agm_cmd.callback
-CMD_REMOVE = AdminAGMMixIn._franchise_remove_agm_cmd.callback
+CMD_ADD = command_callback(AdminAGMMixIn._franchise_promote_agm_cmd)
+CMD_REMOVE = command_callback(AdminAGMMixIn._franchise_remove_agm_cmd)
 
 
 class TestAgmCommandRegistration:
     def test_registered_under_admin_agm(self):
-        cmds = {c.name: c for c in AdminAGMMixIn._agm.commands}
+        cmds = subcommands(AdminAGMMixIn._agm)
         assert "add" in cmds
         assert "remove" in cmds
         assert [p.name for p in cmds["add"].parameters] == ["franchise", "agm"]

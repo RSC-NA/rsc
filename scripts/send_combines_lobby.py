@@ -2,25 +2,21 @@
 
 import argparse
 import json
-import os
 from pathlib import Path
 
 import requests
 
 
-def send_webhook(twos: bool=False):
-    script_path = os.path.dirname(os.path.abspath(__file__))
+def send_webhook(twos: bool = False):
+    script_path = Path(__file__).resolve().parent
     print(f"Script path: {script_path}")
 
-    json_path = Path(script_path).parent
+    json_path = script_path.parent
 
-    if twos:
-        json_path = json_path / "data/combines/combines_webhook_2s.json"
-    else:
-        json_path = json_path / "data/combines/combines_webhook.json"
-    print(f"JSON Path: {json_path.absolute}")
+    json_path = json_path / "data/combines/combines_webhook_2s.json" if twos else json_path / "data/combines/combines_webhook.json"
+    print(f"JSON Path: {json_path}")
 
-    with open(json_path, "r") as fd:
+    with json_path.open() as fd:
         data = json.load(fd)
 
     print("Sending mock combine data...")
@@ -30,9 +26,7 @@ def send_webhook(twos: bool=False):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Test combines lobby webhook")
-    parser.add_argument(
-        "-2", dest="twos", action="store_true", default=False, help="Send 2s league event"
-    )
+    parser.add_argument("-2", dest="twos", action="store_true", default=False, help="Send 2s league event")
 
     argv = parser.parse_args()
 

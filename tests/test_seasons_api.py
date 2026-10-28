@@ -1,11 +1,4 @@
-import sys
-from pathlib import Path
-
 import pytest
-
-# Add the project root to the path so we can import the modules
-project_root = Path(__file__).parent.parent
-sys.path.insert(0, str(project_root))
 
 from rsc.core import RSC
 from rsc.exceptions import RscException
@@ -17,14 +10,14 @@ pytestmark = pytest.mark.integration
 class TestSeasonsApiContract:
     """Verify all expected rscapi SeasonsApi methods exist without calling them."""
 
-    EXPECTED_METHODS = [
+    EXPECTED_METHODS = (
         "seasons_list",
         "seasons_retrieve",
         "seasons_signup_season_retrieve",
         "seasons_player_intents_list",
         "seasons_franchise_standings_list",
         "seasons_activity_check_list",
-    ]
+    )
 
     @pytest.mark.parametrize("method_name", EXPECTED_METHODS)
     def test_method_exists(self, method_name: str):
@@ -99,6 +92,7 @@ class TestSeasonsApiCalls:
         if season.number is None:
             pytest.skip("Season has no number")
 
+        assert season.id is not None
         result = await rsc_bot.season_by_id(mock_guild, season.id)
         if result:
             print(f"✓ season_by_id() succeeded for season {season.id}")

@@ -102,6 +102,7 @@ async def test_combines_active_returns_lobbies(monkeypatch, mock_member):
 
     result = await combines_api.combines_active("https://combines.example/api/", mock_member)
 
+    assert isinstance(result, list)
     assert len(result) == 1
     assert isinstance(result[0], CombinesLobby)
     assert result[0].id == 5

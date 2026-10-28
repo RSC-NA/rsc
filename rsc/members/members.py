@@ -296,8 +296,8 @@ class MemberMixIn(RSCMixIn):
 
     @_intent.command(name="search", description="Search for intent to play status (Limit: 50)")
     @app_commands.autocomplete(
-        franchise=FranchiseMixIn.franchise_autocomplete,  # ty:ignore[invalid-argument-type]
-        team=TeamMixIn.teams_autocomplete,  # ty:ignore[invalid-argument-type]
+        franchise=FranchiseMixIn.franchise_autocomplete,
+        team=TeamMixIn.teams_autocomplete,
     )
     @app_commands.describe(
         player="Discord member to search",

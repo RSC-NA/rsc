@@ -2,12 +2,12 @@
 
 import asyncio
 import os
-from typing import AsyncIterator
+from collections.abc import AsyncIterator
 
 from rscapi import ApiClient, Configuration, MembersApi
 from rscapi.models.member import Member as RSCMember
 
-API_KEY = os.environ.get("RSC_API_KEY")
+API_KEY = os.environ.get("RSC_API_KEY", "")
 API_HOST = "https://api.rscna.com/api/v1"
 
 CONF = Configuration(

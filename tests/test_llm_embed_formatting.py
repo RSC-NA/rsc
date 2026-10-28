@@ -1,5 +1,7 @@
 """Tests for long value handling in LLM query embeds."""
 
+from unittest.mock import MagicMock
+
 from rsc.embeds import BetterEmbed, BlueEmbed, EmbedLimits, chunk_field_value
 from rsc.llm.llm import LLMMixIn
 
@@ -7,7 +9,7 @@ from rsc.llm.llm import LLMMixIn
 def build_embeds(response: str, icon_url: str | None = None):
     """Call the embed builder without instantiating the full cog."""
     return LLMMixIn._build_llm_query_embeds(
-        None,  # type: ignore[arg-type]
+        MagicMock(),
         response=response,
         icon_url=icon_url,
     )

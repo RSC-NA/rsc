@@ -271,6 +271,7 @@ class TestCreateDevLeagueLobbyChannels:
         channels = await m.create_devleague_lobby_channels(DevLeagueLobby(**_lobby_payload()))
 
         m.announce_devleague_lobby.assert_awaited_once()
+        assert m.announce_devleague_lobby.await_args is not None
         assert m.announce_devleague_lobby.await_args.kwargs["channels"] == channels
         assert m.announce_devleague_lobby.await_args.kwargs["announce_channel"] is announce
 
@@ -333,6 +334,7 @@ class TestSortDevLeagueLobby:
 
         await DevLeagueRunnerMixIn._sort_devleague_lobby(MagicMock(), category, home, away)
 
+        assert guild._state.http.bulk_channel_update.await_args is not None
         payload = guild._state.http.bulk_channel_update.await_args.args[1]
         assert [p["id"] for p in payload] == [1, 2, 3, 10, 11, 4, 5]
         assert [p["position"] for p in payload] == list(range(7))
@@ -346,6 +348,7 @@ class TestSortDevLeagueLobby:
 
         await DevLeagueRunnerMixIn._sort_devleague_lobby(MagicMock(), _category(guild, existing), home, away)
 
+        assert guild._state.http.bulk_channel_update.await_args is not None
         payload = guild._state.http.bulk_channel_update.await_args.args[1]
         assert [p["id"] for p in payload] == [1, 2, 10, 11]
 

@@ -5,18 +5,12 @@ parsed through `TransactionResponse.from_dict`, which is exactly what the handle
 does with a `PTR` event payload.
 """
 
-import sys
 from datetime import UTC, datetime, timedelta
-from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
 import discord
 import pytest
 from rscapi.models.transaction_response import TransactionResponse
-
-# Add the project root to the path so we can import the modules
-project_root = Path(__file__).parent.parent
-sys.path.insert(0, str(project_root))
 
 from rsc.embeds import EmbedLimits
 from rsc.events.models import LeagueEventData
@@ -120,7 +114,7 @@ def response(
     ttype: str = "TRD",
     transaction_id: int = 55123,
 ) -> TransactionResponse:
-    return TransactionResponse.from_dict(
+    parsed = TransactionResponse.from_dict(
         {
             "player_updates": players,
             "pick_trades": picks,
@@ -136,6 +130,8 @@ def response(
             "id": transaction_id,
         }
     )
+    assert parsed is not None
+    return parsed
 
 
 @pytest.fixture
@@ -266,17 +262,13 @@ class TestLines:
         assert field_by_prefix(embed, "Solar Flares") == "Future 1st Round Master"
 
     async def test_source_is_shown_when_it_differs_from_destination(self, guild):
-        resp = response(
-            picks=[pick_trade("Solar Flares", FLARES_GM, source_name="Thunder Wolves", source_gm=WOLVES_GM)]
-        )
+        resp = response(picks=[pick_trade("Solar Flares", FLARES_GM, source_name="Thunder Wolves", source_gm=WOLVES_GM)])
         _, embed = await build_trade_embed_from_response(guild, resp)
 
         assert field_by_prefix(embed, "Solar Flares").startswith(f"<@!{WOLVES_GM}> ")
 
     async def test_source_is_hidden_when_it_matches_the_destination(self, guild):
-        resp = response(
-            picks=[pick_trade("Solar Flares", FLARES_GM, source_name="Solar Flares", source_gm=FLARES_GM)]
-        )
+        resp = response(picks=[pick_trade("Solar Flares", FLARES_GM, source_name="Solar Flares", source_gm=FLARES_GM)])
         _, embed = await build_trade_embed_from_response(guild, resp)
 
         assert field_by_prefix(embed, "Solar Flares").startswith("1st Round")
@@ -313,10 +305,7 @@ class TestLabelsAndPings:
 class TestEmbedLimits:
     async def test_large_pick_dump_stays_within_embed_limits(self, guild):
         """A bare add_field would 400 the send past 1024 chars."""
-        picks = [
-            pick_trade("Solar Flares", FLARES_GM, source_name="Thunder Wolves", source_gm=WOLVES_GM, number=n)
-            for n in range(60)
-        ]
+        picks = [pick_trade("Solar Flares", FLARES_GM, source_name="Thunder Wolves", source_gm=WOLVES_GM, number=n) for n in range(60)]
         _, embed = await build_trade_embed_from_response(guild, response(picks=picks))
 
         assert not embed.exceeds_limits()
@@ -560,5 +549,8 @@ class TestAnnounceTrade:
 
         assert channel.sent[0]["content"]
         assert msg is not None
-        msg.edit.assert_awaited_once()
-        assert msg.edit.await_args.kwargs["content"] is None
+        edit = msg.edit
+        assert isinstance(edit, AsyncMock)
+        edit.assert_awaited_once()
+        assert edit.await_args is not None
+        assert edit.await_args.kwargs["content"] is None

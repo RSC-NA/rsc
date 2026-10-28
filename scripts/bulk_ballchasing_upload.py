@@ -13,9 +13,7 @@ from dotenv import load_dotenv
 if __name__ == "__main__":
     loop = asyncio.get_event_loop()
 
-    parser = argparse.ArgumentParser(
-        description="Bulk upload replays to ballchasing group."
-    )
+    parser = argparse.ArgumentParser(description="Bulk upload replays to ballchasing group.")
     parser.add_argument("group", type=str, help="Ballchasing group")
     parser.add_argument("directory", type=str, help="Replay directory")
     argv = parser.parse_args()

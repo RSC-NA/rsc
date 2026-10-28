@@ -25,7 +25,7 @@ from dotenv import load_dotenv
 
 
 def row(r: ballchasing.models.Replay) -> str:
-    return f"  {r.id:<26} {str(r.status):<10} {str(r.match_guid):<34} {str(r.map_code):<16} {r.created}"
+    return f"  {r.id:<26} {r.status!s:<10} {r.match_guid!s:<34} {r.map_code!s:<16} {r.created}"
 
 
 HEADER = f"  {'id':<26} {'status':<10} {'match_guid':<34} {'map_code':<16} created"

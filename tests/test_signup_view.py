@@ -89,6 +89,7 @@ class TestPermFASignupView:
     async def test_game_times_locked_until_acknowledged(self):
         view = PermFASignupView(_interaction())
         phase = view._agreement
+        assert isinstance(phase, PermFAAgreementPhase)
 
         assert phase.times_btn.disabled
         assert not phase.permfa_btn.disabled
@@ -99,6 +100,7 @@ class TestPermFASignupView:
         interaction = _interaction()
         view = PermFASignupView(interaction)
         phase = view._agreement
+        assert isinstance(phase, PermFAAgreementPhase)
 
         await view.complete_step(interaction, SignupState.PERMFA)
 

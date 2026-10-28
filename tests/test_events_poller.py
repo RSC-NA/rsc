@@ -5,17 +5,15 @@ poll: config reads and writes, dispatch, handler invocation, and Discord output,
 with the API and Red's Config faked out.
 """
 
-import sys
 from datetime import UTC, datetime, timedelta
-from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from redbot.core import Config
+from rscapi import Configuration
 
-# Add the project root to the path so we can import the modules
-project_root = Path(__file__).parent.parent
-sys.path.insert(0, str(project_root))
-
+from rsc.enums import EventAction
+from rsc.events import handlers
 from rsc.events.events import EventMixIn, defaults_guild
 from rsc.events.models import MAX_EVENTS_PER_TICK, EventPage, EventPollState, LeagueEventData
 
@@ -44,22 +42,20 @@ class FakeGroup:
         return dict(self._store)
 
 
-class FakeConfig:
-    def __init__(self, store: dict):
-        self._store = store
-
-    def custom(self, *_args) -> FakeGroup:
-        return FakeGroup(self._store)
+def fake_config(store: dict) -> MagicMock:
+    config = MagicMock(spec=Config)
+    config.custom.side_effect = lambda *_args: FakeGroup(store)
+    return config
 
 
 class Poller(EventMixIn):
     """Minimal harness: no Red bot, no task loop, no live API."""
 
     def __init__(self, store: dict, events: list[LeagueEventData]):
-        self.config = FakeConfig(store)
+        self.config = fake_config(store)
         self.bot = MagicMock()
         self.bot.dispatch = MagicMock()
-        self._api_conf = {1: object()}
+        self._api_conf = {1: MagicMock(spec=Configuration)}
         self._league = {1: 1}
         self._event_state = {}
         self._events = events
@@ -97,6 +93,13 @@ class Poller(EventMixIn):
 # Only the events ones matter here, and ABCMeta recomputes this set at class
 # creation, so it has to be cleared afterwards.
 Poller.__abstractmethods__ = frozenset()
+
+
+def make_poller(store: dict, events: list[LeagueEventData]) -> Poller:
+    """Build a `Poller`. ty cannot see the cleared abstract set, so `Poller(...)` reads as abstract."""
+    poller = object.__new__(Poller)
+    poller.__init__(store, events)
+    return poller
 
 
 @pytest.fixture
@@ -137,7 +140,7 @@ class TestBootstrap:
     async def test_seeds_cursor_without_processing(self, guild):
         """A fresh guild must not dump its whole history into the channel."""
         store = enabled_store()
-        poller = Poller(store, [evt(i) for i in range(1, 6)])
+        poller = make_poller(store, [evt(i) for i in range(1, 6)])
 
         await poller.poll_league_events(guild, EventPollState())
 
@@ -149,7 +152,7 @@ class TestBootstrap:
     async def test_empty_api_still_records_a_timestamp(self, guild):
         """Otherwise it would re-bootstrap forever and never bound its fetches."""
         store = enabled_store()
-        poller = Poller(store, [])
+        poller = make_poller(store, [])
 
         await poller.poll_league_events(guild, EventPollState())
 
@@ -160,7 +163,7 @@ class TestBootstrap:
 class TestSteadyState:
     async def test_processes_dispatches_and_posts_new_events(self, guild):
         store = primed_store()
-        poller = Poller(store, [evt(i) for i in range(1, 9)])
+        poller = make_poller(store, [evt(i) for i in range(1, 9)])
 
         await poller.poll_league_events(guild, EventPollState())
 
@@ -172,7 +175,7 @@ class TestSteadyState:
     async def test_dispatches_the_local_dataclass(self, guild):
         """Consumers must not be coupled to the generated client model."""
         store = primed_store()
-        poller = Poller(store, [evt(6)])
+        poller = make_poller(store, [evt(6)])
 
         await poller.poll_league_events(guild, EventPollState())
 
@@ -182,7 +185,7 @@ class TestSteadyState:
 
     async def test_watermark_lags_behind_processed_events(self, guild):
         store = primed_store()
-        poller = Poller(store, [evt(i) for i in range(1, 9)])
+        poller = make_poller(store, [evt(i) for i in range(1, 9)])
 
         await poller.poll_league_events(guild, EventPollState())
 
@@ -194,8 +197,8 @@ class TestSteadyState:
         events = [evt(i) for i in range(1, 9)]
         state = EventPollState()
 
-        await Poller(store, events).poll_league_events(guild, state)
-        second = Poller(store, events)
+        await make_poller(store, events).poll_league_events(guild, state)
+        second = make_poller(store, events)
         await second.poll_league_events(guild, state)
 
         assert second.bot.dispatch.call_count == 0
@@ -206,7 +209,7 @@ class TestDiscordOutput:
     async def test_every_send_suppresses_mentions(self, guild):
         """`payload` is untrusted API JSON and could contain @everyone."""
         store = primed_store()
-        poller = Poller(store, [evt(6, payload={"msg": "@everyone"})])
+        poller = make_poller(store, [evt(6, payload={"msg": "@everyone"})])
 
         await poller.poll_league_events(guild, EventPollState())
 
@@ -219,7 +222,7 @@ class TestDiscordOutput:
 
     async def test_filters_suppress_posting_but_not_processing(self, guild):
         store = primed_store(CategoryFilter=["ANN"])
-        poller = Poller(store, [evt(6, category="TRN")])
+        poller = make_poller(store, [evt(6, category="TRN")])
 
         await poller.poll_league_events(guild, EventPollState())
 
@@ -230,7 +233,7 @@ class TestDiscordOutput:
     async def test_unconfigured_channel_still_advances(self, guild):
         """Configuring a channel later must not replay everything into it."""
         store = primed_store()
-        poller = Poller(store, [evt(i) for i in range(1, 9)])
+        poller = make_poller(store, [evt(i) for i in range(1, 9)])
         poller._get_event_channel = AsyncMock(return_value=None)
 
         await poller.poll_league_events(guild, EventPollState())
@@ -240,7 +243,7 @@ class TestDiscordOutput:
 
     async def test_oversized_backlog_posts_a_summary_instead(self, guild):
         store = primed_store()
-        poller = Poller(store, [evt(i) for i in range(6, 1000)])
+        poller = make_poller(store, [evt(i) for i in range(6, 1000)])
 
         await poller.poll_league_events(guild, EventPollState())
 
@@ -252,14 +255,13 @@ class TestDiscordOutput:
         """Safe from a partial walk: the feed is newest-first, so page one
         carries the maximum id."""
         store = primed_store()
-        poller = Poller(store, [evt(i) for i in range(6, 1000)])
+        poller = make_poller(store, [evt(i) for i in range(6, 1000)])
 
         await poller.poll_league_events(guild, EventPollState())
 
         assert store["ConfirmedId"] == 999
         assert store["SeenIds"] == []
         assert poller.bot.dispatch.call_count == 0, "skipped events must not be dispatched"
-
 
 
 class TestScope:
@@ -271,7 +273,7 @@ class TestScope:
 
     async def test_league_scope_when_global_is_disabled(self, guild):
         store = primed_store(IncludeGlobal=False)
-        poller = Poller(store, [evt(6)])
+        poller = make_poller(store, [evt(6)])
 
         await poller.poll_league_events(guild, EventPollState())
 
@@ -283,7 +285,7 @@ class TestScope:
         leagues at once. Sibling leagues that come with guild scoping are
         dropped by `_in_scope`, so this costs nothing."""
         store = primed_store()
-        poller = Poller(store, [evt(6)])
+        poller = make_poller(store, [evt(6)])
 
         await poller.poll_league_events(guild, EventPollState())
 
@@ -291,7 +293,7 @@ class TestScope:
 
     async def test_include_global_is_passed_through(self, guild):
         store = primed_store(IncludeGlobal=True)
-        poller = Poller(store, [evt(6)])
+        poller = make_poller(store, [evt(6)])
 
         await poller.poll_league_events(guild, EventPollState())
 
@@ -301,7 +303,7 @@ class TestScope:
         """Not the highest id seen. Re-reading the lag window is what catches a
         transaction that committed after a higher id was already visible."""
         store = primed_store(confirmed_id=5, SeenIds=[6, 7, 8])
-        poller = Poller(store, [evt(i) for i in range(1, 12)])
+        poller = make_poller(store, [evt(i) for i in range(1, 12)])
 
         await poller.poll_league_events(guild, EventPollState())
 
@@ -312,7 +314,7 @@ class TestScope:
         handled. Requesting only a batch's worth would return nothing new and
         the poller would stall."""
         store = primed_store(confirmed_id=5, SeenIds=list(range(6, 106)))
-        poller = Poller(store, [evt(i) for i in range(1, 200)])
+        poller = make_poller(store, [evt(i) for i in range(1, 200)])
 
         await poller.poll_league_events(guild, EventPollState())
 
@@ -322,7 +324,7 @@ class TestScope:
     async def test_makes_progress_with_a_large_dedup_set(self, guild):
         """The stall this guards against is silent, so assert on the outcome."""
         store = primed_store(confirmed_id=5, SeenIds=list(range(6, 106)))
-        poller = Poller(store, [evt(i) for i in range(1, 200)])
+        poller = make_poller(store, [evt(i) for i in range(1, 200)])
 
         await poller.poll_league_events(guild, EventPollState())
 
@@ -332,7 +334,7 @@ class TestScope:
 
     async def test_global_events_are_processed_when_returned(self, guild):
         store = primed_store(IncludeGlobal=True)
-        poller = Poller(store, [LeagueEventData(id=6, league=None, category="SYS", action="MPF", severity="ERR")])
+        poller = make_poller(store, [LeagueEventData(id=6, league=None, category="SYS", action="MPF", severity="ERR")])
 
         await poller.poll_league_events(guild, EventPollState())
 
@@ -352,7 +354,7 @@ class TestLeagueScoping:
 
     async def test_other_league_is_not_dispatched(self, guild):
         store = primed_store(IncludeGlobal=True)
-        poller = Poller(store, [self.foreign(6)])
+        poller = make_poller(store, [self.foreign(6)])
 
         await poller.poll_league_events(guild, EventPollState())
 
@@ -361,9 +363,6 @@ class TestLeagueScoping:
     async def test_other_league_does_not_run_handlers(self, guild, monkeypatch):
         """The concrete hazard: a sibling league's `PTR` announcing a foreign
         trade into this guild's transaction channel."""
-        from rsc.enums import EventAction
-        from rsc.events import handlers
-
         ran = []
 
         async def record(_cog, _guild, event):
@@ -372,7 +371,7 @@ class TestLeagueScoping:
         monkeypatch.setitem(handlers.EVENT_HANDLERS, EventAction.PLAYER_SIGNED, record)
 
         store = primed_store(IncludeGlobal=True)
-        poller = Poller(store, [self.foreign(6), evt(7)])
+        poller = make_poller(store, [self.foreign(6), evt(7)])
 
         await poller.poll_league_events(guild, EventPollState())
 
@@ -380,7 +379,7 @@ class TestLeagueScoping:
 
     async def test_other_league_is_not_posted(self, guild):
         store = primed_store(IncludeGlobal=True)
-        poller = Poller(store, [self.foreign(6)])
+        poller = make_poller(store, [self.foreign(6)])
 
         await poller.poll_league_events(guild, EventPollState())
 
@@ -390,7 +389,7 @@ class TestLeagueScoping:
         """Out of scope means "not ours to act on", never "not yet read".
         Re-reading it every tick would wedge the watermark behind it forever."""
         store = primed_store(confirmed_id=5, IncludeGlobal=True)
-        poller = Poller(store, [self.foreign(6), self.foreign(7)])
+        poller = make_poller(store, [self.foreign(6), self.foreign(7)])
 
         await poller.poll_league_events(guild, EventPollState())
 
@@ -399,7 +398,7 @@ class TestLeagueScoping:
     async def test_global_events_are_always_in_scope(self, guild):
         """The whole point of `IncludeGlobal`. A null league is not a mismatch."""
         store = primed_store(IncludeGlobal=True)
-        poller = Poller(store, [LeagueEventData(id=6, league=None, category="SYS", action="TMF", severity="ERR")])
+        poller = make_poller(store, [LeagueEventData(id=6, league=None, category="SYS", action="TMF", severity="ERR")])
 
         await poller.poll_league_events(guild, EventPollState())
 
@@ -407,7 +406,7 @@ class TestLeagueScoping:
 
     async def test_own_league_is_in_scope(self, guild):
         store = primed_store(IncludeGlobal=True)
-        poller = Poller(store, [evt(6)])
+        poller = make_poller(store, [evt(6)])
 
         await poller.poll_league_events(guild, EventPollState())
 
@@ -417,7 +416,7 @@ class TestLeagueScoping:
 class TestGating:
     async def test_disabled_guild_is_a_no_op(self, guild):
         store = dict(defaults_guild)
-        poller = Poller(store, [evt(i) for i in range(1, 9)])
+        poller = make_poller(store, [evt(i) for i in range(1, 9)])
 
         await poller.poll_league_events(guild, EventPollState())
 
@@ -426,7 +425,7 @@ class TestGating:
 
     async def test_unconfigured_api_is_a_no_op(self, guild):
         store = enabled_store()
-        poller = Poller(store, [evt(1)])
+        poller = make_poller(store, [evt(1)])
         poller._api_conf = {}
 
         await poller.poll_league_events(guild, EventPollState())
@@ -436,7 +435,7 @@ class TestGating:
     async def test_unconfigured_league_is_a_no_op(self, guild):
         """`_league` is a plain dict only populated on successful setup."""
         store = enabled_store()
-        poller = Poller(store, [evt(1)])
+        poller = make_poller(store, [evt(1)])
         poller._league = {}
 
         await poller.poll_league_events(guild, EventPollState())
@@ -446,17 +445,13 @@ class TestGating:
 
 class TestHandlers:
     async def test_a_failing_handler_does_not_block_the_cursor(self, guild, monkeypatch):
-        from rsc.enums import EventAction
-
         async def boom(_cog, _guild, _event):
             raise RuntimeError("handler exploded")
-
-        from rsc.events import handlers
 
         monkeypatch.setitem(handlers.EVENT_HANDLERS, EventAction.PLAYER_SIGNED, boom)
 
         store = primed_store()
-        poller = Poller(store, [evt(6)])
+        poller = make_poller(store, [evt(6)])
 
         await poller.poll_league_events(guild, EventPollState())
 

@@ -3,12 +3,12 @@
 import argparse
 import asyncio
 import os
-from typing import AsyncIterator
+from collections.abc import AsyncIterator
 
 from rscapi import ApiClient, Configuration, LeaguePlayersApi
 from rscapi.models.league_player import LeaguePlayer
 
-API_KEY = os.environ.get("RSC_API_KEY")
+API_KEY = os.environ.get("RSC_API_KEY", "")
 API_HOST = "https://api.rscna.com/api/v1"
 
 CONF = Configuration(
@@ -17,7 +17,7 @@ CONF = Configuration(
     api_key_prefix={"Api-Key": "Api-Key"},
 )
 
-ACTIVE_STATUSES = {"RO", "RN", "IR", "AGM_IR",  "FA"}
+ACTIVE_STATUSES = {"RO", "RN", "IR", "AGM_IR", "FA"}
 
 
 async def paged_players(
@@ -104,9 +104,7 @@ async def check_prior_season(season_number: int):
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Check if members had an active status (RO/RN/FA) in the prior season"
-    )
+    parser = argparse.ArgumentParser(description="Check if members had an active status (RO/RN/FA) in the prior season")
     parser.add_argument("season", type=int, help="Current season number (will check season - 1)")
     args = parser.parse_args()
 

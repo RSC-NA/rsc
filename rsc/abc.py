@@ -1,6 +1,6 @@
 import logging
 from abc import ABC, ABCMeta, abstractmethod
-from collections.abc import AsyncIterator, Sequence
+from collections.abc import AsyncGenerator, AsyncIterator, Sequence
 from contextlib import asynccontextmanager
 from datetime import datetime
 from os import PathLike
@@ -96,7 +96,7 @@ class RSCMixIn(ABC):
     # Core
 
     @asynccontextmanager
-    async def api_client(self, guild: discord.Guild) -> AsyncIterator[ApiClient]:
+    async def api_client(self, guild: discord.Guild) -> AsyncGenerator[ApiClient]:
         """Yield the guild's long lived API client.
 
         Deliberately does NOT close the client on exit. `ApiClient` owns an

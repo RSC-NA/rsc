@@ -48,9 +48,8 @@ class TestLeaguesApi:
             mock_api.leagues_list.side_effect = ApiException(status=500, reason="Error")
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
-            with patch("rsc.leagues.leagues.LeaguesApi", return_value=mock_api):
-                with pytest.raises(RscException):
-                    await mixin.leagues(mock_guild)
+            with patch("rsc.leagues.leagues.LeaguesApi", return_value=mock_api), pytest.raises(RscException):
+                await mixin.leagues(mock_guild)
 
 
 # --- league API ---
@@ -171,9 +170,8 @@ class TestPlayersApi:
             mock_api.league_players_list.side_effect = ApiException(status=500, reason="Error")
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
-            with patch("rsc.leagues.leagues.LeaguePlayersApi", return_value=mock_api):
-                with pytest.raises(RscException):
-                    await mixin.players(mock_guild)
+            with patch("rsc.leagues.leagues.LeaguePlayersApi", return_value=mock_api), pytest.raises(RscException):
+                await mixin.players(mock_guild)
 
     async def test_passes_status_filter(self, mock_guild):
         resp = MagicMock()
@@ -270,14 +268,13 @@ class TestUpdateLeaguePlayer:
             mock_api.league_players_partial_update.side_effect = ApiException(status=400, reason="Bad")
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
-            with patch("rsc.leagues.leagues.LeaguePlayersApi", return_value=mock_api):
-                with pytest.raises(RscException):
-                    await mixin.update_league_player(
-                        mock_guild,
-                        player_id=1,
-                        executor=mock_executor,
-                        base_mmr=500,
-                    )
+            with patch("rsc.leagues.leagues.LeaguePlayersApi", return_value=mock_api), pytest.raises(RscException):
+                await mixin.update_league_player(
+                    mock_guild,
+                    player_id=1,
+                    executor=mock_executor,
+                    base_mmr=500,
+                )
 
     async def test_sets_status(self, mock_guild, mock_executor):
         updated = MagicMock()

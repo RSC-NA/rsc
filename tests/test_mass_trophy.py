@@ -15,6 +15,8 @@ from rsc import const
 from rsc.utils.trophy import TrophyMixIn
 from rsc.utils.views.mass_trophy import MassTrophyModal
 
+from .utils import command_callback
+
 
 def _create_mixin(**attrs):
     saved = TrophyMixIn.__abstractmethods__
@@ -152,7 +154,7 @@ class TestMassTrophyCommand:
         )
 
         with self._patch_modal([first, second, third], [], modal_interaction):
-            await TrophyMixIn._accolades_mass_trophy_cmd.callback(mixin, interaction, const.TROPHY_EMOJI)
+            await command_callback(TrophyMixIn._accolades_mass_trophy_cmd)(mixin, interaction, const.TROPHY_EMOJI)
 
         first.edit.assert_awaited_once()
         third.edit.assert_awaited_once()
@@ -169,7 +171,7 @@ class TestMassTrophyCommand:
         mixin = _create_mixin(format_nickname=AsyncMock(return_value="name \U0001f3c6"))
 
         with self._patch_modal([blocked, ok], [], modal_interaction):
-            await TrophyMixIn._accolades_mass_trophy_cmd.callback(mixin, interaction, const.TROPHY_EMOJI)
+            await command_callback(TrophyMixIn._accolades_mass_trophy_cmd)(mixin, interaction, const.TROPHY_EMOJI)
 
         ok.edit.assert_awaited_once()
         embed = self._final_embed(modal_interaction)
@@ -182,7 +184,7 @@ class TestMassTrophyCommand:
         mixin = _create_mixin(format_nickname=AsyncMock(return_value="name \U0001f3c6"))
 
         with self._patch_modal([failed, ok], [], modal_interaction):
-            await TrophyMixIn._accolades_mass_trophy_cmd.callback(mixin, interaction, const.TROPHY_EMOJI)
+            await command_callback(TrophyMixIn._accolades_mass_trophy_cmd)(mixin, interaction, const.TROPHY_EMOJI)
 
         ok.edit.assert_awaited_once()
         embed = self._final_embed(modal_interaction)
@@ -195,7 +197,7 @@ class TestMassTrophyCommand:
         mixin = _create_mixin(format_nickname=AsyncMock(return_value="name \U0001f3c6"))
 
         with self._patch_modal([member], ["Member not found in guild: `999`"], modal_interaction):
-            await TrophyMixIn._accolades_mass_trophy_cmd.callback(mixin, interaction, const.TROPHY_EMOJI)
+            await command_callback(TrophyMixIn._accolades_mass_trophy_cmd)(mixin, interaction, const.TROPHY_EMOJI)
 
         embed = self._final_embed(modal_interaction)
         assert "**1/1**" in embed.description
@@ -207,7 +209,7 @@ class TestMassTrophyCommand:
         mixin = _create_mixin(format_nickname=AsyncMock(return_value="name \U0001f3c6"))
 
         with self._patch_modal([member], [], modal_interaction):
-            await TrophyMixIn._accolades_mass_trophy_cmd.callback(mixin, interaction, const.TROPHY_EMOJI)
+            await command_callback(TrophyMixIn._accolades_mass_trophy_cmd)(mixin, interaction, const.TROPHY_EMOJI)
 
         embed = self._final_embed(modal_interaction)
         assert embed.title == "Mass Trophy Failed"
@@ -219,7 +221,7 @@ class TestMassTrophyCommand:
         mixin = _create_mixin(format_nickname=AsyncMock(return_value="name \U0001f3c6"))
 
         with self._patch_modal(members, [], modal_interaction):
-            await TrophyMixIn._accolades_mass_trophy_cmd.callback(mixin, interaction, const.TROPHY_EMOJI)
+            await command_callback(TrophyMixIn._accolades_mass_trophy_cmd)(mixin, interaction, const.TROPHY_EMOJI)
 
         descriptions = [c.kwargs["embed"].description for c in modal_interaction.edit_original_response.await_args_list]
         assert any("10/25 processed" in d for d in descriptions)
@@ -230,7 +232,7 @@ class TestMassTrophyCommand:
         """Validating inside the loop aborted a batch that was already half applied."""
         mixin = _create_mixin()
 
-        await TrophyMixIn._accolades_mass_trophy_cmd.callback(mixin, interaction, "not-a-trophy")
+        await command_callback(TrophyMixIn._accolades_mass_trophy_cmd)(mixin, interaction, "not-a-trophy")
 
         interaction.response.send_modal.assert_not_awaited()
         assert interaction.response.send_message.await_args.kwargs["embed"].title == "Error"
@@ -249,7 +251,7 @@ class TestMassTrophyCommand:
         mixin = _create_mixin(format_nickname=AsyncMock(return_value="name x"))
 
         with self._patch_modal([member], [], modal_interaction):
-            await TrophyMixIn._accolades_mass_trophy_cmd.callback(mixin, interaction, trophy)
+            await command_callback(TrophyMixIn._accolades_mass_trophy_cmd)(mixin, interaction, trophy)
 
         accolades = mixin.format_nickname.await_args.args[1]
         assert getattr(accolades, field) == 1
@@ -261,7 +263,7 @@ class TestMassTrophyCommand:
         modal.get_members = AsyncMock()
 
         with patch("rsc.utils.trophy.MassTrophyModal", return_value=modal):
-            await TrophyMixIn._accolades_mass_trophy_cmd.callback(mixin, interaction, const.TROPHY_EMOJI)
+            await command_callback(TrophyMixIn._accolades_mass_trophy_cmd)(mixin, interaction, const.TROPHY_EMOJI)
 
         modal.get_members.assert_not_awaited()
         interaction.followup.send.assert_not_awaited()
@@ -273,7 +275,7 @@ class TestMassTrophyCommand:
         mixin = _create_mixin(format_nickname=AsyncMock(return_value="name x"))
 
         with self._patch_modal(members, [], modal_interaction):
-            await TrophyMixIn._accolades_mass_trophy_cmd.callback(mixin, interaction, const.TROPHY_EMOJI)
+            await command_callback(TrophyMixIn._accolades_mass_trophy_cmd)(mixin, interaction, const.TROPHY_EMOJI)
 
         embed = self._final_embed(modal_interaction)
         assert embed.fields[0].name == "Errors (150)"

@@ -21,6 +21,7 @@ from rscapi.models.league_player import LeaguePlayer
 from rsc.enums import Status, TransactionType
 from rsc.exceptions import (
     MalformedTransactionResponse,
+    PastTransactionsEndDate,
     RscException,
     TradeParserException,
 )
@@ -35,6 +36,8 @@ from rsc.transactions.transactions import (
 )
 from rsc.types import Substitute
 from rsc.utils import utils
+
+from .utils import command_callback
 
 
 def _create_mixin(**attrs):
@@ -585,7 +588,7 @@ class TestBuildTransactionEmbed:
             second_franchise=franchise,
         )
 
-        embed, files = await mixin.build_transaction_embed(mock_guild, response, mock_member)
+        embed, _files = await mixin.build_transaction_embed(mock_guild, response, mock_member)
         assert isinstance(embed, discord.Embed)
 
     @patch("rsc.transactions.transactions.utils.transaction_image_from_type", new_callable=AsyncMock)
@@ -611,7 +614,7 @@ class TestBuildTransactionEmbed:
             second_franchise=franchise,
         )
 
-        embed, files = await mixin.build_transaction_embed(mock_guild, response, mock_member)
+        embed, _files = await mixin.build_transaction_embed(mock_guild, response, mock_member)
         assert isinstance(embed, discord.Embed)
 
     @patch("rsc.transactions.transactions.utils.transaction_image_from_type", new_callable=AsyncMock)
@@ -633,7 +636,7 @@ class TestBuildTransactionEmbed:
             first_franchise=franchise,
         )
 
-        embed, files = await mixin.build_transaction_embed(mock_guild, response, mock_member)
+        embed, _files = await mixin.build_transaction_embed(mock_guild, response, mock_member)
         assert isinstance(embed, discord.Embed)
 
     @patch("rsc.transactions.transactions.utils.transaction_image_from_type", new_callable=AsyncMock)
@@ -659,7 +662,7 @@ class TestBuildTransactionEmbed:
             second_franchise=franchise,
         )
 
-        embed, files = await mixin.build_transaction_embed(mock_guild, response, mock_member)
+        embed, _files = await mixin.build_transaction_embed(mock_guild, response, mock_member)
         assert isinstance(embed, discord.Embed)
 
     @patch("rsc.transactions.transactions.utils.transaction_image_from_type", new_callable=AsyncMock)
@@ -719,9 +722,7 @@ class TestBuildTransactionEmbed:
             second_franchise=franchise,
         )
 
-        embed, files = await mixin.build_transaction_embed(
-            mock_guild, response, mock_member, player_out=mock_player_out
-        )
+        embed, _files = await mixin.build_transaction_embed(mock_guild, response, mock_member, player_out=mock_player_out)
         assert isinstance(embed, discord.Embed)
         # When player_out is provided, embed should have "Player In" and "Player Out" fields
         field_names = [f.name for f in embed.fields]
@@ -771,7 +772,7 @@ class TestIrCutTransactionType:
             first_franchise=_make_franchise_identifier("TestFranchise", 999),
         )
 
-        embed, files = await mixin.build_transaction_embed(mock_guild, response, mock_member)
+        embed, _files = await mixin.build_transaction_embed(mock_guild, response, mock_member)
         assert isinstance(embed, discord.Embed)
         assert "released by Team Alpha" in embed.author.name
 
@@ -877,9 +878,7 @@ class TestAnnounceTransaction:
         mixin._trans_channel.return_value = mock_channel
 
         embed = discord.Embed()
-        result = await mixin.announce_transaction(
-            mock_guild, embed=embed, player=mock_member, gm=999
-        )
+        result = await mixin.announce_transaction(mock_guild, embed=embed, player=mock_member, gm=999)
         assert result is mock_msg
         mock_channel.send.assert_called_once()
         mock_msg.edit.assert_called_once()
@@ -892,9 +891,7 @@ class TestAnnounceTransaction:
         mixin._trans_channel.return_value = mock_channel
 
         embed = discord.Embed()
-        result = await mixin.announce_transaction(
-            mock_guild, embed=embed, player=111, gm=222
-        )
+        result = await mixin.announce_transaction(mock_guild, embed=embed, player=111, gm=222)
         assert result is mock_msg
         call_kwargs = mock_channel.send.call_args
         assert "<@!111>" in call_kwargs.kwargs["content"]
@@ -914,9 +911,7 @@ class TestAnnounceToTransactionCommittee:
 
     async def test_returns_none_when_no_channel(self, mixin, mock_guild):
         mixin._trans_log_channel.return_value = None
-        result = await mixin.announce_to_transaction_committee(
-            guild=mock_guild, embed=discord.Embed()
-        )
+        result = await mixin.announce_to_transaction_committee(guild=mock_guild, embed=discord.Embed())
         assert result is None
 
     async def test_returns_none_when_no_role(self, mixin, mock_guild):
@@ -924,9 +919,7 @@ class TestAnnounceToTransactionCommittee:
         mock_channel.send = AsyncMock()
         mixin._trans_log_channel.return_value = mock_channel
         mixin._trans_role.return_value = None
-        result = await mixin.announce_to_transaction_committee(
-            guild=mock_guild, embed=discord.Embed()
-        )
+        result = await mixin.announce_to_transaction_committee(guild=mock_guild, embed=discord.Embed())
         assert result is None
 
     async def test_sends_message_successfully(self, mixin, mock_guild):
@@ -939,9 +932,7 @@ class TestAnnounceToTransactionCommittee:
         mock_role.mention = "@TransCommittee"
         mixin._trans_role.return_value = mock_role
 
-        result = await mixin.announce_to_transaction_committee(
-            guild=mock_guild, embed=discord.Embed()
-        )
+        result = await mixin.announce_to_transaction_committee(guild=mock_guild, embed=discord.Embed())
         assert result is mock_msg
 
 
@@ -956,9 +947,7 @@ class TestAnnounceToFranchiseTransactions:
         return m
 
     async def test_returns_none_when_no_channel(self, mixin, mock_guild):
-        result = await mixin.announce_to_franchise_transactions(
-            mock_guild, franchise="Test Franchise", gm=999, embed=discord.Embed()
-        )
+        result = await mixin.announce_to_franchise_transactions(mock_guild, franchise="Test Franchise", gm=999, embed=discord.Embed())
         assert result is None
 
     async def test_sends_to_matching_channel(self, mixin, mock_guild):
@@ -968,9 +957,7 @@ class TestAnnounceToFranchiseTransactions:
         mock_channel.send = AsyncMock(return_value=mock_msg)
         mock_guild.text_channels = [mock_channel]
 
-        result = await mixin.announce_to_franchise_transactions(
-            mock_guild, franchise="Test Franchise", gm=999, embed=discord.Embed()
-        )
+        result = await mixin.announce_to_franchise_transactions(mock_guild, franchise="Test Franchise", gm=999, embed=discord.Embed())
         assert result is mock_msg
 
     async def test_formats_gm_mention_from_member(self, mixin, mock_guild, mock_member):
@@ -1045,7 +1032,7 @@ class TestBuildTradeEmbed:
         trade = TradeObject(source=src, destination=dest, value=value)
 
         mock_guild.get_member = MagicMock(return_value=None)
-        gms, embed = await mixin.build_trade_embed(mock_guild, [trade])
+        gms, _embed = await mixin.build_trade_embed(mock_guild, [trade])
         assert 222 in gms
         assert 333 in gms
 
@@ -1056,7 +1043,7 @@ class TestBuildTradeEmbed:
         trade = TradeObject(source=src, destination=dest, value=value)
 
         mock_guild.get_member = MagicMock(return_value=None)
-        gms, embed = await mixin.build_trade_embed(mock_guild, [trade])
+        gms, _embed = await mixin.build_trade_embed(mock_guild, [trade])
         assert 222 in gms
 
     async def test_future_pick_trade_embed(self, mixin, mock_guild):
@@ -1066,7 +1053,7 @@ class TestBuildTradeEmbed:
         trade = TradeObject(source=src, destination=dest, value=value)
 
         mock_guild.get_member = MagicMock(return_value=None)
-        gms, embed = await mixin.build_trade_embed(mock_guild, [trade])
+        gms, _embed = await mixin.build_trade_embed(mock_guild, [trade])
         assert 222 in gms
 
 
@@ -1153,8 +1140,6 @@ class TestCutApi:
         mock_ctx.__aexit__ = AsyncMock(return_value=False)
         mock_client_cls.return_value = mock_ctx
 
-        from rsc.exceptions import PastTransactionsEndDate
-
         with pytest.raises(PastTransactionsEndDate):
             await mixin.cut(mock_guild, mock_member, mock_executor)
 
@@ -1194,7 +1179,9 @@ class TestSubstitutionApi:
 
     @patch("rsc.transactions.transactions.TransactionsApi")
     @patch("rsc.abc.ApiClient")
-    async def test_substitution_success(self, mock_client_cls, mock_api_cls, mixin, mock_guild, mock_member, mock_player_out, mock_executor):
+    async def test_substitution_success(
+        self, mock_client_cls, mock_api_cls, mixin, mock_guild, mock_member, mock_player_out, mock_executor
+    ):
         mock_api = AsyncMock()
         expected = _make_transaction_response(type=TransactionType.SUBSTITUTION)
         mock_api.transactions_substitution_create.return_value = expected
@@ -1210,7 +1197,9 @@ class TestSubstitutionApi:
 
     @patch("rsc.transactions.transactions.TransactionsApi")
     @patch("rsc.abc.ApiClient")
-    async def test_substitution_api_exception(self, mock_client_cls, mock_api_cls, mixin, mock_guild, mock_member, mock_player_out, mock_executor):
+    async def test_substitution_api_exception(
+        self, mock_client_cls, mock_api_cls, mixin, mock_guild, mock_member, mock_player_out, mock_executor
+    ):
         mock_api = AsyncMock()
         exc = ApiException(status=400, reason="Bad Request")
         exc.body = json.dumps({"detail": "Some error"})
@@ -1455,7 +1444,7 @@ class TestValidateFuturesCommands:
         response = _make_futures_validation_response(is_valid=True, violations=[])
         mixin.validate_franchise_futures.return_value = response
 
-        await TransactionMixIn._transactions_validate_futures_cmd.callback(mixin, interaction, "Test Franchise")
+        await command_callback(TransactionMixIn._transactions_validate_futures_cmd)(mixin, interaction, "Test Franchise")
 
         interaction.response.defer.assert_awaited_once_with(ephemeral=True)
         mixin.validate_franchise_futures.assert_awaited_once_with(guild=mock_guild, franchise_name="Test Franchise")
@@ -1473,7 +1462,7 @@ class TestValidateFuturesCommands:
         mixin.validate_franchise_futures.return_value = _make_futures_validation_response(is_valid=False)
         mixin.announce_to_franchise_transactions.return_value = MagicMock(spec=discord.Message)
 
-        await TransactionMixIn._transactions_validate_futures_all_cmd.callback(mixin, interaction, ping=True)
+        await command_callback(TransactionMixIn._transactions_validate_futures_all_cmd)(mixin, interaction, ping=True)
 
         interaction.response.defer.assert_awaited_once_with(ephemeral=True)
         mixin.announce_to_franchise_transactions.assert_awaited_once()
@@ -1606,9 +1595,7 @@ class TestPagedTransactionHistoryApi:
         mock_ctx.__aexit__ = AsyncMock(return_value=False)
         mock_client_cls.return_value = mock_ctx
 
-        results = []
-        async for t in mixin.paged_transaction_history(mock_guild, per_page=10):
-            results.append(t)
+        results = [t async for t in mixin.paged_transaction_history(mock_guild, per_page=10)]
 
         assert len(results) == 2
         assert results[0] is t1
@@ -1628,9 +1615,7 @@ class TestPagedTransactionHistoryApi:
         mock_ctx.__aexit__ = AsyncMock(return_value=False)
         mock_client_cls.return_value = mock_ctx
 
-        results = []
-        async for t in mixin.paged_transaction_history(mock_guild, per_page=10):
-            results.append(t)
+        results = [t async for t in mixin.paged_transaction_history(mock_guild, per_page=10)]
 
         assert len(results) == 0
 

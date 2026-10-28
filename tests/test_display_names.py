@@ -46,7 +46,7 @@ CUP = const.COMBINE_CUP_EMOJI
         ("Bizonitax|Giveaway", "Bizonitax|Giveaway"),
         # Real RSC names that a general emoji sweep would destroy.
         ("アクム", "アクム"),
-        ("𝚜𝚞", "𝚜𝚞"),
+        ("𝚜𝚞", "𝚜𝚞"),  # noqa: RUF001
         ("Neb♡", "Neb♡"),
         ("Resonant ¯\\_(ツ)_/¯", "Resonant ¯\\_(ツ)_/¯"),
         (f"TQD | {STAR}Jaden_6{STAR}", f"{STAR}Jaden_6"),

@@ -7,6 +7,8 @@ from rsc.admin.sync import AdminSyncMixIn
 from rsc.enums import Status
 from rsc.exceptions import DiscordNameTooLong
 
+from .utils import command_callback
+
 
 def _create_mixin(**attrs):
     saved = AdminSyncMixIn.__abstractmethods__
@@ -87,7 +89,7 @@ class TestTransactionChannelSync:
         mixin.get_franchise_transaction_channel.side_effect = [existing_channel, None]
         mock_guild.create_text_channel = AsyncMock(return_value=created_channel)
 
-        await AdminSyncMixIn._validate_transaction_channels.callback(mixin, interaction, category)
+        await command_callback(AdminSyncMixIn._validate_transaction_channels)(mixin, interaction, category)
 
         stale_channel.delete.assert_not_awaited()
         mock_guild.create_text_channel.assert_awaited_once()
@@ -120,7 +122,7 @@ class TestTransactionChannelSync:
         mixin.franchises = AsyncMock(return_value=[_make_franchise("Active One")])
         mixin.get_franchise_transaction_channel.side_effect = [active_channel]
 
-        await AdminSyncMixIn._validate_transaction_channels.callback(mixin, interaction, category, delete_stale=True)
+        await command_callback(AdminSyncMixIn._validate_transaction_channels)(mixin, interaction, category, delete_stale=True)
 
         stale_channel.delete.assert_awaited_once()
         embed = interaction.edit_original_response.await_args.kwargs["embed"]
@@ -194,7 +196,7 @@ class TestNonPlayingSyncAgmSweep:
             view.result = True
             view_cls.return_value = view
 
-            await AdminSyncMixIn._sync_nonplaying_cmd.callback(mixin, interaction, dryrun)
+            await command_callback(AdminSyncMixIn._sync_nonplaying_cmd)(mixin, interaction, dryrun)
         return interaction.edit_original_response.await_args.kwargs["embed"]
 
     async def test_strips_the_role_from_a_member_the_api_does_not_list(self, mixin, interaction, agm_role):
@@ -236,7 +238,7 @@ class TestNonPlayingSyncAgmSweep:
         embed = await self._run(mixin, interaction, agm_role)
 
         field = next(f for f in embed.fields if f.name.startswith("Stale AGM Roles"))
-        assert "Stale AGM Roles (25)" == field.name
+        assert field.name == "Stale AGM Roles (25)"
         assert "...and 5 more" in field.value
         assert len(field.value) <= 1024
 
@@ -252,7 +254,7 @@ class TestNonPlayingSyncAgmSweep:
             view.result = True
             view_cls.return_value = view
 
-            await AdminSyncMixIn._sync_nonplaying_cmd.callback(mixin, interaction, False)
+            await command_callback(AdminSyncMixIn._sync_nonplaying_cmd)(mixin, interaction, False)
 
         embed = interaction.edit_original_response.await_args.kwargs["embed"]
         assert embed.title == "Non-Playing Sync"
@@ -289,6 +291,7 @@ class TestNonPlayingSyncAgmSweep:
             embed = await self._run(mixin, interaction, agm_role)
 
         sync.assert_awaited_once()
+        assert sync.await_args is not None
         assert sync.await_args.kwargs["agm_franchise"] is None
         stale.remove_roles.assert_not_awaited()
         assert not [f for f in embed.fields if f.name.startswith("Stale AGM Roles")]
@@ -362,7 +365,7 @@ class TestPlayerSyncNicknameTooLong:
             view.result = True
             view_cls.return_value = view
 
-            await AdminSyncMixIn._sync_players_cmd.callback(mixin, interaction, False)
+            await command_callback(AdminSyncMixIn._sync_players_cmd)(mixin, interaction, False)
 
     async def test_reports_the_member_and_finishes_the_run(self, mixin, interaction, members):
         too_long = DiscordNameTooLong(member_id=111, nickname="COS | cosmo6430 - INACTIVE USER - TRANSFER")

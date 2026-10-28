@@ -8,11 +8,15 @@ script a two-turn conversation.
 
 import asyncio
 import json
+from collections.abc import Mapping
 from datetime import UTC, datetime
 from types import SimpleNamespace
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from openai.types.responses import ResponseFunctionToolCall, ResponseUsage
+from openai.types.responses.response_usage import InputTokensDetails, OutputTokensDetails
 
 from rsc.exceptions import RscException
 from rsc.llm.agent.context import AgentContext
@@ -32,8 +36,8 @@ LEAKED_ANSWER = (
 )
 
 
-def fn_call(name: str, args: dict | str, call_id: str = "call_1") -> SimpleNamespace:
-    return SimpleNamespace(
+def fn_call(name: str, args: dict | str, call_id: str = "call_1") -> ResponseFunctionToolCall:
+    return ResponseFunctionToolCall(
         type="function_call",
         name=name,
         arguments=args if isinstance(args, str) else json.dumps(args),
@@ -49,12 +53,12 @@ def fake_response(output: list, *, in_tokens: int = 100, out_tokens: int = 20, c
     return SimpleNamespace(
         output=output,
         output_text="".join(item.text for item in output if getattr(item, "type", "") == "output_text"),
-        usage=SimpleNamespace(
+        usage=ResponseUsage(
             input_tokens=in_tokens,
             output_tokens=out_tokens,
             total_tokens=in_tokens + out_tokens,
-            input_tokens_details=SimpleNamespace(cached_tokens=cached),
-            output_tokens_details=SimpleNamespace(reasoning_tokens=0),
+            input_tokens_details=InputTokensDetails(cached_tokens=cached),
+            output_tokens_details=OutputTokensDetails(reasoning_tokens=0),
         ),
     )
 
@@ -152,9 +156,7 @@ async def test_dispatch_strips_placeholder_arguments(ctx):
         handler=AsyncMock(),
     )
 
-    cleaned = entry.clean_arguments(
-        {"name": "frostybrew", "discord_id": 0, "me": False, "limit": 0, "query": "", "unknown": ""}
-    )
+    cleaned = entry.clean_arguments({"name": "frostybrew", "discord_id": 0, "me": False, "limit": 0, "query": "", "unknown": ""})
 
     assert cleaned == {"name": "frostybrew", "me": False, "query": "", "unknown": ""}
 
@@ -285,7 +287,7 @@ async def test_loop_stops_at_iteration_cap_and_forces_an_answer(ctx, registered_
     assert_forced_final_call(ctx.client.responses.create.await_args_list[-1].kwargs)
 
 
-def assert_forced_final_call(kwargs: dict) -> None:
+def assert_forced_final_call(kwargs: Mapping[str, Any]) -> None:
     """Calls are forbidden, not withdrawn, and the model is told to answer.
 
     Withdrawing the tools is what made the model write its call out as text.
@@ -381,4 +383,5 @@ async def test_prompt_cache_key_is_stable_per_guild(ctx):
 
     await run_agent(ctx, "question")
 
+    assert ctx.client.responses.create.await_args is not None
     assert ctx.client.responses.create.await_args.kwargs["prompt_cache_key"].endswith(str(ctx.guild.id))

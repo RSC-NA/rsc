@@ -8,6 +8,9 @@ from rsc.checks import elevated_role_required
 from rsc.enums import StaffPositions
 from rsc.exceptions import RscException
 from rsc.members.members import ELEVATED_ROLE_TTL, MemberMixIn
+from rsc.trackers.trackers import TrackerMixIn
+
+from .utils import subcommands
 
 TRACKER_POSITIONS = (
     StaffPositions.ADMIN,
@@ -302,18 +305,15 @@ class TestElevatedPositionsCache:
         with patch("rsc.abc.ApiClient") as mock_client:
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
-            with patch("rsc.members.members.MembersApi", return_value=mock_api):
-                with pytest.raises(RscException):
-                    await mixin.elevated_positions(mock_guild, 1234)
+            with patch("rsc.members.members.MembersApi", return_value=mock_api), pytest.raises(RscException):
+                await mixin.elevated_positions(mock_guild, 1234)
 
 
 class TestTrackerCommandsGated:
     async def test_every_subcommand_is_gated(self):
         """All /trackers subcommands must go through the elevated role check."""
-        from rsc.trackers.trackers import TrackerMixIn
-
-        cmds = TrackerMixIn._trackers.commands
-        assert len(cmds) == 10
+        assert len(TrackerMixIn._trackers.commands) == 10
+        cmds = list(subcommands(TrackerMixIn._trackers).values())
 
         ungated = [c.name for c in cmds if not hasattr(c.callback, "__rsc_elevated_positions__")]
         assert not ungated, f"Ungated /trackers subcommands: {sorted(ungated)}"
@@ -321,13 +321,11 @@ class TestTrackerCommandsGated:
         # Every one of them must accept exactly the numbers committee + admin roles
         expected = frozenset({"ADM", "NUMS", "NH"})
         for c in cmds:
-            assert c.callback.__rsc_elevated_positions__ == expected, f"/trackers {c.name} gated on unexpected positions"
+            assert getattr(c.callback, "__rsc_elevated_positions__", None) == expected, f"/trackers {c.name} gated on unexpected positions"
 
     async def test_signatures_survive_the_decorator(self):
         """`@wraps` must preserve parameters so discord.py builds the command correctly."""
-        from rsc.trackers.trackers import TrackerMixIn
-
-        by_name = {c.name: c for c in TrackerMixIn._trackers.commands}
+        by_name = subcommands(TrackerMixIn._trackers)
 
         assert [p.name for p in by_name["add"].parameters] == ["player", "tracker"]
         assert [p.name for p in by_name["link"].parameters] == ["tracker_id", "player"]

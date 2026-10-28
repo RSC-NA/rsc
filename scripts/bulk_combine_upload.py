@@ -126,9 +126,7 @@ async def group_replay_ids(bapi: ballchasing.Api, group: str) -> set[str]:
     return {r.id async for r in bapi.get_group_replays(group_id=group)}
 
 
-async def handle_duplicate(
-    bapi: ballchasing.Api, replay: Path, group: str, existing: set[str], exc: DuplicateReplay
-) -> str:
+async def handle_duplicate(bapi: ballchasing.Api, replay: Path, group: str, existing: set[str], exc: DuplicateReplay) -> str:
     """Ballchasing already has these exact bytes. Make sure they land in our group."""
     if not exc.id:
         print(f"Duplicate, but ballchasing did not say which replay: {replay.name}")
@@ -163,7 +161,7 @@ async def upload_replay(
     async with gate:
         await pacer.wait()
         try:
-            await bapi.upload_replay(replay_file=str(replay.absolute()), group=group)
+            await bapi.upload_replay(replay_file=str(replay), group=group)
             print(f"Uploaded: {replay.name}")
             return UPLOADED
         except DuplicateReplay as exc:
@@ -220,9 +218,7 @@ if __name__ == "__main__":
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
 
-    parser = argparse.ArgumentParser(
-        description="Bulk upload combine replays to a ballchasing group for a match day."
-    )
+    parser = argparse.ArgumentParser(description="Bulk upload combine replays to a ballchasing group for a match day.")
     parser.add_argument("parent", type=str, help="Top level ballchasing group")
     parser.add_argument("day", type=int, help="Combine match day number")
     parser.add_argument("directory", type=str, help="Replay directory")
@@ -269,7 +265,7 @@ if __name__ == "__main__":
         print("Unable to find Ballchasing API key (BALLCHASING_KEY)")
         sys.exit(1)
 
-    replays = Path(argv.directory)
+    replays = Path(argv.directory).absolute()
 
     if not (replays.exists() and replays.is_dir()):
         print(f"Invalid directory: {replays}")

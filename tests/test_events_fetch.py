@@ -4,19 +4,17 @@
 against a stubbed `IntegrationsApi`, so the request shape is pinned down.
 """
 
-import sys
 from datetime import UTC, datetime
-from pathlib import Path
+from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, patch
 
 import pytest
-
-# Add the project root to the path so we can import the modules
-project_root = Path(__file__).parent.parent
-sys.path.insert(0, str(project_root))
+from rscapi import Configuration
 
 from rsc.events.events import EventMixIn
-from rsc.events.models import EventPollState
+
+if TYPE_CHECKING:
+    from rsc.events.models import EventPollState
 
 GUILD_ID = 1
 LEAGUE_ID = 7
@@ -66,12 +64,19 @@ class Fetcher(EventMixIn):
     def __init__(self):
         self.config = MagicMock()
         self.bot = MagicMock()
-        self._api_conf = {GUILD_ID: object()}
+        self._api_conf = {GUILD_ID: MagicMock(spec=Configuration)}
         self._league = {GUILD_ID: LEAGUE_ID}
         self._event_state: dict[int, EventPollState] = {}
 
 
 Fetcher.__abstractmethods__ = frozenset()
+
+
+def make_fetcher() -> Fetcher:
+    """Build a `Fetcher`. ty cannot see the cleared abstract set, so `Fetcher()` reads as abstract."""
+    fetcher = object.__new__(Fetcher)
+    fetcher.__init__()
+    return fetcher
 
 
 @pytest.fixture
@@ -96,7 +101,7 @@ async def run_fetch(api: FakeApi, guild, **kwargs):
         client_cls.return_value.__aexit__.return_value = False
         kwargs.setdefault("id__gt", 0)
         kwargs.setdefault("limit", 25)
-        return await Fetcher().fetch_league_events(guild, **kwargs)
+        return await make_fetcher().fetch_league_events(guild, **kwargs)
 
 
 async def run_newest(api: FakeApi, guild, **kwargs):
@@ -104,7 +109,7 @@ async def run_newest(api: FakeApi, guild, **kwargs):
     with client_patch as client_cls, api_patch:
         client_cls.return_value.__aenter__.return_value = MagicMock()
         client_cls.return_value.__aexit__.return_value = False
-        return await Fetcher().newest_league_event(guild, **kwargs)
+        return await make_fetcher().newest_league_event(guild, **kwargs)
 
 
 class TestFetchWindow:

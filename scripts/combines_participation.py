@@ -3,13 +3,13 @@
 import argparse
 import asyncio
 import os
-from typing import AsyncIterator
+from collections.abc import AsyncIterator
 
 import pandas as pd
 from rscapi import ApiClient, Configuration, LeaguePlayersApi
 from rscapi.models.league_player import LeaguePlayer
 
-API_KEY = os.environ.get("RSC_API_KEY")
+API_KEY = os.environ.get("RSC_API_KEY", "")
 API_HOST = "https://api.rscna.com/api/v1"
 
 CONF = Configuration(
@@ -67,21 +67,21 @@ async def paged_players(
 
 def parse_combines_csv(csv_file: str):
     df = pd.read_csv(csv_file)
-    df.set_index('RSC ID', inplace=True)
+    df.set_index("RSC ID", inplace=True)
     print(df)
 
     return df
+
 
 async def participation(season: int, csv_file: str):
     # parse combines data
     cdata = parse_combines_csv(csv_file)
 
-    tiers = cdata['Combine Tier'].unique()
+    tiers = cdata["Combine Tier"].unique()
     print(tiers)
 
-    total_0_games = cdata.query('Games <= 0')
+    total_0_games = cdata.query("Games <= 0")
     print(f"Total 0 Games in CSV: {len(total_0_games)}")
-
 
     # Loop players
     total = 0
@@ -134,32 +134,20 @@ async def participation(season: int, csv_file: str):
 
     print(f"Total non PFA players: {total}")
     print(f"Total combine participants: {len(cdata)}")
-    print(f"Players found in combines data: {len(cdata)/total*100:.2f}%")
+    print(f"Players found in combines data: {len(cdata) / total * 100:.2f}%")
 
-
-    print(f"Percent >= 30 combines played: {stats[30]/total*100:.2f}%")
-    print(f"Percent >= 20 combines played: {stats[20]/total*100:.2f}%")
-    print(f"Percent >= 10 combines played: {stats[10]/total*100:.2f}%")
-    print(f"Percent >= 5 combines played: {stats[5]/total*100:.2f}%")
-    print(f"Percent >= 1 combines played: {stats[1]/total*100:.2f}%")
-    print(f"Percent 0 combines played: {stats[0]/total*100:.2f}%")
-
-
-
-
-
-
-
+    print(f"Percent >= 30 combines played: {stats[30] / total * 100:.2f}%")
+    print(f"Percent >= 20 combines played: {stats[20] / total * 100:.2f}%")
+    print(f"Percent >= 10 combines played: {stats[10] / total * 100:.2f}%")
+    print(f"Percent >= 5 combines played: {stats[5] / total * 100:.2f}%")
+    print(f"Percent >= 1 combines played: {stats[1] / total * 100:.2f}%")
+    print(f"Percent 0 combines played: {stats[0] / total * 100:.2f}%")
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description='Check combines participation')
-    parser.add_argument(
-        'season', type=int, default=None,
-        help='RSC Season ID (Not number)')
-    parser.add_argument(
-        'csv_file', type=str, default=None,
-        help='Combines CSV file')
+    parser = argparse.ArgumentParser(description="Check combines participation")
+    parser.add_argument("season", type=int, default=None, help="RSC Season ID (Not number)")
+    parser.add_argument("csv_file", type=str, default=None, help="Combines CSV file")
 
     argv = parser.parse_args()
 

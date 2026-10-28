@@ -2,17 +2,13 @@
 
 import argparse
 import asyncio
-import logging
 import os
 import sys
 from datetime import datetime
 from enum import StrEnum
-from operator import attrgetter
 from pathlib import Path
-from typing import AsyncIterator, TypedDict, cast
+from typing import TypedDict
 
-import numpy as np
-import pandas as pd
 from rich.console import Console
 from rich.table import Table
 from rscapi import (
@@ -20,8 +16,6 @@ from rscapi import (
     Configuration,
     LeaguePlayersApi,
     SeasonsApi,
-    TeamList,
-    TeamsApi,
     TiersApi,
     TransactionResponse,
     TransactionsApi,
@@ -39,8 +33,7 @@ from rsc.pagination import iter_pages
 console = Console()
 
 
-
-API_KEY = os.environ.get("RSC_API_KEY")
+API_KEY = os.environ.get("RSC_API_KEY", "")
 # API_HOST = "https://staging-api.rscna.com/api/v1"
 API_HOST = "https://api.rscna.com/api/v1"
 
@@ -49,6 +42,7 @@ CONF = Configuration(
     api_key={"Api-Key": API_KEY},
     api_key_prefix={"Api-Key": "Api-Key"},
 )
+
 
 class CountKeeper(TypedDict):
     player: LeaguePlayer
@@ -72,6 +66,7 @@ class Status(StrEnum):
     WAIVER_CLAIM = "WC"  # Waiver Claim
     WAIVER_RELEASE = "WR"  # Waiver Release
     DROPPED = "DR"  # Dropped
+
 
 async def transaction_history(
     player: int | None = None,
@@ -98,12 +93,13 @@ async def transaction_history(
         )
         return trans_list.results
 
+
 async def tiers() -> list[Tier]:
     """Fetch a list of tiers"""
     async with ApiClient(CONF) as client:
         api = TiersApi(client)
         tiers = await api.tiers_list(league=1)
-        tiers.sort(key=lambda t: cast(int, t.position), reverse=True)
+        tiers.sort(key=lambda t: t.position, reverse=True)
 
         # Populate cache
         if tiers:
@@ -112,6 +108,7 @@ async def tiers() -> list[Tier]:
         else:
             raise ValueError("No tiers found.")
         return tiers
+
 
 async def player_status(name: str) -> None:
     """Fetch a list of tiers"""
@@ -123,7 +120,19 @@ async def player_status(name: str) -> None:
         console.print(f"Player: {name} - Status: {lplayers[0].status}")
 
 
-async def tier_players(tier_name: str, status: Status|None=None) -> list[LeaguePlayer]:
+def _transaction_date(t: TransactionResponse) -> datetime:
+    if t.var_date is None:
+        raise ValueError(f"Transaction {t.id} has no date")
+    return t.var_date
+
+
+def _current_mmr(lp: LeaguePlayer) -> int:
+    if lp.current_mmr is None:
+        raise ValueError(f"League player {lp.player.name} has no current MMR")
+    return lp.current_mmr
+
+
+async def tier_players(tier_name: str, status: Status | None = None) -> list[LeaguePlayer]:
     """Fetch a list of tiers"""
     async with ApiClient(CONF) as client:
         api = LeaguePlayersApi(client)
@@ -137,13 +146,13 @@ async def tier_players(tier_name: str, status: Status|None=None) -> list[LeagueP
         ]
         console.print(f"Total Results: {len(lplayers)}")
 
-        while any((remove:= p).status in [Status.FORMER, Status.BANNED, Status.PERM_FA, Status.PERMFA_W] for p in lplayers):
+        while any((remove := p).status in [Status.FORMER, Status.BANNED, Status.PERM_FA, Status.PERMFA_W] for p in lplayers):
             console.print(f"\nRemoving {remove} players")
             lplayers.remove(remove)
 
         dropped_players = [p for p in lplayers if p.status == Status.DROPPED]
         for dropped in dropped_players:
-            console.print(f"\nValidating dropped player: {remove.player.name}")
+            console.print(f"\nValidating dropped player: {dropped.player.name}")
             history = await transaction_history(player=dropped.player.discord_id, season=23, trans_type=TransactionType.RETIRE)
 
             if not history:
@@ -151,18 +160,20 @@ async def tier_players(tier_name: str, status: Status|None=None) -> list[LeagueP
 
             console.print(f"History Count: {len(history)}")
             console.print(f"History[0]: {history[0]}")
-            history.sort(key=lambda x: x.var_date, reverse=True)
+            history.sort(key=_transaction_date, reverse=True)
             h = history.pop(0)
-            console.print(f"History: {h.var_date} - {h.type} - {h.player_updates[0].player.player.name}")
-            if h.var_date < datetime.fromisoformat("2025-04-21T00:00:00").replace(tzinfo=h.var_date.tzinfo):
-            # if h.var_date < datetime.fromisoformat("2025-04-01:00:00").replace(tzinfo=h.var_date.tzinfo):
+            h_date = _transaction_date(h)
+            if not h.player_updates:
+                raise ValueError(f"Transaction {h.id} has no player updates")
+            console.print(f"History: {h_date} - {h.type} - {h.player_updates[0].player.player.name}")
+            if h_date < datetime.fromisoformat("2025-04-21T00:00:00").replace(tzinfo=h_date.tzinfo):
+                # if h_date < datetime.fromisoformat("2025-04-01:00:00").replace(tzinfo=h_date.tzinfo):
                 console.print(f"Removing {dropped.player.name} - {dropped.status}")
                 lplayers.remove(dropped)
             else:
                 console.print(f"LEAVING DROPPED PLAYER IN {dropped.player.name} - {dropped.status}")
 
-
-        lplayers.sort(key=lambda lp: (-lp.current_mmr, lp.player.name))
+        lplayers.sort(key=lambda lp: (-_current_mmr(lp), lp.player.name))
         console.print(f"Post filter: {len(lplayers)}")
 
         # Populate cache
@@ -186,7 +197,10 @@ async def current_season() -> Season:
 async def print_count_keeper(data: list[CountKeeper]) -> None:
     """Print count keeper"""
     # for k, v in data.items():
-    tier_name = data[0]["player"].tier.name
+    tier = data[0]["player"].tier
+    if tier is None:
+        raise ValueError(f"League player {data[0]['player'].player.name} has no tier")
+    tier_name = tier.name
     table = Table(title=f"{tier_name} Count/Keeper")
     table.add_column("RSC ID", justify="left", style="cyan")
     table.add_column("Player Name", justify="left", style="magenta")
@@ -202,6 +216,7 @@ async def print_count_keeper(data: list[CountKeeper]) -> None:
         table.add_row(p.player.rsc_id, p.player.name, str(p.base_mmr), str(p.current_mmr), str(d["count"]), str(d["keeper"]))
 
     console.print(table)
+
 
 async def calculate_rounds(tier: str | None = None) -> None:
     """Calculate rounds for a given tier"""
@@ -232,16 +247,11 @@ async def calculate_rounds(tier: str | None = None) -> None:
             console.print(f"Index: {idx}")
             console.print(f"Round {i} - Players: {tcount}")
             # console.print(f"Pulling {len(players[idx:idx+tcount])}")
-            nextup = players[idx:idx+tcount]
+            nextup = players[idx : idx + tcount]
             # print(f"Nextup Len: {len(nextup)}")
             for n in nextup:
-                results.append({
-                    "player": n,
-                    "count": i,
-                    "keeper": i
-                })
+                results.append({"player": n, "count": i, "keeper": i})
                 idx += 1
-
 
             # Bump index
             # idx += tcount
@@ -255,28 +265,18 @@ async def calculate_rounds(tier: str | None = None) -> None:
             while last_player.current_mmr == players[idx].current_mmr and last_player.id != players[idx].id:
                 console.print(f"Duplicate MMR: {last_player.current_mmr} - {players[idx].player.name}")
 
-                results.append({
-                    "player": players[idx],
-                    "count": i + 1,
-                    "keeper": i
-                })
+                results.append({"player": players[idx], "count": i + 1, "keeper": i})
 
                 last_player = players[idx]
                 idx += 1
                 console.print(f"idx: {idx}")
-                if idx >= (len(players)-1):
+                if idx >= (len(players) - 1):
                     break
 
         # rest go to rd 6
-        if idx < (len(players)-1):
-            console.print(f"Adding remaining players to round 6")
-            for n in players[idx:]:
-                results.append({
-                    "player": n,
-                    "count": 6,
-                    "keeper": 6
-                })
-
+        if idx < (len(players) - 1):
+            console.print("Adding remaining players to round 6")
+            results.extend({"player": n, "count": 6, "keeper": 6} for n in players[idx:])
 
         console.log(f"Total CountKeepers: {len(players)}")
         await print_count_keeper(results)
@@ -292,14 +292,10 @@ async def calculate_rounds(tier: str | None = None) -> None:
         # print("\n".join(sorted(test)))
 
 
-
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description='Test RSC draft on staging')
-    parser.add_argument(
-        '-t', '--tier', type=str, default=None,
-        help='Tier')
+    parser = argparse.ArgumentParser(description="Test RSC draft on staging")
+    parser.add_argument("-t", "--tier", type=str, default=None, help="Tier")
     argv = parser.parse_args()
-
 
     loop = asyncio.get_event_loop()
     loop.run_until_complete(calculate_rounds(tier=argv.tier))

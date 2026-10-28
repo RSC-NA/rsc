@@ -6,7 +6,7 @@ import json
 import os
 import sys
 
-import aiohttp
+import aiofiles
 import ballchasing
 from dotenv import load_dotenv
 
@@ -25,8 +25,8 @@ async def main(replay_id: str, output: str | None = None):
     formatted = json.dumps(replay.model_dump(mode="json"), indent=2)
 
     if output:
-        with open(output, "w") as f:
-            f.write(formatted)
+        async with aiofiles.open(output, "w") as f:
+            await f.write(formatted)
         print(f"Saved replay to {output}")
     else:
         print(formatted)

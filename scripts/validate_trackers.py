@@ -3,13 +3,12 @@
 import asyncio
 import os
 from enum import StrEnum
-from typing import AsyncIterator
+from collections.abc import AsyncIterator
 
-from rscapi import ApiClient, ApiException, Configuration, TrackerLinksApi
-from rscapi.models.league_player import LeaguePlayer
+from rscapi import ApiClient, Configuration, TrackerLinksApi
 from rscapi.models.tracker_link import TrackerLink
 
-API_KEY = os.environ.get("RSC_API_KEY")
+API_KEY = os.environ.get("RSC_API_KEY", "")
 API_HOST = "https://api.rscna.com/api/v1"
 
 CONF = Configuration(
@@ -17,6 +16,7 @@ CONF = Configuration(
     api_key={"Api-Key": API_KEY},
     api_key_prefix={"Api-Key": "Api-Key"},
 )
+
 
 class TrackerLinksStatus(StrEnum):
     NEW = "NEW"  # New
@@ -29,6 +29,7 @@ class TrackerLinksStatus(StrEnum):
     @property
     def full_name(self) -> str:
         return self.name.capitalize()
+
 
 async def paged_trackers(
     status: TrackerLinksStatus | None = None,
@@ -76,8 +77,8 @@ async def validate_trackers():
         if "tracker.gg" not in t.link.strip().lower():
             print(f"Invalid tracker.gg URL: {t.id} - {t.link}")
 
-
         c += 1
+
 
 if __name__ == "__main__":
     print("Starting event loop.")

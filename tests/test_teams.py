@@ -49,7 +49,21 @@ def _make_franchise_list(id=10, name="Eagles", agm_discord_ids=()):
     return f
 
 
-def _make_league_player(discord_id=111, name="Player1", team_name="Team Alpha", tier_name="Premier", tier_pos=1, captain=False, status=Status.ROSTERED, sub_status=None, franchise_name="Eagles", franchise_id=10, gm_discord_id=999, gm_name="TestGM", tier_id=1):
+def _make_league_player(
+    discord_id=111,
+    name="Player1",
+    team_name="Team Alpha",
+    tier_name="Premier",
+    tier_pos=1,
+    captain=False,
+    status=Status.ROSTERED,
+    sub_status=None,
+    franchise_name="Eagles",
+    franchise_id=10,
+    gm_discord_id=999,
+    gm_name="TestGM",
+    tier_id=1,
+):
     p = MagicMock()
     p.id = discord_id
     p.captain = captain
@@ -193,9 +207,8 @@ class TestTeamIdByName:
             mock_api.teams_list.return_value = []
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
-            with patch("rsc.teams.teams.TeamsApi", return_value=mock_api):
-                with pytest.raises(ValueError, match="No team found"):
-                    await mixin.team_id_by_name(mock_guild, "None")
+            with patch("rsc.teams.teams.TeamsApi", return_value=mock_api), pytest.raises(ValueError, match="No team found"):
+                await mixin.team_id_by_name(mock_guild, "None")
 
     async def test_exact_match_when_multiple(self, mock_guild):
         t1 = _make_team_list(id=1, name="Alpha")
@@ -228,9 +241,8 @@ class TestTeamIdByName:
             mock_api.teams_list.return_value = [t1, t2]
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
-            with patch("rsc.teams.teams.TeamsApi", return_value=mock_api):
-                with pytest.raises(ValueError, match="More than one"):
-                    await mixin.team_id_by_name(mock_guild, "Alpha")
+            with patch("rsc.teams.teams.TeamsApi", return_value=mock_api), pytest.raises(ValueError, match="More than one"):
+                await mixin.team_id_by_name(mock_guild, "Alpha")
 
     async def test_raises_when_no_id(self, mock_guild):
         t = _make_team_list(id=None, name="Alpha")
@@ -244,9 +256,8 @@ class TestTeamIdByName:
             mock_api.teams_list.return_value = [t]
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
-            with patch("rsc.teams.teams.TeamsApi", return_value=mock_api):
-                with pytest.raises(ValueError, match="no ID"):
-                    await mixin.team_id_by_name(mock_guild, "Alpha")
+            with patch("rsc.teams.teams.TeamsApi", return_value=mock_api), pytest.raises(ValueError, match="no ID"):
+                await mixin.team_id_by_name(mock_guild, "Alpha")
 
 
 # --- team_captain ---
@@ -287,6 +298,7 @@ class TestTeamCaptain:
 
 
 # --- tier_captains ---
+
 
 def _paged(items):
     """Stub for a `paged_*` method, which is an async generator rather than a coroutine."""
@@ -506,9 +518,8 @@ class TestTeamsApi:
             mock_api.teams_list.return_value = [t]
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
-            with patch("rsc.teams.teams.TeamsApi", return_value=mock_api):
-                with pytest.raises(AttributeError, match="no name"):
-                    await mixin.teams(mock_guild)
+            with patch("rsc.teams.teams.TeamsApi", return_value=mock_api), pytest.raises(AttributeError, match="no name"):
+                await mixin.teams(mock_guild)
 
     async def test_raises_rsc_exception_on_api_error(self, mock_guild):
         mixin = _create_mixin(
@@ -521,9 +532,8 @@ class TestTeamsApi:
             mock_api.teams_list.side_effect = ApiException(status=500, reason="Error")
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
-            with patch("rsc.teams.teams.TeamsApi", return_value=mock_api):
-                with pytest.raises(RscException):
-                    await mixin.teams(mock_guild)
+            with patch("rsc.teams.teams.TeamsApi", return_value=mock_api), pytest.raises(RscException):
+                await mixin.teams(mock_guild)
 
 
 class TestTeamByIdApi:
@@ -550,9 +560,8 @@ class TestTeamByIdApi:
             mock_api.teams_retrieve.side_effect = ApiException(status=404, reason="Not Found")
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
-            with patch("rsc.teams.teams.TeamsApi", return_value=mock_api):
-                with pytest.raises(RscException):
-                    await mixin.team_by_id(mock_guild, 999)
+            with patch("rsc.teams.teams.TeamsApi", return_value=mock_api), pytest.raises(RscException):
+                await mixin.team_by_id(mock_guild, 999)
 
 
 class TestNextMatchApi:
@@ -591,9 +600,8 @@ class TestNextMatchApi:
             mock_api.teams_next_match_retrieve.side_effect = ApiException(status=500, reason="Error")
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
-            with patch("rsc.teams.teams.TeamsApi", return_value=mock_api):
-                with pytest.raises(RscException):
-                    await mixin.next_match(mock_guild, 1)
+            with patch("rsc.teams.teams.TeamsApi", return_value=mock_api), pytest.raises(RscException):
+                await mixin.next_match(mock_guild, 1)
 
 
 class TestSeasonMatchesApi:
@@ -645,9 +653,8 @@ class TestCreateTeamApi:
             mock_api.teams_create.side_effect = ApiException(status=400, reason="Bad Request")
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
-            with patch("rsc.teams.teams.TeamsApi", return_value=mock_api):
-                with pytest.raises(RscException):
-                    await mixin.create_team(mock_guild, name="Bad", franchise="X", tier="Y")
+            with patch("rsc.teams.teams.TeamsApi", return_value=mock_api), pytest.raises(RscException):
+                await mixin.create_team(mock_guild, name="Bad", franchise="X", tier="Y")
 
 
 class TestDeleteTeamApi:
@@ -672,6 +679,5 @@ class TestDeleteTeamApi:
             mock_api.teams_destroy.side_effect = ApiException(status=404, reason="Not Found")
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
-            with patch("rsc.teams.teams.TeamsApi", return_value=mock_api):
-                with pytest.raises(RscException):
-                    await mixin.delete_team(mock_guild, team_id=999)
+            with patch("rsc.teams.teams.TeamsApi", return_value=mock_api), pytest.raises(RscException):
+                await mixin.delete_team(mock_guild, team_id=999)

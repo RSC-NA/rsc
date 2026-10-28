@@ -5,11 +5,12 @@ mention with no rate limit, no cap, and no record of what it cost.
 """
 
 from datetime import UTC, datetime, timedelta
-from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import discord
 import pytest
+from openai.types.responses import ResponseUsage
+from openai.types.responses.response_usage import InputTokensDetails, OutputTokensDetails
 
 from rsc.llm.agent.budget import CooldownTracker, UsageAccumulator, usage_day
 from rsc.llm.agent.cache import ToolCache, cache_key
@@ -28,15 +29,22 @@ class FakeRecord:
     def _get(self, field: str):
         return self._store.get(self._key, {}).get(field)
 
-    def __getattr__(self, field: str):
-        async def getter():
-            return self._get(field)
+    def __getattr__(self, field: str) -> "FakeValue":
+        return FakeValue(self, field)
 
-        async def setter(value):
-            self._store.setdefault(self._key, {})[field] = value
 
-        getter.set = setter  # type: ignore[attr-defined]
-        return getter
+class FakeValue:
+    """A Config value: await it to read, `.set()` to write."""
+
+    def __init__(self, record: FakeRecord, field: str):
+        self._record = record
+        self._field = field
+
+    async def __call__(self):
+        return self._record._get(self._field)
+
+    async def set(self, value):
+        self._record._store.setdefault(self._record._key, {})[self._field] = value
 
 
 class FakeConfig:
@@ -132,9 +140,7 @@ async def test_check_budget_reports_cooldown(cog, guild, member, monkeypatch):
 async def test_user_cap_blocks_at_the_limit(cog, guild, member):
     seed_usage(cog, guild.id, member.id, day=usage_day(NOW), count=15)
 
-    verdict = await check_budget(
-        cog, guild, member, cooldown=CooldownTracker(seconds=0), user_cap=15, guild_cap=400, now=NOW
-    )
+    verdict = await check_budget(cog, guild, member, cooldown=CooldownTracker(seconds=0), user_cap=15, guild_cap=400, now=NOW)
 
     assert not verdict.allowed
     assert verdict.reason == "user_cap"
@@ -145,9 +151,7 @@ async def test_usage_resets_on_a_new_day(cog, guild, member):
     yesterday = usage_day(NOW - timedelta(days=1))
     seed_usage(cog, guild.id, member.id, day=yesterday, count=15)
 
-    verdict = await check_budget(
-        cog, guild, member, cooldown=CooldownTracker(seconds=0), user_cap=15, guild_cap=400, now=NOW
-    )
+    verdict = await check_budget(cog, guild, member, cooldown=CooldownTracker(seconds=0), user_cap=15, guild_cap=400, now=NOW)
 
     assert verdict.allowed
 
@@ -155,9 +159,7 @@ async def test_usage_resets_on_a_new_day(cog, guild, member):
 async def test_guild_cap_blocks_everyone(cog, guild, member):
     seed_usage(cog, guild.id, 0, day=usage_day(NOW), count=400)
 
-    verdict = await check_budget(
-        cog, guild, member, cooldown=CooldownTracker(seconds=0), user_cap=15, guild_cap=400, now=NOW
-    )
+    verdict = await check_budget(cog, guild, member, cooldown=CooldownTracker(seconds=0), user_cap=15, guild_cap=400, now=NOW)
 
     assert not verdict.allowed
     assert verdict.reason == "guild_cap"
@@ -167,9 +169,7 @@ async def test_elevated_members_bypass_the_user_cap(cog, guild, member):
     seed_usage(cog, guild.id, member.id, day=usage_day(NOW), count=999)
     cog.elevated_positions.return_value = frozenset({"ADM"})
 
-    verdict = await check_budget(
-        cog, guild, member, cooldown=CooldownTracker(seconds=0), user_cap=15, guild_cap=400, now=NOW
-    )
+    verdict = await check_budget(cog, guild, member, cooldown=CooldownTracker(seconds=0), user_cap=15, guild_cap=400, now=NOW)
 
     assert verdict.allowed
 
@@ -179,9 +179,7 @@ async def test_elevated_members_do_not_bypass_the_guild_cap(cog, guild, member):
     seed_usage(cog, guild.id, 0, day=usage_day(NOW), count=400)
     cog.elevated_positions.return_value = frozenset({"ADM"})
 
-    verdict = await check_budget(
-        cog, guild, member, cooldown=CooldownTracker(seconds=0), user_cap=15, guild_cap=400, now=NOW
-    )
+    verdict = await check_budget(cog, guild, member, cooldown=CooldownTracker(seconds=0), user_cap=15, guild_cap=400, now=NOW)
 
     assert not verdict.allowed
 
@@ -208,9 +206,7 @@ def test_users_outside_a_guild_are_not_exempt():
 async def test_zero_cap_disables_the_limit(cog, guild, member):
     seed_usage(cog, guild.id, member.id, day=usage_day(NOW), count=9999)
 
-    verdict = await check_budget(
-        cog, guild, member, cooldown=CooldownTracker(seconds=0), user_cap=0, guild_cap=0, now=NOW
-    )
+    verdict = await check_budget(cog, guild, member, cooldown=CooldownTracker(seconds=0), user_cap=0, guild_cap=0, now=NOW)
 
     assert verdict.allowed
 
@@ -219,9 +215,7 @@ async def test_role_lookup_failure_does_not_block_the_question(cog, guild, membe
     """An elevated-role lookup is an optimisation, not a gate."""
     cog.elevated_positions.side_effect = RuntimeError("api down")
 
-    verdict = await check_budget(
-        cog, guild, member, cooldown=CooldownTracker(seconds=0), user_cap=15, guild_cap=400, now=NOW
-    )
+    verdict = await check_budget(cog, guild, member, cooldown=CooldownTracker(seconds=0), user_cap=15, guild_cap=400, now=NOW)
 
     assert verdict.allowed
 
@@ -233,19 +227,21 @@ def test_usage_accumulator_sums_across_calls():
     usage = UsageAccumulator()
 
     usage.record(
-        SimpleNamespace(
+        ResponseUsage(
             input_tokens=100,
             output_tokens=10,
-            input_tokens_details=SimpleNamespace(cached_tokens=90),
-            output_tokens_details=SimpleNamespace(reasoning_tokens=5),
+            total_tokens=110,
+            input_tokens_details=InputTokensDetails(cached_tokens=90),
+            output_tokens_details=OutputTokensDetails(reasoning_tokens=5),
         )
     )
     usage.record(
-        SimpleNamespace(
+        ResponseUsage(
             input_tokens=200,
             output_tokens=20,
-            input_tokens_details=SimpleNamespace(cached_tokens=180),
-            output_tokens_details=SimpleNamespace(reasoning_tokens=0),
+            total_tokens=220,
+            input_tokens_details=InputTokensDetails(cached_tokens=180),
+            output_tokens_details=OutputTokensDetails(reasoning_tokens=0),
         )
     )
 

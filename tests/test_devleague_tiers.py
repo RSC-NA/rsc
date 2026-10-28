@@ -45,9 +45,15 @@ def test_parse_ignores_non_game_channels(name):
     assert channel_sort_key(name) is None
 
 
+def _game_channel_key(name: str) -> tuple[int, int, bool]:
+    key = channel_sort_key(name)
+    assert key is not None, name
+    return key
+
+
 def test_sort_key_orders_tier_then_id_then_side():
     names = ["b-3-away", "splus-9-home", "b-3-home", "a-5-home", "b-1-home", "splus-9-away"]
-    assert sorted(names, key=channel_sort_key) == [
+    assert sorted(names, key=_game_channel_key) == [
         "splus-9-home",
         "splus-9-away",
         "a-5-home",

@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import discord
@@ -10,6 +10,8 @@ from rscapi.models.name_change_history import NameChangeHistory
 from rsc.admin.members import AdminMembersMixIn
 from rsc.enums import ACTIVE_STATUSES, INACTIVE_STATUSES, StaffPositions, Status, is_inactive_status
 from rsc.exceptions import RscException
+
+from .utils import command_callback, subcommands
 
 
 def _create_mixin(**attrs):
@@ -50,10 +52,10 @@ def _sent_embed(interaction):
 
 
 # The decorator turns the method into an app command, so reach through to the callback
-CMD = AdminMembersMixIn._member_elevated_roles_cmd.callback
+CMD = command_callback(AdminMembersMixIn._member_elevated_roles_cmd)
 
 
-NAMEHISTORY_CMD = AdminMembersMixIn._member_namehistory_cmd.callback
+NAMEHISTORY_CMD = command_callback(AdminMembersMixIn._member_namehistory_cmd)
 
 
 def _history_entry(old_name="Old", new_name="New", date_changed=None, executor=None):
@@ -75,9 +77,9 @@ class TestAdminNameHistoryCommand:
         interaction = _mock_interaction(mock_guild)
         member = MagicMock(spec=discord.Member)
         history = [
-            _history_entry("A", "B", datetime(2026, 1, 1, tzinfo=timezone.utc)),
+            _history_entry("A", "B", datetime(2026, 1, 1, tzinfo=UTC)),
             _history_entry("C", "D", None),
-            _history_entry("E", "F", datetime(2026, 6, 1, tzinfo=timezone.utc)),
+            _history_entry("E", "F", datetime(2026, 6, 1, tzinfo=UTC)),
         ]
         mixin = _create_mixin(name_history=AsyncMock(return_value=history))
 
@@ -120,7 +122,7 @@ class TestAdminNameHistoryCommand:
 
 class TestAdminElevatedRolesCommand:
     async def test_registered_under_admin_members(self):
-        cmds = {c.name: c for c in AdminMembersMixIn._members.commands}
+        cmds = subcommands(AdminMembersMixIn._members)
         assert "elevatedroles" in cmds
         assert [p.name for p in cmds["elevatedroles"].parameters] == ["member"]
 
@@ -203,7 +205,7 @@ class TestAdminElevatedRolesCommand:
         mixin.member_elevated_roles.assert_not_awaited()
 
 
-NOTINSERVER_CMD = AdminMembersMixIn._admin_member_notinserver_cmd.callback
+NOTINSERVER_CMD = command_callback(AdminMembersMixIn._admin_member_notinserver_cmd)
 
 
 def _league_player(name, discord_id, status, *, lp_id=1, tier="Elite", franchise="Some Franchise"):
@@ -281,10 +283,10 @@ def _safe_defer():
 
 class TestActiveStatuses:
     def test_excludes_only_former_banned_dropped(self):
-        assert INACTIVE_STATUSES == {Status.FORMER, Status.BANNED, Status.DROPPED}
+        assert {Status.FORMER, Status.BANNED, Status.DROPPED} == INACTIVE_STATUSES
 
     def test_active_is_every_other_status(self):
-        assert ACTIVE_STATUSES == frozenset(Status) - INACTIVE_STATUSES
+        assert frozenset(Status) - INACTIVE_STATUSES == ACTIVE_STATUSES
         assert Status.DRAFT_ELIGIBLE in ACTIVE_STATUSES
         assert Status.PERM_FA in ACTIVE_STATUSES
         assert Status.FORMER not in ACTIVE_STATUSES
@@ -302,7 +304,7 @@ class TestActiveStatuses:
 
 class TestAdminNotInServerCommand:
     async def test_registered_under_admin_members(self):
-        cmds = {c.name: c for c in AdminMembersMixIn._members.commands}
+        cmds = subcommands(AdminMembersMixIn._members)
         assert "notinserver" in cmds
         assert [p.name for p in cmds["notinserver"].parameters] == ["status"]
 
@@ -367,7 +369,7 @@ class TestAdminNotInServerCommand:
         embed = _report_embed(interaction)
         assert embed.fields[1].name == "No Discord ID"
         assert embed.fields[1].value == "1"
-        assert "NoId (league player 77)" in [f.value for f in embed.fields if f.name == "Missing Discord ID"][0]
+        assert "NoId (league player 77)" in next(f.value for f in embed.fields if f.name == "Missing Discord ID")
 
     async def test_explicit_status_override_reports_that_status(self, mock_guild):
         players = [

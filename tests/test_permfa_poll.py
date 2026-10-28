@@ -1,9 +1,11 @@
 import asyncio
 import copy
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import discord
 import pytest
+from redbot.core import Config
 
 from rsc.admin.permfa_poll import (
     CURRENT_ANSWER_FIELD,
@@ -21,6 +23,8 @@ from rsc.admin.views import PERMFA_POLL_DM_TEMPLATE, PermFAPollButton, build_per
 from rsc.embeds import EmbedLimits
 from rsc.exceptions import RscException
 from rsc.utils.dm import DMOutcome
+
+from .utils import command_callback, custom_ids
 
 TEMPLATE = PermFAPollButton.__discord_ui_compiled_template__
 
@@ -53,13 +57,17 @@ class FakeGroup:
         self.store.setdefault(guild, {})[tier] = copy.deepcopy(value)
 
 
-class FakeConfig:
-    def __init__(self):
-        self.store: dict = {}
+def fake_config() -> MagicMock:
+    store: dict = {}
 
-    def custom(self, group, *ids):
+    def custom(group, *ids):
         assert group == "PermFAPoll"
-        return FakeGroup(self.store, ids)
+        return FakeGroup(store, ids)
+
+    config = MagicMock(spec=Config)
+    config.store = store
+    config.custom.side_effect = custom
+    return config
 
 
 @pytest.fixture
@@ -91,7 +99,7 @@ def _mixin(guild=None):
         m = object.__new__(AdminPermFAPollMixIn)
     finally:
         AdminPermFAPollMixIn.__abstractmethods__ = saved
-    m.config = FakeConfig()
+    m.config = fake_config()
     m._permfa_poll_locks = {}
     m._permfa_poll_timers = {}
     m.bot = MagicMock()
@@ -103,7 +111,7 @@ def _mixin(guild=None):
 
 
 def _poll(**overrides) -> PermFAPoll:
-    fields = {
+    fields: dict[str, Any] = {
         "poll_id": POLL_ID,
         "tier_id": TIER_ID,
         "tier_name": "Elite",
@@ -149,7 +157,7 @@ class TestTemplate:
     @pytest.mark.parametrize("yes", [True, False])
     def test_generated_custom_id_round_trips(self, yes):
         button = PermFAPollButton(guild_id=GUILD_ID, tier_id=TIER_ID, poll_id=POLL_ID, yes=yes)
-        match = TEMPLATE.fullmatch(button.item.custom_id)
+        match = TEMPLATE.fullmatch(button.custom_id)
         assert match
         assert int(match["guild"]) == GUILD_ID
         assert int(match["tier"]) == TIER_ID
@@ -171,7 +179,7 @@ class TestTemplate:
 
     def test_custom_id_fits_discord_limit(self):
         button = PermFAPollButton(guild_id=2**64 - 1, tier_id=2**64 - 1, poll_id=2**64 - 1, yes=True)
-        assert len(button.item.custom_id) <= 100
+        assert len(button.custom_id) <= 100
 
     async def test_from_custom_id_parses_all_fields(self):
         match = TEMPLATE.fullmatch(f"pfa_poll:{GUILD_ID}:{TIER_ID}:{POLL_ID}:no")
@@ -182,7 +190,7 @@ class TestTemplate:
     def test_view_has_yes_and_no_and_never_times_out(self):
         view = build_permfa_poll_view(GUILD_ID, TIER_ID, POLL_ID)
         assert view.timeout is None
-        ids = [child.item.custom_id for child in view.children]
+        ids = custom_ids(view)
         assert ids == [f"pfa_poll:{GUILD_ID}:{TIER_ID}:{POLL_ID}:yes", f"pfa_poll:{GUILD_ID}:{TIER_ID}:{POLL_ID}:no"]
 
 
@@ -735,7 +743,7 @@ class TestPollCommand:
         mixin.is_valid_tier.return_value = False
         interaction = _command_interaction(guild)
 
-        await AdminPermFAPollMixIn._permfa_poll_cmd.callback(mixin, interaction, tier="nope")
+        await command_callback(AdminPermFAPollMixIn._permfa_poll_cmd)(mixin, interaction, tier="nope")
 
         assert "not a valid tier" in interaction.followup.send.call_args.kwargs["embed"].description
         mixin._dm_helper.enqueue.assert_not_awaited()
@@ -746,7 +754,7 @@ class TestPollCommand:
         await _store(mixin, _poll(poll_id=POLL_ID - 1))
         interaction = _command_interaction(guild)
 
-        await AdminPermFAPollMixIn._permfa_poll_cmd.callback(mixin, interaction, tier="elite")
+        await command_callback(AdminPermFAPollMixIn._permfa_poll_cmd)(mixin, interaction, tier="elite")
 
         assert "already open" in interaction.followup.send.call_args.kwargs["embed"].description
         mixin._dm_helper.enqueue.assert_not_awaited()
@@ -757,7 +765,7 @@ class TestPollCommand:
         mixin = _poll_mixin(guild, players, found=[_member(1)], left=[2])
         interaction = _command_interaction(guild)
 
-        await AdminPermFAPollMixIn._permfa_poll_cmd.callback(mixin, interaction, tier="elite")
+        await command_callback(AdminPermFAPollMixIn._permfa_poll_cmd)(mixin, interaction, tier="elite")
 
         # Only PermFAs are polled, from the requested tier
         assert mixin.paged_players.call_args.kwargs == {"status": "PF", "tier_name": "Elite"}
@@ -780,7 +788,7 @@ class TestPollCommand:
         guild = _guild()
         mixin = _poll_mixin(guild, [_league_player(1, "Alpha")], [_member(1)])
 
-        await AdminPermFAPollMixIn._permfa_poll_cmd.callback(mixin, _command_interaction(guild), tier="elite")
+        await command_callback(AdminPermFAPollMixIn._permfa_poll_cmd)(mixin, _command_interaction(guild), tier="elite")
 
         assert await mixin._get_permfa_poll(GUILD_ID, TIER_ID) is None
         mixin._dm_helper.enqueue.assert_not_awaited()
@@ -795,7 +803,7 @@ class TestPollCommand:
         confirm.before_result = other_admin_starts_a_poll
         interaction = _command_interaction(guild)
 
-        await AdminPermFAPollMixIn._permfa_poll_cmd.callback(mixin, interaction, tier="elite")
+        await command_callback(AdminPermFAPollMixIn._permfa_poll_cmd)(mixin, interaction, tier="elite")
 
         assert (await _load(mixin)).poll_id == POLL_ID - 1
         mixin._dm_helper.enqueue.assert_not_awaited()
@@ -811,7 +819,7 @@ class TestRemindCommand:
         await _store(mixin, poll)
         mixin._resolve_members_by_id = AsyncMock(return_value=([_member(2)], [], []))
 
-        await AdminPermFAPollMixIn._permfa_remind_cmd.callback(mixin, _command_interaction(guild), tier="elite")
+        await command_callback(AdminPermFAPollMixIn._permfa_remind_cmd)(mixin, _command_interaction(guild), tier="elite")
 
         mixin._resolve_members_by_id.assert_awaited_once_with(guild, [2])
         mixin._dm_helper.enqueue.assert_awaited_once()
@@ -824,7 +832,7 @@ class TestRemindCommand:
         await _store(mixin, _poll(closed_at=NOW))
         interaction = _command_interaction(guild)
 
-        await AdminPermFAPollMixIn._permfa_remind_cmd.callback(mixin, interaction, tier="elite")
+        await command_callback(AdminPermFAPollMixIn._permfa_remind_cmd)(mixin, interaction, tier="elite")
 
         assert "no open" in interaction.followup.send.call_args.kwargs["embed"].description
         mixin._dm_helper.enqueue.assert_not_awaited()
@@ -838,7 +846,7 @@ class TestCloseCommand:
         await _store(mixin, _poll())
         clock["now"] = NOW + 30
 
-        await AdminPermFAPollMixIn._permfa_close_cmd.callback(mixin, _command_interaction(guild), tier="Elite")
+        await command_callback(AdminPermFAPollMixIn._permfa_close_cmd)(mixin, _command_interaction(guild), tier="Elite")
 
         stored = await _load(mixin)
         assert stored.closed_at == NOW + 30
@@ -852,7 +860,7 @@ class TestCloseCommand:
         await _store(mixin, _poll(closed_at=NOW))
         interaction = _command_interaction(guild)
 
-        await AdminPermFAPollMixIn._permfa_close_cmd.callback(mixin, interaction, tier="elite")
+        await command_callback(AdminPermFAPollMixIn._permfa_close_cmd)(mixin, interaction, tier="elite")
 
         assert "no open" in interaction.followup.send.call_args.kwargs["embed"].description
         mixin._arm_permfa_poll_timer.assert_not_called()
@@ -862,7 +870,7 @@ class TestResponsesCommand:
     async def test_no_poll(self, clock):
         guild = _guild()
         interaction = _command_interaction(guild)
-        await AdminPermFAPollMixIn._permfa_responses_cmd.callback(_mixin(guild), interaction, tier="elite")
+        await command_callback(AdminPermFAPollMixIn._permfa_responses_cmd)(_mixin(guild), interaction, tier="elite")
         assert "no PermFA conversion poll" in interaction.followup.send.call_args.kwargs["embed"].description
 
     async def test_sends_each_embed_as_its_own_followup(self, clock):
@@ -871,7 +879,7 @@ class TestResponsesCommand:
         await _store(mixin, _poll())
         interaction = _command_interaction(guild)
 
-        await AdminPermFAPollMixIn._permfa_responses_cmd.callback(mixin, interaction, tier="elite")
+        await command_callback(AdminPermFAPollMixIn._permfa_responses_cmd)(mixin, interaction, tier="elite")
 
         for call in interaction.followup.send.call_args_list:
             assert "embeds" not in call.kwargs
@@ -957,7 +965,7 @@ class TestDmTestCommand:
         interaction.user.send = AsyncMock()
         target = self._target()
 
-        await AdminPermFAPollMixIn._permfa_dm_test_cmd.callback(mixin, interaction, member=target, reminder=reminder)
+        await command_callback(AdminPermFAPollMixIn._permfa_dm_test_cmd)(mixin, interaction, member=target, reminder=reminder)
 
         # Goes to the member picked, not whoever ran the command
         interaction.user.send.assert_not_awaited()
@@ -970,7 +978,7 @@ class TestDmTestCommand:
         assert "**RSC Tester**" in embed.description
         assert "Season 24" in embed.description
         assert "not recorded" in embed.footer.text
-        ids = [child.item.custom_id for child in kwargs["view"].children]
+        ids = custom_ids(kwargs["view"])
         assert ids == [f"pfa_poll:{GUILD_ID}:0:0:yes", f"pfa_poll:{GUILD_ID}:0:0:no"]
         assert mixin.config.store == {}
         assert target.mention in interaction.followup.send.call_args.kwargs["embed"].description
@@ -981,7 +989,7 @@ class TestDmTestCommand:
         mixin.current_season.side_effect = RscException(message="down")
         target = self._target()
 
-        await AdminPermFAPollMixIn._permfa_dm_test_cmd.callback(mixin, _command_interaction(guild), member=target)
+        await command_callback(AdminPermFAPollMixIn._permfa_dm_test_cmd)(mixin, _command_interaction(guild), member=target)
 
         assert "the current season" in target.send.call_args.kwargs["embed"].description
 
@@ -992,7 +1000,7 @@ class TestDmTestCommand:
         target = self._target()
         target.send.side_effect = discord.Forbidden(MagicMock(), "Cannot DM")
 
-        await AdminPermFAPollMixIn._permfa_dm_test_cmd.callback(mixin, interaction, member=target)
+        await command_callback(AdminPermFAPollMixIn._permfa_dm_test_cmd)(mixin, interaction, member=target)
 
         assert f"Unable to DM {target.mention}" in interaction.followup.send.call_args.kwargs["embed"].description
 
@@ -1005,7 +1013,7 @@ class TestDmTestCommand:
         interaction = _command_interaction(guild)
         target = self._target()
 
-        await AdminPermFAPollMixIn._permfa_dm_test_cmd.callback(mixin, interaction, member=target)
+        await command_callback(AdminPermFAPollMixIn._permfa_dm_test_cmd)(mixin, interaction, member=target)
 
         target.send.assert_not_awaited()
         assert "does not have a tier" in interaction.followup.send.call_args.kwargs["embed"].description
@@ -1017,7 +1025,7 @@ class TestDmTestCommand:
         interaction = _command_interaction(guild)
         target = self._target()
 
-        await AdminPermFAPollMixIn._permfa_dm_test_cmd.callback(mixin, interaction, member=target)
+        await command_callback(AdminPermFAPollMixIn._permfa_dm_test_cmd)(mixin, interaction, member=target)
 
         target.send.assert_not_awaited()
         interaction.followup.send.assert_awaited_once()

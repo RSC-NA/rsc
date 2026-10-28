@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from unittest.mock import AsyncMock, MagicMock, patch, PropertyMock
 
 import discord
@@ -73,7 +73,7 @@ def _make_match(
     m.match_type = match_type
     m.game_name = game_name
     m.game_pass = game_pass
-    m.var_date = var_date or datetime(2025, 3, 15, tzinfo=timezone.utc)
+    m.var_date = var_date or datetime(2025, 3, 15, tzinfo=UTC)
     m.id = 1
     return m
 
@@ -255,16 +255,16 @@ class TestIsMatchFranchiseAgm:
 
 class TestIsFutureMatchDate:
     async def test_future_date(self, mock_guild):
-        match = _make_match(var_date=datetime(2099, 12, 31, tzinfo=timezone.utc))
+        match = _make_match(var_date=datetime(2099, 12, 31, tzinfo=UTC))
         mixin = _create_mixin()
-        mixin.timezone = AsyncMock(return_value=timezone.utc)
+        mixin.timezone = AsyncMock(return_value=UTC)
 
         assert await mixin.is_future_match_date(mock_guild, match) is True
 
     async def test_past_date(self, mock_guild):
-        match = _make_match(var_date=datetime(2000, 1, 1, tzinfo=timezone.utc))
+        match = _make_match(var_date=datetime(2000, 1, 1, tzinfo=UTC))
         mixin = _create_mixin()
-        mixin.timezone = AsyncMock(return_value=timezone.utc)
+        mixin.timezone = AsyncMock(return_value=UTC)
 
         assert await mixin.is_future_match_date(mock_guild, match) is False
 
@@ -272,7 +272,7 @@ class TestIsFutureMatchDate:
         match = _make_match()
         match.var_date = None
         mixin = _create_mixin()
-        mixin.timezone = AsyncMock(return_value=timezone.utc)
+        mixin.timezone = AsyncMock(return_value=UTC)
 
         with pytest.raises(AttributeError, match="no date"):
             await mixin.is_future_match_date(mock_guild, match)
@@ -394,9 +394,8 @@ class TestMatchesApi:
             mock_api.matches_list.side_effect = ApiException(status=500, reason="Error")
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
-            with patch("rsc.matches.matches.MatchesApi", return_value=mock_api):
-                with pytest.raises(RscException):
-                    await mixin.matches(mock_guild)
+            with patch("rsc.matches.matches.MatchesApi", return_value=mock_api), pytest.raises(RscException):
+                await mixin.matches(mock_guild)
 
 
 class TestMatchByDayApi:
@@ -422,9 +421,8 @@ class TestMatchByDayApi:
             mock_api.teams_match_retrieve.side_effect = ApiException(status=404, reason="Not Found")
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
-            with patch("rsc.matches.matches.TeamsApi", return_value=mock_api):
-                with pytest.raises(RscException):
-                    await mixin.match_by_day(mock_guild, team_id=1, day=3)
+            with patch("rsc.matches.matches.TeamsApi", return_value=mock_api), pytest.raises(RscException):
+                await mixin.match_by_day(mock_guild, team_id=1, day=3)
 
 
 class TestFindMatchApi:
@@ -494,16 +492,15 @@ class TestReportMatchApi:
             mock_api.matches_score_report_create.side_effect = ApiException(status=400, reason="Bad")
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
-            with patch("rsc.matches.matches.MatchesApi", return_value=mock_api):
-                with pytest.raises(RscException):
-                    await mixin.report_match(
-                        mock_guild,
-                        match_id=1,
-                        ballchasing_group="abc123",
-                        home_score=3,
-                        away_score=1,
-                        executor=mock_executor,
-                    )
+            with patch("rsc.matches.matches.MatchesApi", return_value=mock_api), pytest.raises(RscException):
+                await mixin.report_match(
+                    mock_guild,
+                    match_id=1,
+                    ballchasing_group="abc123",
+                    home_score=3,
+                    away_score=1,
+                    executor=mock_executor,
+                )
 
 
 class TestCreateMatchApi:
@@ -552,6 +549,5 @@ class TestMatchResultsApi:
             mock_api.matches_results_retrieve.side_effect = ApiException(status=500, reason="Error")
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
-            with patch("rsc.matches.matches.MatchesApi", return_value=mock_api):
-                with pytest.raises(RscException):
-                    await mixin.match_results(mock_guild, id=1)
+            with patch("rsc.matches.matches.MatchesApi", return_value=mock_api), pytest.raises(RscException):
+                await mixin.match_results(mock_guild, id=1)

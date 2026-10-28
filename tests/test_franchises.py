@@ -139,9 +139,8 @@ class TestFranchiseGmByName:
             mock_api.franchises_list.return_value = [f1, f2]
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
-            with patch("rsc.franchises.franchises.FranchisesApi", return_value=mock_api):
-                with pytest.raises(ValueError, match="more than one"):
-                    await mixin.franchise_gm_by_name(mock_guild, "Eagles")
+            with patch("rsc.franchises.franchises.FranchisesApi", return_value=mock_api), pytest.raises(ValueError, match="more than one"):
+                await mixin.franchise_gm_by_name(mock_guild, "Eagles")
 
     async def test_returns_none_when_no_gm(self, mock_guild):
         f = _make_franchise_list(name="Eagles")
@@ -209,9 +208,8 @@ class TestFetchFranchise:
             mock_api.franchises_list.return_value = [f1, f2]
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
-            with patch("rsc.franchises.franchises.FranchisesApi", return_value=mock_api):
-                with pytest.raises(ValueError, match="more than one"):
-                    await mixin.fetch_franchise(mock_guild, "Eagles")
+            with patch("rsc.franchises.franchises.FranchisesApi", return_value=mock_api), pytest.raises(ValueError, match="more than one"):
+                await mixin.fetch_franchise(mock_guild, "Eagles")
 
 
 class TestFranchiseNameToId:
@@ -260,9 +258,8 @@ class TestFranchiseNameToId:
             mock_api.franchises_list.return_value = [f]
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
-            with patch("rsc.franchises.franchises.FranchisesApi", return_value=mock_api):
-                with pytest.raises(AttributeError, match="no ID"):
-                    await mixin.franchise_name_to_id(mock_guild, "Eagles")
+            with patch("rsc.franchises.franchises.FranchisesApi", return_value=mock_api), pytest.raises(AttributeError, match="no ID"):
+                await mixin.franchise_name_to_id(mock_guild, "Eagles")
 
 
 class TestDeleteFranchiseByName:
@@ -295,9 +292,8 @@ class TestDeleteFranchiseByName:
             mock_api.franchises_list.return_value = []
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
-            with patch("rsc.franchises.franchises.FranchisesApi", return_value=mock_api):
-                with pytest.raises(ValueError, match="does not exist"):
-                    await mixin.delete_franchise_by_name(mock_guild, "NonExistent")
+            with patch("rsc.franchises.franchises.FranchisesApi", return_value=mock_api), pytest.raises(ValueError, match="does not exist"):
+                await mixin.delete_franchise_by_name(mock_guild, "NonExistent")
 
     async def test_raises_when_multiple_matches(self, mock_guild):
         f1 = _make_franchise_list(id=1, name="Eagles")
@@ -312,9 +308,8 @@ class TestDeleteFranchiseByName:
             mock_api.franchises_list.return_value = [f1, f2]
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
-            with patch("rsc.franchises.franchises.FranchisesApi", return_value=mock_api):
-                with pytest.raises(ValueError, match="more than one"):
-                    await mixin.delete_franchise_by_name(mock_guild, "Eagles")
+            with patch("rsc.franchises.franchises.FranchisesApi", return_value=mock_api), pytest.raises(ValueError, match="more than one"):
+                await mixin.delete_franchise_by_name(mock_guild, "Eagles")
 
     async def test_raises_when_no_id(self, mock_guild):
         f = _make_franchise_list(id=None, name="Eagles")
@@ -328,9 +323,8 @@ class TestDeleteFranchiseByName:
             mock_api.franchises_list.return_value = [f]
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
-            with patch("rsc.franchises.franchises.FranchisesApi", return_value=mock_api):
-                with pytest.raises(AttributeError, match="no ID"):
-                    await mixin.delete_franchise_by_name(mock_guild, "Eagles")
+            with patch("rsc.franchises.franchises.FranchisesApi", return_value=mock_api), pytest.raises(AttributeError, match="no ID"):
+                await mixin.delete_franchise_by_name(mock_guild, "Eagles")
 
 
 class TestFullLogoUrl:
@@ -423,9 +417,8 @@ class TestFranchisesApi:
             mock_api.franchises_list.return_value = [f]
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
-            with patch("rsc.franchises.franchises.FranchisesApi", return_value=mock_api):
-                with pytest.raises(AttributeError, match="no name"):
-                    await mixin.franchises(mock_guild)
+            with patch("rsc.franchises.franchises.FranchisesApi", return_value=mock_api), pytest.raises(AttributeError, match="no name"):
+                await mixin.franchises(mock_guild)
 
     async def test_returns_empty_list(self, mock_guild):
         mixin = _create_mixin(
@@ -511,9 +504,8 @@ class TestUploadFranchiseLogoApi:
             mock_api.franchises_upload_logo_update.side_effect = ApiException(status=400, reason="Bad Request")
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
-            with patch("rsc.franchises.franchises.FranchisesApi", return_value=mock_api):
-                with pytest.raises(RscException):
-                    await mixin.upload_franchise_logo(mock_guild, id=1, logo=b"fake data")
+            with patch("rsc.franchises.franchises.FranchisesApi", return_value=mock_api), pytest.raises(RscException):
+                await mixin.upload_franchise_logo(mock_guild, id=1, logo=b"fake data")
 
 
 class TestDeleteFranchiseApi:
@@ -538,9 +530,8 @@ class TestDeleteFranchiseApi:
             mock_api.franchises_destroy.side_effect = ApiException(status=404, reason="Not Found")
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
-            with patch("rsc.franchises.franchises.FranchisesApi", return_value=mock_api):
-                with pytest.raises(RscException):
-                    await mixin.delete_franchise(mock_guild, id=999)
+            with patch("rsc.franchises.franchises.FranchisesApi", return_value=mock_api), pytest.raises(RscException):
+                await mixin.delete_franchise(mock_guild, id=999)
 
 
 class TestRebrandFranchiseApi:
@@ -569,9 +560,8 @@ class TestRebrandFranchiseApi:
             mock_api.franchises_rebrand_update.side_effect = ApiException(status=400, reason="Bad Request")
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
-            with patch("rsc.franchises.franchises.FranchisesApi", return_value=mock_api):
-                with pytest.raises(RscException):
-                    await mixin.rebrand_franchise(mock_guild, id=1, rebrand=rebrand)
+            with patch("rsc.franchises.franchises.FranchisesApi", return_value=mock_api), pytest.raises(RscException):
+                await mixin.rebrand_franchise(mock_guild, id=1, rebrand=rebrand)
 
 
 class TestTransferFranchiseApi:
@@ -603,9 +593,8 @@ class TestTransferFranchiseApi:
             mock_api.franchises_transfer_franchise_update.side_effect = ApiException(status=403, reason="Forbidden")
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
-            with patch("rsc.franchises.franchises.FranchisesApi", return_value=mock_api):
-                with pytest.raises(RscException):
-                    await mixin.transfer_franchise(mock_guild, id=1, gm=mock_member)
+            with patch("rsc.franchises.franchises.FranchisesApi", return_value=mock_api), pytest.raises(RscException):
+                await mixin.transfer_franchise(mock_guild, id=1, gm=mock_member)
 
 
 class TestFranchiseLogoApi:
@@ -680,9 +669,8 @@ class TestFranchiseLogoApi:
             mock_api.franchises_logo_retrieve.side_effect = ApiException(status=500, reason="Server Error")
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
-            with patch("rsc.franchises.franchises.FranchisesApi", return_value=mock_api):
-                with pytest.raises(RscException):
-                    await mixin.franchise_logo(mock_guild, 1)
+            with patch("rsc.franchises.franchises.FranchisesApi", return_value=mock_api), pytest.raises(RscException):
+                await mixin.franchise_logo(mock_guild, 1)
 
 
 # --- AGM management ---
@@ -745,9 +733,8 @@ class TestAddAgmApi:
             mock_api.franchises_add_agm_update.side_effect = ApiException(status=403, reason="Forbidden")
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
-            with patch("rsc.franchises.franchises.FranchisesApi", return_value=mock_api):
-                with pytest.raises(RscException):
-                    await mixin.add_agm(mock_guild, 7, agm=mock_member, executor=222)
+            with patch("rsc.franchises.franchises.FranchisesApi", return_value=mock_api), pytest.raises(RscException):
+                await mixin.add_agm(mock_guild, 7, agm=mock_member, executor=222)
 
 
 class TestRemoveAgmApi:
@@ -778,9 +765,8 @@ class TestRemoveAgmApi:
             mock_api.franchises_remove_agm_update.side_effect = ApiException(status=404, reason="Not Found")
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
-            with patch("rsc.franchises.franchises.FranchisesApi", return_value=mock_api):
-                with pytest.raises(RscException) as exc:
-                    await mixin.remove_agm(mock_guild, 7, agm=mock_member, executor=222)
+            with patch("rsc.franchises.franchises.FranchisesApi", return_value=mock_api), pytest.raises(RscException) as exc:
+                await mixin.remove_agm(mock_guild, 7, agm=mock_member, executor=222)
 
         assert exc.value.status == 404
 

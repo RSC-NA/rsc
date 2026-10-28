@@ -10,6 +10,8 @@ from rsc import const
 from rsc.admin.franchise import AdminFranchiseMixIn, rebrand_length_errors
 from rsc.exceptions import RscException
 
+from .utils import command_callback
+
 
 def _create_mixin(**attrs):
     saved = AdminFranchiseMixIn.__abstractmethods__
@@ -42,7 +44,7 @@ def _guild_member(discord_id):
 def _mock_guild_with(members):
     guild = MagicMock(spec=discord.Guild)
     guild.id = 395806681994493964
-    guild.get_member = MagicMock(side_effect=lambda i: members.get(i))
+    guild.get_member = MagicMock(side_effect=members.get)
     return guild
 
 
@@ -89,9 +91,7 @@ class TestClearFormerAgms:
         guild = _mock_guild_with({111: member})
         mixin = _create_mixin()
 
-        await mixin._clear_former_agms(
-            guild, [_agm_entry(111)], agm_role=agm_role, tchannel=_mock_channel(), exclude=set()
-        )
+        await mixin._clear_former_agms(guild, [_agm_entry(111)], agm_role=agm_role, tchannel=_mock_channel(), exclude=set())
 
         # Exactly one call, carrying only the AGM role
         member.remove_roles.assert_awaited_once_with(agm_role, reason="Franchise was transferred to a new GM")
@@ -143,9 +143,7 @@ class TestClearFormerAgms:
         guild = _mock_guild_with({111: member})
         mixin = _create_mixin()
 
-        cleared, _ = await mixin._clear_former_agms(
-            guild, [_agm_entry(111)], agm_role=agm_role, tchannel=None, exclude=set()
-        )
+        cleared, _ = await mixin._clear_former_agms(guild, [_agm_entry(111)], agm_role=agm_role, tchannel=None, exclude=set())
 
         assert cleared == [member]
         member.remove_roles.assert_awaited_once()
@@ -202,10 +200,10 @@ class TestRebrandLimitsMatchTheApi:
         return next(m.max_length for m in model.model_fields[field].metadata if hasattr(m, "max_length"))
 
     def test_team_name_limit_matches_team_rebrand(self):
-        assert const.TEAM_NAME_MAX_LENGTH == self._max_length(TeamRebrand, "name")
+        assert self._max_length(TeamRebrand, "name") == const.TEAM_NAME_MAX_LENGTH
 
     def test_prefix_limit_matches_franchise_rebrand(self):
-        assert const.FRANCHISE_PREFIX_MAX_LENGTH == self._max_length(FranchiseRebrand, "prefix")
+        assert self._max_length(FranchiseRebrand, "prefix") == const.FRANCHISE_PREFIX_MAX_LENGTH
 
 
 class TestTeamCacheUpdates:
@@ -249,7 +247,7 @@ class TestTeamCacheUpdates:
             delete_team=AsyncMock(),
         )
 
-        await AdminFranchiseMixIn._franchise_rmteam_cmd.callback(mixin, interaction, "Dik-Diks", "premier", "Dik-diks")
+        await command_callback(AdminFranchiseMixIn._franchise_rmteam_cmd)(mixin, interaction, "Dik-Diks", "premier", "Dik-diks")
 
         mixin.delete_team.assert_awaited_once_with(guild, team_id=fteam.id)
         assert mixin._team_cache[guild.id] == ["Alpha"]
@@ -262,7 +260,7 @@ class TestTeamCacheUpdates:
             delete_team=AsyncMock(),
         )
 
-        await AdminFranchiseMixIn._franchise_rmteam_cmd.callback(mixin, interaction, "Dik-Diks", "premier", "dik")
+        await command_callback(AdminFranchiseMixIn._franchise_rmteam_cmd)(mixin, interaction, "Dik-Diks", "premier", "dik")
 
         assert mixin._team_cache[guild.id] == []
 
@@ -273,7 +271,7 @@ class TestTeamCacheUpdates:
             delete_team=AsyncMock(side_effect=RscException(message="boom")),
         )
 
-        await AdminFranchiseMixIn._franchise_rmteam_cmd.callback(mixin, interaction, "Dik-Diks", "premier", "Dik-diks")
+        await command_callback(AdminFranchiseMixIn._franchise_rmteam_cmd)(mixin, interaction, "Dik-Diks", "premier", "Dik-diks")
 
         assert mixin._team_cache[guild.id] == ["Dik-diks"]
 
@@ -285,7 +283,7 @@ class TestTeamCacheUpdates:
             create_team=AsyncMock(return_value=self._team(name="Dik-diks")),
         )
 
-        await AdminFranchiseMixIn._franchise_addteam_cmd.callback(mixin, interaction, "Dik-Diks", "premier", "DIK-DIKS")
+        await command_callback(AdminFranchiseMixIn._franchise_addteam_cmd)(mixin, interaction, "Dik-Diks", "premier", "DIK-DIKS")
 
         assert mixin._team_cache[guild.id] == ["Alpha", "Dik-diks"]
 
@@ -295,6 +293,6 @@ class TestTeamCacheUpdates:
             create_team=AsyncMock(return_value=self._team(name="Dik-diks")),
         )
 
-        await AdminFranchiseMixIn._franchise_addteam_cmd.callback(mixin, interaction, "Dik-Diks", "premier", "Dik-diks")
+        await command_callback(AdminFranchiseMixIn._franchise_addteam_cmd)(mixin, interaction, "Dik-Diks", "premier", "Dik-diks")
 
         assert mixin._team_cache[guild.id] == ["Dik-diks"]

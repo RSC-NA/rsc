@@ -1,11 +1,11 @@
 import asyncio
+from collections import deque
 from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import discord
-import pytest
 
-from rsc.utils.dm import MAX_FAILED_MEMBERS, DMHelper, DMOutcome, DMTask, SCHEDULE_POLL_INTERVAL
+from rsc.utils.dm import MAX_FAILED_MEMBERS, DMHelper, DMOutcome, DMTask
 
 
 def _mock_member(name="TestUser", member_id=111111111):
@@ -13,7 +13,7 @@ def _mock_member(name="TestUser", member_id=111111111):
     member = MagicMock(spec=discord.Member)
     member.id = member_id
     member.name = name
-    member.__str__ = lambda self: name
+    member.__str__ = MagicMock(return_value=name)
     member.send = AsyncMock()
     return member
 
@@ -23,7 +23,7 @@ def _mock_user(name="TestUser", user_id=222222222):
     user = MagicMock(spec=discord.User)
     user.id = user_id
     user.name = name
-    user.__str__ = lambda self: name
+    user.__str__ = MagicMock(return_value=name)
     user.send = AsyncMock()
     return user
 
@@ -78,7 +78,7 @@ class TestDMHelperLifecycle:
 
     async def test_start_resets_failed_members(self):
         helper = DMHelper(rate=0)
-        helper._failed_members = [_mock_member()]
+        helper._failed_members = deque([_mock_member()])
         helper.start()
         assert helper.failed_members == []
         await helper.stop()

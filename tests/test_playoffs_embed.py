@@ -11,6 +11,8 @@ from rscapi.models.tier_playoff_hunt import TierPlayoffHunt
 from rsc.exceptions import RscException
 from rsc.stats.stats import PLAYOFF_CUT_LINE, StatsMixIn
 
+from .utils import command_callback
+
 
 def _team(rank: int, name: str, qualified: bool, **overrides) -> dict:
     values = {
@@ -159,7 +161,7 @@ def test_team_line_escapes_markdown_in_team_names():
 
 # /playoffs command: tier resolution
 
-playoffs_cmd = StatsMixIn._playoffs_cmd.callback
+playoffs_cmd = command_callback(StatsMixIn._playoffs_cmd)
 
 
 def _interaction(user_id: int = 42) -> MagicMock:

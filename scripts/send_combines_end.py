@@ -2,21 +2,20 @@
 
 import argparse
 import json
-import os
 from pathlib import Path
 
 import requests
 
 
 def send_finished(lobby_id: int):
-    script_path = os.path.dirname(os.path.abspath(__file__))
+    script_path = Path(__file__).resolve().parent
     print(f"Script path: {script_path}")
 
-    json_path = Path(script_path).parent
+    json_path = script_path.parent
     json_path = json_path / "data/combines/combines_event_game_finished.json"
-    print(f"JSON Path: {json_path.absolute}")
+    print(f"JSON Path: {json_path}")
 
-    with open(json_path, "r") as fd:
+    with json_path.open() as fd:
         data = json.load(fd)
 
     data["match_id"] = lobby_id

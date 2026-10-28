@@ -13,10 +13,13 @@ import pytest
 from rsc.admin.views import (
     ACTIVITY_DM_TEMPLATE,
     ActivityCheckDMButton,
+    IntentDMButton,
     build_activity_check_dm_view,
 )
 from rsc.core import RSC
 from rsc.exceptions import RscException
+
+from .utils import custom_ids
 
 TEMPLATE = ActivityCheckDMButton.__discord_ui_compiled_template__
 
@@ -147,8 +150,6 @@ class TestActivityDMTemplate:
 
     def test_does_not_hijack_intent_buttons(self):
         """Both templates are registered globally; neither may swallow the other."""
-        from rsc.admin.views import IntentDMButton
-
         intent_template = IntentDMButton.__discord_ui_compiled_template__
         assert intent_template.fullmatch(f"activity_dm:{GUILD_ID}:{SEASON}:yes") is None
         assert TEMPLATE.fullmatch(f"intent_dm:{GUILD_ID}:{SEASON}:yes") is None
@@ -171,13 +172,14 @@ class TestActivityDMButton:
     async def test_custom_id_round_trip(self, active):
         original = ActivityCheckDMButton(guild_id=GUILD_ID, season=SEASON, active=active)
         match = TEMPLATE.fullmatch(original.custom_id)
+        assert match
         rebuilt = await ActivityCheckDMButton.from_custom_id(MagicMock(), MagicMock(), match)
 
         assert (rebuilt.guild_id, rebuilt.season, rebuilt.active) == (GUILD_ID, SEASON, active)
 
     def test_view_has_both_buttons(self):
         view = build_activity_check_dm_view(GUILD_ID, SEASON)
-        ids = {item.custom_id for item in view.children}
+        ids = set(custom_ids(view))
 
         assert ids == {
             f"activity_dm:{GUILD_ID}:{SEASON}:yes",
@@ -249,6 +251,7 @@ class TestCallbackGuards:
 
         embed = _final_embed(interaction)
         assert embed.title == "This Message Is Out Of Date"
+        assert embed.description is not None
         assert f"Season {SEASON}" in embed.description
         assert f"Season {SEASON + 1}" in embed.description
         cog.activity_check.assert_not_awaited()
@@ -279,6 +282,7 @@ class TestCallbackSubmit:
 
         embed = _final_embed(interaction)
         assert embed.title == title
+        assert embed.description is not None
         assert marker in embed.description
         assert interaction.edit_original_response.call_args.kwargs["view"] is None
 
@@ -303,6 +307,7 @@ class TestCallbackSubmit:
 
         embed = _final_embed(interaction)
         assert embed.title == "Activity Check"
+        assert embed.description is not None
         assert "already completed" in embed.description
         interaction.followup.send.assert_not_awaited()
 
@@ -335,4 +340,5 @@ class TestCallbackSubmit:
 
         embed = _retry_embed(interaction)
         assert embed.title == "Activity Check Recorded"
+        assert embed.description is not None
         assert "No further action is needed" in embed.description

@@ -322,7 +322,7 @@ class AdminMembersMixIn(AdminMixIn):
         contract_length="Contract Length",
         waiver_period='Waiver start date (Example: "2025-01-25")',
     )
-    @app_commands.autocomplete(tier=TierMixIn.tier_autocomplete, team=TeamMixIn.teams_autocomplete)  # ty:ignore[invalid-argument-type]
+    @app_commands.autocomplete(tier=TierMixIn.tier_autocomplete, team=TeamMixIn.teams_autocomplete)
     async def _member_patch_cmd(
         self,
         interaction: discord.Interaction,

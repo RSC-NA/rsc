@@ -3,18 +3,15 @@ import argparse
 
 import asyncio
 import os
-import sys
 import time
-from typing import AsyncIterator
 
 from rscapi import ApiClient, Configuration, LeaguePlayersApi
-from rscapi.models.league_player import LeaguePlayer
 
 
 NUM_CALLS = 200
 
 
-API_KEY = os.environ.get("RSC_API_KEY")
+API_KEY = os.environ.get("RSC_API_KEY", "")
 API_HOST = "https://staging-api.rscna.com/api/v1"
 # API_HOST = "http://127.0.0.1:8000/api/v1"
 
@@ -29,9 +26,10 @@ NO_KEY_CONF = Configuration(
     host=API_HOST,
 )
 
+
 async def players(
     client: ApiClient,
-    num: int|None=None,
+    num: int | None = None,
 ) -> int:
     try:
         api = LeaguePlayersApi(client)
@@ -44,19 +42,15 @@ async def players(
             print(f"Call {num}: Rate limit exceeded")
         return response.status_code
     except Exception as exc:
-        return exc.status if hasattr(exc, "status") else -1
-
-
+        status = getattr(exc, "status", None)
+        return status if isinstance(status, int) else -1
 
 
 async def test_throttling(conf: Configuration, count: int = NUM_CALLS):
     start = time.time()
 
     async with ApiClient(conf) as client:
-        tasks = [
-            players(client, num=i)
-            for i in range(count)
-        ]
+        tasks = [players(client, num=i) for i in range(count)]
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
         codes = {}
@@ -64,12 +58,11 @@ async def test_throttling(conf: Configuration, count: int = NUM_CALLS):
             codes.setdefault(r, 0)
             codes[r] += 1
 
-        for code, count in codes.items():
-            print(f"Status Code {code}: {count} occurrences")
+        for code, occurrences in codes.items():
+            print(f"Status Code {code}: {occurrences} occurrences")
 
         duration = time.time() - start
         print(f"Completed {len(results)} calls in {duration:.2f} seconds")
-
 
 
 async def main(count: int = NUM_CALLS):

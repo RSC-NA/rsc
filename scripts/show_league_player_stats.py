@@ -3,28 +3,19 @@
 import argparse
 import asyncio
 import os
-import sys
 from enum import StrEnum
-from typing import AsyncIterator, cast
 
-import numpy as np
-import pandas as pd
 from rscapi import (
     ApiClient,
     Configuration,
     LeaguePlayersApi,
     SeasonsApi,
-    TeamList,
-    TeamsApi,
     TiersApi,
-    TransactionResponse,
-    TransactionsApi,
 )
-from rscapi.models.league_player import LeaguePlayer
 from rscapi.models.season import Season
 from rscapi.models.tier import Tier
 
-API_KEY = os.environ.get("RSC_API_KEY")
+API_KEY = os.environ.get("RSC_API_KEY", "")
 # API_HOST = "https://staging-api.rscna.com/api/v1"
 API_HOST = "https://api.rscna.com/api/v1"
 
@@ -33,6 +24,7 @@ CONF = Configuration(
     api_key={"Api-Key": API_KEY},
     api_key_prefix={"Api-Key": "Api-Key"},
 )
+
 
 class Status(StrEnum):
     DRAFT_ELIGIBLE = "DE"  # Draft Eligible
@@ -51,12 +43,13 @@ class Status(StrEnum):
     WAIVER_RELEASE = "WR"  # Waiver Release
     DROPPED = "DR"  # Dropped
 
+
 async def tiers() -> list[Tier]:
     """Fetch a list of tiers"""
     async with ApiClient(CONF) as client:
         api = TiersApi(client)
         tiers = await api.tiers_list(league=1)
-        tiers.sort(key=lambda t: cast(int, t.position), reverse=True)
+        tiers.sort(key=lambda t: t.position, reverse=True)
 
         # Populate cache
         if tiers:
@@ -66,17 +59,15 @@ async def tiers() -> list[Tier]:
             raise ValueError("No tiers found.")
         return tiers
 
-async def tier_players(tier_name: str, status: Status|None=None) -> None:
+
+async def tier_players(tier_name: str, status: Status | None = None) -> None:
     """Fetch a list of tiers"""
     async with ApiClient(CONF) as client:
         api = LeaguePlayersApi(client)
 
-
         for s in Status:
             resp = await api.league_players_list(league=1, tier_name=tier_name, status=s)
             print(f"Status: {s} - Players: {resp.count}")
-
-
 
 
 async def current_season() -> Season:
@@ -91,27 +82,21 @@ async def current_season() -> Season:
         return season
 
 
-
 async def calculate_rounds(tier: str | None = None) -> None:
     """Calculate rounds for a given tier"""
     season = await current_season()
-
 
     for t in season.season_tier_data or []:
         print("=" * 20)
         print(f"Tier: {t.tier}")
 
-        tcount = t.team_number
         await tier_players(t.tier)
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description='Test RSC draft on staging')
-    parser.add_argument(
-        '-t', '--tier', type=str, default=None,
-        help='Tier')
+    parser = argparse.ArgumentParser(description="Test RSC draft on staging")
+    parser.add_argument("-t", "--tier", type=str, default=None, help="Tier")
     argv = parser.parse_args()
-
 
     asyncio.run(calculate_rounds(tier=argv.tier))
     # asyncio.run(get_rostered_players())

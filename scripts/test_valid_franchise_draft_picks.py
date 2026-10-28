@@ -11,8 +11,9 @@ from rich.console import Console
 from rich.logging import RichHandler
 from rich.table import Table
 from rscapi import ApiClient, Configuration, DraftPicksApi, FranchisesApi
+from rscapi.models.draft_pick_list import DraftPickList
 
-API_KEY = os.environ.get("RSC_API_KEY")
+API_KEY = os.environ.get("RSC_API_KEY", "")
 API_HOST = "https://staging-api.rscna.com/api/v1"
 LOG_LEVEL = os.environ.get("RSC_DRAFT_LOG_LEVEL", "INFO").upper()
 LEAGUE_ID = 1
@@ -49,7 +50,7 @@ def _tier_key(value: str) -> str:
     return value.strip().casefold()
 
 
-def _pick_tier_name(pick: Any) -> str | None:
+def _pick_tier_name(pick: DraftPickList) -> str | None:
     season_tier = getattr(pick, "tier", None)
     tier = getattr(season_tier, "tier", None)
     name = getattr(tier, "name", None)
@@ -58,7 +59,7 @@ def _pick_tier_name(pick: Any) -> str | None:
     return None
 
 
-def _round_number(pick: Any) -> int | None:
+def _round_number(pick: DraftPickList) -> int | None:
     round_no = getattr(pick, "round", None)
     if isinstance(round_no, int):
         return round_no
@@ -89,10 +90,7 @@ def _summarize_rounds(rounds: list[int], *, max_items: int = 12) -> str:
 
 def _describe_round_rule_failure(tier_name: str, rounds: list[int], target_round: int) -> str:
     if target_round == 1:
-        return (
-            f"{tier_name}: missing a round 1 pick; "
-            f"rounds present={_summarize_rounds(rounds)}"
-        )
+        return f"{tier_name}: missing a round 1 pick; rounds present={_summarize_rounds(rounds)}"
 
     exact_count = sum(1 for round_no in rounds if round_no == target_round)
     better_or_equal_count = sum(1 for round_no in rounds if round_no <= target_round)
@@ -113,20 +111,13 @@ def _validate_round_coverage_rule(
     total_tiers = len(tiers)
     required_tiers = max(total_tiers - allowed_missing_tiers, 0)
 
-    passing_tiers = [
-        tier_name
-        for tier_name in tiers
-        if _satisfies_round_rule(rounds_by_tier[tier_name], target_round)
-    ]
+    passing_tiers = [tier_name for tier_name in tiers if _satisfies_round_rule(rounds_by_tier[tier_name], target_round)]
     failing_tiers = [tier_name for tier_name in tiers if tier_name not in passing_tiers]
 
     if len(passing_tiers) >= required_tiers:
         return None
 
-    failure_reasons = [
-        _describe_round_rule_failure(tier_name, rounds_by_tier[tier_name], target_round)
-        for tier_name in failing_tiers
-    ]
+    failure_reasons = [_describe_round_rule_failure(tier_name, rounds_by_tier[tier_name], target_round) for tier_name in failing_tiers]
 
     return (
         f"Rule {rule_label}: passes in {len(passing_tiers)}/{total_tiers} tiers "
@@ -187,11 +178,7 @@ def _validate_rule_5_2_5_5(tiers: list[str], rounds_by_tier: dict[str, list[int]
 
 
 def _validate_rule_5_2_5_6(tiers: list[str], rounds_by_tier: dict[str, list[int]]) -> str | None:
-    retain_failures = [
-        tier_name
-        for tier_name in tiers
-        if sum(1 for round_no in rounds_by_tier[tier_name] if round_no <= 5) < 3
-    ]
+    retain_failures = [tier_name for tier_name in tiers if sum(1 for round_no in rounds_by_tier[tier_name] if round_no <= 5) < 3]
     if not retain_failures:
         return None
 
@@ -261,7 +248,7 @@ def _render_validation_tables(season_number: int, results: list[dict[str, Any]])
     console.print(details)
 
 
-def validate_franchise_pick_layout(franchise: str, tiers: list[str], picks: list[Any]) -> list[str]:
+def validate_franchise_pick_layout(franchise: str, tiers: list[str], picks: list[DraftPickList]) -> list[str]:
     tier_name_map = {_tier_key(tier_name): tier_name for tier_name in tiers}
     rounds_by_tier: dict[str, list[int]] = {tier_name: [] for tier_name in tiers}
 
@@ -301,12 +288,7 @@ async def fetch_franchise_tier_map(franchises_api: FranchisesApi) -> dict[str, s
             continue
 
         tiers = getattr(franchise, "tiers", None) or []
-        tier_names = {
-            tier_name
-            for tier in tiers
-            for tier_name in [getattr(tier, "name", None)]
-            if isinstance(tier_name, str)
-        }
+        tier_names = {tier_name for tier in tiers for tier_name in [getattr(tier, "name", None)] if isinstance(tier_name, str)}
 
         if tier_names:
             franchise_tiers[franchise_name] = tier_names
@@ -318,8 +300,8 @@ async def fetch_franchise_draft_picks(
     draft_picks_api: DraftPicksApi,
     season_number: int,
     franchise: str,
-) -> list[Any]:
-    all_picks: list[Any] = []
+) -> list[DraftPickList]:
+    all_picks: list[DraftPickList] = []
     offset = 0
 
     while True:
@@ -359,9 +341,7 @@ async def validate_season(season_number: int, franchise_name: str | None) -> int
 
         if franchise_name:
             logger.info("Filtering to franchise '%s' using case-insensitive match", franchise_name)
-            selected_franchises = [
-                name for name in franchise_tiers if _tier_key(name) == _tier_key(franchise_name)
-            ]
+            selected_franchises = [name for name in franchise_tiers if _tier_key(name) == _tier_key(franchise_name)]
             if not selected_franchises:
                 logger.error("Franchise '%s' not found in season %s", franchise_name, season_number)
                 return 1
@@ -389,10 +369,7 @@ async def validate_season(season_number: int, franchise_name: str | None) -> int
                 picks=picks,
             )
 
-            failed_rules = [
-                _split_violation_message(violation)[0]
-                for violation in violations
-            ]
+            failed_rules = [_split_violation_message(violation)[0] for violation in violations]
 
             franchise_results.append(
                 {
@@ -425,9 +402,7 @@ async def validate_season(season_number: int, franchise_name: str | None) -> int
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description="Validate franchise draft pick legality for a season using RSCAPI DraftPicks."
-    )
+    parser = argparse.ArgumentParser(description="Validate franchise draft pick legality for a season using RSCAPI DraftPicks.")
     parser.add_argument(
         "season",
         type=int,

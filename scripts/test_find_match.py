@@ -2,17 +2,15 @@
 
 import asyncio
 import os
-import sys
 from datetime import datetime
 from enum import StrEnum
-from typing import AsyncIterator
 
-from rscapi import ApiClient, Configuration, MembersApi, MatchesApi, ApiException
-from rscapi.models import LeaguePlayer, Match
+from rscapi import ApiClient, Configuration, MatchesApi
+from rscapi.models import Match
 
-API_KEY = os.environ.get("RSC_API_KEY")
+API_KEY = os.environ.get("RSC_API_KEY", "")
 API_HOST = "https://api.rscna.com/api/v1"
-#API_HOST = "http://127.0.0.1:8000/api/v1"
+# API_HOST = "http://127.0.0.1:8000/api/v1"
 
 CONF = Configuration(
     host=API_HOST,
@@ -49,6 +47,7 @@ class MatchFormat(StrEnum):
     BEST_OF_FIVE = "BO5"  # Best of Five
     BEST_OF_SEVEN = "BO7"  # Best of Seven
 
+
 async def find_match(
     teams: list[str],
     date_lt: datetime | None = None,
@@ -64,7 +63,7 @@ async def find_match(
     async with ApiClient(CONF) as client:
         api = MatchesApi(client)
         teams_fmt = ",".join(teams)
-        resp = await api.matches_find_match(
+        resp = await api.matches_find_match_retrieve(
             teams=teams_fmt,
             date__lt=date_lt,
             date__gt=date_gt,
@@ -74,19 +73,20 @@ async def find_match(
             match_type=str(match_type) if match_type else None,
             match_format=str(match_format) if match_format else None,
             league=1,
-            limit=limit,
-            offset=offset,
         )
         return resp.results
 
+
 if __name__ == "__main__":
-    matches = asyncio.run(find_match(
-        teams=["Raptors", "Orochi"],
-        season_number=25,
-        day=12,
-        limit=1,
-        offset=0,
-    ))
+    matches = asyncio.run(
+        find_match(
+            teams=["Raptors", "Orochi"],
+            season_number=25,
+            day=12,
+            limit=1,
+            offset=0,
+        )
+    )
 
     for match in matches:
         print(match)

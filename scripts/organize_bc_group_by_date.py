@@ -14,7 +14,7 @@ from dotenv import load_dotenv
 
 
 async def parse_bc_group():
-    raise NotImplementedError()
+    raise NotImplementedError
 
 
 if __name__ == "__main__":
@@ -22,9 +22,7 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="Organize ballchasing groups by date")
     parser.add_argument("group", type=str, help="Ballchasing group")
-    parser.add_argument(
-        "-n", "--no-dry-run", type=int, default=None, help="Organize the replays."
-    )
+    parser.add_argument("-n", "--no-dry-run", type=int, default=None, help="Organize the replays.")
     argv = parser.parse_args()
 
     group: str = argv.group
