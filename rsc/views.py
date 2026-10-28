@@ -1,7 +1,7 @@
 import logging
 
 import discord
-from discord.ui import Container, TextDisplay, TextInput
+from discord.ui import ActionRow, Container, Separator, TextDisplay, TextInput
 from rscapi.models.league import League
 
 from rsc.const import DEFAULT_TIMEOUT
@@ -71,6 +71,82 @@ class ResultView(discord.ui.LayoutView):
                 accent_colour=colour,
             )
         )
+
+
+class _ConfirmLayoutButton(discord.ui.Button["ConfirmLayoutView"]):
+    def __init__(self, *, confirm: bool, label: str, style: discord.ButtonStyle):
+        super().__init__(label=label, style=style)
+        self.confirm = confirm
+
+    async def callback(self, interaction: discord.Interaction):
+        if self.view is not None:
+            await self.view.finish(interaction, confirmed=self.confirm)
+
+
+class ConfirmLayoutView(AuthorOnlyLayoutView):
+    """A Components V2 confirm/cancel prompt for the invoking user.
+
+    Every click is answered with `interaction.response.edit_message`, so Discord
+    never shows "This interaction failed", and the buttons are replaced by a result
+    (`working_title` on confirm, `cancelled_title` on cancel). On timeout the inherited
+    `on_timeout` replaces the prompt with a "Time Out" result. `result` is True only
+    after Confirm, so a cancel and a timeout both mean "do nothing".
+
+    Usage:
+        view = ConfirmLayoutView(interaction, title="Delete Franchise", description=..., confirm_style=discord.ButtonStyle.danger)
+        await view.prompt()
+        await view.wait()
+        if view.result:
+            ...  # then edit_original_response with the outcome
+    """
+
+    def __init__(
+        self,
+        interaction: discord.Interaction,
+        *,
+        title: str,
+        description: str,
+        confirm_label: str = "Confirm",
+        confirm_style: discord.ButtonStyle = discord.ButtonStyle.success,
+        cancel_label: str = "Cancel",
+        working_title: str = "Working",
+        working_description: str = "Please wait...",
+        cancelled_title: str = "Cancelled",
+        cancelled_description: str = "Nothing was changed.",
+        colour: discord.Colour | None = None,
+        timeout: float = DEFAULT_TIMEOUT,
+    ):
+        super().__init__(interaction=interaction, timeout=timeout)
+        self.result = False
+        self.working = (working_title, working_description)
+        self.cancelled = (cancelled_title, cancelled_description)
+        self.add_item(
+            Container(
+                TextDisplay(f"## {title}"),
+                TextDisplay(description),
+                Separator(spacing=discord.SeparatorSpacing.small),
+                ActionRow(
+                    _ConfirmLayoutButton(confirm=True, label=confirm_label, style=confirm_style),
+                    _ConfirmLayoutButton(confirm=False, label=cancel_label, style=discord.ButtonStyle.secondary),
+                ),
+                accent_colour=colour or discord.Colour.orange(),
+            )
+        )
+
+    async def prompt(self, *, ephemeral: bool = True):
+        """Show the prompt as the response, or as a followup if the interaction was already answered."""
+        if self.interaction.response.is_done():
+            await self.interaction.followup.send(view=self, ephemeral=ephemeral)
+        else:
+            await self.interaction.response.send_message(view=self, ephemeral=ephemeral)
+
+    async def finish(self, interaction: discord.Interaction, *, confirmed: bool):
+        """Record the choice and answer the click by replacing the prompt with its result."""
+        self.result = confirmed
+        self.stop()
+        title, description = self.working if confirmed else self.cancelled
+        colour = discord.Colour.yellow() if confirmed else discord.Colour.red()
+        await interaction.response.edit_message(view=ResultView(title=title, description=description, colour=colour))
 
 
 # Generic Buttons
