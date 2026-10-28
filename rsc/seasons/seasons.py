@@ -21,7 +21,44 @@ log = logging.getLogger("red.rsc.seasons")
 class SeasonsMixIn(RSCMixIn):
     def __init__(self):
         log.debug("Initializing SeasonsMixIn")
+        # guild.id -> season number -> season ID, for the guild's league
+        self._season_cache: dict[int, dict[int, int]] = {}
         super().__init__()
+
+    # Season ID cache
+    #
+    # The API identifies seasons by ID while most payloads (e.g. a Match) carry only
+    # the season number, and website links take the ID. Seasons change a few times a
+    # year, so the map is built once at startup and refetched once on a miss, which
+    # covers a season created while the bot is running.
+
+    async def prepare_season_cache(self, guild: discord.Guild) -> None:
+        """Build the guild's season number -> ID map. Never raises: a stale map only costs a refetch."""
+        try:
+            seasons = await self.seasons(guild)
+        except RscException as exc:
+            log.warning(f"[{guild.name}] Unable to cache seasons: {exc.reason or exc}")
+            return
+        self._season_cache[guild.id] = {s.number: s.id for s in seasons if s.number is not None and s.id is not None}
+
+    async def season_id_for_number(self, guild: discord.Guild, number: int) -> int | None:
+        """The ID of season `number` in the guild's league, or None if it doesn't exist."""
+        season_id = self._season_cache.get(guild.id, {}).get(number)
+        if season_id is None:
+            await self.prepare_season_cache(guild)
+            season_id = self._season_cache.get(guild.id, {}).get(number)
+        return season_id
+
+    async def season_number_for_id(self, guild: discord.Guild, season_id: int) -> int | None:
+        """The number of the season with `season_id` in the guild's league, or None if it isn't one."""
+        number = self._season_number(guild, season_id)
+        if number is None:
+            await self.prepare_season_cache(guild)
+            number = self._season_number(guild, season_id)
+        return number
+
+    def _season_number(self, guild: discord.Guild, season_id: int) -> int | None:
+        return next((n for n, sid in self._season_cache.get(guild.id, {}).items() if sid == season_id), None)
 
     # Helper Functions
 

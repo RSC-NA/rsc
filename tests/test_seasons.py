@@ -372,3 +372,48 @@ class TestSeasonActivityChecksApi:
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
             with patch("rsc.seasons.seasons.SeasonsApi", return_value=mock_api), pytest.raises(RscException):
                 await mixin.season_activity_checks(mock_guild)
+
+
+class TestSeasonCache:
+    def _mixin(self, *results):
+        """A mixin whose seasons() returns each of `results` in turn (an exception is raised)."""
+        return _create_mixin(_season_cache={}, seasons=AsyncMock(side_effect=list(results)))
+
+    async def test_prepare_maps_number_to_id(self, mock_guild):
+        mixin = self._mixin([_make_season(id=11, number=24), _make_season(id=12, number=25)])
+        await mixin.prepare_season_cache(mock_guild)
+        assert mixin._season_cache[mock_guild.id] == {24: 11, 25: 12}
+
+    async def test_prepare_skips_incomplete_seasons(self, mock_guild):
+        mixin = self._mixin([_make_season(id=None, number=24), _make_season(id=12, number=None), _make_season(id=13, number=26)])
+        await mixin.prepare_season_cache(mock_guild)
+        assert mixin._season_cache[mock_guild.id] == {26: 13}
+
+    async def test_prepare_survives_api_errors(self, mock_guild):
+        mixin = self._mixin(RscException(response=ApiException(status=500, reason="Error")))
+        await mixin.prepare_season_cache(mock_guild)
+        assert mock_guild.id not in mixin._season_cache
+
+    async def test_hit_does_not_refetch(self, mock_guild):
+        mixin = self._mixin([_make_season(id=12, number=25)])
+        await mixin.prepare_season_cache(mock_guild)
+        assert await mixin.season_id_for_number(mock_guild, 25) == 12
+        assert await mixin.season_number_for_id(mock_guild, 12) == 25
+        assert mixin.seasons.await_count == 1
+
+    async def test_miss_refetches_once_for_a_new_season(self, mock_guild):
+        mixin = self._mixin([_make_season(id=12, number=25)], [_make_season(id=12, number=25), _make_season(id=13, number=26)])
+        await mixin.prepare_season_cache(mock_guild)
+        assert await mixin.season_id_for_number(mock_guild, 26) == 13
+        assert mixin.seasons.await_count == 2
+
+    async def test_unknown_season_is_none(self, mock_guild):
+        mixin = self._mixin([_make_season(id=12, number=25)], [_make_season(id=12, number=25)], [_make_season(id=12, number=25)])
+        await mixin.prepare_season_cache(mock_guild)
+        assert await mixin.season_id_for_number(mock_guild, 99) is None
+        assert await mixin.season_number_for_id(mock_guild, 99) is None
+        assert mixin.seasons.await_count == 3
+
+    async def test_empty_cache_fetches_on_first_lookup(self, mock_guild):
+        mixin = self._mixin([_make_season(id=12, number=25)])
+        assert await mixin.season_id_for_number(mock_guild, 25) == 12

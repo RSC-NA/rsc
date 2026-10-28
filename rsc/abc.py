@@ -660,6 +660,15 @@ class RSCMixIn(ABC):
     async def season_by_id(self, guild: discord.Guild, season_id: int) -> Season: ...
 
     @abstractmethod
+    async def prepare_season_cache(self, guild: discord.Guild) -> None: ...
+
+    @abstractmethod
+    async def season_id_for_number(self, guild: discord.Guild, number: int) -> int | None: ...
+
+    @abstractmethod
+    async def season_number_for_id(self, guild: discord.Guild, season_id: int) -> int | None: ...
+
+    @abstractmethod
     async def player_intents(
         self,
         guild: discord.Guild,

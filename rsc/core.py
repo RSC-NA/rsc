@@ -259,6 +259,7 @@ class RSC(
                     tg.create_task(self.tiers(guild))
                     tg.create_task(self.franchises(guild))
                     tg.create_task(self.teams(guild))
+                    tg.create_task(self.prepare_season_cache(guild))
                     tg.create_task(self.setup_persistent_activity_check(guild))
         except* ApiException as eg:
             # API is down or not responding
