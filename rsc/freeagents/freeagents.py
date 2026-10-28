@@ -7,7 +7,7 @@ from redbot.core import Config, app_commands
 from rscapi.models.league_player import LeaguePlayer
 
 from rsc.abc import RSCMixIn
-from rsc.embeds import BetterEmbed, ErrorEmbed, SuccessEmbed
+from rsc.embeds import BetterEmbed, EmbedLimits, ErrorEmbed, SuccessEmbed
 from rsc.enums import Status
 from rsc.freeagents.views import CheckInView, CheckOutView
 from rsc.tiers import TierMixIn
@@ -116,6 +116,7 @@ class FreeAgentMixIn(RSCMixIn):
         free_agents.extend(await self.permanent_free_agents(guild, tier))
 
         fa_fmt_list: list[tuple[str, int | None]] = []
+        pfa_fmt_list: list[tuple[str, int | None]] = []
         for fa in free_agents:
             log.debug(fa.player)
             if not fa.player.discord_id:
@@ -129,36 +130,31 @@ class FreeAgentMixIn(RSCMixIn):
 
             fstr = discord.utils.escape_markdown(fmember.display_name)
             if fa.status == Status.PERM_FA:
-                fstr += " (PermFA)"
-            fa_fmt_list.append((fstr, fa.current_mmr))
-
-        fa_fmt_list.sort(key=lambda x: x[1] if x[1] is not None else float("-inf"), reverse=True)
+                pfa_fmt_list.append((fstr, fa.current_mmr))
+            else:
+                fa_fmt_list.append((fstr, fa.current_mmr))
 
         tier_role = await utils.role_by_name(guild, tier)
 
-        if not fa_fmt_list:
-            embed = BetterEmbed(
-                title=f"{tier} Free Agents",
-                description="No free agents available",
-                color=tier_role.color if tier_role else discord.Color.blue(),
-            )
-        else:
-            # One line per player so name/MMR stay paired for mobile users
-            fa_lines = [f"{name} — **{mmr if mmr is not None else 'N/A'}**" for name, mmr in fa_fmt_list]
+        # Sections go in the description instead of fields. Fields split into "(cont.)" fields past 1024 chars.
+        sections = []
+        for title, players in (("Free Agents", fa_fmt_list), ("Permanent FAs", pfa_fmt_list)):
+            if not players:
+                continue
+            players.sort(key=lambda x: x[1] if x[1] is not None else float("-inf"), reverse=True)
+            lines = [f"`{mmr if mmr is not None else 'N/A'}` {name}" for name, mmr in players]
+            sections.append(f"**{title} ({len(players)})**\n" + "\n".join(lines))
 
-            embed = BetterEmbed(
-                title=f"{tier} Free Agents",
-                description=f"The following free agents are available for the **{tier}** tier",
-                color=tier_role.color if tier_role else discord.Color.blue(),
-            )
-            leftover = embed.add_long_field(
-                name=f"Players ({len(fa_lines)})",
-                value="\n".join(fa_lines),
-                inline=False,
-            )
-            if leftover:
-                log.warning(f"Truncated {tier} free agent list, exceeded embed limits")
+        description = "\n\n".join(sections) or "No free agents available"
+        if len(description) > EmbedLimits.Description:
+            log.warning(f"Truncated {tier} free agent list, exceeded embed limits")
+            description = description[: EmbedLimits.Description].rsplit("\n", 1)[0]
 
+        embed = BetterEmbed(
+            title=f"{tier} Free Agents",
+            description=description,
+            color=tier_role.color if tier_role else discord.Color.blue(),
+        )
         await interaction.followup.send(embed=embed)
 
     @_free_agent_group.command(
