@@ -7,7 +7,7 @@ with exactly one copy of each game under exactly one group tree.
 
 import asyncio
 from collections.abc import Generator
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from hashlib import md5
 from pathlib import Path
 from typing import NamedTuple
@@ -988,8 +988,16 @@ class TestPrepareBallchasing:
 
         assert mixin._ballchasing_api == {}
 
-    @pytest.mark.parametrize("error", [MissingAPIKey(), asyncio.CancelledError()])
-    async def test_failed_ping_closes_the_session_it_opened(self, error):
+    @pytest.mark.parametrize(
+        ("error", "raises"),
+        [
+            # A rejected key is guild config, so it's swallowed rather than
+            # reaching setup's error logging (and Sentry).
+            (MissingAPIKey(), nullcontext()),
+            (asyncio.CancelledError(), pytest.raises(asyncio.CancelledError)),
+        ],
+    )
+    async def test_failed_ping_closes_the_session_it_opened(self, error, raises):
         """ping() lazily opens a ClientSession; nobody else holds the instance."""
         existing = MagicMock(auth_key="old")
         existing.close = AsyncMock()
@@ -997,7 +1005,7 @@ class TestPrepareBallchasing:
         mixin._ballchasing_api = {GUILD_ID: existing}
 
         with _patch_api(ping=AsyncMock(side_effect=error)) as api:
-            with pytest.raises(type(error)):
+            with raises:
                 await mixin.prepare_ballchasing(_guild())
             api.close.assert_awaited_once()
 

@@ -12,7 +12,7 @@ from urllib.parse import urljoin
 import aiohttp
 import ballchasing
 import discord
-from ballchasing.exceptions import BackoffLimitExceeded, BallchasingFault, DuplicateReplay, UserFault
+from ballchasing.exceptions import BackoffLimitExceeded, BallchasingFault, DuplicateReplay, MissingAPIKey, UserFault
 from redbot.core import app_commands
 from rscapi.models.match import Match
 from rscapi.models.match_results import MatchResults
@@ -137,6 +137,13 @@ class BallchasingMixIn(RSCMixIn):
         try:
             await api.ping()
             await api.reconfigure_session()
+        except MissingAPIKey:
+            # The library raises this on any 401, so the saved key was rejected
+            # (revoked or regenerated). That's guild config, not a bot fault, so
+            # warn instead of letting setup log it as an error.
+            await api.close()
+            log.warning("Ballchasing rejected the saved API key. Skipping ballchasing setup.", guild=guild)
+            return
         except BaseException:
             await api.close()
             raise
