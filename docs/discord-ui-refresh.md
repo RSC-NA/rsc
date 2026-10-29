@@ -14,7 +14,7 @@ This file is the working record for the refresh. Update the status table as phas
 |---|---|---|
 | 1 | Fix the bugs listed under [Bugs](#bugs) | **Done** (2026-10-28, branch `discord-ui-phase-1`) |
 | 2 | Shared building blocks (see [Phase 2](#phase-2-shared-building-blocks)) | **Done** (2026-10-28, merged to master `31985f2`) |
-| 3 | Ship the six locked designs, in the order **06 → 01 → 02 → 03 → 05 → 04** (decided 2026-10-28): match result, transactions, lobbies + DMs, combines guide, player card + `/accounts`, Report Match copy | **Done, all six cards approved live and pushed to master** (2026-10-28). The sign-up redesign and trade card are follow-ups; see [Where we are](#where-we-are-end-of-2026-10-28--resume-here). |
+| 3 | Ship the six locked designs, in the order **06 → 01 → 02 → 03 → 05 → 04** (decided 2026-10-28): match result, transactions, lobbies + DMs, combines guide, player card + `/accounts`, Report Match copy | **Done, all six cards approved live and pushed to master** (2026-10-28). The sign-up redesign is also done and pushed. `/playoffs` is built and awaiting review, and the trade card is awaiting the user's pick; see [Where we are](#where-we-are-end-of-2026-10-28--resume-here). |
 | 4 | Upgrade the other modals: Label descriptions on admin modals, and the `.replay` upload filter once discord.py ships it. (The Report Match copy is in Phase 3.) | Open |
 | 5 | Optional: errors and logs stay as embeds unless `ResultView` gets a one-line constructor | Open |
 | 6 | Move the 12 legacy confirm/decline views to `ConfirmLayoutView`, as a separate change after Phase 3 (decided 2026-10-28) | Open |
@@ -23,51 +23,80 @@ This file is the working record for the refresh. Update the status table as phas
 
 ## Where we are (end of 2026-10-28) — resume here
 
-**Deployed state.** `discord-ui-phase-3` was fast-forwarded into `master` and pushed to origin. The user asked to deploy everything approved and committed. That is:
+### State of the repo
 
-| Design | Status | Last change |
-|---|---|---|
-| 06 Match result | Approved | `b9cb072` separate label/score TextDisplays, line above buttons |
-| 01 Transaction card | Approved (option B, every type) | `90fd0ed` player headline layout |
-| 02 Lobby (combine + Dev League, DM, Final) | Approved | `9d472fe` layout, `65f38d7` Join Home/Away VC |
-| 03 Combines guide | Approved | `8abecf0` new step 3 screenshot |
-| 05 Player card + `/accounts` + Trackers button | Approved | `d1ddcc7` Team/Rating groups, `d8a3dc1` accounts list beside avatar |
-| 04 Report Match form | Approved (text inputs kept) | `9889923` |
+- **`master` = `origin/master` = `e6136ce`.** Pushed. It has everything approved: all six Phase 3 cards, the rscapi 2.2.1 fixes (`b9e67f8`, `45f05d3`) and the rebuilt sign-up (option B).
+- **The working tree in `~/dev/rsc`** (branch `discord-ui-phase-3`, same commit as `master`) holds two uncommitted things:
+  1. **The `/playoffs` redesign, built and waiting on the user's preview and approval** (details below). Files:
+     - new `rsc/stats/playoffs.py`, `rsc/stats/graphic.py`, `rsc/stats/views.py`, `tests/playoff_samples.py`, `tests/test_playoffs.py`;
+     - modified `rsc/stats/stats.py`, `rsc/utils/website.py`, `tests/test_website.py`;
+     - `tests/test_playoffs_embed.py` deleted (its staged deletion is in the index).
+  2. **The temporary `/pingtest` command** in `rsc/developer/developer.py`. Never commit it, and remove it before the refresh's final commit. Styles: `match_result`, `transaction` (every type), `lobby`, `lobby_final`, `devleague_lobby`, `guide`, `player`, `accounts`, `report`, `report_teams_only`, `playoffs`, `playoffs_text`, and the sign-up styles (`signup`, `permfa`, `signup_about`, `permfa_about`, `signup_fix`, `signup_success`, `permfa_success`, `signup_already`, `permfa_already`, `permfa_waiting`, `signup_timeout`, `signup_cancelled`). An unknown style lists them.
+- **Checks on the working tree:** 1837 tests pass, and ruff and ty are clean. ty needs `uv sync --group scripts` after any `uv sync`, or the `scripts/` imports fail.
+- **Worktrees** (`git worktree list`):
+  - `~/dev/rsc-playoffs` (branch `playoffs-redesign`): the agent's copy of the `/playoffs` build; the same code is already in `~/dev/rsc`.
+  - `~/dev/rsc-signup` and `~/dev/rsc-signup-b`: superseded sign-up builds.
+  - `~/dev/rsc-season-fix`: the user's own 2.2.1 work.
+  All but the user's own can be removed once `/playoffs` is committed.
 
-- **Sign-up comes along.** The deploy includes the two-form sign-up built by session rsc-15 (merged in `866d017`). The user deployed it knowingly, but it is being redesigned (next steps below).
-- **Checked before deploy:** a clean checkout of the committed code passed 1744 tests, ruff and ty on `rsc`/`tests`. No slash command options changed, so no command sync is needed; reload the cog.
-- **Watch after deploy:**
-  - the first combine/Dev League lobbies (players now get a DM of the lobby card; cards turn Final at teardown with the combine score);
-  - the first real transactions;
-  - the first real `/reportmatch` (early match lookup);
-  - the guide posting when combines start.
-  - Lobbies open during the deploy won't turn Final (no stored record); harmless.
+### Done and approved (all pushed)
 
-**Local only, never committed:** the temporary `/pingtest` command in `rsc/developer/developer.py`. Free-text `style` option, with previews for every card plus rsc-15's sign-up previews. Remove before the final commit of the refresh.
+| Design | Last change |
+|---|---|
+| 06 Match result | `b9cb072` |
+| 01 Transaction card, option B, every type | `90fd0ed` |
+| 02 Lobby (combine + Dev League, DM copy, Final) | `9d472fe`, `65f38d7` |
+| 03 Combines guide (new step 3 screenshot) | `8abecf0` |
+| 05 Player card, `/accounts`, Trackers button | `d1ddcc7`, `d8a3dc1` |
+| 04 Report Match form (text inputs kept) | `9889923` |
+| 07 Sign-up and PermFA (option B: two message steps, then one form) | `e6136ce` |
 
-### Next steps, in order
+**Watch once deployed:**
+- lobby DMs and the Final edit at teardown;
+- real transactions;
+- the real `/reportmatch` early lookup;
+- the guide posting when combines start;
+- the new `/signup` and `/permfa` with real players.
 
-1. **Sign-up redesign (option B): built, approved and committed (2026-10-28).** It's `SignupFlowView` in `rsc/members/views/signup.py`. The user approved `/signup`, `/permfa` and everything related.
-   - **Step 1, "Before you start":** the match nights (no "your next one" timestamp) and the rules link, each confirmed with a toggle button (grey, then green with the label changed). Continue unlocks once both are confirmed.
-   - **Step 2, "About you":**
-     - button rows for **Draft eligible** / **Permanent Free Agent**, each explained in one line (signing up makes you draft eligible, not a "Free Agent"), then played before and region;
-     - selects for platform and "how did you hear about RSC";
-     - a thin line between every question and a footer naming what's missing;
-     - a Continue + red Cancel row, with Back (to step 1, answers kept) on its own row underneath. A row can't be right-aligned.
-   - **Step 3:** ONE form: in-game name (hint "Must match your in-game name on your tracker link."), the tracker help text and tracker links, prefilled within `PREFILL_WAIT` (1.5 s).
-   - **Review:** Submit, a red Cancel, and Back to step 2 on its own row. Then the success card.
-   - The flow message times out after 14 minutes, under the interaction token's 15-minute limit.
-   - **Switches at the top of `signup.py`** for the open questions: `PERMFA_ASKS_KIND = True`, `CONFIRMS_CAN_UNDO = True`, `SKIP_REVIEW_WHEN_VALID = False`.
-   - **Still open:** the emoji left on the review, success and timeout cards (✏️ ✅ ⚠️ ✓ ⏱️), and the code chips for tracker IDs on the review. Neither has been raised again.
-   - The older two-form build and worktrees (`~/dev/rsc-signup`, `~/dev/rsc-signup-b`) are superseded.
-2. **Trade announcement: not started.**
-   - **Two paths** still post the old "Trade Confirmed" embed, one field per receiving franchise, players as `@player to Team`, picks like `Future 1st Round Elite`, GM pings sent as content then edited out:
-     - `/transactions trade` → `TransactionMixIn.build_trade_embed` (`rsc/transactions/transactions.py`);
-     - website trades (`PTR` event, and `/transactions announce <id>`) → `build_trade_embed_from_response` and `announce_trade` (`rsc/transactions/trade_announce.py`). This one groups by GM discord id and handles pick sources and truncation.
-   - **Spec note from 01:** one section per franchise, with an overflow link past 4,000 characters.
-   - **Plan:** mockups first (one background agent, desktop + phone), user picks, then one shared card builder for both paths, pings from a TextDisplay, and a `/pingtest style:trade` preview.
-3. **`/playoffs` redesign: mockups requested (2026-10-28, for review the next day).** The command is `_playoffs_cmd` / `create_playoff_hunt_embed` in `rsc/stats/stats.py`. Today it posts one embed, with a field per playoff group, monospaced rank/record and a cut line. The data is `TierPlayoffHunt` (groups → teams with seed, record, clinch/magic-number/delta labels, franchise logo). A background agent is drawing 3–4 Components V2 options (race view, own-team focus, rendered standings image, projected bracket, group switcher), desktop and phone, published as a new artifact.
+### Pick up here
+
+1. **`/playoffs`: preview it and decide.** It's built in the working tree, uncommitted.
+   - **Behaviour:**
+     - **Default:** a Pillow "broadcast graphic", option C of https://claude.ai/artifact/Qtn68K8TFKUGhafts5pPMd, with no franchise logos. One PNG per playoff group, rendered in `asyncio.to_thread` and cached in a 32-entry LRU keyed on the standings data. A text summary (Clinched / On the bubble / Eliminated) and a grey "Full standings" link to `{site}/standings/?league=…&season=<season id>&tier=…&mode=playoffs` follow it.
+     - **`/playoffs text:True`:** the race board (option A), with each team on ONE line: `1. **Aurora** 14-4 · Clinched`. The user rejected the mockup's second subtext line.
+     - **Status:** eliminated is worked out by the bot (`is_eliminated` in `rsc/stats/playoffs.py`), and the graphic keeps the mockup's pills.
+     - **Render time:** about 150–270 ms uncached, under 1 ms cached.
+   - **To do:**
+     - The user previews it with `/pingtest style:playoffs` / `playoffs_text`, and the real `/playoffs`.
+     - **Command sync needed** for the new `text` option before `text:True` shows in Discord.
+     - Answer the open questions:
+       1. Does the numbered list sit right under the `-#` header in Discord?
+       2. Is a team 2 wins back "on the bubble", or only 1?
+       3. Should division-tier wildcards say "Mountain wildcard" or just "Wildcard"?
+     - On approval, commit (without `developer.py`) and push if asked.
+   - **Follow-up:** issue https://github.com/RSC-NA/rsc/issues/9 reviews the image path after it has been live (performance, keep or revert to text as the default).
+2. **Trade announcement: the user picks an option.**
+   - **Mockups:** https://claude.ai/artifact/2qEpVfCpyXZzBL7deCrC4S
+     - **A:** a card per franchise;
+     - **B:** one card with "X receives" groups, like the approved transaction card;
+     - **C:** a ledger (`IRN → HEX @player`);
+     - **D:** the banner first.
+   - **Open questions:**
+     1. Which option, or a mix?
+     2. Fold big future-pick dumps into a **Futures** line per tier?
+     3. Show the season ("S25 1st Round Elite") instead of "Future …"?
+     4. Keep the "via IRN" original-owner tag?
+     5. Is there a website trade page (for a "View full trade" button)?
+     6. Should the footer carry the traded players' Discord IDs (for search)?
+     7. Accent: the tier colour, or league blue across tiers?
+   - **Then:** one shared builder for both paths (`/transactions trade` → `build_trade_embed` in `transactions.py`, and website trades → `build_trade_embed_from_response` / `announce_trade` in `trade_announce.py`), pings from a TextDisplay, and a `/pingtest style:trade` preview.
+3. **Sign-up leftovers (optional):** the emoji on the review, success and timeout cards (✏️ ✅ ⚠️ ✓ ⏱️), and the code chips for tracker IDs on the review card.
 4. **Phases 4–6** (table above).
+
+### GitHub issues opened this session
+- #7: point "RSC Tracker Links" at the website. It needs a member-visible, per-player tracker page there first.
+- #8: upgrade to Python 3.14, labelled `planned migration`. Red-DiscordBot 3.5.24 caps Python at <3.12 (we already run 3.12), and its exact pins have no 3.14 wheels. Free-threading is out of scope.
+- #9: review the `/playoffs` image generation once it's live.
 
 ### Unanswered offers (ask again only if relevant)
 - Status "pills" (e.g. LIVE / FINAL) as app emoji.
@@ -79,17 +108,19 @@ This file is the working record for the refresh. Update the status table as phas
   - before/after comparison https://claude.ai/artifact/KVCtqRzVKTeN6vnSyJ7hZd
   - transaction card options https://claude.ai/artifact/VQemU5Nnj6TKTUuxTrj3sm
   - sign-up flow options https://claude.ai/artifact/XxQ7yNyQeijx5iC84nUmMo
+  - `/playoffs` options https://claude.ai/artifact/Qtn68K8TFKUGhafts5pPMd
+  - trade options https://claude.ai/artifact/2qEpVfCpyXZzBL7deCrC4S
   - original refresh summary https://claude.ai/artifact/WYTJx7XV1zyXCtg3WQVeJe
-- **Mockup sources:** build scripts live in the session scratchpad under `/tmp/claude-1000/-home-xentrick-dev-rsc/b157e061-8ce0-4cbb-ad9a-1aff0931280b/scratchpad/`: `compare/`, `tx-options/`, `signup-options/`, `preview.py`. Being under `/tmp`, they may not survive a reboot; the published artifacts are the durable copy.
-- **Follow-up issue:** https://github.com/RSC-NA/rsc/issues/7. Point the "RSC Tracker Links" button at the website; needs a member-visible, per-player tracker page there first.
+- **Mockup sources:** in the session scratchpad `/tmp/claude-1000/-home-xentrick-dev-rsc/b157e061-8ce0-4cbb-ad9a-1aff0931280b/scratchpad/`: `compare/`, `tx-options/`, `signup-options/`, `playoffs-options/`, `trade-options/`. Being under `/tmp`, they may not survive a reboot; the published artifacts are the durable copy. A backup of `developer.py` from before the sign-up merge is there as `developer-before-signup-b.py`.
 - **Working agreements:**
   - Leave UI changes uncommitted until the user previews them live and approves.
   - Prompt for every design decision.
   - `/pingtest` takes a free-text style, so no command sync is needed.
   - Use bold labels, never inline-code label chips.
   - No decorative emoji (the animated LIVE dot is the exception).
-  - One background agent per mockup, always designed for phone too.
-  - Link buttons are grey. A Section's accessory is pinned to its top.
+  - One background agent per mockup or build, in its own worktree, always designed for phone too.
+  - Link buttons are grey. A Section's accessory is pinned to its top and can't be centred. A row of buttons can't be right-aligned.
+  - Don't `git switch` in `~/dev/rsc`; use worktrees.
 
 ## Phase 2: shared building blocks
 
