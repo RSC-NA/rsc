@@ -20,21 +20,26 @@ nothing about the ordering affects how nicknames appear.
 
 import asyncio
 import logging
+from collections.abc import Mapping
+from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, NamedTuple
 
 import discord
 from pydantic import ValidationError
+from rscapi.models.player_franchise import PlayerFranchise
+from rscapi.models.player_transaction_updates import PlayerTransactionUpdates
+from rscapi.models.team_franchise import TeamFranchise
+from rscapi.models.trade_object import TradeObject
+from rscapi.models.transaction_franchise import TransactionFranchise
 from rscapi.models.transaction_response import TransactionResponse
 
-from rscapi.models.player_franchise import PlayerFranchise
-from rscapi.models.transaction_franchise import TransactionFranchise
-
-from rsc.embeds import BetterEmbed, BlueEmbed, ErrorEmbed, YellowEmbed
+from rsc.embeds import ErrorEmbed, YellowEmbed
 from rsc.enums import TransactionType
 from rsc.exceptions import RscException
 from rsc.logs import GuildLogAdapter
 from rsc.transactions.roles import update_signed_player_discord
+from rsc.transactions.views import TradeCard, TradeGiver, TradePick, TradePlayer, TradeReceiver
 from rsc.utils import utils
 
 if TYPE_CHECKING:
@@ -63,174 +68,300 @@ ROLE_UPDATE_DELAY = 0.5
 TRADE_TYPES = frozenset({TransactionType.TRADE, TransactionType.PLAYER_TRADE})
 
 
-def _ordinal(round_no: int | None) -> str:
-    """Render a draft round. `TransactionPick.round` is Optional."""
-    if round_no is None:
-        return "Unknown Round"
-    match round_no:
-        case 1:
-            return "1st"
-        case 2:
-            return "2nd"
-        case 3:
-            return "3rd"
-        case _:
-            return f"{round_no}th"
-
-
 #: The two franchise shapes a trade response can carry. Player destinations come
 #: through `PlayerFranchise` and pick destinations through `TransactionFranchise`.
 #: They differ in nullability - `name`, `id` and `prefix` are all Optional on
-#: `PlayerFranchise` - but both carry a required `gm: FranchiseGM` whose
-#: `discord_id` is required, which is why that is the grouping key.
+#: `PlayerFranchise` - but both carry a `gm: FranchiseGM` whose `discord_id` is
+#: required, which is why that is the grouping key.
 TradeFranchise = PlayerFranchise | TransactionFranchise
 
-
-async def _franchise_label(guild: discord.Guild, franchise: TradeFranchise) -> str:
-    """`Franchise (GM Name)`, preferring the live member's display name."""
-    name = franchise.name or "Unknown Franchise"
-
-    # A franchise between GMs has no gm at all.
-    if not franchise.gm:
-        return name
-
-    member = guild.get_member(franchise.gm.discord_id)
-    if member:
-        gm_name = await utils.remove_prefix(member)
-        gm_name = await utils.strip_discord_accolades(gm_name)
-        return f"{name} ({gm_name.strip()})"
-
-    # The payload carries the GM's RSC name, so a GM who has left the server still
-    # renders with a name instead of degrading to a bare franchise.
-    if franchise.gm.rsc_name:
-        return f"{name} ({franchise.gm.rsc_name})"
-    return name
+#: A franchise's grouping key: its GM's discord id, or its lowercased name when it
+#: has no GM. Never the franchise id, which is Optional on `PlayerFranchise` and
+#: would split one franchise in two.
+FranchiseKey = int | str
 
 
-async def build_trade_embed_from_response(
+def _franchise_key(franchise: TradeFranchise | TeamFranchise) -> FranchiseKey | None:
+    if franchise.gm:
+        return franchise.gm.discord_id
+    if franchise.name:
+        return franchise.name.lower()
+    return None
+
+
+def _player_mention(ptu: PlayerTransactionUpdates) -> tuple[int | None, str]:
+    """The player's discord id, and how the card names them: a mention, or their escaped name."""
+    member = ptu.player.player if ptu.player else None
+    if member and member.discord_id:
+        return member.discord_id, f"<@{member.discord_id}>"
+    name = member.name if member and member.name else "Unknown Player"
+    return None, discord.utils.escape_markdown(name)
+
+
+@dataclass
+class _Received:
+    """What one franchise receives from one giver, while the card is being assembled."""
+
+    players: list[TradePlayer] = field(default_factory=list)
+    picks: list[TradePick] = field(default_factory=list)
+    tiers: set[str] = field(default_factory=set)
+
+
+class FranchiseRef(NamedTuple):
+    """A franchise found outside the response's franchise objects: its grouping key and name."""
+
+    key: FranchiseKey
+    name: str | None
+
+
+def player_sources_from_trade(trades: list[TradeObject]) -> dict[int, FranchiseRef]:
+    """Which franchise each player in a `/transactions trade` came from, keyed on their discord id.
+
+    The command parsed this from the trade text, so passing it to `build_trade_card`
+    saves the old-team lookups a trade of three or more franchises otherwise needs.
+    """
+    sources: dict[int, FranchiseRef] = {}
+    for trade in trades:
+        if not trade.value.player:
+            continue
+        source = trade.source
+        key = source.gm or (source.name.lower() if source.name else None)
+        if key is not None:
+            sources[trade.value.player.id] = FranchiseRef(key, source.name)
+    return sources
+
+
+async def _player_givers(
+    cog: "RSCMixIn",
     guild: discord.Guild,
     response: TransactionResponse,
-) -> tuple[list[int], BetterEmbed]:
-    """Render a trade from the API response.
+    involved: set[FranchiseKey],
+    hints: Mapping[int, FranchiseRef],
+) -> list[FranchiseRef | None]:
+    """The franchise each traded player left, in `player_updates` order.
 
-    Returns `(ping_ids, embed)` where `ping_ids` holds destination GM ids and
-    traded player ids, matching the contract of `TransactionMixIn.build_trade_embed`.
-
-    Groups into an insertion-ordered dict keyed on GM discord id rather than using
-    `itertools.groupby`, which only groups *adjacent* runs and so silently emits
-    duplicate fields for one franchise when the input is not pre-sorted.
+    The response only names a player's old team, not its franchise. `hints` answers
+    it when the caller knows; with two franchises in the trade it is simply the other
+    one; otherwise the old team is looked up. None when it can't be found, so the
+    player still shows, unlabelled.
     """
-    lines: dict[int, list[str]] = {}
-    franchises: dict[int, TradeFranchise] = {}
-    ping_ids: list[int] = []
+    cache: dict[tuple[str, str | None], FranchiseRef | None] = {}
+    givers: list[FranchiseRef | None] = []
+    for ptu in response.player_updates or []:
+        discord_id, _ = _player_mention(ptu)
+        if discord_id is not None and discord_id in hints:
+            givers.append(hints[discord_id])
+            continue
 
-    def _register(franchise: TradeFranchise) -> int | None:
-        # Grouping and pinging are both keyed on the GM's discord id, so a
-        # franchise sitting without a GM cannot participate in either.
-        if not franchise.gm:
-            log.warning(f"Trade franchise {franchise.name} has no GM. Skipping.", guild=guild)
+        if len(involved) == 2:
+            dest = ptu.player.team.franchise if ptu.player and ptu.player.team else None
+            dest_key = _franchise_key(dest) if dest else None
+            other = next((k for k in involved if k != dest_key), None)
+            givers.append(FranchiseRef(other, None) if other is not None else None)
+            continue
+
+        old = ptu.old_team
+        if not (old and old.name):
+            givers.append(None)
+            continue
+        lookup = (old.name, old.tier or None)
+        if lookup not in cache:
+            try:
+                teams = await cog.teams(guild, name=old.name, tier=old.tier or None)
+            except RscException as exc:
+                log.warning("Unable to find the franchise of team %s: %s", old.name, exc, guild=guild)
+                teams = []
+            match = next((t for t in teams if t.name == old.name), None)
+            key = _franchise_key(match.franchise) if match else None
+            cache[lookup] = FranchiseRef(key, match.franchise.name) if match and key is not None else None
+        givers.append(cache[lookup])
+    return givers
+
+
+async def _accent(guild: discord.Guild, name: str, tiers: set[str]) -> discord.Colour:
+    """The franchise role's colour, or the tier's when the franchise receives from one tier only."""
+    role = await utils.franchise_role_from_name(guild, name)
+    if role and role.colour.value:
+        return role.colour
+    if len(tiers) == 1:
+        return await utils.tier_color_by_name(guild, next(iter(tiers)))
+    return discord.Colour.blue()
+
+
+async def _logo(cog: "RSCMixIn", guild: discord.Guild, franchise_id: int | None) -> str | None:
+    if franchise_id is None:
+        return None
+    try:
+        return await cog.franchise_logo(guild, franchise_id)
+    except RscException as exc:
+        log.warning("Unable to fetch franchise logo %s: %s", franchise_id, exc, guild=guild)
+        return None
+
+
+async def _tier_order(cog: "RSCMixIn", guild: discord.Guild) -> tuple[str, ...]:
+    """Tier names, highest first."""
+    try:
+        tiers = await cog.tiers(guild)
+    except RscException as exc:
+        log.warning("Unable to fetch tiers to order trade picks: %s", exc, guild=guild)
+        return ()
+    return tuple(t.name for t in sorted(tiers, key=lambda t: t.position, reverse=True))
+
+
+async def build_trade_card(
+    cog: "RSCMixIn",
+    guild: discord.Guild,
+    response: TransactionResponse,
+    player_sources: Mapping[int, FranchiseRef] | None = None,
+) -> TradeCard:
+    """The trade card, from the API's trade response.
+
+    Shared by website trades (`PTR` events and `/transactions processtrade`) and
+    `/transactions trade`, which gets the same response back from the trade call.
+    `player_sources` optionally says which franchise each player left (see
+    `player_sources_from_trade`).
+
+    Groups into insertion-ordered dicts keyed on `_franchise_key` rather than using
+    `itertools.groupby`, which only groups *adjacent* runs and so silently emits a
+    franchise twice when the input is not pre-sorted.
+    """
+    franchises: dict[FranchiseKey, TradeFranchise] = {}
+    received: dict[FranchiseKey, dict[FranchiseKey | None, _Received]] = {}
+
+    def register(franchise: TradeFranchise | None) -> FranchiseKey | None:
+        if franchise is None:
             return None
-
-        gm_id = franchise.gm.discord_id
-        # Prefer whichever shape actually carries a name; it is required on
+        key = _franchise_key(franchise)
+        if key is None:
+            log.warning("Trade franchise has no GM and no name. Skipping.", guild=guild)
+            return None
+        # Prefer whichever shape carries a name and id; both are required on
         # TransactionFranchise but nullable on PlayerFranchise.
-        if gm_id not in franchises or franchises[gm_id].name is None:
-            franchises[gm_id] = franchise
-        lines.setdefault(gm_id, [])
-        if gm_id not in ping_ids:
-            ping_ids.append(gm_id)
-        return gm_id
+        known = franchises.get(key)
+        if known is None or known.name is None or (known.id is None and franchise.id is not None and franchise.name):
+            franchises[key] = franchise
+        received.setdefault(key, {})
+        return key
 
-    # Seed from the top level franchises so a franchise that only gives up assets
-    # still resolves to a proper label.
+    # Seed from the top level franchises, so the card order follows the trade
     for franchise in (response.first_franchise, response.second_franchise):
-        if franchise is not None:
-            _register(franchise)
+        register(franchise)
+
+    # Every franchise the trade touches, to tell a two-franchise trade from a bigger one
+    for ptu in response.player_updates or []:
+        register(ptu.player.team.franchise if ptu.player and ptu.player.team else None)
+    for pick_update in response.pick_trades or []:
+        register(pick_update.destination)
+        register(pick_update.source)
 
     # Players. `player.team` is the POST-trade team - the API saves the new team
     # before serializing the event - so its franchise is the destination.
-    for ptu in response.player_updates or []:
-        team = ptu.player.team if ptu.player else None
-        if not (team and team.franchise):
+    updates = response.player_updates or []
+    givers = await _player_givers(cog, guild, response, set(franchises), player_sources or {})
+    # Names for givers found through hints or a team lookup, which may give without receiving
+    giver_names: dict[FranchiseKey, str] = {}
+    for ptu, ref in zip(updates, givers, strict=True):
+        giver = ref.key if ref else None
+        if ref and ref.name and ref.key not in franchises:
+            giver_names.setdefault(ref.key, ref.name)
+        dest = ptu.player.team.franchise if ptu.player and ptu.player.team else None
+        dest_key = _franchise_key(dest) if dest else None
+        if dest_key is None or dest_key not in received:
             log.warning("Trade player update has no destination franchise", guild=guild)
             continue
-        gm_id = _register(team.franchise)
-        if gm_id is None:
-            continue
+        _, mention = _player_mention(ptu)
+        team = discord.utils.escape_markdown(ptu.new_team.name) if ptu.new_team and ptu.new_team.name else None
+        group = received[dest_key].setdefault(giver if giver != dest_key else None, _Received())
+        group.players.append(TradePlayer(mention=mention, team=team))
+        tier = (ptu.new_team.tier if ptu.new_team else None) or (ptu.player.tier.name if ptu.player.tier else None)
+        if tier:
+            group.tiers.add(tier)
 
-        discord_id = ptu.player.player.discord_id if ptu.player and ptu.player.player else None
-        if discord_id:
-            if discord_id not in ping_ids:
-                ping_ids.append(discord_id)
-            mention = f"<@!{discord_id}>"
-        else:
-            mention = (ptu.player.player.name if ptu.player and ptu.player.player else None) or "Unknown Player"
-
-        destination_team = ptu.new_team.name if ptu.new_team else None
-        lines[gm_id].append(f"{mention} to {destination_team}" if destination_team else mention)
-
-    # Picks.
+    # Picks
     for pick_update in response.pick_trades or []:
         pick = pick_update.pick
         if pick is None:
             continue
-
-        if pick_update.destination is None:
+        dest_key = _franchise_key(pick_update.destination) if pick_update.destination else None
+        if dest_key is None or dest_key not in received:
             log.warning("Trade pick update has no destination franchise", guild=guild)
             continue
-        gm_id = _register(pick_update.destination)
-        if gm_id is None:
-            continue
-
-        # Show the source whenever it differs from the destination. The original
-        # builder used a `len(groups) > 2` heuristic, which counts groupby runs
-        # rather than franchises and misfires on unsorted input.
-        prefix = ""
-        if pick_update.source is not None:
-            source_id = _register(pick_update.source)
-            if source_id is not None and source_id != gm_id:
-                prefix = f"<@!{source_id}> "
-
-        round_fmt = _ordinal(pick.round)
+        source = pick_update.source
+        source_key = _franchise_key(source) if source else None
+        # A pick "from" its own destination says nothing, so it shows unlabelled
+        giver = source_key if source_key != dest_key else None
+        via = pick.original_pick
+        if via and source and source.prefix and via.lower() == source.prefix.lower():
+            via = None
         tier = pick.tier or "Unknown Tier"
+        group = received[dest_key].setdefault(giver, _Received())
+        group.picks.append(
+            TradePick(
+                tier=tier,
+                round=pick.round,
+                number=pick.number,
+                future=bool(pick.future_pick),
+                # 0 is what the API sends for a pick with no season
+                season=pick.future_season or None,
+                via=via or None,
+            )
+        )
+        if pick.tier:
+            group.tiers.add(pick.tier)
 
-        if pick.future_pick:
-            lines[gm_id].append(f"{prefix}Future {round_fmt} Round {tier}")
-        elif pick.number is None:
-            lines[gm_id].append(f"{prefix}{round_fmt} Round {tier}")
-        else:
-            lines[gm_id].append(f"{prefix}{round_fmt} Round {tier} ({pick.number})")
+    def _giver_name(key: FranchiseKey) -> str:
+        known = franchises.get(key)
+        return (known.name if known else None) or giver_names.get(key) or "Unknown Franchise"
 
-    embed = BlueEmbed(title="Trade Confirmed")
+    def _giver_gm(key: FranchiseKey) -> int | None:
+        # Only a giver that receives nothing, since a receiver's GM is already pinged on its own card
+        known = franchises.get(key)
+        if received.get(key) or not known or not known.gm:
+            return None
+        return known.gm.discord_id
 
-    truncated = False
-    for gm_id, entries in lines.items():
-        if not entries:
-            # A franchise seeded from first/second_franchise that gave up nothing
-            # trackable. Nothing useful to show.
+    receivers: list[TradeReceiver] = []
+    for key, by_giver in received.items():
+        if not by_giver:
+            # A franchise that gave things up but received nothing. Its assets
+            # show on the receiving cards.
             continue
-        label = await _franchise_label(guild, franchises[gm_id])
-        # add_long_field enforces the 1024 / 6000 / 25-field limits and returns
-        # whatever did not fit. A bare add_field would 400 the send on a large
-        # futures dump.
-        leftover = embed.add_long_field(name=label, value="\n".join(entries))
-        if leftover:
-            truncated = True
-            log.warning("Trade embed truncated for franchise %s", label, guild=guild)
+        franchise = franchises[key]
+        name = franchise.name or "Unknown Franchise"
+        # Known givers in the order they appeared, then anything of unknown origin
+        ordered = sorted(by_giver.items(), key=lambda item: item[0] is None)
+        receivers.append(
+            TradeReceiver(
+                name=discord.utils.escape_markdown(name),
+                colour=await _accent(guild, name, set().union(*(g.tiers for g in by_giver.values()))),
+                givers=tuple(
+                    TradeGiver(
+                        name=discord.utils.escape_markdown(_giver_name(giver)) if giver is not None else None,
+                        players=tuple(group.players),
+                        picks=tuple(group.picks),
+                        gm_id=_giver_gm(giver) if giver is not None else None,
+                    )
+                    for giver, group in ordered
+                ),
+                gm_id=franchise.gm.discord_id if franchise.gm else None,
+                logo=await _logo(cog, guild, franchise.id),
+            )
+        )
 
-    if truncated:
-        embed.set_footer(text="Trade too large to display in full. See the web UI for the complete trade.")
-
-    if guild.icon:
-        embed.set_thumbnail(url=guild.icon.url)
-
-    return ping_ids, embed
+    return TradeCard(
+        receivers=tuple(receivers),
+        banner=utils.TRADE_BANNER,
+        created_at=response.var_date or discord.utils.utcnow(),
+        transaction_id=response.id,
+        tier_order=await _tier_order(cog, guild),
+    )
 
 
 async def announce_trade(
     cog: "RSCMixIn",
     guild: discord.Guild,
     response: TransactionResponse,
+    player_sources: Mapping[int, FranchiseRef] | None = None,
 ) -> discord.Message | None:
     """Post a trade to the transaction channel. Returns None if unconfigured."""
     channel = await cog._trans_channel(guild)
@@ -238,19 +369,16 @@ async def announce_trade(
         log.warning("Transaction channel is not configured. Skipping trade announcement.", guild=guild)
         return None
 
-    ping_ids, embed = await build_trade_embed_from_response(guild, response)
-    content = " ".join(f"<@!{i}>" for i in ping_ids)
-
-    msg = await channel.send(
-        content=content or None,
-        embed=embed,
+    card = await build_trade_card(cog, guild, response, player_sources)
+    view, files = card.render()
+    # Every GM and player pings from the card's TextDisplays
+    return await channel.send(
+        view=view,
+        files=files,
         # Explicit. `AllowedMentions(users=True)` leaves everyone and roles
         # enabled, because every field defaults to a truthy sentinel.
         allowed_mentions=discord.AllowedMentions(everyone=False, roles=False, users=True),
     )
-    # Ping, then strip the content so the message body stays clean.
-    await msg.edit(content=None, embed=embed)
-    return msg
 
 
 async def apply_trade_role_updates(

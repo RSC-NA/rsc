@@ -1,5 +1,4 @@
 import asyncio
-import itertools
 import logging
 import re
 from typing import TYPE_CHECKING
@@ -56,7 +55,7 @@ from rsc.franchises import FranchiseMixIn
 from rsc.logs import GuildLogAdapter
 from rsc.teams import TeamMixIn
 from rsc.transactions.modals import CutMsgModal, TransactionAnnouncementModal
-from rsc.transactions.trade_announce import announce_trade, apply_trade_role_updates
+from rsc.transactions.trade_announce import announce_trade, apply_trade_role_updates, player_sources_from_trade
 from rsc.transactions.roles import (
     update_cut_player_discord,
     update_nonplaying_discord,
@@ -1282,14 +1281,8 @@ class TransactionMixIn(RSCMixIn):
 
         msg = None
         if announce:
-            gms, embed = await self.build_trade_embed(guild, trade_items)
-            gm_mention = " ".join([f"<@!{g}>" for g in gms])
-            msg = await trans_channel.send(
-                content=gm_mention,
-                embed=embed,
-                allowed_mentions=discord.AllowedMentions(users=True),
-            )
-            await msg.edit(content=None, embed=embed)
+            # The same card as website trades, built from the response the trade call returned
+            msg = await announce_trade(self, guild, result, player_sources_from_trade(trade_items))
 
         embed = SuccessEmbed(description="Trade has been processed.")
         if msg:
@@ -2756,85 +2749,6 @@ class TransactionMixIn(RSCMixIn):
                 raise TradeParserException(message=f"Unknown line in trade data: `{line}`")
 
         return trade_list
-
-    async def build_trade_embed(self, guild: discord.Guild, trades: list[TradeObject]) -> tuple[list[int], discord.Embed]:
-        trade_groups = [list(t) for _, t in itertools.groupby(trades, lambda t: t.destination)]
-        embed = BlueEmbed(title="Trade Confirmed")
-
-        gms = []
-        for group in trade_groups:
-            dest: str | None = None
-            trade_fmt = []
-            for trade in group:
-                if trade.destination.gm and trade.destination.gm not in gms:
-                    gms.append(trade.destination.gm)
-
-                # Get GM for field name
-                if not dest:
-                    if trade.destination.name:
-                        m = None
-                        if trade.destination.gm:
-                            m = guild.get_member(trade.destination.gm)
-
-                        if m:
-                            gm_name = await utils.remove_prefix(m)
-                            gm_name = await utils.strip_discord_accolades(gm_name)
-                            log.debug(f"Embed GM Name: {gm_name}", guild=guild)
-                            dest = f"{trade.destination.name} ({gm_name.strip()})"
-                        else:
-                            dest = trade.destination.name
-                    else:
-                        dest = "Error"
-
-                # Process trade item
-                if trade.value.player:
-                    # Append to ping list
-                    if trade.value.player.id:
-                        gms.append(trade.value.player.id)
-                    if trade.value.player.team:
-                        trade_fmt.append(f"<@!{trade.value.player.id}> to {trade.value.player.team}")
-                    else:
-                        trade_fmt.append(f"<@!{trade.value.player.id}>")
-                    continue
-
-                if trade.value.pick:
-                    # Format Round
-                    round_fmt = None
-                    match trade.value.pick.round:
-                        case 1:
-                            round_fmt = "1st"
-                        case 2:
-                            round_fmt = "2nd"
-                        case 3:
-                            round_fmt = "3rd"
-                        case _:
-                            round_fmt = f"{trade.value.pick.round}th"
-
-                    # Determine if need source
-                    src_fmt = None
-                    if len(trade_groups) > 2 and trade.source.gm:
-                        # Future Pick Trade
-                        src_fmt = f"<@!{trade.source.gm}>"
-
-                    if trade.value.pick.future:
-                        # Future Pick Trade
-                        if src_fmt:
-                            trade_fmt.append(f"{src_fmt} Future {round_fmt} Round {trade.value.pick.tier}")
-                        else:
-                            trade_fmt.append(f"Future {round_fmt} Round {trade.value.pick.tier}")
-                    elif src_fmt:
-                        trade_fmt.append(f"{src_fmt} {round_fmt} Round {trade.value.pick.tier} ({trade.value.pick.number})")
-                    else:
-                        trade_fmt.append(f"{round_fmt} Round {trade.value.pick.tier} ({trade.value.pick.number})")
-
-            # Build field
-            embed.add_field(name=dest, value="\n".join(trade_fmt), inline=False)
-
-        # Add thumbnail
-        if guild.icon:
-            embed.set_thumbnail(url=guild.icon.url)
-
-        return gms, embed
 
     async def get_franchise_transaction_channel(self, guild: discord.Guild, franchise_name: str) -> discord.TextChannel | None:
         """Find franchise transaction channel"""

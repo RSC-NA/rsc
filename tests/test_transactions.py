@@ -10,7 +10,6 @@ from rscapi.models.player import Player
 from rscapi.models.player_transaction_updates import PlayerTransactionUpdates
 from rscapi.models.transaction_response import TransactionResponse
 from rscapi.models.franchise_identifier import FranchiseIdentifier
-from rscapi.models.draft_pick_trade import DraftPickTrade
 from rscapi.models.franchise_futures_validation import FranchiseFuturesValidation
 from rscapi.models.franchise_futures_validation_response import FranchiseFuturesValidationResponse
 from rscapi.models.trade_franchise import TradeFranchise
@@ -39,6 +38,8 @@ from rsc.transactions.transactions import (
 from rsc.types import Substitute
 from rsc.utils import utils
 
+from .test_trade_announce import COMETS_GM, FLARES_GM, WOLVES_GM, pick_trade, player_update
+from .test_trade_announce import response as trade_response
 from .utils import command_callback
 
 
@@ -896,50 +897,88 @@ class TestParseTradeText:
             await mixin.parse_trade_text(guild=mock_guild, data="")
 
 
-# --- build_trade_embed Tests ---
+# --- /transactions trade announcement Tests ---
 
 
-class TestBuildTradeEmbed:
+class TestTradeCommandAnnouncement:
+    """`/transactions trade` posts the same card as website trades, from the trade call's response."""
+
     @pytest.fixture
-    def mixin(self, mock_guild):
-        m = _create_mixin()
-        return m
+    def channel(self):
+        channel = MagicMock()
+        msg = MagicMock()
+        msg.jump_url = "https://discord.com/x"
+        msg.edit = AsyncMock()
+        channel.send = AsyncMock(return_value=msg)
+        return channel
 
-    async def test_empty_trade_list(self, mixin, mock_guild):
-        gms, embed = await mixin.build_trade_embed(mock_guild, [])
-        assert isinstance(gms, list)
-        assert isinstance(embed, discord.Embed)
+    @pytest.fixture
+    def mixin(self, mock_guild, channel):
+        wolves = TradeFranchise(id=1, name="Thunder Wolves", gm=WOLVES_GM)
+        comets = TradeFranchise(id=3, name="Comets", gm=COMETS_GM)
+        trade_items = [
+            # Comets send player 111 to the Wolves; the response alone can't say where he came from
+            TradeObject(source=comets, destination=wolves, value=TradeItem(player=TradePlayer(id=111, team="Comets"), pick=None)),
+        ]
+        result = trade_response(
+            players=[player_update(111, "Thunder Wolves", WOLVES_GM)],
+            picks=[
+                pick_trade("Solar Flares", FLARES_GM, source_name="Thunder Wolves", source_gm=WOLVES_GM),
+                pick_trade("Comets", COMETS_GM, source_name="Solar Flares", source_gm=FLARES_GM, future=True, season=25),
+            ],
+        )
+        return _create_mixin(
+            _trans_channel=AsyncMock(return_value=channel),
+            parse_trade_text=AsyncMock(return_value=trade_items),
+            trade=AsyncMock(return_value=result),
+            tiers=AsyncMock(return_value=[]),
+            teams=AsyncMock(return_value=[]),
+            franchise_logo=AsyncMock(return_value=None),
+        )
 
-    async def test_player_trade_embed(self, mixin, mock_guild):
-        src = TradeFranchise(id=1, name="Source FC", gm=111)
-        dest = TradeFranchise(id=2, name="Dest FC", gm=222)
-        value = TradeItem(player=TradePlayer(id=333, team="Team A"), pick=None)
-        trade = TradeObject(source=src, destination=dest, value=value)
+    @pytest.fixture
+    def interaction(self, mock_guild, mock_member):
+        interaction = MagicMock(spec=discord.Interaction)
+        interaction.guild = mock_guild
+        interaction.user = mock_member
+        interaction.response = MagicMock()
+        interaction.response.send_modal = AsyncMock()
+        interaction.followup = MagicMock()
+        interaction.followup.send = AsyncMock()
+        return interaction
 
-        mock_guild.get_member = MagicMock(return_value=None)
-        gms, _embed = await mixin.build_trade_embed(mock_guild, [trade])
-        assert 222 in gms
-        assert 333 in gms
+    async def run(self, mixin, interaction, **kwargs):
+        modal = MagicMock()
+        modal.wait = AsyncMock(return_value=False)
+        modal.trade.value = "Thunder Wolves receives: @player"
+        with patch("rsc.transactions.transactions.TradeAnnouncementModal", return_value=modal):
+            await command_callback(TransactionMixIn._transactions_trade_cmd)(mixin, interaction, **kwargs)
 
-    async def test_pick_trade_embed(self, mixin, mock_guild):
-        src = TradeFranchise(id=1, name="Source FC", gm=111)
-        dest = TradeFranchise(id=2, name="Dest FC", gm=222)
-        value = TradeItem(player=None, pick=DraftPickTrade(tier="Elite", round=1, number=5, future=False))
-        trade = TradeObject(source=src, destination=dest, value=value)
+    async def test_sends_one_v2_card_that_pings_from_text(self, mixin, interaction, channel):
+        await self.run(mixin, interaction)
 
-        mock_guild.get_member = MagicMock(return_value=None)
-        gms, _embed = await mixin.build_trade_embed(mock_guild, [trade])
-        assert 222 in gms
+        channel.send.assert_awaited_once()
+        kwargs = channel.send.await_args.kwargs
+        view = kwargs["view"]
+        assert isinstance(view, discord.ui.LayoutView)
+        assert "content" not in kwargs
+        assert "embed" not in kwargs
+        mentions = kwargs["allowed_mentions"]
+        assert (mentions.users, mentions.everyone, mentions.roles) == (True, False, False)
+        # No send-then-edit
+        channel.send.return_value.edit.assert_not_awaited()
 
-    async def test_future_pick_trade_embed(self, mixin, mock_guild):
-        src = TradeFranchise(id=1, name="Source FC", gm=111)
-        dest = TradeFranchise(id=2, name="Dest FC", gm=222)
-        value = TradeItem(player=None, pick=DraftPickTrade(tier="Elite", round=2, number=0, future=True))
-        trade = TradeObject(source=src, destination=dest, value=value)
+        text = "\n".join(c.content for c in view.walk_children() if isinstance(c, discord.ui.TextDisplay))
+        for discord_id in (WOLVES_GM, FLARES_GM, COMETS_GM, 111):
+            assert f"<@{discord_id}>" in text
+        # The parsed trade said where the player came from, so no lookup was needed
+        assert "-# From Comets\n- **Player** <@111> → Comets" in text
+        mixin.teams.assert_not_awaited()
 
-        mock_guild.get_member = MagicMock(return_value=None)
-        gms, _embed = await mixin.build_trade_embed(mock_guild, [trade])
-        assert 222 in gms
+    async def test_announce_false_posts_nothing(self, mixin, interaction, channel):
+        await self.run(mixin, interaction, announce=False)
+
+        channel.send.assert_not_awaited()
 
 
 # --- API Method Tests (mocked) ---

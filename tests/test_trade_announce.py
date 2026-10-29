@@ -12,13 +12,18 @@ import discord
 import pytest
 from rscapi.models.transaction_response import TransactionResponse
 
-from rsc.embeds import EmbedLimits
+from discord import ui
+from rscapi.models.franchise_gm import FranchiseGM
+from rscapi.models.team_franchise import TeamFranchise
+from rscapi.models.team_list import TeamList
+
 from rsc.events.models import LeagueEventData
 from rsc.transactions.trade_announce import (
     TRADE_ANNOUNCE_MAX_AGE,
+    FranchiseRef,
     announce_trade,
     apply_trade_role_updates,
-    build_trade_embed_from_response,
+    build_trade_card,
     process_trade_event,
 )
 
@@ -88,6 +93,8 @@ def pick_trade(
     number: int | None = 4,
     tier: str = "Master",
     future: bool = False,
+    season: int = 0,
+    original: str | None = None,
 ) -> dict:
     return {
         "pick": {
@@ -96,9 +103,9 @@ def pick_trade(
             "round": round_no,
             "tier": tier,
             "future_pick": future,
-            "future_season": 0,
-            "pick_from": "SF",
-            "original_pick": "TW",
+            "future_season": season,
+            "pick_from": None,
+            "original_pick": original,
         },
         "source": franchise(source_name, source_gm) if source_name and source_gm else None,
         "destination": franchise(dest_name, dest_gm),
@@ -140,29 +147,67 @@ def guild() -> MagicMock:
     g.id = GUILD_ID
     g.name = "Test Guild"
     g.icon = None
+    g.roles = []
     g.get_member = MagicMock(return_value=None)
     return g
 
 
-def field_names(embed) -> list[str]:
-    return [f.name for f in embed.fields]
+def texts(view: ui.LayoutView) -> list[str]:
+    return [c.content for c in view.walk_children() if isinstance(c, ui.TextDisplay)]
 
 
-def field_by_prefix(embed, prefix: str) -> str:
-    return next(f.value for f in embed.fields if f.name and f.name.startswith(prefix))
+def containers(view: ui.LayoutView) -> list[ui.Container]:
+    return [c for c in view.children if isinstance(c, ui.Container)]
+
+
+def card_names(view: ui.LayoutView) -> list[str]:
+    """Each card's franchise heading, in order."""
+    names = []
+    for container in containers(view):
+        first = next(c for c in container.walk_children() if isinstance(c, ui.TextDisplay))
+        names.append(first.content.split("\n")[0].removeprefix("### "))
+    return names
+
+
+def card(view: ui.LayoutView, name: str) -> ui.Container:
+    return containers(view)[card_names(view).index(name)]
+
+
+def bodies(container: ui.Container) -> list[str]:
+    """Each block under a thin line, its heading and content rejoined: one per giver, without the RECEIVES line heading the first."""
+    blocks: list[list[str]] = []
+    for child in list(container.children)[1:]:
+        if isinstance(child, ui.Separator) and child.visible:
+            blocks.append([])
+        elif isinstance(child, ui.TextDisplay):
+            blocks[-1].append(child.content)
+    texts = ["\n".join(block) for block in blocks]
+    if texts:
+        texts[0] = texts[0].removeprefix("-# RECEIVES\n")
+    return texts
+
+
+async def render(cog, guild, resp, **kwargs) -> ui.LayoutView:
+    view, _ = (await build_trade_card(cog, guild, resp, **kwargs)).render()
+    return view
+
+
+@pytest.fixture
+def cog() -> MagicMock:
+    return make_cog(trade_settings())
 
 
 class TestGrouping:
-    async def test_one_field_per_franchise(self, guild):
+    async def test_one_card_per_receiving_franchise(self, cog, guild):
         resp = response(
             players=[player_update(111, "Thunder Wolves", WOLVES_GM)],
             picks=[pick_trade("Solar Flares", FLARES_GM)],
         )
-        _, embed = await build_trade_embed_from_response(guild, resp)
+        view = await render(cog, guild, resp)
 
-        assert len(embed.fields) == 2
+        assert card_names(view) == ["Thunder Wolves", "Solar Flares"]
 
-    async def test_interleaved_input_does_not_duplicate_a_franchise(self, guild):
+    async def test_interleaved_input_does_not_duplicate_a_franchise(self, cog, guild):
         """`itertools.groupby` only groups adjacent runs, so this ordering would
         emit the same franchise twice. Keying on a dict makes it impossible."""
         resp = response(
@@ -172,167 +217,364 @@ class TestGrouping:
                 player_update(333, "Thunder Wolves", WOLVES_GM),
             ],
         )
-        _, embed = await build_trade_embed_from_response(guild, resp)
+        view = await render(cog, guild, resp)
 
-        assert len(embed.fields) == 2
-        wolves = field_by_prefix(embed, "Thunder Wolves")
-        assert "<@!111>" in wolves
-        assert "<@!333>" in wolves
+        assert card_names(view) == ["Thunder Wolves", "Solar Flares"]
+        wolves = "\n".join(bodies(card(view, "Thunder Wolves")))
+        assert "<@111>" in wolves
+        assert "<@333>" in wolves
 
-    async def test_franchise_as_both_pick_source_and_player_destination_collapses(self, guild):
+    async def test_franchise_as_both_pick_source_and_player_destination_collapses(self, cog, guild):
         resp = response(
             players=[player_update(111, "Thunder Wolves", WOLVES_GM)],
             picks=[pick_trade("Solar Flares", FLARES_GM, source_name="Thunder Wolves", source_gm=WOLVES_GM)],
         )
-        _, embed = await build_trade_embed_from_response(guild, resp)
+        view = await render(cog, guild, resp)
 
-        assert len(embed.fields) == 2
+        assert len(containers(view)) == 2
 
-    async def test_null_franchise_id_does_not_split_a_franchise(self, guild):
+    async def test_null_franchise_id_does_not_split_a_franchise(self, cog, guild):
         """`PlayerFranchise.id` is Optional while `TransactionFranchise.id` is not,
-        so keying on id would split one franchise across two fields."""
+        so keying on id would split one franchise across two cards."""
         resp = response(
             players=[player_update(111, "Thunder Wolves", WOLVES_GM, dest_id=None)],
             picks=[pick_trade("Thunder Wolves", WOLVES_GM)],
         )
-        _, embed = await build_trade_embed_from_response(guild, resp)
+        view = await render(cog, guild, resp)
 
-        assert len(embed.fields) == 1
+        assert len(containers(view)) == 1
 
-    async def test_franchise_with_nothing_received_is_omitted(self, guild):
+    async def test_franchise_with_nothing_received_is_omitted(self, cog, guild):
         resp = response(
             players=[player_update(111, "Thunder Wolves", WOLVES_GM)],
             first=franchise("Thunder Wolves", WOLVES_GM),
             second=franchise("Solar Flares", FLARES_GM),
         )
-        _, embed = await build_trade_embed_from_response(guild, resp)
+        view = await render(cog, guild, resp)
 
-        assert len(embed.fields) == 1
+        assert card_names(view) == ["Thunder Wolves"]
+
+    async def test_cards_follow_first_and_second_franchise(self, cog, guild):
+        resp = response(
+            players=[player_update(111, "Thunder Wolves", WOLVES_GM), player_update(222, "Solar Flares", FLARES_GM)],
+            first=franchise("Solar Flares", FLARES_GM),
+            second=franchise("Thunder Wolves", WOLVES_GM),
+        )
+        view = await render(cog, guild, resp)
+
+        assert card_names(view) == ["Solar Flares", "Thunder Wolves"]
+
+
+class TestGivers:
+    async def test_two_franchise_trade_labels_the_other_franchise(self, cog, guild):
+        resp = response(
+            players=[player_update(111, "Thunder Wolves", WOLVES_GM)],
+            picks=[pick_trade("Solar Flares", FLARES_GM, source_name="Thunder Wolves", source_gm=WOLVES_GM)],
+            first=franchise("Thunder Wolves", WOLVES_GM),
+            second=franchise("Solar Flares", FLARES_GM),
+        )
+        view = await render(cog, guild, resp)
+
+        # Labelled like a bigger trade, without pinging GMs who already have a card
+        assert bodies(card(view, "Thunder Wolves"))[0].startswith("-# From Solar Flares\n")
+        assert bodies(card(view, "Solar Flares"))[0].startswith("-# From Thunder Wolves\n")
+        cog.teams.assert_not_awaited()
+
+    async def test_three_franchises_label_each_giver_and_split_with_a_line(self, cog, guild):
+        """Wolves receive from Flares and Comets: two groups, a thin line between them."""
+        resp = response(
+            picks=[
+                pick_trade("Thunder Wolves", WOLVES_GM, source_name="Solar Flares", source_gm=FLARES_GM),
+                pick_trade("Thunder Wolves", WOLVES_GM, source_name="Comets", source_gm=COMETS_GM, round_no=2),
+                pick_trade("Solar Flares", FLARES_GM, source_name="Thunder Wolves", source_gm=WOLVES_GM),
+            ],
+        )
+        view = await render(cog, guild, resp)
+
+        wolves = card(view, "Thunder Wolves")
+        header, line, first, _, _, between, second, _, _ = wolves.children
+        assert isinstance(header, ui.TextDisplay)
+        assert isinstance(line, ui.Separator) and line.visible
+        assert isinstance(between, ui.Separator) and between.visible
+        assert isinstance(first, ui.TextDisplay) and first.content == "-# RECEIVES\n-# From Solar Flares"
+        # Comets receive nothing, so their GM is pinged by the label instead of a card of their own
+        assert isinstance(second, ui.TextDisplay) and second.content == f"-# From Comets · **GM** <@{COMETS_GM}>"
+
+    async def test_givers_with_a_card_of_their_own_are_not_pinged_by_the_label(self, cog, guild):
+        resp = response(
+            picks=[
+                pick_trade("Thunder Wolves", WOLVES_GM, source_name="Solar Flares", source_gm=FLARES_GM),
+                pick_trade("Solar Flares", FLARES_GM, source_name="Thunder Wolves", source_gm=WOLVES_GM),
+                pick_trade("Solar Flares", FLARES_GM, source_name="Comets", source_gm=COMETS_GM),
+            ],
+        )
+        view = await render(cog, guild, resp)
+
+        assert bodies(card(view, "Thunder Wolves"))[0].startswith("-# From Solar Flares\n")
+        assert bodies(card(view, "Solar Flares"))[0].startswith("-# From Thunder Wolves\n")
+        assert bodies(card(view, "Solar Flares"))[1].startswith(f"-# From Comets · **GM** <@{COMETS_GM}>\n")
+
+    async def test_pick_only_giver_in_a_two_franchise_trade_is_labelled_to_ping_its_gm(self, cog, guild):
+        resp = response(
+            picks=[pick_trade("Solar Flares", FLARES_GM, source_name="Thunder Wolves", source_gm=WOLVES_GM)],
+            first=franchise("Thunder Wolves", WOLVES_GM),
+            second=franchise("Solar Flares", FLARES_GM),
+        )
+        view = await render(cog, guild, resp)
+
+        assert card_names(view) == ["Solar Flares"]
+        assert bodies(card(view, "Solar Flares"))[0].startswith(f"-# From Thunder Wolves · **GM** <@{WOLVES_GM}>\n")
+
+    async def test_player_giver_found_from_the_old_team(self, cog, guild):
+        """The response names a player's old team only, so a 3-team trade looks it up."""
+        cog.teams = AsyncMock(
+            return_value=[
+                TeamList.model_construct(
+                    name="Wolves",
+                    franchise=TeamFranchise.model_construct(name="Comets", gm=FranchiseGM.model_construct(discord_id=COMETS_GM)),
+                )
+            ]
+        )
+        resp = response(
+            players=[player_update(111, "Thunder Wolves", WOLVES_GM)],
+            picks=[
+                pick_trade("Solar Flares", FLARES_GM, source_name="Thunder Wolves", source_gm=WOLVES_GM),
+                pick_trade("Comets", COMETS_GM, source_name="Solar Flares", source_gm=FLARES_GM),
+            ],
+        )
+        view = await render(cog, guild, resp)
+
+        assert bodies(card(view, "Thunder Wolves")) == ["-# From Comets\n- **Player** <@111> → Comets"]
+        cog.teams.assert_awaited_once_with(guild, name="Wolves", tier="Master")
+
+    async def test_player_sources_skip_the_lookup(self, cog, guild):
+        resp = response(
+            players=[player_update(111, "Thunder Wolves", WOLVES_GM)],
+            picks=[
+                pick_trade("Solar Flares", FLARES_GM, source_name="Thunder Wolves", source_gm=WOLVES_GM),
+                pick_trade("Comets", COMETS_GM, source_name="Solar Flares", source_gm=FLARES_GM),
+            ],
+        )
+        view = await render(cog, guild, resp, player_sources={111: FranchiseRef(COMETS_GM, "Comets")})
+
+        assert bodies(card(view, "Thunder Wolves"))[0].startswith("-# From Comets\n")
+        cog.teams.assert_not_awaited()
+
+    async def test_unknown_player_giver_still_shows_the_player(self, cog, guild):
+        resp = response(
+            players=[player_update(111, "Thunder Wolves", WOLVES_GM)],
+            picks=[
+                pick_trade("Solar Flares", FLARES_GM, source_name="Thunder Wolves", source_gm=WOLVES_GM),
+                pick_trade("Comets", COMETS_GM, source_name="Solar Flares", source_gm=FLARES_GM),
+            ],
+        )
+        view = await render(cog, guild, resp)
+
+        assert bodies(card(view, "Thunder Wolves")) == ["- **Player** <@111> → Comets"]
 
 
 class TestLines:
-    async def test_player_line_includes_destination_team(self, guild):
+    async def test_player_line_includes_destination_team(self, cog, guild):
         resp = response(players=[player_update(111, "Thunder Wolves", WOLVES_GM, team_name="Comets")])
-        _, embed = await build_trade_embed_from_response(guild, resp)
+        view = await render(cog, guild, resp)
 
-        assert field_by_prefix(embed, "Thunder Wolves") == "<@!111> to Comets"
+        assert bodies(card(view, "Thunder Wolves")) == ["- **Player** <@111> → Comets"]
 
-    async def test_player_without_new_team_omits_the_destination(self, guild):
+    async def test_player_without_new_team_omits_the_destination(self, cog, guild):
         resp = response(players=[player_update(111, "Thunder Wolves", WOLVES_GM, new_team=False)])
-        _, embed = await build_trade_embed_from_response(guild, resp)
+        view = await render(cog, guild, resp)
 
-        assert field_by_prefix(embed, "Thunder Wolves") == "<@!111>"
+        assert bodies(card(view, "Thunder Wolves")) == ["- **Player** <@111>"]
 
-    async def test_player_without_discord_id_falls_back_to_name(self, guild):
-        resp = response(players=[player_update(None, "Thunder Wolves", WOLVES_GM, player_name="NoDiscord")])
-        _, embed = await build_trade_embed_from_response(guild, resp)
+    async def test_player_without_discord_id_falls_back_to_name(self, cog, guild):
+        resp = response(players=[player_update(None, "Thunder Wolves", WOLVES_GM, player_name="No_Discord")])
+        view = await render(cog, guild, resp)
 
-        assert "NoDiscord" in field_by_prefix(embed, "Thunder Wolves")
+        # Escaped, so the underscore can't start italics
+        assert "No\\_Discord" in bodies(card(view, "Thunder Wolves"))[0]
 
     @pytest.mark.parametrize(
         ("round_no", "expected"),
         [(1, "1st"), (2, "2nd"), (3, "3rd"), (4, "4th"), (11, "11th")],
     )
-    async def test_pick_round_ordinals(self, guild, round_no, expected):
+    async def test_pick_round_ordinals(self, cog, guild, round_no, expected):
         resp = response(picks=[pick_trade("Solar Flares", FLARES_GM, round_no=round_no)])
-        _, embed = await build_trade_embed_from_response(guild, resp)
+        view = await render(cog, guild, resp)
 
-        assert field_by_prefix(embed, "Solar Flares").startswith(expected)
+        assert bodies(card(view, "Solar Flares")) == [f"- **Pick** {expected} Round Master, pick 4"]
 
-    async def test_null_round_does_not_render_noneth(self, guild):
-        """`TransactionPick.round` is Optional; the original builder produced
-        `"Noneth"` for a null round."""
+    async def test_null_round_does_not_render_noneth(self, cog, guild):
+        """`TransactionPick.round` is Optional; the original builder produced `"Noneth"`."""
         resp = response(picks=[pick_trade("Solar Flares", FLARES_GM, round_no=None)])
-        _, embed = await build_trade_embed_from_response(guild, resp)
+        view = await render(cog, guild, resp)
 
-        value = field_by_prefix(embed, "Solar Flares")
-        assert "Noneth" not in value
-        assert "Unknown Round" in value
+        assert bodies(card(view, "Solar Flares")) == ["- **Pick** Unknown Round Master, pick 4"]
 
-    async def test_null_pick_number_omits_the_parenthetical(self, guild):
+    async def test_null_pick_number_omits_the_pick(self, cog, guild):
         resp = response(picks=[pick_trade("Solar Flares", FLARES_GM, number=None)])
-        _, embed = await build_trade_embed_from_response(guild, resp)
+        view = await render(cog, guild, resp)
 
-        assert field_by_prefix(embed, "Solar Flares") == "1st Round Master"
+        assert bodies(card(view, "Solar Flares")) == ["- **Pick** 1st Round Master"]
 
-    async def test_future_pick_has_no_number(self, guild):
-        resp = response(picks=[pick_trade("Solar Flares", FLARES_GM, future=True)])
-        _, embed = await build_trade_embed_from_response(guild, resp)
+    async def test_future_pick_shows_its_season(self, cog, guild):
+        resp = response(picks=[pick_trade("Solar Flares", FLARES_GM, future=True, season=25)])
+        view = await render(cog, guild, resp)
 
-        assert field_by_prefix(embed, "Solar Flares") == "Future 1st Round Master"
+        assert bodies(card(view, "Solar Flares")) == ["- **Future Pick** S25 1st Round Master"]
 
-    async def test_source_is_shown_when_it_differs_from_destination(self, guild):
-        resp = response(picks=[pick_trade("Solar Flares", FLARES_GM, source_name="Thunder Wolves", source_gm=WOLVES_GM)])
-        _, embed = await build_trade_embed_from_response(guild, resp)
+    async def test_future_pick_without_a_season(self, cog, guild):
+        """The API sends 0 when a future pick has no season."""
+        resp = response(picks=[pick_trade("Solar Flares", FLARES_GM, future=True, season=0)])
+        view = await render(cog, guild, resp)
 
-        assert field_by_prefix(embed, "Solar Flares").startswith(f"<@!{WOLVES_GM}> ")
+        assert bodies(card(view, "Solar Flares")) == ["- **Future Pick** 1st Round Master"]
 
-    async def test_source_is_hidden_when_it_matches_the_destination(self, guild):
-        resp = response(picks=[pick_trade("Solar Flares", FLARES_GM, source_name="Solar Flares", source_gm=FLARES_GM)])
-        _, embed = await build_trade_embed_from_response(guild, resp)
+    async def test_via_tag_when_the_original_owner_is_not_the_giver(self, cog, guild):
+        resp = response(
+            picks=[pick_trade("Solar Flares", FLARES_GM, source_name="Thunder Wolves", source_gm=WOLVES_GM, original="CMT")],
+        )
+        view = await render(cog, guild, resp)
 
-        assert field_by_prefix(embed, "Solar Flares").startswith("1st Round")
+        assert bodies(card(view, "Solar Flares")) == [
+            f"-# From Thunder Wolves · **GM** <@{WOLVES_GM}>\n- **Pick** 1st Round Master, pick 4 · via CMT"
+        ]
+
+    async def test_no_via_tag_for_the_givers_own_pick(self, cog, guild):
+        resp = response(
+            picks=[pick_trade("Solar Flares", FLARES_GM, source_name="Thunder Wolves", source_gm=WOLVES_GM, original="XX")],
+        )
+        view = await render(cog, guild, resp)
+
+        assert "via" not in bodies(card(view, "Solar Flares"))[0]
+
+    async def test_pick_from_its_own_destination_is_unlabelled(self, cog, guild):
+        resp = response(
+            picks=[
+                pick_trade("Solar Flares", FLARES_GM, source_name="Solar Flares", source_gm=FLARES_GM),
+                pick_trade("Comets", COMETS_GM, source_name="Thunder Wolves", source_gm=WOLVES_GM),
+            ]
+        )
+        view = await render(cog, guild, resp)
+
+        assert bodies(card(view, "Solar Flares")) == ["- **Pick** 1st Round Master, pick 4"]
+
+    async def test_future_picks_each_get_their_own_line_in_order(self, cog, guild):
+        picks = [
+            pick_trade(
+                "Solar Flares", FLARES_GM, source_name="Thunder Wolves", source_gm=WOLVES_GM, future=True, season=s, round_no=r, number=None
+            )
+            for s in (25, 26)
+            for r in (2, 1)
+        ]
+        view = await render(cog, guild, response(picks=picks))
+
+        assert bodies(card(view, "Solar Flares"))[0].split("\n") == [
+            f"-# From Thunder Wolves · **GM** <@{WOLVES_GM}>",
+            "- **Future Pick** S26 1st Round Master",
+            "- **Future Pick** S26 2nd Round Master",
+            "- **Future Pick** S25 1st Round Master",
+            "- **Future Pick** S25 2nd Round Master",
+        ]
 
 
-class TestLabelsAndPings:
-    async def test_gm_rsc_name_used_when_member_is_not_in_the_server(self, guild):
+class TestHeaderAndPings:
+    async def test_header_is_the_franchise_and_gm_with_receives_under_the_line(self, cog, guild):
         resp = response(players=[player_update(111, "Thunder Wolves", WOLVES_GM)])
-        _, embed = await build_trade_embed_from_response(guild, resp)
+        view = await render(cog, guild, resp)
 
-        assert field_names(embed) == ["Thunder Wolves (GM)"]
+        header, line, heading, space, body = card(view, "Thunder Wolves").children
+        assert isinstance(header, ui.TextDisplay)
+        assert header.content == f"### Thunder Wolves\n**GM** <@{WOLVES_GM}>"
+        assert isinstance(line, ui.Separator) and line.visible
+        assert isinstance(heading, ui.TextDisplay) and heading.content == "-# RECEIVES"
+        assert isinstance(space, ui.Separator) and not space.visible
+        assert isinstance(body, ui.TextDisplay) and body.content.startswith("- **Player** <@111>")
 
-    async def test_ping_list_includes_gms_and_traded_players(self, guild):
+    async def test_logo_sits_beside_the_header(self, cog, guild):
+        cog.franchise_logo = AsyncMock(return_value="https://cdn.example/wolves.png")
+        resp = response(players=[player_update(111, "Thunder Wolves", WOLVES_GM, dest_id=12)])
+        view = await render(cog, guild, resp)
+
+        section = card(view, "Thunder Wolves").children[0]
+        assert isinstance(section, ui.Section)
+        assert [t.content for t in section.children if isinstance(t, ui.TextDisplay)] == [
+            "### Thunder Wolves",
+            f"**GM** <@{WOLVES_GM}>",
+        ]
+        assert isinstance(section.accessory, ui.Thumbnail)
+        cog.franchise_logo.assert_awaited_once_with(guild, 12)
+
+    async def test_every_gm_and_player_is_mentioned_in_a_text_display(self, cog, guild):
         resp = response(
-            players=[player_update(111, "Thunder Wolves", WOLVES_GM)],
-            picks=[pick_trade("Solar Flares", FLARES_GM)],
+            players=[player_update(111, "Thunder Wolves", WOLVES_GM), player_update(222, "Solar Flares", FLARES_GM)],
+            picks=[pick_trade("Comets", COMETS_GM, source_name="Thunder Wolves", source_gm=WOLVES_GM)],
         )
-        ping_ids, _ = await build_trade_embed_from_response(guild, resp)
+        view = await render(cog, guild, resp, player_sources={})
+        text = "\n".join(texts(view))
 
-        assert set(ping_ids) == {WOLVES_GM, FLARES_GM, 111}
+        for discord_id in (WOLVES_GM, FLARES_GM, COMETS_GM, 111, 222):
+            assert f"<@{discord_id}>" in text
 
-    async def test_ping_list_has_no_duplicates(self, guild):
-        resp = response(
-            players=[
-                player_update(111, "Thunder Wolves", WOLVES_GM),
-                player_update(222, "Thunder Wolves", WOLVES_GM),
-            ],
-        )
-        ping_ids, _ = await build_trade_embed_from_response(guild, resp)
+    async def test_accent_is_the_franchise_role_colour(self, cog, guild):
+        role = MagicMock(spec=discord.Role)
+        role.name = "Thunder Wolves"
+        role.colour = discord.Colour(0xE67E22)
+        guild.roles = [role]
+        resp = response(players=[player_update(111, "Thunder Wolves", WOLVES_GM)])
+        view = await render(cog, guild, resp)
 
-        assert len(ping_ids) == len(set(ping_ids))
+        assert card(view, "Thunder Wolves").accent_colour == discord.Colour(0xE67E22)
+
+    async def test_accent_falls_back_to_the_tier_colour(self, cog, guild):
+        tier_role = MagicMock(spec=discord.Role)
+        tier_role.name = "Master"
+        tier_role.color = discord.Colour(0x9B59B6)
+        tier_role.colour = tier_role.color
+        guild.roles = [tier_role]
+        resp = response(players=[player_update(111, "Thunder Wolves", WOLVES_GM)])
+        view = await render(cog, guild, resp)
+
+        assert card(view, "Thunder Wolves").accent_colour == discord.Colour(0x9B59B6)
+
+    async def test_footer_carries_the_transaction_id(self, cog, guild):
+        resp = response(players=[player_update(111, "Thunder Wolves", WOLVES_GM)], transaction_id=48214)
+        view = await render(cog, guild, resp)
+
+        footer = view.children[-1]
+        assert isinstance(footer, ui.TextDisplay)
+        assert footer.content.startswith("-# Transaction ID: 48214 · <t:")
+
+    async def test_banner_is_the_header(self, cog, guild):
+        resp = response(players=[player_update(111, "Thunder Wolves", WOLVES_GM)])
+        view, files = (await build_trade_card(cog, guild, resp)).render()
+
+        gallery = view.children[0]
+        assert isinstance(gallery, ui.MediaGallery)
+        assert [item.media.url for item in gallery.items] == ["attachment://Trade.png"]
+        assert [f.filename for f in files] == ["Trade.png"]
 
 
-class TestEmbedLimits:
-    async def test_large_pick_dump_stays_within_embed_limits(self, guild):
-        """A bare add_field would 400 the send past 1024 chars."""
-        picks = [pick_trade("Solar Flares", FLARES_GM, source_name="Thunder Wolves", source_gm=WOLVES_GM, number=n) for n in range(60)]
-        _, embed = await build_trade_embed_from_response(guild, response(picks=picks))
+class TestLimits:
+    async def test_large_pick_dump_stays_within_message_limits(self, cog, guild):
+        picks = [
+            pick_trade("Solar Flares", FLARES_GM, source_name="Thunder Wolves", source_gm=WOLVES_GM, number=n, original="CMT")
+            for n in range(400)
+        ]
+        view = await render(cog, guild, response(picks=picks))
 
-        assert not embed.exceeds_limits()
-
-    async def test_truncation_is_disclosed(self, guild):
-        picks = [pick_trade("Solar Flares", FLARES_GM, number=n) for n in range(400)]
-        _, embed = await build_trade_embed_from_response(guild, response(picks=picks))
-
-        assert embed.footer.text is not None
-        assert not embed.exceeds_limits()
-
-    async def test_field_values_never_exceed_the_cap(self, guild):
-        picks = [pick_trade("Solar Flares", FLARES_GM, number=n) for n in range(60)]
-        _, embed = await build_trade_embed_from_response(guild, response(picks=picks))
-
-        for f in embed.fields:
-            assert f.value is not None
-            assert len(f.value) <= EmbedLimits.Field.Value
+        assert view.total_children_count <= 40
+        assert sum(len(t) for t in texts(view)) <= 4000
+        # Truncation is disclosed
+        assert any("more picks" in t for t in texts(view))
 
 
 class TestPickOnlyTrade:
-    async def test_pick_only_trade_still_renders(self, guild):
+    async def test_pick_only_trade_still_renders(self, cog, guild):
         """`player_updates` is Optional and empty for a pure futures trade."""
         resp = response(players=None, picks=[pick_trade("Solar Flares", FLARES_GM)])
-        _, embed = await build_trade_embed_from_response(guild, resp)
+        view = await render(cog, guild, resp)
 
-        assert len(embed.fields) == 1
+        assert len(containers(view)) == 1
 
 
 class FakeValue:
@@ -371,6 +613,8 @@ def make_cog(store: dict, *, channel: MagicMock | None = None) -> MagicMock:
     cog._league = {GUILD_ID: LEAGUE_ID}
     cog._trans_channel = AsyncMock(return_value=channel)
     cog.tiers = AsyncMock(return_value=[])
+    cog.teams = AsyncMock(return_value=[])
+    cog.franchise_logo = AsyncMock(return_value=None)
     cog._try_post_embeds = AsyncMock()
     cog.transaction_history_by_id = AsyncMock()
     return cog
@@ -540,17 +784,22 @@ class TestAnnounceTrade:
 
         assert await announce_trade(cog, guild, resp) is None
 
-    async def test_content_is_cleared_after_pinging(self, guild):
+    async def test_sends_one_v2_message_without_editing_it(self, guild):
+        """The pings come from the card's TextDisplays, so the old send-then-edit trick is gone."""
         channel = make_channel()
         cog = make_cog(trade_settings(), channel=channel)
         resp = response(players=[player_update(111, "Wolves", WOLVES_GM)])
 
         msg = await announce_trade(cog, guild, resp)
 
-        assert channel.sent[0]["content"]
         assert msg is not None
+        (sent,) = channel.sent
+        assert isinstance(sent["view"], ui.LayoutView)
+        assert "content" not in sent
+        assert "embed" not in sent
+        assert [f.filename for f in sent["files"]] == ["Trade.png"]
+        mentions = sent["allowed_mentions"]
+        assert (mentions.users, mentions.everyone, mentions.roles) == (True, False, False)
         edit = msg.edit
         assert isinstance(edit, AsyncMock)
-        edit.assert_awaited_once()
-        assert edit.await_args is not None
-        assert edit.await_args.kwargs["content"] is None
+        edit.assert_not_awaited()

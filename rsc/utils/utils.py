@@ -480,6 +480,9 @@ async def fa_img_path_from_tier(tier: str, tiny: bool = False) -> Path | None:
 # A temporary contract ending has no transaction type of its own
 CONTRACT_EXPIRED_BANNER = Path(__file__).parent.parent / "resources/transactions/card/ContractExpired.png"
 
+# The trade announcement's header. Unpadded, since it sits above the franchise cards and spans their width.
+TRADE_BANNER = Path(__file__).parent.parent / "resources/transactions/Trade.png"
+
 
 def transaction_banner(action: TransactionType) -> Path:
     """The banner image for a transaction card, padded to ~70% of the card's width (scripts/make_card_banners.py)."""
@@ -496,8 +499,9 @@ def transaction_banner(action: TransactionType) -> Path:
             return root / "Subbed.png"
         case TransactionType.TEMP_FA:
             return root / "Subbed.png"
-        case TransactionType.TRADE:
-            return root / "Traded.png"
+        # The trade card's header: "TRADE", where the old embed's banner said "TRADED"
+        case TransactionType.TRADE | TransactionType.PLAYER_TRADE:
+            return root / "Trade.png"
         case TransactionType.RETIRE:
             return root / "Retired.png"
         case TransactionType.INACTIVE_RESERVE:
