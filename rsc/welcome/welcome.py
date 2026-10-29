@@ -9,7 +9,9 @@ from rsc.types import WelcomeSettings
 
 log = logging.getLogger("red.rsc.welcome")
 
-defaults_guild = WelcomeSettings(WelcomeChannel=None, WelcomeMsg=None, WelcomeRoles=[], WelcomeStatus=False)
+# WelcomeStatus defaults on: the join listener ignored it until it was wired up, so every
+# server that never ran `/welcome toggle` has been posting the message all along.
+defaults_guild = WelcomeSettings(WelcomeChannel=None, WelcomeMsg=None, WelcomeRoles=[], WelcomeStatus=True)
 
 
 class WelcomeMixIn(RSCMixIn):
@@ -28,6 +30,10 @@ class WelcomeMixIn(RSCMixIn):
         wroles = await self._get_welcome_roles(member.guild)
         if wroles:
             await member.add_roles(*wroles)
+
+        # The toggle covers the message only. New members still get the roles.
+        if not await self._get_welcome_status(member.guild):
+            return
 
         # Check if welcome channel is set
         wchan = await self._get_welcome_channel(member.guild)
@@ -66,7 +72,7 @@ class WelcomeMixIn(RSCMixIn):
             title="RSC Welcome Settings",
             description="RSC member welcome channel and roles configuration.",
         )
-        settings_embed.add_field(name="Enabled", value=str(welcome_active), inline=False)
+        settings_embed.add_field(name="Welcome Message Enabled", value=str(welcome_active), inline=False)
         settings_embed.add_field(
             name="Welcome Channel",
             value=welcome_channel.mention if welcome_channel else welcome_channel,

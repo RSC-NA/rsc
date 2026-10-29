@@ -49,7 +49,7 @@ Each franchise also needs a `<franchise-name>-transactions` channel (lowercase, 
 | `WelcomeChannel` | none | `/welcome channel` |
 | `WelcomeMsg` | none | `/welcome message` (`{member.mention}` is replaced) |
 | `WelcomeRoles` | `[]` | `/welcome roles`, up to 4. Also re-added by cuts and syncs as the default roles |
-| `WelcomeStatus` | `False` | `/welcome toggle`. Currently has no effect: the join listener never checks it |
+| `WelcomeStatus` | `True` | `/welcome toggle`. Turns the message on or off; new members get the roles either way |
 
 ### Transactions — [transactions](modules/transactions.md)
 
