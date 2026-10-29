@@ -14,89 +14,65 @@ This file is the working record for the refresh. Update the status table as phas
 |---|---|---|
 | 1 | Fix the bugs listed under [Bugs](#bugs) | **Done** (2026-10-28, branch `discord-ui-phase-1`) |
 | 2 | Shared building blocks (see [Phase 2](#phase-2-shared-building-blocks)) | **Done** (2026-10-28, merged to master `31985f2`) |
-| 3 | Ship the six locked designs, in the order **06 → 01 → 02 → 03 → 05 → 04** (decided 2026-10-28): match result, transactions, lobbies + DMs, combines guide, player card + `/accounts`, Report Match copy | **Done, all six cards approved live and pushed to master** (2026-10-28). The sign-up redesign is also done and pushed. `/playoffs` is built and awaiting review, and the trade card is awaiting the user's pick; see [Where we are](#where-we-are-end-of-2026-10-28--resume-here). |
-| 4 | Upgrade the other modals: Label descriptions on admin modals, and the `.replay` upload filter once discord.py ships it. (The Report Match copy is in Phase 3.) | Open |
-| 5 | Optional: errors and logs stay as embeds unless `ResultView` gets a one-line constructor | Open |
-| 6 | Move the 12 legacy confirm/decline views to `ConfirmLayoutView`, as a separate change after Phase 3 (decided 2026-10-28) | Open |
+| 3 | Ship the six locked designs, in the order **06 → 01 → 02 → 03 → 05 → 04** (decided 2026-10-28): match result, transactions, lobbies + DMs, combines guide, player card + `/accounts`, Report Match copy | **Done.** All six cards, the sign-up, `/playoffs` and the trade announcement are approved (2026-10-29); see [Where we are](#where-we-are-end-of-2026-10-29--resume-here). |
+| 4 | Upgrade the other modals: Label descriptions on admin modals, and the `.replay` upload filter once discord.py ships it. (The Report Match copy is in Phase 3.) | Deferred, tracked on issue #11 |
+| 5 | Optional: errors and logs stay as embeds unless `ResultView` gets a one-line constructor | Deferred, tracked on issue #11 |
+| 6 | Move the 12 legacy confirm/decline views to `ConfirmLayoutView`, as a separate change after Phase 3 (decided 2026-10-28) | Deferred, tracked on issue #11 |
 
-> **Remove before the final commit:** the temporary `/pingtest` command in `rsc/developer/developer.py` (added 2026-10-28, never committed). It now takes a free-text `style` and previews each Phase 3 card (`match_result`, `transaction`, `lobby`, `devleague_lobby`, `lobby_final`, `guide`, `player`, `accounts`, `report`, `report_teams_only`) plus the sign-up previews; an unknown style lists them all.
+> **Removed 2026-10-29 (never committed):** the temporary `/pingtest` command in `rsc/developer/developer.py` (added 2026-10-28, never committed). It now takes a free-text `style` and previews each Phase 3 card (`match_result`, `transaction`, `lobby`, `devleague_lobby`, `lobby_final`, `guide`, `player`, `accounts`, `report`, `report_teams_only`) plus the sign-up, `/playoffs` (`playoffs`, `playoffs_text`) and trade (`trade`, `trade_big`, `trade_sweetener`) previews; an unknown style lists them all.
 
-## Where we are (end of 2026-10-28) — resume here
+## Where we are (end of 2026-10-29) — resume here
 
 ### State of the repo
 
-- **`master` = `origin/master` = `e6136ce`.** Pushed. It has everything approved: all six Phase 3 cards, the rscapi 2.2.1 fixes (`b9e67f8`, `45f05d3`) and the rebuilt sign-up (option B).
-- **The working tree in `~/dev/rsc`** (branch `discord-ui-phase-3`, same commit as `master`) holds two uncommitted things:
-  1. **The `/playoffs` redesign, built and waiting on the user's preview and approval** (details below). Files:
-     - new `rsc/stats/playoffs.py`, `rsc/stats/graphic.py`, `rsc/stats/views.py`, `tests/playoff_samples.py`, `tests/test_playoffs.py`;
-     - modified `rsc/stats/stats.py`, `rsc/utils/website.py`, `tests/test_website.py`;
-     - `tests/test_playoffs_embed.py` deleted (its staged deletion is in the index).
-  2. **The temporary `/pingtest` command** in `rsc/developer/developer.py`. Never commit it, and remove it before the refresh's final commit. Styles: `match_result`, `transaction` (every type), `lobby`, `lobby_final`, `devleague_lobby`, `guide`, `player`, `accounts`, `report`, `report_teams_only`, `playoffs`, `playoffs_text`, and the sign-up styles (`signup`, `permfa`, `signup_about`, `permfa_about`, `signup_fix`, `signup_success`, `permfa_success`, `signup_already`, `permfa_already`, `permfa_waiting`, `signup_timeout`, `signup_cancelled`). An unknown style lists them.
-- **Checks on the working tree:** 1837 tests pass, and ruff and ty are clean. ty needs `uv sync --group scripts` after any `uv sync`, or the `scripts/` imports fail.
-- **Worktrees** (`git worktree list`):
-  - `~/dev/rsc-playoffs` (branch `playoffs-redesign`): the agent's copy of the `/playoffs` build; the same code is already in `~/dev/rsc`.
-  - `~/dev/rsc-signup` and `~/dev/rsc-signup-b`: superseded sign-up builds.
-  - `~/dev/rsc-season-fix`: the user's own 2.2.1 work.
-  All but the user's own can be removed once `/playoffs` is committed.
+- **Everything is merged into `master` and pushed** (2026-10-29), including the other session's lobby work. Phase 3 is closed.
+- **`/pingtest` is removed** from the working tree; it was never committed. A copy of its last version is in the session scratchpad as `pingtest-final.patch`, in case a future phase wants previews again.
+- **Checks:** 1939 tests pass; ruff and ty are clean. ty needs `uv sync --group scripts` after any `uv sync`.
+- **Worktrees:** the refresh's own worktrees (`rsc-playoffs`, `rsc-signup`, `rsc-signup-b`, `rsc-trade`) are deleted; they held only older or rejected versions of committed work.
 
-### Done and approved (all pushed)
+### Done and approved
 
 | Design | Last change |
 |---|---|
 | 06 Match result | `b9cb072` |
-| 01 Transaction card, option B, every type | `90fd0ed` |
+| 01 Transaction card, option B, every type (plus contract expired, franchise release, RE-SIGNED banner) | `90fd0ed`, `d8164d4`, `95560ee` |
 | 02 Lobby (combine + Dev League, DM copy, Final) | `9d472fe`, `65f38d7` |
 | 03 Combines guide (new step 3 screenshot) | `8abecf0` |
 | 05 Player card, `/accounts`, Trackers button | `d1ddcc7`, `d8a3dc1` |
 | 04 Report Match form (text inputs kept) | `9889923` |
-| 07 Sign-up and PermFA (option B: two message steps, then one form) | `e6136ce` |
+| 07 Sign-up and PermFA (option B), then tidied | `e6136ce`, `5fccdc6` |
+| 08 `/playoffs`: a graphic card per conference, `text:True` race board, bubble = 2 wins back | `a1d206d`, `02d7994` |
+| 09 Trade announcement | `3abd899` |
+
+Draft pick announcements and the free-text `/transactions announce` stay plain text (user's choice).
+
+**Trade announcement (09), as approved:**
+- The full-width TRADE banner (`rsc/resources/transactions/Trade.png`, rebuilt by `scripts/make_trade_banner.py`) heads the message, then one Container per receiving franchise, then `-# Transaction ID · date`.
+- Card header: `### Franchise` and `**GM** @gm` beside the logo. Under a thin line, each giver's block: `-# RECEIVES` (first block only), `-# From X` (always, even in two-franchise trades), a small invisible spacer, then bulleted lines.
+- Lines: `- **Player** @p → Team`, `- **Pick** 2nd Round Elite, pick 14`, `- **Future Pick** S25 1st Round Master · via IRN`. Players, then picks, then future picks. Future picks by season (latest first); then tier (highest first, one cached `tiers` call), round, pick number. No folding.
+- A franchise that only gives picks has no card; its GM is pinged on its label: `-# From X · **GM** @gm`.
+- Accent: the franchise role colour; else the tier colour when it receives from one tier; else blue.
+- Overflow past 40 components: drop the heading spacers (last card first), then logos, then merge a card's blocks, then list trailing franchises on one line each (still pinging). Past 3,900 characters, picks are cut with `…and N more picks`; players never.
+- One builder (`build_trade_card` in `trade_announce.py`) for website trades and `/transactions trade`.
 
 **Watch once deployed:**
+- **Command sync** for the new `/playoffs` `text` option.
 - lobby DMs and the Final edit at teardown;
-- real transactions;
+- real transactions and trades (website trades with 3+ franchises make one `teams` call per old team to find player givers);
 - the real `/reportmatch` early lookup;
 - the guide posting when combines start;
-- the new `/signup` and `/permfa` with real players.
+- the new `/signup` and `/permfa` with real players;
+- `/playoffs` image performance (issue #9).
 
 ### Pick up here
 
-1. **`/playoffs`: approved and committed (2026-10-29).** Conference tiers get one graphic card per conference (`## Elite · Lunar`, `## Elite · Solar`) in the same message, each with its own summary; Full standings sits under the last card. A whole tier stays one card.
-   - **Behaviour:**
-     - **Default:** a Pillow "broadcast graphic", option C of https://claude.ai/artifact/Qtn68K8TFKUGhafts5pPMd, with no franchise logos. One PNG per playoff group, rendered in `asyncio.to_thread` and cached in a 32-entry LRU keyed on the standings data. A text summary (Clinched / On the bubble / Eliminated) and a grey "Full standings" link to `{site}/standings/?league=…&season=<season id>&tier=…&mode=playoffs` follow it.
-     - **`/playoffs text:True`:** the race board (option A), with each team on ONE line: `1. **Aurora** 14-4 · Clinched`. The user rejected the mockup's second subtext line.
-     - **Status:** eliminated is worked out by the bot (`is_eliminated` in `rsc/stats/playoffs.py`), and the graphic keeps the mockup's pills.
-     - **Render time:** about 150–270 ms uncached, under 1 ms cached.
-   - **To do:**
-     - The user previews it with `/pingtest style:playoffs` / `playoffs_text`, and the real `/playoffs`.
-     - **Command sync needed** for the new `text` option before `text:True` shows in Discord.
-     - Answer the open questions:
-       1. Does the numbered list sit right under the `-#` header in Discord?
-       2. Is a team 2 wins back "on the bubble", or only 1?
-       3. Should division-tier wildcards say "Mountain wildcard" or just "Wildcard"?
-     - On approval, commit (without `developer.py`) and push if asked.
-   - **Follow-up:** issue https://github.com/RSC-NA/rsc/issues/9 reviews the image path after it has been live (performance, keep or revert to text as the default).
-2. **Trade announcement: the user picks an option.**
-   - **Mockups:** https://claude.ai/artifact/2qEpVfCpyXZzBL7deCrC4S
-     - **A:** a card per franchise;
-     - **B:** one card with "X receives" groups, like the approved transaction card;
-     - **C:** a ledger (`IRN → HEX @player`);
-     - **D:** the banner first.
-   - **Open questions:**
-     1. Which option, or a mix?
-     2. Fold big future-pick dumps into a **Futures** line per tier?
-     3. Show the season ("S25 1st Round Elite") instead of "Future …"?
-     4. Keep the "via IRN" original-owner tag?
-     5. Is there a website trade page (for a "View full trade" button)?
-     6. Should the footer carry the traded players' Discord IDs (for search)?
-     7. Accent: the tier colour, or league blue across tiers?
-   - **Then:** one shared builder for both paths (`/transactions trade` → `build_trade_embed` in `transactions.py`, and website trades → `build_trade_embed_from_response` / `announce_trade` in `trade_announce.py`), pings from a TextDisplay, and a `/pingtest style:trade` preview.
-3. **Sign-up leftovers (optional):** the emoji on the review, success and timeout cards (✏️ ✅ ⚠️ ✓ ⏱️), and the code chips for tracker IDs on the review card.
-4. **Phases 4–6** (table above).
+Nothing is in progress. **Phases 4–6 are deferred** until the user picks them up; they are tracked on GitHub issue #11 (the embed inventory, plus a comment listing the modal upgrades and the `ConfirmLayoutView` migration).
 
 ### GitHub issues opened this session
 - #7: point "RSC Tracker Links" at the website. It needs a member-visible, per-player tracker page there first.
 - #8: upgrade to Python 3.14, labelled `planned migration`. Red-DiscordBot 3.5.24 caps Python at <3.12 (we already run 3.12), and its exact pins have no 3.14 wheels. Free-threading is out of scope.
 - #9: review the `/playoffs` image generation once it's live.
+- #11: inventory the remaining embeds, with keep-as-embed or convert recommendations.
 
 ### Unanswered offers (ask again only if relevant)
 - Status "pills" (e.g. LIVE / FINAL) as app emoji.
