@@ -129,6 +129,24 @@ class BallchasingMixIn(RSCMixIn):
             log.debug("Ballchasing API already configured", guild=guild)
             return
 
+        try:
+            api = await self._open_ballchasing_api(token)
+        except MissingAPIKey:
+            # The saved key was rejected (revoked or regenerated). That's guild
+            # config, not a bot fault, so warn instead of letting setup log it as
+            # an error.
+            log.warning("Ballchasing rejected the saved API key. Skipping ballchasing setup.", guild=guild)
+            return
+
+        await self._install_ballchasing_api(guild, api)
+
+    @staticmethod
+    async def _open_ballchasing_api(token: str) -> ballchasing.Api:
+        """Return a client that ballchasing has accepted the key for.
+
+        The library raises MissingAPIKey on any 401, so that means the key was
+        rejected rather than missing.
+        """
         # Not Api.create(): it pings before returning, and ping() lazily opens a
         # ClientSession. If the key is rejected or a sibling setup task cancels
         # us mid-request, create() never hands the instance back and the session
@@ -137,17 +155,14 @@ class BallchasingMixIn(RSCMixIn):
         try:
             await api.ping()
             await api.reconfigure_session()
-        except MissingAPIKey:
-            # The library raises this on any 401, so the saved key was rejected
-            # (revoked or regenerated). That's guild config, not a bot fault, so
-            # warn instead of letting setup log it as an error.
-            await api.close()
-            log.warning("Ballchasing rejected the saved API key. Skipping ballchasing setup.", guild=guild)
-            return
         except BaseException:
             await api.close()
             raise
+        return api
 
+    async def _install_ballchasing_api(self, guild: discord.Guild, api: ballchasing.Api):
+        """Make api the guild's client and close the one it replaces."""
+        existing = self._ballchasing_api.get(guild.id)
         self._ballchasing_api[guild.id] = api
         self._bc_group_cache.pop(guild.id, None)
 
@@ -272,11 +287,37 @@ class BallchasingMixIn(RSCMixIn):
     @_ballchasing.command(name="key", description="Configure the Ballchasing API key for the server")
     @app_commands.checks.has_permissions(manage_guild=True)
     async def _bc_key(self, interaction: discord.Interaction, key: str):
-        if not interaction.guild:
+        guild = interaction.guild
+        if not guild:
             return
-        await self._save_bc_auth_token(interaction.guild, key.strip())
-        await interaction.response.send_message(
-            embed=SuccessEmbed(description="Ballchasing API key have been successfully configured"),
+        key = key.strip()
+
+        # Check the key before saving it, so a typo or revoked key is refused here
+        # instead of silently disabling ballchasing at the next startup.
+        await interaction.response.defer(ephemeral=True)
+        try:
+            api = await self._open_ballchasing_api(key)
+        except MissingAPIKey:
+            await interaction.followup.send(
+                embed=ErrorEmbed(description="Ballchasing rejected this API key. The saved key was not changed."),
+                ephemeral=True,
+            )
+            return
+        except Exception as exc:
+            log.warning(f"Could not check ballchasing API key: {exc!r}", guild=guild)
+            await interaction.followup.send(
+                embed=ErrorEmbed(
+                    description="Couldn't reach ballchasing to check this API key. Try again later. The saved key was not changed."
+                ),
+                ephemeral=True,
+            )
+            return
+
+        await self._save_bc_auth_token(guild, key)
+        # Takes effect now rather than at the next restart.
+        await self._install_ballchasing_api(guild, api)
+        await interaction.followup.send(
+            embed=SuccessEmbed(description=f"Ballchasing API key saved. It belongs to **{api.steam_name}**."),
             ephemeral=True,
         )
 

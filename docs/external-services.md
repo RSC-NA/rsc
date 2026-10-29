@@ -31,7 +31,7 @@ Combines and Dev League run on `devleague.rscna.com`, a separate site from the m
 ## ballchasing.com
 
 - **Client:** `python-ballchasing`, from [xentrick/python-ballchasing](https://github.com/xentrick/python-ballchasing).
-- **Auth:** an API token per guild, `/ballchasing key`. Reload the cog after setting it.
+- **Auth:** an API token per guild, `/ballchasing key`. The command checks it with ballchasing before saving it, and it takes effect immediately. A saved token that ballchasing later rejects is logged as a warning at startup and ballchasing stays off for that guild.
 - **Layout:** replays go under the guild's top-level group, organised into sub-groups per match. The bot fingerprints replays (with `replay-parser`, from [xentrick/python-replay-parser](https://github.com/xentrick/python-replay-parser)) so the same game isn't uploaded twice.
 - Many maintenance scripts work against ballchasing groups directly; see [Scripts](scripts.md#ballchasingcom).
 

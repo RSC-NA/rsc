@@ -79,7 +79,7 @@ Each franchise also needs a `<franchise-name>-transactions` channel (lowercase, 
 
 | Key | Default | Command |
 |---|---|---|
-| `AuthToken` | none | `/ballchasing key`. Reload the cog afterwards |
+| `AuthToken` | none | `/ballchasing key`. Checked with ballchasing before saving, and takes effect immediately |
 | `TopLevelGroup` | none | `/ballchasing toplevelgroup` |
 | `ReportCategory` | none | `/ballchasing category` (holds the `<tier>-score-reporting` channels) |
 | `LogChannel` | none | `/ballchasing log` |

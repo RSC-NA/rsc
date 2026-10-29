@@ -22,6 +22,8 @@ from rsc.ballchasing import groups, process
 from rsc.ballchasing.ballchasing import BallchasingMixIn, normalize_scores, upload_summary
 from rsc.enums import MatchType
 
+from .utils import command_callback
+
 FIXTURES = Path(__file__).parent / "fixtures" / "replays"
 
 # Two separate players' recordings of the same online match
@@ -1012,6 +1014,67 @@ class TestPrepareBallchasing:
         # The working instance is left in place rather than swapped for a dead one.
         assert mixin._ballchasing_api[GUILD_ID] is existing
         existing.close.assert_not_awaited()
+
+
+CMD_KEY = command_callback(BallchasingMixIn._bc_key)
+
+
+def _key_interaction(guild: MagicMock) -> MagicMock:
+    interaction = MagicMock(spec=discord.Interaction)
+    interaction.guild = guild
+    interaction.response = MagicMock()
+    interaction.response.defer = AsyncMock()
+    interaction.followup = MagicMock()
+    interaction.followup.send = AsyncMock()
+    return interaction
+
+
+def _sent_description(interaction: MagicMock) -> str:
+    return interaction.followup.send.await_args.kwargs["embed"].description
+
+
+class TestBcKeyCommand:
+    async def test_accepted_key_is_saved_and_used_now(self):
+        existing = MagicMock(auth_key="old")
+        existing.close = AsyncMock()
+        save = AsyncMock()
+        mixin = _create_mixin(_save_bc_auth_token=save)
+        mixin._ballchasing_api = {GUILD_ID: existing}
+        guild = _guild()
+        interaction = _key_interaction(guild)
+
+        with _patch_api() as api:
+            await CMD_KEY(mixin, interaction, "  new  ")
+            api.close.assert_not_awaited()
+
+        save.assert_awaited_once_with(guild, "new")
+        assert mixin._ballchasing_api[GUILD_ID].auth_key == "new"
+        existing.close.assert_awaited_once()
+        assert "saved" in _sent_description(interaction)
+
+    @pytest.mark.parametrize(
+        ("error", "message"),
+        [
+            (MissingAPIKey(), "rejected"),
+            (BallchasingFault({"error": "down"}), "Couldn't reach"),
+        ],
+    )
+    async def test_unverified_key_is_not_saved(self, error, message):
+        existing = MagicMock(auth_key="old")
+        existing.close = AsyncMock()
+        save = AsyncMock()
+        mixin = _create_mixin(_save_bc_auth_token=save)
+        mixin._ballchasing_api = {GUILD_ID: existing}
+        interaction = _key_interaction(_guild())
+
+        with _patch_api(ping=AsyncMock(side_effect=error)) as api:
+            await CMD_KEY(mixin, interaction, "bad")
+            api.close.assert_awaited_once()
+
+        save.assert_not_awaited()
+        assert mixin._ballchasing_api[GUILD_ID] is existing
+        existing.close.assert_not_awaited()
+        assert message in _sent_description(interaction)
 
 
 # ---------------------------------------------------------------- end to end

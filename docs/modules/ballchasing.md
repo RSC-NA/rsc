@@ -48,7 +48,7 @@ If two people report the same match at once, the second waits for the first to f
 | Command | Who can run it | What it does |
 |---|---|---|
 | `/ballchasing settings` | Manage Server | Show whether a key is set, the manager role, log channel, report category and the top-level group link. |
-| `/ballchasing key key` | Manage Server | Save the ballchasing API key. |
+| `/ballchasing key key` | Manage Server | Check the ballchasing API key and save it if ballchasing accepts it. Takes effect immediately. |
 | `/ballchasing ping` | Manage Server | Test the key. Shows the Steam name, Steam ID and Patreon tier of the key's owner. |
 | `/ballchasing manager role` | Manage Server | Set the ballchasing management role, for example the Stats Committee. |
 | `/ballchasing log channel` | Manage Server | Set the channel for upload failure reports. |
@@ -138,7 +138,9 @@ The form itself times out after `MODAL_TIMEOUT` (600 seconds, from `rsc/const.py
 
 ## Gotchas
 
-- `/ballchasing key` only saves the key. The client is built in `prepare_ballchasing()` during setup, so `/ballchasing ping` says "not configured" (or keeps using an old key) until the cog is reloaded or the bot reconnects. Guilds without RSC API configuration never get a client.
+- `/ballchasing key` pings ballchasing with the new key and refuses it, keeping the old one, if ballchasing rejects it or can't be reached. An accepted key replaces the guild's client straight away.
+- At startup, a saved key that ballchasing rejects (revoked or regenerated) is logged as a warning and ballchasing stays off for that guild until `/ballchasing key` sets a working one. The library raises `MissingAPIKey` for any 401, so that name means "rejected", not "missing".
+- Setup only builds a client for guilds with RSC API configuration. `/ballchasing key` builds one regardless.
 - Admins who are not on either team are refused unless they set `override:True`. AGMs are refused unless they play on one of the teams. Only GMs get the franchise exception.
 - The per-tier channel must be named exactly `<tier name lowercased>-score-reporting` and must be in the configured category. Otherwise the public card is skipped with only a log warning.
 - The score check only looks at the total number of games. In a best of 5, 2–1 passes because 3 games falls within 3 to 5.
