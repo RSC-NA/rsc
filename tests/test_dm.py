@@ -343,7 +343,45 @@ class TestDMHelperPurge:
             m.send.assert_awaited_once_with(content="hi")
 
 
+class TestDMHelperShutdownSignal:
+    """What happens around the shutdown signal `stop()` queues.
+
+    Reaching these by timing a real `stop()` would be flaky, so the signal is
+    placed in the queue directly, where `stop()` would put it.
+    """
+
+    async def test_purge_keeps_the_shutdown_signal_and_what_follows_it(self):
+        helper = DMHelper(rate=0)
+        before, after = _mock_member("Before", 901), _mock_member("After", 902)
+        await helper.enqueue(before, content="hi")
+        await helper._queue.put(None)
+        await helper.enqueue(after, content="hi")
+
+        assert await helper.purge() == 1
+
+        helper.start()
+        await helper.stop()
+        before.send.assert_not_awaited()
+        after.send.assert_awaited_once_with(content="hi")
+
+    async def test_dms_queued_behind_the_shutdown_signal_are_still_sent(self):
+        helper = DMHelper(rate=0)
+        await helper._queue.put(None)
+        members = [_mock_member(f"Late{i}", 910 + i) for i in range(2)]
+        for m in members:
+            await helper.enqueue(m, content="hi")
+
+        helper.start()
+        await helper.stop()
+
+        for m in members:
+            m.send.assert_awaited_once_with(content="hi")
+
+
 class TestDMHelperPrecheck:
+    async def test_no_precheck_means_still_wanted(self):
+        assert await DMHelper()._should_still_send(DMTask(member=_mock_member())) is True
+
     async def test_precheck_false_skips_the_send(self):
         helper = DMHelper(rate=0)
         helper.start()

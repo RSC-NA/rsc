@@ -250,7 +250,9 @@ def _cog(fake: FakeDiscord, config: Config, helper: DMHelper) -> MagicMock:
     cog.live_emoji = lambda: ""
     for mixin, names in (
         (CombineManagerMixIn, ("_get_combines_active", "_get_combines_category", "_get_combines_api")),
+        (CombineManagerMixIn, ("_set_combines_active", "_set_combines_category", "_set_combines_api")),
         (DevLeagueManagerMixIn, ("_get_devleague_active", "_get_devleague_category", "_get_devleague_announce_channel")),
+        (DevLeagueManagerMixIn, ("_set_devleague_active", "_set_devleague_category", "_set_devleague_announce_channel")),
         (CombineMixIn, ("combine_players_from_lobby",)),
     ):
         for name in names:
@@ -405,6 +407,26 @@ class TestSettingsLookups:
         assert await cog._get_combines_category(fake.guild) is None
         assert await cog._get_devleague_category(fake.guild) is None
         assert await cog._get_devleague_announce_channel(fake.guild) is None
+
+    async def test_what_the_setters_save_the_getters_read_back(self, config):
+        fake = FakeDiscord()
+        fake.add_announce_channel("announcements")
+        category = fake.category("Lobbies")
+        cog = _cog(fake, config, MagicMock())
+
+        await cog._set_combines_active(fake.guild, True)
+        await cog._set_combines_category(fake.guild, category)
+        await cog._set_combines_api(fake.guild, "https://combines.example/api/")
+        await cog._set_devleague_active(fake.guild, True)
+        await cog._set_devleague_category(fake.guild, category)
+        await cog._set_devleague_announce_channel(fake.guild, fake.announce)
+
+        assert await cog._get_combines_active(fake.guild) is True
+        assert await cog._get_combines_category(fake.guild) is category
+        assert await cog._get_combines_api(fake.guild) == "https://combines.example/api/"
+        assert await cog._get_devleague_active(fake.guild) is True
+        assert await cog._get_devleague_category(fake.guild) is category
+        assert await cog._get_devleague_announce_channel(fake.guild) is fake.announce
 
     async def test_ids_that_no_longer_exist_read_as_missing(self, config):
         fake = FakeDiscord()
