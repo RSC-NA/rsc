@@ -1,330 +1,91 @@
-import asyncio
-import copy
-import json
-from unittest.mock import AsyncMock, MagicMock, patch
+"""What Dev League lobbies do differently. The shared runner is tested in test_lobby_runner.py."""
+
+from unittest.mock import AsyncMock, MagicMock
 
 import discord
-import pytest
 
-from rsc import const
-from rsc.devleague import runner
+from rsc.devleague.api import DEVLEAGUE_API_URL
 from rsc.devleague.models import DevLeagueLobby
-from rsc.devleague.runner import DevLeagueRunnerMixIn
-from rsc.exceptions import DevLeagueNotActive, NotInGuild
+from rsc.devleague.runner import DevLeague
 
 GUILD_ID = 991044575567179856
 
 
-@pytest.fixture(autouse=True)
-def _clear_active_lobbies():
-    runner.active_lobbies.clear()
-    yield
-    runner.active_lobbies.clear()
+def _lobby(tier: str = "S+") -> DevLeagueLobby:
+    return DevLeagueLobby(
+        id=101,
+        lobby_user="dl",
+        lobby_pass="rsc",
+        home_wins=0,
+        away_wins=0,
+        reported_rsc_id=None,
+        confirmed_rsc_id=None,
+        completed=False,
+        cancelled=False,
+        tier=tier,
+        guild_id=GUILD_ID,
+        home=[],
+        away=[],
+    )
 
 
-def _player(discord_id: int, team: str, match_id: int = 101) -> dict:
-    return {
-        "discord_id": str(discord_id),
-        "rsc_id": f"RSC{discord_id}",
-        "match_id": match_id,
-        "team": team,
-        "name": f"player{discord_id}",
-    }
-
-
-def _lobby_payload(match_id: int = 101, tier: str = "S+") -> dict:
-    return {
-        "id": match_id,
-        "lobby_user": "dl",
-        "lobby_pass": "rsc",
-        "home_wins": 0,
-        "away_wins": 0,
-        "reported_rsc_id": None,
-        "confirmed_rsc_id": None,
-        "completed": 0,
-        "cancelled": 0,
-        "tier": tier,
-        "guild_id": str(GUILD_ID),
-        "home": [_player(i, "home", match_id) for i in (1, 2, 3)],
-        "away": [_player(i, "away", match_id) for i in (4, 5, 6)],
-    }
-
-
-def _event_payload(message_type: str = "Finished Game", match_id: int | None = 101) -> dict:
-    return {
-        "actor": {"nickname": "nickm", "discord_id": 1},
-        "status": "success",
-        "message_type": message_type,
-        "message": "done",
-        "match_id": match_id,
-        "guild_id": str(GUILD_ID),
-    }
-
-
-def _request(data=None, *, bad_json: bool = False):
-    request = MagicMock()
-    if bad_json:
-        request.json = AsyncMock(side_effect=json.JSONDecodeError("bad", "", 0))
-    else:
-        request.json = AsyncMock(return_value=copy.deepcopy(data))
-    return request
-
-
-def _channel(name: str, channel_id: int, position: int = 0):
+def _channel(name: str, channel_id: int, position: int = 0) -> MagicMock:
     channel = MagicMock(spec=discord.VoiceChannel)
     channel.name = name
     channel.id = channel_id
     channel.position = position
-    channel.delete = AsyncMock()
     return channel
 
 
-def _member(member_id: int):
-    member = MagicMock(spec=discord.Member)
-    member.id = member_id
-    member.mention = f"<@{member_id}>"
-    return member
-
-
-def _guild(channels=None, *, league_role=True):
+def _guild() -> MagicMock:
     guild = MagicMock(spec=discord.Guild)
     guild.id = GUILD_ID
-    guild.icon = None
-    guild.channels = channels or []
-    guild.categories = []
-    guild.default_role = MagicMock(spec=discord.Role)
-    guild.roles = []
-    if league_role:
-        role = MagicMock(spec=discord.Role)
-        role.name = const.LEAGUE_ROLE
-        guild.roles.append(role)
-    guild.get_member.return_value = None
+    guild._state = MagicMock()
+    guild._state.http.bulk_channel_update = AsyncMock()
     return guild
 
 
-def _category(guild, voice_channels=None):
+def _category(guild, voice_channels) -> MagicMock:
     category = MagicMock(spec=discord.CategoryChannel)
-    category.name = "Dev League"
     category.guild = guild
-    category.channels = list(voice_channels or [])
-    category.voice_channels = list(voice_channels or [])
-    created = iter(range(9000, 9100))
-
-    async def create_voice_channel(name, **kwargs):
-        channel = _channel(name, next(created))
-        channel.overwrites = kwargs["overwrites"]
-        return channel
-
-    category.create_voice_channel = AsyncMock(side_effect=create_voice_channel)
+    category.voice_channels = list(voice_channels)
     return category
 
 
-def _mixin(guild=None, category=None, *, active=True, announce_channel=None, players=None):
-    saved = DevLeagueRunnerMixIn.__abstractmethods__
-    DevLeagueRunnerMixIn.__abstractmethods__ = frozenset()
-    try:
-        m = object.__new__(DevLeagueRunnerMixIn)
-    finally:
-        DevLeagueRunnerMixIn.__abstractmethods__ = saved
-    m.bot = MagicMock()
-    m.bot.get_guild.return_value = guild
-    m._get_devleague_active = AsyncMock(return_value=active)
-    m._get_devleague_category = AsyncMock(return_value=category)
-    m._get_devleague_announce_channel = AsyncMock(return_value=announce_channel)
-    m.combine_players_from_lobby = AsyncMock(return_value=players if players is not None else [_member(i) for i in range(1, 7)])
-    # No stored lobby card, so teardown has nothing to mark Final
-    m.config = MagicMock()
-    m.config.custom.return_value.LobbyMessages = AsyncMock(return_value={})
-    return m
+def _league() -> DevLeague:
+    return DevLeague(MagicMock())
 
 
-class TestStartDevLeagueGame:
-    async def test_bad_json_is_400(self):
-        resp = await _mixin().start_devleague_game(_request(bad_json=True))
-        assert resp.status == 400
+class TestDevLeague:
+    def test_channels_use_the_tier_slug(self):
+        assert [_league().channel_name(_lobby(), side) for side in ("home", "away")] == ["splus-101-home", "splus-101-away"]
 
-    async def test_invalid_lobby_is_400(self):
-        payload = _lobby_payload()
-        del payload["tier"]
-        resp = await _mixin().start_devleague_game(_request({"101": payload}))
-        assert resp.status == 400
+    def test_card_links_to_the_match(self):
+        assert _league().match_url(_lobby()) == f"{DEVLEAGUE_API_URL}/match/101"
 
-    @pytest.mark.parametrize("data", [{}, []])
-    async def test_empty_or_non_object_body_is_400(self, data):
-        resp = await _mixin().start_devleague_game(_request(data))
-        assert resp.status == 400
+    def test_cards_are_kept_under_the_dev_league_config_group(self):
+        cog = MagicMock()
+        assert DevLeague(cog).store(_guild()) is cog.config.custom.return_value
+        cog.config.custom.assert_called_once_with("DevLeague", str(GUILD_ID))
 
-    async def test_not_in_guild_is_503(self):
-        resp = await _mixin(guild=None).start_devleague_game(_request({"101": _lobby_payload()}))
-        assert resp.status == 503
+    async def test_settings_come_from_the_dev_league_getters(self):
+        league = _league()
+        category, announce = MagicMock(spec=discord.CategoryChannel), MagicMock(spec=discord.TextChannel)
+        league.cog._get_devleague_active = AsyncMock(return_value=True)
+        league.cog._get_devleague_category = AsyncMock(return_value=category)
+        league.cog._get_devleague_announce_channel = AsyncMock(return_value=announce)
 
-    async def test_disabled_is_503_and_creates_nothing(self):
-        guild = _guild()
-        category = _category(guild)
-        m = _mixin(guild, category, active=False)
+        assert await league.active(_guild()) is True
+        assert await league.category(_guild()) is category
+        assert await league.announce_channel(_guild()) is announce
 
-        resp = await m.start_devleague_game(_request({"101": _lobby_payload()}))
-
-        assert resp.status == 503
-        category.create_voice_channel.assert_not_called()
-
-    async def test_creates_every_lobby(self):
-        m = _mixin(_guild())
-        m.create_devleague_lobby_channels = AsyncMock(return_value=[])
-
-        resp = await m.start_devleague_game(_request({"101": _lobby_payload(101, "S+"), "102": _lobby_payload(102, "B")}))
-        await asyncio.gather(*runner.background_tasks)
-
-        assert resp.status == 200
-        tiers = [c.args[0].tier for c in m.create_devleague_lobby_channels.await_args_list]
-        assert tiers == ["S+", "B"]
-
-    async def test_responds_before_lobbies_are_created(self):
-        m = _mixin(_guild())
-        m.create_devleague_lobby_channels = AsyncMock(return_value=[])
-
-        resp = await m.start_devleague_game(_request({"101": _lobby_payload()}))
-
-        assert resp.status == 200
-        m.create_devleague_lobby_channels.assert_not_called()
-        await asyncio.gather(*runner.background_tasks)
-        m.create_devleague_lobby_channels.assert_awaited_once()
-
-    async def test_failed_lobby_does_not_stop_the_rest(self):
-        m = _mixin(_guild())
-        m.create_devleague_lobby_channels = AsyncMock(side_effect=[discord.HTTPException(MagicMock(status=500), "boom"), []])
-
-        resp = await m.start_devleague_game(_request({"101": _lobby_payload(101), "102": _lobby_payload(102)}))
-        await asyncio.gather(*runner.background_tasks)
-
-        assert resp.status == 200
-        assert [c.args[0].id for c in m.create_devleague_lobby_channels.await_args_list] == [101, 102]
+    def test_no_extra_overwrites(self):
+        assert _league().extra_overwrites(_guild()) == {}
 
 
-class TestDuplicateDevLeagueLobbies:
-    async def test_concurrent_duplicate_is_created_once(self):
-        m = _mixin(_guild())
-        m.create_devleague_lobby_channels = AsyncMock(return_value=[MagicMock(), MagicMock()])
-
-        first = await m.start_devleague_game(_request({"101": _lobby_payload()}))
-        second = await m.start_devleague_game(_request({"101": _lobby_payload()}))
-        await asyncio.gather(*runner.background_tasks)
-
-        assert (first.status, second.status) == (200, 200)
-        m.create_devleague_lobby_channels.assert_awaited_once()
-
-    async def test_lobby_that_created_nothing_can_be_retried(self):
-        m = _mixin(_guild())
-        m.create_devleague_lobby_channels = AsyncMock(return_value=[])
-
-        for _ in range(2):
-            await m.start_devleague_game(_request({"101": _lobby_payload()}))
-            await asyncio.gather(*runner.background_tasks)
-
-        assert m.create_devleague_lobby_channels.await_count == 2
-
-    async def test_teardown_allows_lobby_again(self):
-        guild = _guild()
-        m = _mixin(guild, _category(guild))
-        m._devleague_categories = MagicMock(return_value=[])
-        m.create_devleague_lobby_channels = AsyncMock(return_value=[MagicMock(), MagicMock()])
-
-        await m.start_devleague_game(_request({"101": _lobby_payload()}))
-        await asyncio.gather(*runner.background_tasks)
-        with patch("rsc.devleague.runner.asyncio.sleep", AsyncMock()):
-            await m.teardown_devleague_lobby(guild, lobby_id=101)
-        await m.start_devleague_game(_request({"101": _lobby_payload()}))
-        await asyncio.gather(*runner.background_tasks)
-
-        assert m.create_devleague_lobby_channels.await_count == 2
-
-
-class TestCreateDevLeagueLobbyChannels:
-    async def test_creates_slugged_channels_for_league_role(self):
-        guild = _guild()
-        league_role = guild.roles[0]
-        category = _category(guild)
-        m = _mixin(guild, category)
-        m._sort_devleague_lobby = AsyncMock()
-
-        home, away = await m.create_devleague_lobby_channels(DevLeagueLobby(**_lobby_payload()))
-
-        assert (home.name, away.name) == ("splus-101-home", "splus-101-away")
-        for channel in (home, away):
-            assert set(channel.overwrites) == {guild.default_role, league_role}
-            assert channel.overwrites[guild.default_role].connect is False
-            assert channel.overwrites[league_role].connect is True
-            assert channel.overwrites[league_role].send_messages is True
-        m._sort_devleague_lobby.assert_awaited_once_with(category, home, away)
-
-    async def test_missing_league_role_is_skipped(self):
-        guild = _guild(league_role=False)
-        category = _category(guild)
-        m = _mixin(guild, category)
-
-        assert await m.create_devleague_lobby_channels(DevLeagueLobby(**_lobby_payload())) == []
-        category.create_voice_channel.assert_not_called()
-
-    async def test_announces_when_channel_configured(self):
-        guild = _guild()
-        announce = MagicMock(spec=discord.TextChannel)
-        m = _mixin(guild, _category(guild), announce_channel=announce)
-        m._sort_devleague_lobby = AsyncMock()
-        m.announce_devleague_lobby = AsyncMock()
-
-        channels = await m.create_devleague_lobby_channels(DevLeagueLobby(**_lobby_payload()))
-
-        m.announce_devleague_lobby.assert_awaited_once()
-        assert m.announce_devleague_lobby.await_args is not None
-        assert m.announce_devleague_lobby.await_args.kwargs["channels"] == channels
-        assert m.announce_devleague_lobby.await_args.kwargs["announce_channel"] is announce
-
-    async def test_no_announcement_channel_skips_announce(self):
-        guild = _guild()
-        m = _mixin(guild, _category(guild))
-        m._sort_devleague_lobby = AsyncMock()
-        m.announce_devleague_lobby = AsyncMock()
-
-        channels = await m.create_devleague_lobby_channels(DevLeagueLobby(**_lobby_payload()))
-
-        assert len(channels) == 2
-        m.announce_devleague_lobby.assert_not_called()
-
-    async def test_sort_failure_still_returns_channels(self):
-        guild = _guild()
-        m = _mixin(guild, _category(guild))
-        m._sort_devleague_lobby = AsyncMock(side_effect=discord.HTTPException(MagicMock(status=500), "boom"))
-
-        channels = await m.create_devleague_lobby_channels(DevLeagueLobby(**_lobby_payload()))
-
-        assert len(channels) == 2
-
-    async def test_existing_lobby_is_skipped(self):
-        guild = _guild(channels=[_channel("splus-101-home", 1)])
-        category = _category(guild)
-        m = _mixin(guild, category)
-
-        assert await m.create_devleague_lobby_channels(DevLeagueLobby(**_lobby_payload())) == []
-        category.create_voice_channel.assert_not_called()
-
-    async def test_no_players_in_guild_is_skipped(self):
-        guild = _guild()
-        category = _category(guild)
-        m = _mixin(guild, category, players=[])
-
-        assert await m.create_devleague_lobby_channels(DevLeagueLobby(**_lobby_payload())) == []
-        category.create_voice_channel.assert_not_called()
-
-    async def test_no_category_is_skipped(self):
-        m = _mixin(_guild(), None)
-        assert await m.create_devleague_lobby_channels(DevLeagueLobby(**_lobby_payload())) == []
-
-
-class TestSortDevLeagueLobby:
+class TestPlaceByTier:
     async def test_inserts_new_lobby_in_tier_order(self):
         guild = _guild()
-        guild._state = MagicMock()
-        guild._state.http.bulk_channel_update = AsyncMock()
         existing = [
             _channel("waiting-room", 1, position=0),
             _channel("splus-1-home", 2, position=1),
@@ -334,9 +95,7 @@ class TestSortDevLeagueLobby:
         ]
         home, away = _channel("a-3-home", 10, position=5), _channel("a-3-away", 11, position=6)
         # The cache may or may not already hold the new channels.
-        category = _category(guild, [*existing, home])
-
-        await DevLeagueRunnerMixIn._sort_devleague_lobby(MagicMock(), category, home, away)
+        await _league().place(_category(guild, [*existing, home]), home, away)
 
         assert guild._state.http.bulk_channel_update.await_args is not None
         payload = guild._state.http.bulk_channel_update.await_args.args[1]
@@ -345,170 +104,11 @@ class TestSortDevLeagueLobby:
 
     async def test_lowest_tier_goes_last(self):
         guild = _guild()
-        guild._state = MagicMock()
-        guild._state.http.bulk_channel_update = AsyncMock()
         existing = [_channel("s-1-home", 1, 0), _channel("s-1-away", 2, 1)]
         home, away = _channel("f-3-home", 10), _channel("f-3-away", 11)
 
-        await DevLeagueRunnerMixIn._sort_devleague_lobby(MagicMock(), _category(guild, existing), home, away)
+        await _league().place(_category(guild, existing), home, away)
 
         assert guild._state.http.bulk_channel_update.await_args is not None
         payload = guild._state.http.bulk_channel_update.await_args.args[1]
         assert [p["id"] for p in payload] == [1, 2, 10, 11]
-
-
-class TestDevLeagueEventHandler:
-    async def test_finished_schedules_teardown(self):
-        guild = _guild()
-        m = _mixin(guild)
-        m.teardown_devleague_lobby = AsyncMock()
-
-        resp = await m.devleague_event_handler(_request(_event_payload()))
-        await asyncio.gather(*runner.background_tasks)
-
-        assert resp.status == 200
-        m.teardown_devleague_lobby.assert_awaited_once_with(guild, lobby_id=101)
-
-    async def test_finished_without_match_id_is_400(self):
-        resp = await _mixin(_guild()).devleague_event_handler(_request(_event_payload(match_id=None)))
-        assert resp.status == 400
-
-    async def test_other_event_is_501(self):
-        resp = await _mixin(_guild()).devleague_event_handler(_request(_event_payload("Checked In")))
-        assert resp.status == 501
-
-    async def test_unknown_guild_is_503(self):
-        resp = await _mixin(None).devleague_event_handler(_request(_event_payload()))
-        assert resp.status == 503
-
-    @pytest.mark.parametrize("data", [None, {"match_id": 1}])
-    async def test_bad_payload_is_400(self, data):
-        request = _request(bad_json=True) if data is None else _request(data)
-        resp = await _mixin(_guild()).devleague_event_handler(request)
-        assert resp.status == 400
-
-
-class TestTeardownDevLeagueLobby:
-    async def test_deletes_only_matching_lobby_across_overflow(self):
-        guild = _guild()
-        keep = [_channel("splus-1010-home", 1), _channel("a-7-away", 2), _channel("101-home", 3)]
-        target_main = _channel("splus-101-home", 4)
-        target_overflow = _channel("splus-101-away", 5)
-        category = _category(guild, [*keep, target_main])
-        overflow = _category(guild, [target_overflow])
-        overflow.name = "Dev League-2"
-        guild.categories = [category, overflow]
-        m = _mixin(guild, category)
-
-        with patch("rsc.devleague.runner.asyncio.sleep", AsyncMock()):
-            await m.teardown_devleague_lobby(guild, lobby_id=101)
-
-        target_main.delete.assert_awaited_once()
-        target_overflow.delete.assert_awaited_once()
-        for channel in keep:
-            channel.delete.assert_not_called()
-
-
-class TestDevLeagueTargetCategory:
-    def _guild_with(self, *channels):
-        guild = _guild(channels=list(channels))
-        guild.create_category = AsyncMock(side_effect=lambda name, **_: _category(guild))
-        return guild
-
-    async def test_category_with_room_is_used(self):
-        guild = self._guild_with()
-        category = _category(guild)
-        assert await _mixin(guild)._devleague_target_category(guild, category) is category
-
-    async def test_full_category_creates_the_next_beside_it(self):
-        guild = self._guild_with()
-        category = _category(guild, [MagicMock()] * 41)
-        category.position = 3
-
-        await _mixin(guild)._devleague_target_category(guild, category)
-
-        assert guild.create_category.await_args is not None
-        assert guild.create_category.await_args.kwargs["name"] == "Dev League-2"
-        assert guild.create_category.await_args.kwargs["position"] == 4
-
-    async def test_skips_names_taken_by_other_channels_and_full_overflows(self):
-        guild = _guild()
-        taken = MagicMock(spec=discord.TextChannel)
-        taken.name = "Dev League-2"
-        full = _category(guild, [MagicMock()] * 41)
-        full.name = "Dev League-3"
-        roomy = _category(guild)
-        roomy.name = "Dev League-4"
-        guild.channels = [taken, full, roomy]
-        category = _category(guild, [MagicMock()] * 41)
-
-        assert await _mixin(guild)._devleague_target_category(guild, category) is roomy
-
-    async def test_every_overflow_full_falls_back_to_the_configured_category(self):
-        guild = _guild()
-        overflows = []
-        for i in runner.OVERFLOW_CATEGORIES:
-            overflow = _category(guild, [MagicMock()] * 41)
-            overflow.name = f"Dev League-{i}"
-            overflows.append(overflow)
-        guild.channels = overflows
-        category = _category(guild, [MagicMock()] * 41)
-
-        assert await _mixin(guild)._devleague_target_category(guild, category) is category
-
-
-class TestDevLeagueUnavailable:
-    async def test_not_in_guild_raises(self):
-        m = _mixin(None, None)
-        with pytest.raises(NotInGuild):
-            await m.create_devleague_lobby_channels(DevLeagueLobby(**_lobby_payload()))
-
-    async def test_disabled_raises(self):
-        m = _mixin(_guild(), None, active=False)
-        with pytest.raises(DevLeagueNotActive):
-            await m.create_devleague_lobby_channels(DevLeagueLobby(**_lobby_payload()))
-
-    async def test_unavailable_lobby_can_be_retried(self):
-        m = _mixin(_guild())
-        m.create_devleague_lobby_channels = AsyncMock(side_effect=DevLeagueNotActive)
-
-        await m._create_devleague_lobbies([DevLeagueLobby(**_lobby_payload())])
-
-        assert runner.active_lobbies == set()
-
-    async def test_announce_needs_two_channels(self):
-        with pytest.raises(ValueError):
-            await _mixin(_guild()).announce_devleague_lobby(
-                _guild(), DevLeagueLobby(**_lobby_payload()), [MagicMock()], MagicMock(spec=discord.TextChannel)
-            )
-
-
-class TestTeardownDevLeagueCard:
-    async def test_saved_card_is_marked_final_without_a_score(self):
-        guild = _guild()
-        m = _mixin(guild, _category(guild))
-        entry = MagicMock()
-
-        with (
-            patch("rsc.devleague.runner.asyncio.sleep", AsyncMock()),
-            patch("rsc.devleague.runner.lobby_messages", AsyncMock(return_value=entry)),
-            patch("rsc.devleague.runner.finish_lobby", AsyncMock()) as finish,
-        ):
-            await m.teardown_devleague_lobby(guild, lobby_id=101)
-
-        assert finish.await_args is not None
-        assert finish.await_args.args[1] is entry
-        assert finish.await_args.kwargs["score"] is None
-
-    async def test_no_category_still_finishes_the_card(self):
-        guild = _guild()
-        m = _mixin(guild, None)
-
-        with (
-            patch("rsc.devleague.runner.asyncio.sleep", AsyncMock()),
-            patch("rsc.devleague.runner.lobby_messages", AsyncMock(return_value=MagicMock())),
-            patch("rsc.devleague.runner.finish_lobby", AsyncMock()) as finish,
-        ):
-            await m.teardown_devleague_lobby(guild, lobby_id=101)
-
-        finish.assert_awaited_once()

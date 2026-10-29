@@ -32,8 +32,10 @@ from rsc.admin.views import ActivityCheckDMButton, IntentDMButton, PermFAPollBut
 from rsc.combines.guide import ReplayLocationButton
 from rsc.ballchasing import BallchasingMixIn
 from rsc.combines import CombineMixIn
+from rsc.combines.runner import CombinesLeague
 from rsc.developer import DeveloperMixIn
 from rsc.devleague import DevLeagueMixIn
+from rsc.devleague.runner import DevLeague
 from rsc.checks import bot_owner_required
 from rsc.const import API_RETRIES, API_RETRY_EXCEPTIONS, DEFAULT_MODMAIL_BOT_ID, LIVE_EMOJI_NAME, MODAL_TIMEOUT
 from rsc.embeds import BlueEmbed, ErrorEmbed, SuccessEmbed
@@ -45,6 +47,7 @@ from rsc.freeagents import FreeAgentMixIn
 from rsc.leagues import LeagueMixIn
 from rsc.llm import LLMMixIn
 from rsc.llm.rulebook import load_rulebooks
+from rsc.lobbies.runner import LobbyRunner
 from rsc.logs import GuildLogAdapter
 from rsc.matches import MatchMixIn
 from rsc.members import MemberMixIn
@@ -154,6 +157,10 @@ class RSC(
         # A separate lane for lobby DMs, so a running mass DM can't hold players' lobby details back
         self._lobby_dm_helper = DMHelper()
         self._lobby_dm_helper.start()
+
+        # Combines and Dev League lobbies, started and torn down by the website's webhooks
+        self._combines_runner = LobbyRunner(self, CombinesLeague(self))
+        self._devleague_runner = LobbyRunner(self, DevLeague(self))
 
         super().__init__()
         log.info("RSC Bot has been started.")
@@ -422,12 +429,12 @@ class RSC(
         self._web_app = web.Application()
 
         # Combines
-        self._web_app.router.add_post("/combines_match", self.start_combines_game)
-        self._web_app.router.add_post("/combines_event", self.combines_event_handler)
+        self._web_app.router.add_post("/combines_match", self._combines_runner.start_game)
+        self._web_app.router.add_post("/combines_event", self._combines_runner.handle_event)
 
         # Dev League
-        self._web_app.router.add_post("/devleague_match", self.start_devleague_game)
-        self._web_app.router.add_post("/devleague_event", self.devleague_event_handler)
+        self._web_app.router.add_post("/devleague_match", self._devleague_runner.start_game)
+        self._web_app.router.add_post("/devleague_event", self._devleague_runner.handle_event)
 
         self._web_app.router.add_post("/league_player_update", self.league_player_update_handler)
 

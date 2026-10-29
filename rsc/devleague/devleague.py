@@ -7,7 +7,6 @@ from redbot.core import app_commands
 from rsc.abc import RSCMixIn
 from rsc.devleague import api
 from rsc.devleague.manager import DevLeagueManagerMixIn
-from rsc.devleague.runner import DevLeagueRunnerMixIn
 from rsc.embeds import BlueEmbed, ErrorEmbed, OrangeEmbed, SuccessEmbed
 from rsc.types import DevLeagueSettings
 from rsc.utils import utils
@@ -25,7 +24,7 @@ defaults_guild = DevLeagueSettings(
 BUFMAX = 1984
 
 
-class DevLeagueMixIn(DevLeagueRunnerMixIn, DevLeagueManagerMixIn, RSCMixIn):
+class DevLeagueMixIn(DevLeagueManagerMixIn, RSCMixIn):
     def __init__(self):
         log.debug("Initializing DevLeagueMixIn")
 

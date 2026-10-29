@@ -1,15 +1,18 @@
-"""A whole lobby's life, from the start webhook to teardown, for both runners.
+"""A whole lobby's life, from the start webhook to teardown, for combines and Dev League.
 
-Runs against Red's real Config and the real DM queue. Only Discord is faked, so
-locking, saving and DM recording behave as they do in the bot. Every wait is
-bounded, so a hang fails the test instead of stalling the suite.
+Runs against Red's real Config, the real DM queue, the real settings getters and
+the real player lookup. Only Discord is faked, so locking, saving and DM
+recording behave as they do in the bot. Every wait is bounded, so a hang fails
+the test instead of stalling the suite.
 """
 
 import asyncio
 import copy
 import itertools
+import uuid
 import weakref
-from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
+from types import MethodType
+from unittest.mock import AsyncMock, MagicMock, PropertyMock
 
 import discord
 import pytest
@@ -20,12 +23,15 @@ from redbot.core.config import Config
 
 from rsc import const
 from rsc.combines import manager as combines_manager
-from rsc.combines import runner as combines_runner
-from rsc.combines.runner import CombineRunnerMixIn
+from rsc.combines.combines import CombineMixIn
+from rsc.combines.manager import CombineManagerMixIn
+from rsc.combines.models import CombinesLobby
+from rsc.combines.runner import ANNOUNCE_CHANNEL, CombinesLeague
 from rsc.combines.views import FINAL_COLOUR, LIVE_COLOUR
 from rsc.devleague import devleague as devleague_cog
-from rsc.devleague import runner as devleague_runner
-from rsc.devleague.runner import DevLeagueRunnerMixIn
+from rsc.devleague.manager import DevLeagueManagerMixIn
+from rsc.devleague.runner import DevLeague
+from rsc.lobbies.runner import LobbyRunner
 from rsc.utils.dm import DMHelper
 
 GUILD_ID = 395806681994493964
@@ -34,22 +40,16 @@ LOBBY_IDS = (101, 102, 103)
 WAIT = 5
 
 
-@pytest.fixture(autouse=True)
-def _clear_runner_state():
-    for module in (combines_runner, devleague_runner):
-        module.active_lobbies.clear()
-    yield
-    for module in (combines_runner, devleague_runner):
-        module.active_lobbies.clear()
-
-
 @pytest.fixture
 def config(tmp_path, monkeypatch) -> Config:
     """The bot's Config on a throwaway JSON store, registered as the cog registers it."""
     monkeypatch.setattr(data_manager, "basic_config", {**data_manager.basic_config_default, "DATA_PATH": str(tmp_path)})
     monkeypatch.setattr(config_module, "_config_cache", weakref.WeakValueDictionary())
-    driver = _drivers.get_driver("RSC", "6349109713", data_path_override=tmp_path)
-    conf = Config(cog_name="RSC", unique_identifier="6349109713", driver=driver, force_registration=True)
+    # Red's JSON driver shares its data across the process by cog name, so each test
+    # gets its own name, as Red's own test fixtures do, or settings leak between tests
+    cog_name = f"RSC{uuid.uuid4().hex}"
+    driver = _drivers.get_driver(cog_name, "6349109713", data_path_override=tmp_path)
+    conf = Config(cog_name=cog_name, unique_identifier="6349109713", driver=driver, force_registration=True)
     conf.init_custom("Combines", 1)
     conf.register_custom("Combines", **combines_manager.defaults_guild)
     conf.init_custom("DevLeague", 1)
@@ -88,6 +88,7 @@ class FakeDiscord:
         self.guild._state.http.bulk_channel_update = AsyncMock()
         self.members = {}
         self.guild.get_member.side_effect = self.members.get
+        self.guild.get_channel.side_effect = lambda cid: next((c for c in self._channels if c.id == cid), None)
 
         self.announce = MagicMock(spec=discord.TextChannel)
         self.announce.id = next(self.ids)
@@ -219,27 +220,10 @@ def _request(data) -> MagicMock:
     return request
 
 
-def _build(cls):
-    saved = cls.__abstractmethods__
-    cls.__abstractmethods__ = frozenset()
-    try:
-        return object.__new__(cls)
-    finally:
-        cls.__abstractmethods__ = saved
-
-
-def _players_for(fake: FakeDiscord):
-    async def players(_guild, lobby):
-        # Like the real lookup, players who left the guild are left out
-        return [m for p in [*lobby.home, *lobby.away] if (m := fake.members.get(p.discord_id))]
-
-    return players
-
-
-async def _settle(module) -> None:
+async def _settle(runner: LobbyRunner) -> None:
     """Wait for every background task the runner started, or fail on a hang."""
-    while module.background_tasks:
-        await asyncio.wait_for(asyncio.gather(*module.background_tasks), timeout=WAIT)
+    while runner.background_tasks:
+        await asyncio.wait_for(asyncio.gather(*runner.background_tasks), timeout=WAIT)
 
 
 async def _drain(helper: DMHelper, sent: int) -> None:
@@ -257,16 +241,60 @@ def _colour(view: ui.LayoutView) -> discord.Colour | int | None:
     return container.accent_colour
 
 
-async def _run_lifecycle(fake: FakeDiscord, store, runner_module, start, finish, helper: DMHelper, tiers: list[str]):
+def _cog(fake: FakeDiscord, config: Config, helper: DMHelper) -> MagicMock:
+    """The cog as the runners see it, with the real settings getters and player lookup."""
+    cog = MagicMock()
+    cog.bot = fake.bot
+    cog.config = config
+    cog._lobby_dm_helper = helper
+    cog.live_emoji = lambda: ""
+    for mixin, names in (
+        (CombineManagerMixIn, ("_get_combines_active", "_get_combines_category", "_get_combines_api")),
+        (DevLeagueManagerMixIn, ("_get_devleague_active", "_get_devleague_category", "_get_devleague_announce_channel")),
+        (CombineMixIn, ("combine_players_from_lobby",)),
+    ):
+        for name in names:
+            setattr(cog, name, MethodType(getattr(mixin, name), cog))
+    return cog
+
+
+async def _combines(fake: FakeDiscord, config: Config, helper: DMHelper) -> LobbyRunner:
+    """Combines switched on, with its category set and its announcement channel in the guild."""
+    category = fake.category("Combines")
+    fake.add_announce_channel(ANNOUNCE_CHANNEL)
+    settings = config.custom("Combines", str(GUILD_ID))
+    await settings.Active.set(True)
+    await settings.CombinesCategory.set(category.id)
+    cog = _cog(fake, config, helper)
+    runner = LobbyRunner(cog, CombinesLeague(cog))
+    runner.TEARDOWN_DELAY = 0
+    return runner
+
+
+async def _devleague(fake: FakeDiscord, config: Config, helper: DMHelper) -> LobbyRunner:
+    """Dev League switched on, with its category and announcement channel set."""
+    category = fake.category("Dev League")
+    fake.add_announce_channel("dev-league-announcements")
+    settings = config.custom("DevLeague", str(GUILD_ID))
+    await settings.Active.set(True)
+    await settings.DevLeagueCategory.set(category.id)
+    await settings.DevLeagueAnnounceChannel.set(fake.announce.id)
+    cog = _cog(fake, config, helper)
+    runner = LobbyRunner(cog, DevLeague(cog))
+    runner.TEARDOWN_DELAY = 0
+    return runner
+
+
+async def _run_lifecycle(fake: FakeDiscord, store, runner: LobbyRunner, helper: DMHelper, tiers: list[str]):
     for match_id in LOBBY_IDS:
         for i in range(1, 7):
             fake.member(match_id * 10 + i)
     payload = {str(match_id): _lobby_payload(match_id, tier) for match_id, tier in zip(LOBBY_IDS, tiers, strict=True)}
 
     # Start: every lobby in the batch gets two VCs, a card and a saved record
-    resp = await start(_request(payload))
+    resp = await runner.start_game(_request(payload))
     assert resp.status == 200
-    await _settle(runner_module)
+    await _settle(runner)
 
     assert len(fake.voice_channels()) == 2 * len(LOBBY_IDS)
     assert len(fake.posts) == len(LOBBY_IDS)
@@ -279,11 +307,10 @@ async def _run_lifecycle(fake: FakeDiscord, store, runner_module, start, finish,
     assert all(len(record["dms"]) == 6 for record in saved.values())
 
     # Teardown: the card and every DM turn Final, the VCs go, and the record is forgotten
-    with patch(f"{runner_module.__name__}.asyncio.sleep", AsyncMock()):
-        for match_id in LOBBY_IDS:
-            resp = await finish(_request(_finished(match_id)))
-            assert resp.status == 200
-        await _settle(runner_module)
+    for match_id in LOBBY_IDS:
+        resp = await runner.handle_event(_request(_finished(match_id)))
+        assert resp.status == 200
+    await _settle(runner)
 
     assert fake.voice_channels() == []
     assert await store.LobbyMessages() == {}
@@ -294,97 +321,105 @@ async def _run_lifecycle(fake: FakeDiscord, store, runner_module, start, finish,
 
 
 class TestCombinesLifecycle:
-    def _mixin(self, fake: FakeDiscord, config: Config, helper: DMHelper) -> CombineRunnerMixIn:
-        m = _build(CombineRunnerMixIn)
-        m.bot = fake.bot
-        m.config = config
-        m._lobby_dm_helper = helper
-        m.live_emoji = lambda: ""
-        m._get_combines_active = AsyncMock(return_value=True)
-        m._get_combines_category = AsyncMock(return_value=fake.category("Combines"))
-        m._get_combines_api = AsyncMock(return_value=None)
-        m.combine_players_from_lobby = AsyncMock(side_effect=_players_for(fake))
-        return m
-
     async def test_start_to_teardown(self, config, dm_helper):
         fake = FakeDiscord()
-        fake.add_announce_channel("combines-announcements")
-        m = self._mixin(fake, config, dm_helper)
+        runner = await _combines(fake, config, dm_helper)
 
-        await _run_lifecycle(
-            fake,
-            config.custom("Combines", str(GUILD_ID)),
-            combines_runner,
-            m.start_combines_game,
-            m.combines_event_handler,
-            dm_helper,
-            ["Premier", "Elite", "Elite"],
-        )
+        await _run_lifecycle(fake, config.custom("Combines", str(GUILD_ID)), runner, dm_helper, ["Premier", "Elite", "Elite"])
 
-    async def test_cards_post_live(self, config, dm_helper):
+    async def test_cards_post_live_even_when_some_players_left(self, config, dm_helper):
         fake = FakeDiscord()
-        fake.add_announce_channel("combines-announcements")
-        m = self._mixin(fake, config, dm_helper)
+        runner = await _combines(fake, config, dm_helper)
         fake.member(1011)
 
-        await m.start_combines_game(_request({"101": _lobby_payload(101, "Premier")}))
-        await _settle(combines_runner)
+        await runner.start_game(_request({"101": _lobby_payload(101, "Premier")}))
+        await _settle(runner)
 
         assert fake.announce.send.await_args is not None
         assert _colour(fake.announce.send.await_args.kwargs["view"]) == LIVE_COLOUR
 
     async def test_back_to_back_batches_all_start(self, config, dm_helper):
-        # Last night's failure: a second webhook while the first batch was still running
+        # The night of the deadlock: a second webhook while the first batch was still running
         fake = FakeDiscord()
-        fake.add_announce_channel("combines-announcements")
-        m = self._mixin(fake, config, dm_helper)
+        runner = await _combines(fake, config, dm_helper)
         for match_id in (101, 102, 103, 104):
             fake.member(match_id * 10 + 1)
 
-        await m.start_combines_game(_request({"101": _lobby_payload(101, "Elite"), "102": _lobby_payload(102, "Elite")}))
-        await m.start_combines_game(_request({"103": _lobby_payload(103, "Elite"), "104": _lobby_payload(104, "Elite")}))
-        await _settle(combines_runner)
+        await runner.start_game(_request({"101": _lobby_payload(101, "Elite"), "102": _lobby_payload(102, "Elite")}))
+        await runner.start_game(_request({"103": _lobby_payload(103, "Elite"), "104": _lobby_payload(104, "Elite")}))
+        await _settle(runner)
 
         assert sorted(map(int, await config.custom("Combines", str(GUILD_ID)).LobbyMessages())) == [101, 102, 103, 104]
 
 
 class TestDevLeagueLifecycle:
-    def _mixin(self, fake: FakeDiscord, config: Config, helper: DMHelper) -> DevLeagueRunnerMixIn:
-        m = _build(DevLeagueRunnerMixIn)
-        m.bot = fake.bot
-        m.config = config
-        m._lobby_dm_helper = helper
-        m.live_emoji = lambda: ""
-        m._get_devleague_active = AsyncMock(return_value=True)
-        m._get_devleague_category = AsyncMock(return_value=fake.category("Dev League"))
-        m._get_devleague_announce_channel = AsyncMock(return_value=fake.announce)
-        m.combine_players_from_lobby = AsyncMock(side_effect=_players_for(fake))
-        return m
-
     async def test_start_to_teardown(self, config, dm_helper):
         fake = FakeDiscord()
-        fake.add_announce_channel("dev-league-announcements")
-        m = self._mixin(fake, config, dm_helper)
+        runner = await _devleague(fake, config, dm_helper)
 
-        await _run_lifecycle(
-            fake,
-            config.custom("DevLeague", str(GUILD_ID)),
-            devleague_runner,
-            m.start_devleague_game,
-            m.devleague_event_handler,
-            dm_helper,
-            ["S+", "A", "F"],
-        )
+        await _run_lifecycle(fake, config.custom("DevLeague", str(GUILD_ID)), runner, dm_helper, ["S+", "A", "F"])
+
+    async def test_tier_outside_the_letter_scheme_still_tears_down(self, config, dm_helper):
+        fake = FakeDiscord()
+        runner = await _devleague(fake, config, dm_helper)
+
+        await _run_lifecycle(fake, config.custom("DevLeague", str(GUILD_ID)), runner, dm_helper, ["Tier 2", "A-", "S++"])
 
     async def test_back_to_back_batches_all_start(self, config, dm_helper):
         fake = FakeDiscord()
-        fake.add_announce_channel("dev-league-announcements")
-        m = self._mixin(fake, config, dm_helper)
+        runner = await _devleague(fake, config, dm_helper)
         for match_id in (101, 102, 103, 104):
             fake.member(match_id * 10 + 1)
 
-        await m.start_devleague_game(_request({"101": _lobby_payload(101, "A"), "102": _lobby_payload(102, "B")}))
-        await m.start_devleague_game(_request({"103": _lobby_payload(103, "C"), "104": _lobby_payload(104, "D")}))
-        await _settle(devleague_runner)
+        await runner.start_game(_request({"101": _lobby_payload(101, "A"), "102": _lobby_payload(102, "B")}))
+        await runner.start_game(_request({"103": _lobby_payload(103, "C"), "104": _lobby_payload(104, "D")}))
+        await _settle(runner)
 
         assert sorted(map(int, await config.custom("DevLeague", str(GUILD_ID)).LobbyMessages())) == [101, 102, 103, 104]
+
+
+class TestSettingsLookups:
+    """The getters each system reads its settings through, against real Config."""
+
+    async def test_unset_settings_read_as_off_or_missing(self, config):
+        cog = _cog(FakeDiscord(), config, MagicMock())
+        guild = cog.bot.get_guild(GUILD_ID)
+
+        assert await cog._get_combines_active(guild) is False
+        assert await cog._get_combines_category(guild) is None
+        assert await cog._get_combines_api(guild) is None
+        assert await cog._get_devleague_active(guild) is False
+        assert await cog._get_devleague_category(guild) is None
+        assert await cog._get_devleague_announce_channel(guild) is None
+
+    async def test_ids_pointing_at_the_wrong_kind_of_channel_read_as_missing(self, config):
+        fake = FakeDiscord()
+        fake.add_announce_channel("announcements")
+        category = fake.category("Lobbies")
+        cog = _cog(fake, config, MagicMock())
+        # A text channel saved as a category, and a category saved as the announcement channel
+        await config.custom("Combines", str(GUILD_ID)).CombinesCategory.set(fake.announce.id)
+        await config.custom("DevLeague", str(GUILD_ID)).DevLeagueCategory.set(fake.announce.id)
+        await config.custom("DevLeague", str(GUILD_ID)).DevLeagueAnnounceChannel.set(category.id)
+
+        assert await cog._get_combines_category(fake.guild) is None
+        assert await cog._get_devleague_category(fake.guild) is None
+        assert await cog._get_devleague_announce_channel(fake.guild) is None
+
+    async def test_ids_that_no_longer_exist_read_as_missing(self, config):
+        fake = FakeDiscord()
+        cog = _cog(fake, config, MagicMock())
+        await config.custom("Combines", str(GUILD_ID)).CombinesCategory.set(424242)
+
+        assert await cog._get_combines_category(fake.guild) is None
+
+
+class TestCombinePlayersFromLobby:
+    async def test_home_then_away_skipping_players_not_in_the_guild(self, config):
+        fake = FakeDiscord()
+        present = [fake.member(i) for i in (1012, 1013, 1014, 1016)]
+        cog = _cog(fake, config, MagicMock())
+
+        players = await cog.combine_players_from_lobby(fake.guild, CombinesLobby(**_lobby_payload(101, "Elite")))
+
+        assert players == present

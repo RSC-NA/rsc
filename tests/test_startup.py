@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import discord
 import pytest
+from aiohttp.test_utils import TestClient, TestServer
 from rscapi.rest import ALLOW_RETRY_METHODS
 from aiohttp import (
     ClientConnectorError,
@@ -15,7 +16,10 @@ from aiohttp import (
 
 from rsc.admin.views import ActivityCheckDMButton, IntentDMButton, PermFAPollButton
 from rsc.combines.guide import ReplayLocationButton
+from rsc.combines.runner import CombinesLeague
 from rsc.core import RSC
+from rsc.devleague.runner import DevLeague
+from rsc.lobbies.runner import LobbyRunner
 from rsc.members.views import PlayerInfoButton, PlayerTrackersButton
 from rsc.tiers.tiers import TierMixIn
 
@@ -446,7 +450,7 @@ class TestStartWebapp:
 
     async def test_bind_failure_is_not_fatal(self):
         """A dead webhook listener must not stop the guild caches from loading."""
-        cog = _create_cog(_web_runner=None, _web_site=None)
+        cog = _create_cog(_web_runner=None, _web_site=None, _combines_runner=MagicMock(), _devleague_runner=MagicMock())
 
         runner = AsyncMock()
         site = AsyncMock()
@@ -460,8 +464,9 @@ class TestStartWebapp:
         runner.cleanup.assert_awaited_once()
         assert cog._web_runner is None
 
-    async def test_registers_devleague_routes(self):
-        cog = _create_cog(_web_runner=None, _web_site=None)
+    async def test_registers_lobby_routes_on_each_systems_runner(self):
+        combines, devleague = MagicMock(), MagicMock()
+        cog = _create_cog(_web_runner=None, _web_site=None, _combines_runner=combines, _devleague_runner=devleague)
 
         with patch("rsc.core.web") as mock_web:
             mock_web.AppRunner.return_value = AsyncMock()
@@ -469,8 +474,51 @@ class TestStartWebapp:
             await cog.start_webapp()
 
         routes = {c.args[0]: c.args[1] for c in mock_web.Application.return_value.router.add_post.call_args_list}
-        assert routes["/devleague_match"] == cog.start_devleague_game
-        assert routes["/devleague_event"] == cog.devleague_event_handler
+        assert routes["/combines_match"] is combines.start_game
+        assert routes["/combines_event"] is combines.handle_event
+        assert routes["/devleague_match"] is devleague.start_game
+        assert routes["/devleague_event"] is devleague.handle_event
+
+    async def test_lobby_urls_reach_the_right_systems_runner_over_http(self):
+        # Combines is on and Dev League is off, so each URL's answer shows whose runner took it
+        guild = MagicMock(spec=discord.Guild)
+        guild.id = 1
+        cog = _create_cog(_web_runner=None, _web_site=None)
+        cog.bot = MagicMock()
+        cog.bot.get_guild.return_value = guild
+        cog._get_combines_active = AsyncMock(return_value=True)
+        cog._get_devleague_active = AsyncMock(return_value=False)
+        cog._combines_runner = LobbyRunner(cog, CombinesLeague(cog))
+        cog._devleague_runner = LobbyRunner(cog, DevLeague(cog))
+        cog._combines_runner.create_channels = AsyncMock(return_value=[])
+        lobby = {
+            "id": 101,
+            "lobby_user": "rsc",
+            "lobby_pass": "rsc",
+            "home_wins": 0,
+            "away_wins": 0,
+            "reported_rsc_id": None,
+            "confirmed_rsc_id": None,
+            "completed": False,
+            "cancelled": False,
+            "tier": "Elite",
+            "guild_id": "1",
+            "home": [],
+            "away": [],
+        }
+
+        with patch("rsc.core.web.TCPSite", return_value=AsyncMock()):
+            await cog.start_webapp()
+        async with TestClient(TestServer(cog._web_app)) as client:
+            combines_match = await client.post("/combines_match", json={"101": lobby})
+            devleague_match = await client.post("/devleague_match", json={"101": lobby})
+            combines_event = await client.post("/combines_event", data="not json")
+            devleague_event = await client.post("/devleague_event", data="not json")
+        await cog._web_runner.cleanup()
+        await asyncio.gather(*cog._combines_runner.background_tasks)
+
+        assert (combines_match.status, devleague_match.status) == (200, 503)
+        assert (combines_event.status, devleague_event.status) == (400, 400)
 
 
 class TestApplicationEmojis:

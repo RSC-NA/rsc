@@ -7,7 +7,6 @@ from redbot.core import app_commands
 from rsc.abc import RSCMixIn
 from rsc.combines import api, models
 from rsc.combines.manager import CombineManagerMixIn
-from rsc.combines.runner import CombineRunnerMixIn
 from rsc.embeds import BlueEmbed, ErrorEmbed, YellowEmbed
 from rsc.exceptions import BadGateway
 from rsc.tiers import TierMixIn
@@ -51,7 +50,7 @@ def active_combines(f):  # noqa: ANN001
     return combine_wrapper
 
 
-class CombineMixIn(CombineRunnerMixIn, CombineManagerMixIn, RSCMixIn):
+class CombineMixIn(CombineManagerMixIn, RSCMixIn):
     def __init__(self):
         log.debug("Initializing CombineMixIn")
         super().__init__()
