@@ -151,12 +151,10 @@ class RSC(
         # Resolved by prepare_application_emojis()
         self._live_emoji: discord.Emoji | None = None
 
-        # Shared rate-limited DM queue
+        # The one rate-limited DM queue every feature shares. A second queue would
+        # double the send rate, so time-sensitive DMs are queued as urgent instead.
         self._dm_helper = DMHelper()
         self._dm_helper.start()
-        # A separate lane for lobby DMs, so a running mass DM can't hold players' lobby details back
-        self._lobby_dm_helper = DMHelper()
-        self._lobby_dm_helper.start()
 
         # Combines and Dev League lobbies, started and torn down by the website's webhooks
         self._combines_runner = LobbyRunner(self, CombinesLeague(self))
@@ -196,7 +194,6 @@ class RSC(
         # Discard rather than drain. Draining sends one DM per `rate` seconds, so a
         # large queued batch would block the reload for many minutes.
         await self._dm_helper.stop(drain=False)
-        await self._lobby_dm_helper.stop(drain=False)
         await self.close_ballchasing_sessions()
         await self.close_api_clients()
         if self._web_runner is not None:

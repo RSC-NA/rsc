@@ -1,4 +1,5 @@
 import asyncio
+import itertools
 import logging
 import random
 from collections import deque
@@ -17,6 +18,12 @@ SCHEDULE_POLL_INTERVAL = 30.0  # seconds between checks for scheduled messages
 # The helper is a long lived singleton, so undeliverable recipients are kept in a
 # bounded ring rather than a list that grows for the lifetime of the process.
 MAX_FAILED_MEMBERS = 200
+
+# Queue order. Urgent DMs go ahead of anything waiting, and the shutdown signal
+# goes behind everything, so a draining stop() still sends the whole backlog.
+URGENT = 0
+NORMAL = 1
+SHUTDOWN = 2
 
 
 class DMOutcome(StrEnum):
@@ -46,13 +53,20 @@ class DMTask:
     # success. Lets a feature record per-recipient delivery and keep message
     # ids for later edits. Never called for DMs dropped by `purge()`.
     on_result: Callable[[DMOutcome, discord.Message | None], Awaitable[None]] | None = None
+    # Sent ahead of anything waiting, such as a player's lobby details during a mass DM
+    urgent: bool = False
 
 
 class DMHelper:
-    """A rate-limited queue for sending Discord direct messages.
+    """The bot's one rate-limited queue for sending Discord direct messages.
 
     Sends one DM at a time with a configurable delay between each to avoid
-    being flagged by Discord for mass-DMing users.
+    being flagged by Discord for mass-DMing users. Every feature shares the one
+    queue, so the delay holds across all of them. A second queue would double
+    the send rate.
+
+    Urgent DMs jump ahead of anything waiting but are still paced like every
+    other DM. Within each kind, DMs go out in the order they were queued.
 
     Usage:
         helper = DMHelper(rate=1.5)
@@ -64,7 +78,11 @@ class DMHelper:
 
     def __init__(self, rate: float = DEFAULT_RATE):
         self._rate = rate
-        self._queue: asyncio.Queue[DMTask | None] = asyncio.Queue()
+        # (rank, arrival order, task). None is the shutdown signal. The arrival
+        # order keeps DMs of the same rank first in, first out, and means a
+        # tie never falls through to comparing the tasks themselves.
+        self._queue: asyncio.PriorityQueue[tuple[int, int, DMTask | None]] = asyncio.PriorityQueue()
+        self._arrivals = itertools.count()
         self._task: asyncio.Task | None = None
         self._scheduler_task: asyncio.Task | None = None
         self._scheduled: list[DMTask] = []
@@ -147,22 +165,21 @@ class DMHelper:
         delivered - at most one DM escapes.
         """
         dropped = 0
-        requeue_sentinel = False
+        shutting_down = False
 
         while True:
             try:
-                item = self._queue.get_nowait()
+                _, _, item = self._queue.get_nowait()
             except asyncio.QueueEmpty:
                 break
             if item is None:
-                # Shutdown sentinel. Put it back and stop; anything behind it is
-                # post-shutdown work the consumer will handle on its own terms.
-                requeue_sentinel = True
-                break
-            dropped += 1
+                shutting_down = True
+            else:
+                dropped += 1
 
-        if requeue_sentinel:
-            await self._queue.put(None)
+        # A stop() already under way still needs its shutdown signal
+        if shutting_down:
+            await self._put(None, SHUTDOWN)
 
         async with self._scheduled_lock:
             dropped += len(self._scheduled)
@@ -193,8 +210,8 @@ class DMHelper:
         if not drain:
             await self.purge()
 
-        # Sentinel to signal consumer shutdown
-        await self._queue.put(None)
+        # Signal the consumer to finish. It ranks last, so everything queued goes first.
+        await self._put(None, SHUTDOWN)
         if self._task:
             await self._task
             self._task = None
@@ -208,6 +225,7 @@ class DMHelper:
         send_at: datetime | None = None,
         precheck: Callable[[], Awaitable[bool]] | None = None,
         on_result: Callable[[DMOutcome, discord.Message | None], Awaitable[None]] | None = None,
+        urgent: bool = False,
     ) -> None:
         """Add a DM to the send queue.
 
@@ -215,7 +233,8 @@ class DMHelper:
         is held until that time before entering the send queue. If ``precheck``
         is provided it is awaited just before sending; a False result drops the
         message. If ``on_result`` is provided it is awaited with the final
-        outcome, and the sent message when there is one.
+        outcome, and the sent message when there is one. An ``urgent`` DM is
+        sent ahead of anything waiting, once it is due.
 
         Raises:
             ValueError: ``view`` is a LayoutView and ``content`` or ``embed`` is also set.
@@ -234,26 +253,25 @@ class DMHelper:
             send_at=send_at,
             precheck=precheck,
             on_result=on_result,
+            urgent=urgent,
         )
         if send_at and send_at > datetime.now(UTC):
             async with self._scheduled_lock:
                 self._scheduled.append(task)
             logger.debug(f"Scheduled DM to {member} ({member.id}) at {send_at.isoformat()}")
         else:
-            await self._queue.put(task)
+            await self._put(task, URGENT if urgent else NORMAL)
+
+    async def _put(self, task: DMTask | None, rank: int) -> None:
+        await self._queue.put((rank, next(self._arrivals), task))
 
     async def _consumer(self) -> None:
         """Process queued DMs one at a time with rate limiting."""
         logger.debug("DM consumer started")
         while True:
-            item = await self._queue.get()
+            _, _, item = await self._queue.get()
             if item is None:
-                # Drain remaining
-                while not self._queue.empty():
-                    remaining = self._queue.get_nowait()
-                    if remaining is not None:
-                        await self._send(remaining)
-                        await asyncio.sleep(self._jittered_rate())
+                # The shutdown signal ranks last, so nothing that was queued is left behind it
                 break
 
             await self._send(item)
@@ -278,7 +296,7 @@ class DMHelper:
 
             for task in ready:
                 logger.debug(f"Releasing scheduled DM to {task.member} ({task.member.id})")
-                await self._queue.put(task)
+                await self._put(task, URGENT if task.urgent else NORMAL)
 
             await asyncio.sleep(SCHEDULE_POLL_INTERVAL)
 

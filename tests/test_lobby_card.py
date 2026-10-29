@@ -271,7 +271,7 @@ class TestPostLobby:
         channel.send = AsyncMock(return_value=MagicMock(id=88))
         cog = MagicMock()
         cog.live_emoji.return_value = LIVE
-        cog._lobby_dm_helper.enqueue = AsyncMock()
+        cog._dm_helper.enqueue = AsyncMock()
         store = _store()
         active = {(1, 4812)}
 
@@ -285,8 +285,10 @@ class TestPostLobby:
         saved = LobbyMessages.model_validate(store.LobbyMessages.data["4812"])
         assert (saved.channel_id, saved.message_id, saved.executor_id, saved.dms) == (77, 88, 1, [])
 
-        dms = cog._lobby_dm_helper.enqueue.await_args_list
+        dms = cog._dm_helper.enqueue.await_args_list
         assert [c.args[0].id for c in dms] == [1, 2, 4]
+        # The bot's one DM queue, ahead of any mass DM already waiting
+        assert all(c.kwargs["urgent"] is True for c in dms)
         lines = [_lines(_container(c.kwargs["view"]))[1] for c in dms]
         assert lines == [
             "You're on **Home** · you make the lobby",
@@ -308,7 +310,7 @@ class TestPostLobby:
         channel.send = AsyncMock(return_value=MagicMock(id=88))
         cog = MagicMock()
         cog.live_emoji.return_value = LIVE
-        cog._lobby_dm_helper.enqueue = AsyncMock()
+        cog._dm_helper.enqueue = AsyncMock()
         store = _store()
 
         for lobby_id in (4812, 4813):

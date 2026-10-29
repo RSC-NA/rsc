@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import discord
 import pytest
 
-from rsc.utils.dm import MAX_FAILED_MEMBERS, DMHelper, DMOutcome, DMTask
+from rsc.utils.dm import MAX_FAILED_MEMBERS, SHUTDOWN, DMHelper, DMOutcome, DMTask
 
 
 def _mock_member(name="TestUser", member_id=111111111):
@@ -343,30 +343,75 @@ class TestDMHelperPurge:
             m.send.assert_awaited_once_with(content="hi")
 
 
-class TestDMHelperShutdownSignal:
-    """What happens around the shutdown signal `stop()` queues.
+def _recording_members(order: list[str], *names: str) -> list[MagicMock]:
+    """Members whose DMs append their name to `order` as they are sent."""
+    members = []
+    for i, name in enumerate(names):
+        member = _mock_member(name, 900 + i)
+        member.send = AsyncMock(side_effect=lambda *_, name=name, **__: order.append(name))
+        members.append(member)
+    return members
 
-    Reaching these by timing a real `stop()` would be flaky, so the signal is
-    placed in the queue directly, where `stop()` would put it.
-    """
 
-    async def test_purge_keeps_the_shutdown_signal_and_what_follows_it(self):
+class TestDMHelperUrgent:
+    """One queue for the whole bot, with urgent DMs sent ahead of anything waiting."""
+
+    async def test_urgent_dms_go_ahead_of_a_waiting_batch_in_arrival_order(self):
+        order: list[str] = []
+        n1, n2, n3, u1, u2 = _recording_members(order, "n1", "n2", "n3", "u1", "u2")
         helper = DMHelper(rate=0)
-        before, after = _mock_member("Before", 901), _mock_member("After", 902)
-        await helper.enqueue(before, content="hi")
-        await helper._queue.put(None)
-        await helper.enqueue(after, content="hi")
-
-        assert await helper.purge() == 1
+        for m in (n1, n2, n3):
+            await helper.enqueue(m, content="batch")
+        await helper.enqueue(u1, content="lobby", urgent=True)
+        await helper.enqueue(u2, content="lobby", urgent=True)
 
         helper.start()
         await helper.stop()
-        before.send.assert_not_awaited()
-        after.send.assert_awaited_once_with(content="hi")
 
-    async def test_dms_queued_behind_the_shutdown_signal_are_still_sent(self):
+        assert order == ["u1", "u2", "n1", "n2", "n3"]
+
+    @patch("rsc.utils.dm.asyncio.sleep", new_callable=AsyncMock)
+    async def test_urgent_dms_are_paced_like_every_other_dm(self, mock_sleep):
+        helper = DMHelper(rate=1.5)
+        members = [_mock_member(f"P{i}", 930 + i) for i in range(4)]
+        for i, m in enumerate(members):
+            await helper.enqueue(m, content="hi", urgent=i % 2 == 0)
+
+        helper.start()
+        await helper.stop()
+
+        # One pause after every DM, urgent or not, so the shared rate holds
+        assert mock_sleep.await_count == len(members)
+        assert all(0.75 <= c.args[0] <= 2.25 for c in mock_sleep.await_args_list)
+
+    async def test_a_scheduled_urgent_dm_is_still_urgent_when_released(self):
+        order: list[str] = []
+        n1, n2, u1 = _recording_members(order, "n1", "n2", "u1")
         helper = DMHelper(rate=0)
-        await helper._queue.put(None)
+        await helper.enqueue(n1, content="batch")
+        await helper.enqueue(n2, content="batch")
+        # Already due, so the scheduler's first pass releases it. Run that one pass
+        # by hand before the consumer starts, so the order shows its rank.
+        helper._scheduled.append(DMTask(member=u1, content="lobby", send_at=datetime.now(UTC), urgent=True))
+        scheduler = asyncio.create_task(helper._schedule_loop())
+        # One yield runs the pass: it releases due DMs before its first real wait
+        await asyncio.sleep(0)
+        scheduler.cancel()
+        assert helper.scheduled == 0
+
+        helper.start()
+        await helper.stop()
+
+        assert order == ["u1", "n1", "n2"]
+
+
+class TestDMHelperShutdownSignal:
+    """The signal `stop()` queues ranks behind every DM, so the backlog goes first."""
+
+    async def test_dms_queued_after_the_signal_still_go_out_first(self):
+        helper = DMHelper(rate=0)
+        # Where a stop() already under way would have put it
+        await helper._put(None, SHUTDOWN)
         members = [_mock_member(f"Late{i}", 910 + i) for i in range(2)]
         for m in members:
             await helper.enqueue(m, content="hi")
@@ -376,6 +421,23 @@ class TestDMHelperShutdownSignal:
 
         for m in members:
             m.send.assert_awaited_once_with(content="hi")
+
+    async def test_purge_during_a_stop_keeps_the_signal(self):
+        helper = DMHelper(rate=0)
+        members = [_mock_member(f"Q{i}", 920 + i) for i in range(2)]
+        for m in members:
+            await helper.enqueue(m, content="hi")
+        await helper._put(None, SHUTDOWN)
+
+        assert await helper.purge() == 2
+
+        # The consumer still finds the signal and stops, having sent nothing
+        helper.start()
+        assert helper._task is not None
+        await asyncio.wait_for(helper._task, timeout=1)
+        for m in members:
+            m.send.assert_not_awaited()
+        await helper.stop()
 
 
 class TestDMHelperPrecheck:

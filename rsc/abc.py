@@ -92,7 +92,6 @@ class RSCMixIn(ABC):
     _elevated_role_cache: dict[int, dict[int, tuple[float, frozenset[str]]]]
 
     _dm_helper: "DMHelper"
-    _lobby_dm_helper: "DMHelper"
 
     # Application emoji, resolved at startup. None until then, or if unavailable.
     _live_emoji: discord.Emoji | None

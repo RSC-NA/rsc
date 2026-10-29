@@ -95,11 +95,13 @@ async def post_lobby(
             if not member:
                 continue
             makes_lobby = team is LobbyTeam.HOME and index == 0
-            await cog._lobby_dm_helper.enqueue(
+            # Urgent, so a mass DM already running doesn't hold back the lobby details
+            await cog._dm_helper.enqueue(
                 member,
                 view=card.render(live_emoji=cog.live_emoji(), viewer=team, viewer_makes_lobby=makes_lobby),
                 precheck=_still_active(active, key),
                 on_result=_record_dm(store, card, team),
+                urgent=True,
             )
     return msg
 

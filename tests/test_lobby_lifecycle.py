@@ -246,7 +246,7 @@ def _cog(fake: FakeDiscord, config: Config, helper: DMHelper) -> MagicMock:
     cog = MagicMock()
     cog.bot = fake.bot
     cog.config = config
-    cog._lobby_dm_helper = helper
+    cog._dm_helper = helper
     cog.live_emoji = lambda: ""
     for mixin, names in (
         (CombineManagerMixIn, ("_get_combines_active", "_get_combines_category", "_get_combines_api")),

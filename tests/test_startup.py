@@ -423,7 +423,6 @@ class TestCogUnload:
             retire_audit_loop=MagicMock(),
             cancel_permfa_poll_timers=MagicMock(),
             _dm_helper=AsyncMock(),
-            _lobby_dm_helper=AsyncMock(),
             close_ballchasing_sessions=AsyncMock(),
             close_api_clients=AsyncMock(),
             _web_runner=None,

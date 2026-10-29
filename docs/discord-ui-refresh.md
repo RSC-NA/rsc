@@ -360,7 +360,7 @@ Each spec uses only what discord.py 2.7.1 supports. Mockups are in the published
 
 - **Implemented (2026-10-28, branch `discord-ui-phase-3`):** `LobbyCard` in `rsc/combines/views.py` (a frozen pydantic model, so it's stored as JSON) and `rsc/combines/lobby.py` (`lobby_card`, `post_lobby`, `lobby_messages`, `finish_lobby`), used by both runners. Preview with `/pingtest style:lobby`, `devleague_lobby` and `lobby_final`.
   - **Calls made while building, for review:**
-    - Lobby DMs go through their own `DMHelper` lane, `_lobby_dm_helper`, so a running mass DM can't hold up lobby details. The two lanes together can send two DMs per ~1.5 s.
+    - Lobby DMs go through the bot's one shared `DMHelper` queue as `urgent`, so they go ahead of a mass DM already waiting without raising the send rate. (They briefly had a second queue of their own, `_lobby_dm_helper`; that was removed on 2026-10-29 because two queues doubled the rate.)
     - Team sections read `**Home**`, then `-# Nova makes the lobby` (or `-# Uploads the replays` for combines Away), then the players. A player not in the server shows their escaped name instead of a dead mention.
     - DM lines: "You're on **Home** · you make the lobby", "You're on **Away** · your team uploads the replays" (combines only), otherwise "You're on **Home**"; after teardown, "You were on **Home**".
     - Combines keep a `-# Lost these details? Run /combines lobbyinfo.` footer while live.
