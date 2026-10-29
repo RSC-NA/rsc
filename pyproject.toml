@@ -9,7 +9,6 @@ dependencies = [
     "openai>=2.28.0",
     "pandas>=3.0.2",
     "pillow>=13.0.0",
-    "pip>=26.1.2",
     "pydantic>=2.11.10",
     "python-ballchasing>=0.3.0",
     "pytz>=2026.1.post1",
@@ -25,6 +24,9 @@ dependencies = [
 [dependency-groups]
 dev = [
     "ipdb>=0.13.13",
+    # Red imports pip at startup (redbot/core/core_commands.py) but doesn't declare it, and
+    # uv venvs don't include pip. Production runs from a normal virtualenv, which has it.
+    "pip>=26.2.2",
     # Used directly by tests/conftest.py. It previously arrived as a transitive
     # of the langchain stack, so removing that stack orphaned it.
     "python-dotenv>=1.0.0",
