@@ -121,6 +121,48 @@ class DevLeagueManagerMixIn(RSCMixIn):
             ephemeral=True,
         )
 
+    @_devleague_manager.command(name="teardown", description="End Dev League matches that are still up in Discord")
+    @app_commands.describe(match_id="Match to end. Leave empty to end every match.")
+    async def _devleague_teardown_cmd(self, interaction: discord.Interaction, match_id: int | None = None):
+        guild = interaction.guild
+        if not guild:
+            return
+
+        runner = self._devleague_runner
+        open_ids = await runner.open_lobbies(guild)
+        if match_id is not None and match_id not in open_ids:
+            await interaction.response.send_message(
+                embed=ErrorEmbed(description=f"Match {match_id} has no live card or voice channels."),
+                ephemeral=True,
+            )
+            return
+
+        targets = sorted({match_id} if match_id is not None else open_ids)
+        if not targets:
+            await interaction.response.send_message(
+                embed=ErrorEmbed(description="There are no Dev League matches to end."),
+                ephemeral=True,
+            )
+            return
+
+        await interaction.response.defer(ephemeral=True)
+
+        # One failed match must not stop the rest from being ended
+        failed = []
+        for lobby_id in targets:
+            try:
+                await runner.teardown(guild, lobby_id, delay=False)
+            except discord.HTTPException as exc:
+                log.exception(f"Error tearing down Dev League match {lobby_id}", exc_info=exc)
+                failed.append(lobby_id)
+
+        ended = [i for i in targets if i not in failed]
+        lines = [f"Ended {_matches(ended)}."] if ended else []
+        if failed:
+            lines.append(f"Unable to end {_matches(failed)}. Check the bot's permissions.")
+        embed = (GreenEmbed if not failed else OrangeEmbed)(title="Dev League Teardown", description="\n".join(lines))
+        await interaction.followup.send(embed=embed, ephemeral=True)
+
     # Config
 
     async def _get_devleague_active(self, guild: discord.Guild) -> bool:
@@ -152,3 +194,10 @@ class DevLeagueManagerMixIn(RSCMixIn):
 
     async def _set_devleague_announce_channel(self, guild: discord.Guild, channel: discord.TextChannel):
         await self.config.custom("DevLeague", str(guild.id)).DevLeagueAnnounceChannel.set(channel.id)
+
+
+def _matches(lobby_ids: list[int]) -> str:
+    """ "match 101" or "3 matches: 101, 102, 103"."""
+    if len(lobby_ids) == 1:
+        return f"match {lobby_ids[0]}"
+    return f"{len(lobby_ids)} matches: {', '.join(map(str, lobby_ids))}"

@@ -64,6 +64,7 @@ from rsc.pagination import API_MAX_PAGE_SIZE
 if TYPE_CHECKING:
     from rsc.combines.models import CombinesLobby
     from rsc.events.models import EventPage, LeagueEventData
+    from rsc.lobbies.runner import LobbyRunner
     from rsc.utils.dm import DMHelper
 
 
@@ -92,6 +93,8 @@ class RSCMixIn(ABC):
     _elevated_role_cache: dict[int, dict[int, tuple[float, frozenset[str]]]]
 
     _dm_helper: "DMHelper"
+
+    _devleague_runner: "LobbyRunner"
 
     # Application emoji, resolved at startup. None until then, or if unavailable.
     _live_emoji: discord.Emoji | None

@@ -11,7 +11,7 @@
 
 ## Game Channels
 
-When the Dev League API creates a match, the bot creates `home` and `away` voice channels for it in the configured category and announces the lobby. When the match finishes, the bot deletes the channels 30 seconds later.
+When the Dev League API creates a match, the bot creates `home` and `away` voice channels for it in the configured category and announces the lobby. When the match finishes, the bot marks the lobby card Final straight away and deletes the channels 30 seconds later.
 
 The feature is **disabled by default**.
 
@@ -24,6 +24,7 @@ The feature is **disabled by default**.
 - `announcements <channel>` - Text channel that new games are announced in (optional)
 - `enable` - Start creating game channels (requires a category)
 - `disable` - Stop creating game channels. Existing channels are left alone
+- `teardown [match_id]` - End a match that is finished on the website but still up in Discord: mark its card Final and delete its channels now. With no match ID, ends every match
 
 ### Channels
 

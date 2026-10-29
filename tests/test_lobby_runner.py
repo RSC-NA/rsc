@@ -455,8 +455,61 @@ class TestTeardown:
 
         finish.assert_awaited_once()
 
-    async def test_waits_before_tearing_down(self, rig):
+    async def test_card_turns_final_before_the_channels_wait(self, rig):
+        # The score shows as soon as the match ends. Only the voice channels get a grace period.
         rig.runner.TEARDOWN_DELAY = 30
-        with patch("rsc.lobbies.runner.asyncio.sleep", AsyncMock()) as sleep:
+        rig.runner.active_lobbies.add((GUILD_ID, 101))
+        rig.league.final_score = AsyncMock(return_value=None)
+        channel = rig.lobby_channel(101, "home")
+        rig.category.voice_channels = [channel]
+        order = []
+
+        async def sleep(delay):
+            # Queued lobby DMs are already being dropped while the channels wait
+            assert (GUILD_ID, 101) not in rig.runner.active_lobbies
+            order.append(("sleep", delay))
+
+        async def finish(*args):
+            order.append(("finish",))
+
+        channel.delete.side_effect = lambda **kwargs: order.append(("delete",))
+        with (
+            patch("rsc.lobbies.runner.asyncio.sleep", sleep),
+            patch("rsc.lobbies.runner.lobby_messages", AsyncMock(return_value=MagicMock())),
+            patch("rsc.lobbies.runner.finish_lobby", finish),
+        ):
             await rig.runner.teardown(rig.guild, lobby_id=101)
-        sleep.assert_awaited_once_with(30)
+
+        assert order == [("finish",), ("sleep", 30), ("delete",)]
+
+    async def test_without_delay_skips_the_wait(self, rig):
+        rig.runner.TEARDOWN_DELAY = 30
+        channel = rig.lobby_channel(101, "home")
+        rig.category.voice_channels = [channel]
+
+        with patch("rsc.lobbies.runner.asyncio.sleep", AsyncMock()) as sleep:
+            await rig.runner.teardown(rig.guild, lobby_id=101, delay=False)
+
+        sleep.assert_not_called()
+        channel.delete.assert_awaited_once()
+
+
+class TestOpenLobbies:
+    async def test_saved_cards_and_channels_across_overflow(self, rig):
+        # A lobby can have a live card but no channels, or channels but no card
+        rig.cog.config.custom.return_value.LobbyMessages = AsyncMock(return_value={"101": {}, "102": {}})
+        overflow = rig.make_category(f"{rig.category.name}-2")
+        rig.guild.categories = [rig.category, overflow]
+        rig.category.voice_channels = [
+            rig.lobby_channel(102, "home"),
+            _channel(discord.VoiceChannel, "waiting-room"),
+        ]
+        overflow.voice_channels = [rig.lobby_channel(103, "away", overflow)]
+
+        assert await rig.runner.open_lobbies(rig.guild) == {101, 102, 103}
+
+    async def test_no_category_uses_saved_cards_only(self, rig):
+        rig.cog.config.custom.return_value.LobbyMessages = AsyncMock(return_value={"101": {}})
+        rig.category_getter.return_value = None
+
+        assert await rig.runner.open_lobbies(rig.guild) == {101}

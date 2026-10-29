@@ -22,7 +22,7 @@ from redbot.core.config import Group
 from rsc.combines.lobby import LobbyMessages, finish_lobby, lobby_card, lobby_messages, post_lobby
 from rsc.combines.models import CombineEvent, CombineEventType, CombinesLobby
 from rsc.combines.views import LobbyKind, LobbyScore
-from rsc.lobbies.channels import Side, is_lobby_channel
+from rsc.lobbies.channels import Side, is_lobby_channel, parse_lobby_channel
 from rsc.utils import utils
 
 if TYPE_CHECKING:
@@ -339,18 +339,20 @@ class LobbyRunner:
 
     # Teardown
 
-    async def teardown(self, guild: discord.Guild, lobby_id: int) -> None:
-        """Turn the lobby's card Final and delete its voice channels."""
-        await asyncio.sleep(self.TEARDOWN_DELAY)
-
+    async def teardown(self, guild: discord.Guild, lobby_id: int, *, delay: bool = True) -> None:
+        """Turn the lobby's card Final at once, then delete its voice channels after the grace period."""
         log.debug(f"Tearing down {self.league.label} {lobby_id}")
+        # Lobby DMs still queued would only show stale details, so they're dropped from here on
         self.active_lobbies.discard((guild.id, lobby_id))
 
-        # The voice channels and lobby details are done with, so the card turns Final
+        # The lobby details are done with, so the card turns Final with the score right away
         store = self.league.store(guild)
         entry = await lobby_messages(store, lobby_id)
         if entry:
             await finish_lobby(self.cog, entry, store, await self.league.final_score(guild, entry))
+
+        if delay:
+            await asyncio.sleep(self.TEARDOWN_DELAY)
 
         category = await self.league.category(guild)
         if not category:
@@ -362,3 +364,14 @@ class LobbyRunner:
                 if is_lobby_channel(channel.name, lobby_id):
                     log.debug(f"Deleting {channel.name}")
                     await channel.delete(reason=f"{_sentence(self.league.label)} {lobby_id} has finished.")
+
+    async def open_lobbies(self, guild: discord.Guild) -> set[int]:
+        """IDs of every lobby with a card still live or a voice channel still up."""
+        lobby_ids = {int(k) for k in await self.league.store(guild).LobbyMessages() if k.isdigit()}
+        category = await self.league.category(guild)
+        if category:
+            for cat in self.categories(guild, category):
+                for channel in cat.voice_channels:
+                    if parsed := parse_lobby_channel(channel.name):
+                        lobby_ids.add(parsed[1])
+        return lobby_ids
