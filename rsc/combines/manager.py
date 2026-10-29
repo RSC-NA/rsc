@@ -64,11 +64,13 @@ class CombineManagerMixIn(RSCMixIn):
         )
         embed.add_field(name="Combines Active", value=active, inline=False)
         embed.add_field(name="Combines API", value=api_url, inline=False)
-        embed.add_field(
-            name="Combines Category",
-            value=category.mention if category else "None",
-            inline=False,
-        )
+        if category:
+            category_value = category.mention
+        elif await self._combines_category_deleted(guild):
+            category_value = "Deleted. Set a new one with `/combinemanager category`."
+        else:
+            category_value = "None"
+        embed.add_field(name="Combines Category", value=category_value, inline=False)
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
     @_combine_manager.command(name="category", description="Configure the combines category channel")
@@ -121,9 +123,7 @@ class CombineManagerMixIn(RSCMixIn):
                 embed=ErrorEmbed(description="Combines API has not been configured!"), ephemeral=True
             )
         if not category:
-            return await interaction.response.send_message(
-                embed=ErrorEmbed(description="Combines category channel has not been configured!"), ephemeral=True
-            )
+            return await interaction.response.send_message(embed=ErrorEmbed(description=await self._no_category_msg(guild)), ephemeral=True)
 
         await interaction.response.defer(ephemeral=True)
 
@@ -269,30 +269,28 @@ class CombineManagerMixIn(RSCMixIn):
                 embed=ErrorEmbed(description="Combines are not currently active."), ephemeral=True
             )
 
-        category = await self._get_combines_category(guild)
-
-        if not category:
-            return await interaction.response.send_message(
-                embed=ErrorEmbed(description="Combines category channel has not been configured!"), ephemeral=True
-            )
-
         await interaction.response.defer(ephemeral=True)
         # Off first, so no new lobby starts while the open ones are torn down
         await self._set_combines_active(guild, active=False)
 
-        # Cards and DMs turn Final before the channels go with their categories
+        # Ending a lobby turns its card and DMs Final and deletes its channels
         runner = self._combines_runner
         lobby_ids = sorted(await runner.open_lobbies(guild))
         failed = await runner.end_now(guild, lobby_ids)
 
-        # tear down combine category
-        await self.delete_combine_category(category)
-        for i in range(2, 5):
-            extra_cat = discord.utils.get(guild.categories, name=f"{category.name}-{i}")
-            if extra_cat:
-                await self.delete_combine_category(extra_cat)
+        # The combines category and its standing channels stay for the next start.
+        # Overflow categories only ever hold lobby channels, so they go.
+        category = await self._get_combines_category(guild)
+        if category:
+            for i in range(2, 5):
+                overflow = discord.utils.get(guild.categories, name=f"{category.name}-{i}")
+                if overflow:
+                    await self.delete_overflow_category(overflow)
 
-        lines = ["Combines have been ended and channels deleted.", *ended_lines(runner.league, lobby_ids, failed)]
+        lines = [
+            "Combines have been stopped. The combines category and its channels are kept.",
+            *ended_lines(runner.league, lobby_ids, failed),
+        ]
         await interaction.followup.send(
             embed=(OrangeEmbed if failed else GreenEmbed)(title="Combines Stopped", description="\n".join(lines)),
             ephemeral=True,
@@ -318,9 +316,8 @@ class CombineManagerMixIn(RSCMixIn):
         category = await self._get_combines_category(guild)
         if not channel:
             if not category:
-                return await interaction.response.send_message(
-                    embed=ErrorEmbed(description="Combines category channel has not been configured!"), ephemeral=True
-                )
+                msg = await self._no_category_msg(guild)
+                return await interaction.response.send_message(embed=ErrorEmbed(description=msg), ephemeral=True)
             channel = discord.utils.get(category.text_channels, name="how-to-play")
             if not channel:
                 return await interaction.response.send_message(
@@ -360,9 +357,9 @@ class CombineManagerMixIn(RSCMixIn):
 
     # Helper Functions
 
-    async def delete_combine_category(self, category: discord.CategoryChannel):
-        """Delete a combine category and it's associated channels"""
-        log.debug(f"[{category.guild}] Deleting combine category: {category.name}")
+    async def delete_overflow_category(self, category: discord.CategoryChannel):
+        """Delete a combines overflow category and any lobby channels left in it"""
+        log.debug(f"[{category.guild}] Deleting combines overflow category: {category.name}")
         channels = category.channels
         for c in channels:
             try:
@@ -407,6 +404,16 @@ class CombineManagerMixIn(RSCMixIn):
         if not isinstance(category, discord.CategoryChannel):
             return None
         return category
+
+    async def _combines_category_deleted(self, guild: discord.Guild) -> bool:
+        """A category was set, but it no longer exists in the guild."""
+        return bool(await self.config.custom("Combines", str(guild.id)).CombinesCategory()) and not await self._get_combines_category(guild)
+
+    async def _no_category_msg(self, guild: discord.Guild) -> str:
+        """Why there is no combines category to use."""
+        if await self._combines_category_deleted(guild):
+            return "The combines category no longer exists. Set a new one with `/combinemanager category`."
+        return "Combines category channel has not been configured!"
 
     async def _get_combines_api(self, guild: discord.Guild) -> str | None:
         return await self.config.custom("Combines", str(guild.id)).CombinesApi()

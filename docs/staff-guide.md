@@ -95,7 +95,7 @@ Both run lobbies that the Dev League website starts. When it does, the bot creat
 | Set up | Create a category, then `/combinemanager category` and `/combinemanager api <url>` | `/devleaguemanager category`, then `announcements` (without it there are no cards or DMs) |
 | Turn on | `/combinemanager start` creates the combines channels and posts the guide. Needs roles named `League` and `Admin` | `/devleaguemanager enable` |
 | Clear a stuck lobby | `/combinemanager teardown [lobby_id]` | `/devleaguemanager teardown [match_id]` |
-| Turn off | `/combinemanager stop` ends every lobby and **deletes the whole combines category**; set the category again before the next `start` | `/devleaguemanager disable` ends open matches, keeps the category |
+| Turn off | `/combinemanager stop` ends every lobby and keeps the category and its channels for next time | `/devleaguemanager disable` ends open matches, keeps the category |
 
 See [combines](modules/combines.md) and [devleague](modules/devleague.md).
 

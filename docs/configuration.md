@@ -116,7 +116,7 @@ Models and token limits are code constants in [rsc/llm/config.py](../rsc/llm/con
 
 | Key | Default | Command |
 |---|---|---|
-| `CombinesCategory` | none | `/combinemanager category`. `stop` deletes the category, so set it again before the next `start` |
+| `CombinesCategory` | none | `/combinemanager category`. `stop` keeps it. If the category is deleted, `start` and `settings` say so |
 | `CombinesApi` | none | `/combinemanager api`, e.g. `https://devleague.rscna.com/c-api/` |
 | `Active` | `False` | `/combinemanager start`, `stop` |
 

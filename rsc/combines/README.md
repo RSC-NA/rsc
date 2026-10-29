@@ -25,7 +25,7 @@ Combines are **stopped by default**.
 - `category <category>` - Category that combines channels are created in
 - `api <url>` - Combines API location, for example `https://devleague.rscna.com/c-api/`
 - `start` - Start combines and create the combines channels (requires the API and category)
-- `stop` - Stop combines, end every open lobby as `teardown` does, then delete the combines category and its overflow categories
+- `stop` - Stop combines and end every open lobby as `teardown` does. The combines category and its channels are kept; overflow categories are deleted
 - `teardown [lobby_id]` - End a lobby that is finished on the website but still up in Discord: mark its card Final and delete its channels now. With no lobby ID, ends every lobby
 - `guide [channel] [overwrite]` - Post the how-to-play guide, in #how-to-play by default. If one is already posted there, links it instead. `overwrite` updates it in place
 

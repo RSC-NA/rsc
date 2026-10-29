@@ -27,7 +27,7 @@ If the website is down or slow, the `/combines` commands wait up to 10 seconds a
 
 **Admins, after the night**
 
-- Run `/combinemanager stop`. It turns combines off, ends every open lobby (cards go Final, channels deleted), then deletes the combines category, every channel in it, and the overflow categories `<category>-2` to `<category>-4`.
+- Run `/combinemanager stop`. It turns combines off and ends every open lobby (cards go Final, lobby channels deleted). The combines category and its standing channels stay for the next `start`; only the overflow categories `<category>-2` to `<category>-4` are deleted.
 - If a lobby finished on the website but its card or channels are still up in Discord (for example the bot restarted during the 30 second grace period), run `/combinemanager teardown <lobby_id>`, or with no ID to end every open lobby.
 
 ## Commands
@@ -51,7 +51,7 @@ Every `/combines` reply is private. Each command defers before it calls the comb
 | `/combinemanager category <category>` | Manage Server | Sets the category combines channels are created in. |
 | `/combinemanager api <url>` | Manage Server | Sets the combines API base URL. |
 | `/combinemanager start` | Manage Server | Creates the combines channels, posts the guide and help messages, and marks combines active. Needs the API URL, the category, and roles named `League` and `Admin`. Refuses if already active. |
-| `/combinemanager stop` | Manage Server | Marks combines inactive, ends every open lobby without the grace period, then deletes the combines category and its overflow categories with all their channels. |
+| `/combinemanager stop` | Manage Server | Marks combines inactive and ends every open lobby without the grace period. Keeps the combines category and its channels, and deletes the overflow categories. Works even if the category has been deleted. |
 | `/combinemanager teardown [lobby_id]` | Manage Server | Ends one lobby (or every open lobby) now: card and DMs go Final, voice channels deleted. Errors if the lobby has no live card or channels. |
 | `/combinemanager guide [channel] [overwrite]` | Manage Server | Posts the how-to-play guide card in `channel`, or in `#how-to-play` in the combines category. If the bot's guide is already in the last 100 messages there, links it instead; with `overwrite`, edits it in place. |
 
@@ -91,7 +91,7 @@ The module also relies on roles found by name: `League` (players who may join lo
 ## How it works
 
 - [combines.py](../../rsc/combines/combines.py): `CombineMixIn` and the `/combines` player commands. The `active_combines` decorator blocks `checkin`, `checkout` and `lobbyinfo` unless combines are active and the API URL is set. `combine_players_from_lobby` resolves a lobby's players to guild members and is also used by the shared runner.
-- [manager.py](../../rsc/combines/manager.py): `CombineManagerMixIn`, the `/combinemanager` commands, Config registration and getters/setters, channel creation for `start`, and category deletion for `stop`. `stop` ends open lobbies with the shared runner's `end_now`; `teardown`'s body and the "Ended ..." reply lines come from [rsc/lobbies/commands.py](../../rsc/lobbies/commands.py). `guide` finds an already posted guide with `is_combines_guide`.
+- [manager.py](../../rsc/combines/manager.py): `CombineManagerMixIn`, the `/combinemanager` commands, Config registration and getters/setters, channel creation for `start`, and overflow category cleanup for `stop`. `_no_category_msg` tells a category that was never set apart from one that was deleted, for `start`, `guide` and `settings`. `stop` ends open lobbies with the shared runner's `end_now`; `teardown`'s body and the "Ended ..." reply lines come from [rsc/lobbies/commands.py](../../rsc/lobbies/commands.py). `guide` finds an already posted guide with `is_combines_guide`.
 - [api.py](../../rsc/combines/api.py): calls to the combines API. Each sends `discord_id` and `guild_id` as query parameters to `<api>/check_in`, `<api>/check_out`, `<api>/active` and `<api>/lobby/[<id>]` through the shared request helper in [rsc/lobbies/api.py](../../rsc/lobbies/api.py), which has a 10 second timeout and turns every failure into `SiteUnavailable`. A reply with `status` and `message` is treated as a status message; anything else is parsed as lobbies.
 - [models.py](../../rsc/combines/models.py): pydantic models for the webhook and API payloads (`CombinesLobby`, `CombinesPlayer`, `CombineEvent`, `CombineEventType`, `CombinesStatus`). Player `discord_id` and `name` may be null because the API fills them from a LEFT JOIN.
 - [runner.py](../../rsc/combines/runner.py): `CombinesLeague`, the combines settings for the shared [`LobbyRunner`](./lobbies.md). It supplies the Config group, the `combines-announcements` channel, channel names, the match link (`https://devleague.rscna.com/combine/<id>`), the Muted overwrite, and `final_score`, which reads the series score from `<api>/lobby/<id>` as one of the lobby's players. If the site can't answer, the card goes Final without a score.
@@ -104,7 +104,6 @@ External services: the combines API at the configured URL (part of the Dev Leagu
 
 ## Gotchas
 
-- `/combinemanager stop` deletes the configured category itself. The saved category ID then points at nothing, so the next `start` fails with "category channel has not been configured" until you create a new category and run `/combinemanager category` again.
 - The webhook server only binds to `localhost:8008` and the routes have no authentication. The website (or a proxy) must reach the bot on the same host. If the port is taken the bot logs an error and the webhooks are dead until the next reload.
 - `/combines_match` answers 200 before any channel exists. Channel creation failures only show up in the bot log.
 - If the bot restarts during the 30 second grace period, the voice channels are never deleted. Use `/combinemanager teardown`.
