@@ -38,6 +38,11 @@ OVERFLOW_CATEGORIES = range(2, 5)
 Overwrites = dict[discord.Role | discord.Member | discord.Object, discord.PermissionOverwrite]
 
 
+def _sentence(text: str) -> str:
+    """Capitalise the first letter only. str.capitalize() would turn "Dev League" into "Dev league"."""
+    return text[:1].upper() + text[1:]
+
+
 class LobbyLeague(ABC):
     """What one system does differently. `LobbyRunner` does everything else."""
 
@@ -184,7 +189,7 @@ class LobbyRunner:
         for lobby in lobbies:
             key = (lobby.guild_id, lobby.id)
             if key in self.active_lobbies:
-                log.warning(f"{self.league.label.capitalize()} {lobby.id} is already active. Skipping duplicate.")
+                log.warning(f"{_sentence(self.league.label)} {lobby.id} is already active. Skipping duplicate.")
                 continue
 
             self.active_lobbies.add(key)
@@ -222,12 +227,12 @@ class LobbyRunner:
         for name in (home_name, away_name):
             exists = discord.utils.get(guild.channels, name=name)
             if exists:
-                log.error(f"{label.capitalize()} already exists: {exists.name}")
+                log.error(f"{_sentence(label)} already exists: {exists.name}")
                 return []
 
         players = await self.cog.combine_players_from_lobby(guild, lobby)
         if not players:
-            log.error(f"{label.capitalize()} has no players in the guild")
+            log.error(f"{_sentence(label)} has no players in the guild")
             return []
 
         try:
@@ -271,7 +276,7 @@ class LobbyRunner:
         if announce_channel:
             await self.announce(guild, lobby, [home, away], announce_channel)
         else:
-            log.warning(f"{self.league.name} announcement channel not found. {label.capitalize()} has no card.")
+            log.warning(f"{self.league.name} announcement channel not found. {_sentence(label)} has no card.")
 
         return [home, away]
 
@@ -356,4 +361,4 @@ class LobbyRunner:
             for channel in cat.voice_channels:
                 if is_lobby_channel(channel.name, lobby_id):
                     log.debug(f"Deleting {channel.name}")
-                    await channel.delete(reason=f"{self.league.label.capitalize()} {lobby_id} has finished.")
+                    await channel.delete(reason=f"{_sentence(self.league.label)} {lobby_id} has finished.")

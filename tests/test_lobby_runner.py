@@ -412,8 +412,10 @@ class TestTeardown:
 
         await rig.runner.teardown(rig.guild, lobby_id=1)
 
+        # The audit log reason keeps the system's own capitals: "Dev League", not "Dev league"
+        reason = {"combines": "Combine lobby 1 has finished.", "devleague": "Dev League match 1 has finished."}[rig.system]
         for channel in targets:
-            channel.delete.assert_awaited_once()
+            channel.delete.assert_awaited_once_with(reason=reason)
         for channel in keep:
             channel.delete.assert_not_called()
 

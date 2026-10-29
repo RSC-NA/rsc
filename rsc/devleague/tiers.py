@@ -4,8 +4,7 @@ Dev League tiers are letter grades: `S+`, `S`, `A`, `B`, ... `F`. `+` is not
 channel-safe, so channel names use a lowercase slug (`S+` -> `splus`).
 """
 
-from rsc.lobbies.channels import Side as Side
-from rsc.lobbies.channels import parse_lobby_channel as parse_lobby_channel
+from rsc.lobbies.channels import Side, parse_lobby_channel
 
 # Rank for tiers that don't fit the letter scheme, so they sort after F.
 UNKNOWN_TIER_RANK = 100
