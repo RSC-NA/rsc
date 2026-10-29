@@ -89,3 +89,23 @@ async def test_devleague_endpoint(monkeypatch, mock_member, endpoint, path, payl
         },
     ]
     assert sessions[0].kwargs == session_kwargs
+
+
+def test_status_for_unknown_player():
+    # The server's whole reply when the Discord ID has no contract
+    status = DevLeagueStatus.model_validate({"error": "Player not found", "discord_id": "1"})
+
+    assert status.error == "Player not found"
+    assert (status.player, status.rsc_id, status.tier, status.checked_in) == (None, None, None, False)
+
+
+def test_status_without_error_key():
+    status = DevLeagueStatus(player="Player", rsc_id="RSC-1", tier="Major", checked_in=False)
+
+    assert status.error is None
+
+
+def test_check_in_out_without_optional_keys():
+    result = DevLeagueCheckInOut(success="checked in")
+
+    assert result.error is None

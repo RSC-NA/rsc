@@ -36,8 +36,8 @@ class CombinesPlayerLobbyInfo(BaseModel):
     lobby_pass: str
     home_wins: int
     away_wins: int
-    reported_rsc_id: str | None
-    confirmed_rsc_id: str | None
+    reported_rsc_id: str | None = None
+    confirmed_rsc_id: str | None = None
     completed: bool
     cancelled: bool
     rsc_id: str
@@ -45,11 +45,17 @@ class CombinesPlayerLobbyInfo(BaseModel):
 
 
 class CombinesPlayer(BaseModel):
-    discord_id: int
-    rsc_id: str
+    # Names and Discord IDs come from a LEFT JOIN, so the API sends null when it can't find them
+    discord_id: int | None = None
+    rsc_id: str | None = None
     match_id: int
     team: str
-    name: str
+    name: str | None = None
+
+    @property
+    def label(self) -> str:
+        """The player's name, or the best stand-in when the API has none."""
+        return self.name or self.rsc_id or "Unknown player"
 
 
 class CombinesLobby(BaseModel):
@@ -58,8 +64,8 @@ class CombinesLobby(BaseModel):
     lobby_pass: str
     home_wins: int
     away_wins: int
-    reported_rsc_id: str | None
-    confirmed_rsc_id: str | None
+    reported_rsc_id: str | None = None
+    confirmed_rsc_id: str | None = None
     completed: bool
     cancelled: bool
     tier: str
@@ -73,5 +79,5 @@ class CombineEvent(BaseModel):
     status: str
     message_type: CombineEventType
     message: str
-    match_id: int | None
+    match_id: int | None = None
     guild_id: int = Field(strict=False)

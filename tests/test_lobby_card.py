@@ -262,6 +262,28 @@ class TestLobbyCardBuilder:
         assert card.lobby_maker == "Nova"
         assert (card.home_vc_url, card.away_vc_url) == ("https://discord.com/channels/1/10", "https://discord.com/channels/1/11")
 
+    def test_players_the_api_could_not_name(self):
+        # The API LEFT JOINs player names and Discord IDs, so both can come back null
+        lobby_data = _lobby()
+        lobby_data.home = [
+            CombinesPlayer(discord_id=None, rsc_id="RSC9", match_id=4812, team="home", name=None),
+            _player(2, "Sable", "home"),
+        ]
+        lobby_data.away = [CombinesPlayer(discord_id=None, rsc_id=None, match_id=4812, team="away", name=None)]
+
+        card = lobby_card(
+            _guild({2}),
+            lobby_data,
+            kind=LobbyKind.COMBINE,
+            channels=[_channel(10), _channel(11)],
+            match_url="https://devleague.rscna.com/combine/4812",
+            started_at=STARTED,
+        )
+
+        assert card.home == ("RSC9", "<@2>")
+        assert card.away == ("Unknown player",)
+        assert card.lobby_maker == "RSC9"
+
 
 class TestPostLobby:
     async def test_posts_stores_and_dms_each_player(self):
@@ -301,6 +323,26 @@ class TestPostLobby:
         assert await precheck() is True
         active.clear()
         assert await precheck() is False
+
+    async def test_skips_players_without_a_discord_id(self):
+        guild = _guild({2, 4})
+        channel = MagicMock(spec=discord.TextChannel)
+        channel.id = 77
+        channel.send = AsyncMock(return_value=MagicMock(id=88))
+        cog = MagicMock()
+        cog.live_emoji.return_value = LIVE
+        cog._dm_helper.enqueue = AsyncMock()
+        store = _store()
+        lobby_data = _lobby()
+        lobby_data.home[0] = CombinesPlayer(discord_id=None, rsc_id="RSC9", match_id=4812, team="home", name=None)
+
+        await post_lobby(cog, guild, lobby_data, _card(), channel, store, set())
+
+        # The executor is the first player with a Discord ID, and only they get DMs
+        saved = LobbyMessages.model_validate(store.LobbyMessages.data["4812"])
+        assert saved.executor_id == 2
+        assert [c.args[0].id for c in cog._dm_helper.enqueue.await_args_list] == [2, 4]
+        assert all(c.args != (None,) for c in guild.get_member.call_args_list)
 
     async def test_posts_one_lobby_after_another(self):
         # Each post must release the store's lock, or every lobby after the first hangs

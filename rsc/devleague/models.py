@@ -3,16 +3,17 @@ from rsc.combines.models import CombineEvent, CombineEventType, CombinesLobby
 
 
 class DevLeagueStatus(BaseModel):
-    checked_in: bool
-    error: str | None
-    player: str
-    rsc_id: str
-    tier: str
+    # An unknown player gets back only `error`, so every other field may be missing
+    checked_in: bool = False
+    error: str | None = None
+    player: str | None = None
+    rsc_id: str | None = None
+    tier: str | None = None
 
 
 class DevLeagueCheckInOut(BaseModel):
-    error: str | None
-    success: str | None
+    error: str | None = None
+    success: str | None = None
 
 
 # Game lobby webhooks share the combines payload shape.

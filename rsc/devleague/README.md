@@ -47,4 +47,4 @@ Responses:
 - `503`: the bot is not in the guild, or Dev League is disabled
 - `501`: the event type is not handled
 
-Sample payloads are in `data/devleague/`. To send them, use `scripts/send_devleague_lobby.py` and `scripts/send_devleague_end.py <match_id>`.
+Sample payloads are in `data/devleague/`. To send them, use `scripts/devleague_lobby.py start <guild_id>` and `scripts/devleague_lobby.py teardown <guild_id> <match_id>`.

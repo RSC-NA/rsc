@@ -48,7 +48,9 @@ def lobby_card(
     started_at: datetime,
 ) -> LobbyCard:
     def players(team: list) -> tuple[str, ...]:
-        return tuple(m.mention if (m := guild.get_member(p.discord_id)) else discord.utils.escape_markdown(p.name) for p in team)
+        return tuple(
+            m.mention if p.discord_id and (m := guild.get_member(p.discord_id)) else discord.utils.escape_markdown(p.label) for p in team
+        )
 
     home_vc, away_vc = channels
     return LobbyCard(
@@ -59,7 +61,7 @@ def lobby_card(
         lobby_pass=lobby.lobby_pass,
         home=players(lobby.home),
         away=players(lobby.away),
-        lobby_maker=discord.utils.escape_markdown(lobby.home[0].name) if lobby.home else None,
+        lobby_maker=discord.utils.escape_markdown(lobby.home[0].label) if lobby.home else None,
         home_vc_url=home_vc.jump_url,
         away_vc_url=away_vc.jump_url,
         match_url=match_url,
@@ -83,7 +85,7 @@ async def post_lobby(
         card=card,
         channel_id=channel.id,
         message_id=msg.id,
-        executor_id=next((p.discord_id for p in [*lobby.home, *lobby.away]), None),
+        executor_id=next((p.discord_id for p in [*lobby.home, *lobby.away] if p.discord_id), None),
     )
     async with store.LobbyMessages() as saved:
         saved[str(card.lobby_id)] = entry.model_dump(mode="json")
@@ -91,7 +93,7 @@ async def post_lobby(
     key = (guild.id, card.lobby_id)
     for team, roster in ((LobbyTeam.HOME, lobby.home), (LobbyTeam.AWAY, lobby.away)):
         for index, player in enumerate(roster):
-            member = guild.get_member(player.discord_id)
+            member = guild.get_member(player.discord_id) if player.discord_id else None
             if not member:
                 continue
             makes_lobby = team is LobbyTeam.HOME and index == 0
