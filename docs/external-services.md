@@ -8,6 +8,7 @@ Everything the bot talks to besides Discord, what it uses each one for, and wher
 | Dev League / Combines website | Combines check-in and lobby lookups; Dev League check-in and status; lobby webhooks into the bot | `/combinemanager api` per guild; Dev League URL hard-coded | [combines](modules/combines.md), [devleague](modules/devleague.md), [lobbies](modules/lobbies.md) |
 | ballchasing.com | Uploading match replays into groups, deduplicating them, linking results | `/ballchasing key`, `/ballchasing toplevelgroup` per guild | [ballchasing](modules/ballchasing.md) |
 | OpenAI | The rules assistant (`/ask`, mentions) and ticket summaries | `/llm apikey`, `/llm organization` per guild | [llm](modules/llm.md) |
+| Sentry | Error reporting from the production bot | `SENTRY_DSN` environment variable on the host | [rsc/\_\_init\_\_.py](../rsc/__init__.py) |
 
 ## RSC website API
 
@@ -41,6 +42,14 @@ Combines and Dev League run on `devleague.rscna.com`, a separate site from the m
 - **Calls:** the Responses API for the rules assistant and its rules sub-agent (`store=False`), Chat Completions for `/llm summarize`. Models are set in [rsc/llm/config.py](../rsc/llm/config.py).
 - **Data:** questions and the rule text and league data the assistant looks up are sent to OpenAI. This is stated in the cog's end-user data statement in [rsc/info.json](../rsc/info.json).
 - **Cost control:** per-user cooldown and daily caps, a per-guild daily cap, and token ceilings per question. See [llm](modules/llm.md).
+
+## Sentry
+
+- **Client:** the `sentry-sdk` Python package, started in `init_sentry()` in [rsc/\_\_init\_\_.py](../rsc/__init__.py) when the cog loads.
+- **Project:** `rsc-discord-bot` in the `individual-s2` Sentry organization.
+- **Enabled by:** the `SENTRY_DSN` environment variable. Only the production host sets it, so dev instances report nothing. `SENTRY_ENVIRONMENT` overrides the environment tag (default `production`).
+- **What it reports:** errors only, no tracing. Every error-level log record becomes an event, which covers command and slash command errors (Red logs them with `log.exception`) and failures the cog logs itself. Lower-level log lines go along as breadcrumbs.
+- **Data:** `send_default_pii` is off, so Sentry doesn't attach user IPs or request bodies. Exception messages and log lines are sent as written.
 
 ## Google Cloud Storage
 

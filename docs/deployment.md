@@ -38,7 +38,9 @@ How the production bot is installed and updated. Today it runs on a VPS from a P
 
    Run this from a checkout of the repo at the commit you're deploying. Repeat it whenever `requirements.txt` changes.
 
-4. **Start Red** (`~/redenv/bin/redbot <instance>`), then install and load the cog from Discord:
+4. **Set the Sentry DSN** in the environment Red starts from, so errors go to the `rsc-discord-bot` Sentry project (see [External services](external-services.md#sentry)). For a systemd unit, add `Environment=SENTRY_DSN=<dsn>` to `[Service]`. Without it the bot runs normally and reports nothing.
+
+5. **Start Red** (`~/redenv/bin/redbot <instance>`), then install and load the cog from Discord:
 
    ```
    [p]load downloader
@@ -49,7 +51,7 @@ How the production bot is installed and updated. Today it runs on a VPS from a P
    [p]slash sync
    ```
 
-5. **Configure each server.** See [Configuration](configuration.md). At minimum, in every guild: `/rsc url`, `/rsc key`, `/rsc league`. Then work through the feature settings that guild uses.
+6. **Configure each server.** See [Configuration](configuration.md). At minimum, in every guild: `/rsc url`, `/rsc key`, `/rsc league`. Then work through the feature settings that guild uses.
 
 ### Keeping Red running
 
@@ -95,6 +97,7 @@ The production bot keeps no secrets in files of its own. They live in Red's data
 | ballchasing.com API key | `/ballchasing key`, per guild |
 | OpenAI key and organization | `/llm apikey`, `/llm organization`, per guild |
 | Combines lobby API URL | `/combinemanager api`, per guild. The Dev League API URL is hard-coded |
+| Sentry DSN | `SENTRY_DSN` environment variable on the host. It only allows sending events, but keep it out of the repo |
 
 This makes the Red data directory sensitive: protect it and its backups accordingly.
 
