@@ -8,6 +8,7 @@ from aiohttp import web
 import discord
 import pydantic
 
+from rsc import const
 from rsc.abc import RSCMixIn
 from rsc.combines import api, models
 from rsc.combines.lobby import LobbyMessages, finish_lobby, lobby_card, lobby_messages, post_lobby
@@ -210,10 +211,12 @@ class CombineRunnerMixIn(RSCMixIn):
         log.debug(f"Combine Category: {combine_category.name}")
 
         # Set up channel permissions
-        muted_role = await utils.get_muted_role(guild)
-        league_role = await utils.get_league_role(guild)
-        if not league_role:
-            log.error("League role does not exist in guild.")
+        # The Muted role is optional. Without it the lobby just has no muted overwrite.
+        muted_role = discord.utils.get(guild.roles, name=const.MUTED_ROLE)
+        try:
+            league_role = await utils.get_league_role(guild)
+        except ValueError:
+            log.error(f"League role does not exist. Can't create combine lobby {lobby.id}.")
             return []
 
         player_overwrites: dict[discord.Role | discord.Member | discord.Object, discord.PermissionOverwrite] = {
@@ -306,12 +309,13 @@ class CombineRunnerMixIn(RSCMixIn):
             if not channel.category.name.lower().startswith("combines"):
                 continue
 
-            if channel.name.endswith(f"{lobby_id}-home"):
+            # Names are "<tier>-<id>-home". The leading dash keeps lobby 1 from matching lobby 101.
+            if channel.name.endswith(f"-{lobby_id}-home"):
                 log.debug(f"Deleting {channel.name}")
                 await channel.delete(reason="Combine lobby has finished.")
                 continue
 
-            if channel.name.endswith(f"{lobby_id}-away"):
+            if channel.name.endswith(f"-{lobby_id}-away"):
                 log.debug(f"Deleting {channel.name}")
                 await channel.delete(reason="Combine lobby has finished.")
 
