@@ -144,6 +144,10 @@ class CombinesError(RscException):
     """Combines returned error status message"""
 
 
+class SiteUnavailable(RscException):
+    """The combines or Dev League site couldn't be reached, or sent back something unusable"""
+
+
 # Discord
 
 

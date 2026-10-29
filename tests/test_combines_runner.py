@@ -10,7 +10,7 @@ from rsc.combines import models
 from rsc.combines.lobby import LobbyMessages
 from rsc.combines.runner import ANNOUNCE_CHANNEL, CombinesLeague
 from rsc.combines.views import LobbyCard, LobbyKind, LobbyScore
-from rsc.exceptions import BadGateway
+from rsc.exceptions import SiteUnavailable
 
 GUILD_ID = 395806681994493964
 
@@ -140,7 +140,7 @@ class TestCombineFinalScore:
         status = models.CombinesStatus(status="error", message="nope")
         with patch("rsc.combines.runner.api.combines_lobby", AsyncMock(return_value=status)):
             assert await self._league().final_score(self._guild(), _entry()) is None
-        with patch("rsc.combines.runner.api.combines_lobby", AsyncMock(side_effect=BadGateway("down"))):
+        with patch("rsc.combines.runner.api.combines_lobby", AsyncMock(side_effect=SiteUnavailable("down"))):
             assert await self._league().final_score(self._guild(), _entry()) is None
 
     async def test_no_executor_skips_the_lookup(self):

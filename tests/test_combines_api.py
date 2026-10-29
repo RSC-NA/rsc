@@ -2,7 +2,8 @@ import pytest
 
 from rsc.combines import api as combines_api
 from rsc.combines.models import CombinesLobby, CombinesStatus
-from rsc.exceptions import BadGateway
+from rsc.exceptions import SiteUnavailable
+from rsc.lobbies import api as lobbies_api
 
 
 class _FakeResponse:
@@ -48,7 +49,7 @@ def _patch_client_session(monkeypatch, payload, status: int = 200):
         sessions.append(session)
         return session
 
-    monkeypatch.setattr(combines_api.aiohttp, "ClientSession", factory)
+    monkeypatch.setattr(lobbies_api.aiohttp, "ClientSession", factory)
     return calls, sessions
 
 
@@ -94,7 +95,7 @@ async def test_combines_status_endpoints(monkeypatch, mock_member, endpoint, pat
             "params": {"discord_id": mock_member.id, "guild_id": mock_member.guild.id},
         },
     ]
-    assert sessions[0].kwargs == {"trust_env": True}
+    assert sessions[0].kwargs == {"trust_env": True, "timeout": lobbies_api.TIMEOUT}
 
 
 async def test_combines_active_returns_lobbies(monkeypatch, mock_member):
@@ -108,7 +109,7 @@ async def test_combines_active_returns_lobbies(monkeypatch, mock_member):
     assert result[0].id == 5
     assert calls[0]["url"] == "https://combines.example/api/active"
     assert calls[0]["params"] == {"discord_id": mock_member.id, "guild_id": mock_member.guild.id}
-    assert sessions[0].kwargs == {"trust_env": True}
+    assert sessions[0].kwargs == {"trust_env": True, "timeout": lobbies_api.TIMEOUT}
 
 
 async def test_combines_active_returns_status(monkeypatch, mock_member):
@@ -133,18 +134,18 @@ async def test_combines_lobby_returns_lobby(monkeypatch, mock_member):
             "params": {"discord_id": mock_member.id, "guild_id": mock_member.guild.id},
         },
     ]
-    assert sessions[0].kwargs == {"trust_env": True}
+    assert sessions[0].kwargs == {"trust_env": True, "timeout": lobbies_api.TIMEOUT}
 
 
 async def test_combines_lobby_rejects_empty_payload(monkeypatch, mock_member):
     _patch_client_session(monkeypatch, {})
 
-    with pytest.raises(ValueError, match="valid JSON object"):
+    with pytest.raises(SiteUnavailable, match="valid JSON object"):
         await combines_api.combines_lobby("https://combines.example/api/", executor=mock_member)
 
 
-async def test_combines_endpoint_raises_bad_gateway(monkeypatch, mock_member):
+async def test_combines_endpoint_raises_site_unavailable_on_bad_gateway(monkeypatch, mock_member):
     _patch_client_session(monkeypatch, {}, status=502)
 
-    with pytest.raises(BadGateway):
+    with pytest.raises(SiteUnavailable):
         await combines_api.combines_check_in("https://combines.example/api/", mock_member)

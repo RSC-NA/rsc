@@ -20,6 +20,8 @@ class DevLeague(LobbyLeague):
     kind = LobbyKind.DEV_LEAGUE
     name = "Dev League"
     label = "Dev League match"
+    noun = "match"
+    nouns = "matches"
 
     def store(self, guild: discord.Guild) -> Group:
         return self.cog.config.custom("DevLeague", str(guild.id))

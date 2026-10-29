@@ -11,9 +11,9 @@ from rsc.const import (
     COMBINES_HELP_3,
     MUTED_ROLE,
 )
-from rsc.combines.guide import combines_command_mentions, combines_guide
-from rsc.embeds import BlueEmbed, ErrorEmbed, GreenEmbed
-from rsc.lobbies.channels import parse_lobby_channel
+from rsc.combines.guide import combines_command_mentions, combines_guide, is_combines_guide
+from rsc.embeds import BlueEmbed, ErrorEmbed, GreenEmbed, OrangeEmbed
+from rsc.lobbies.commands import ended_lines, teardown_command
 from rsc.types import CombineSettings
 from rsc.utils import utils
 
@@ -111,16 +111,18 @@ class CombineManagerMixIn(RSCMixIn):
 
         status = await self._get_combines_active(guild)
         if status:
-            return await interaction.response.send_message(embed=ErrorEmbed(description="Combines are already active!"))
+            return await interaction.response.send_message(embed=ErrorEmbed(description="Combines are already active!"), ephemeral=True)
 
         api = await self._get_combines_api(guild)
         category = await self._get_combines_category(guild)
 
         if not api:
-            return await interaction.response.send_message(embed=ErrorEmbed(description="Combines API has not been configured!"))
+            return await interaction.response.send_message(
+                embed=ErrorEmbed(description="Combines API has not been configured!"), ephemeral=True
+            )
         if not category:
             return await interaction.response.send_message(
-                embed=ErrorEmbed(description="Combines category channel has not been configured!")
+                embed=ErrorEmbed(description="Combines category channel has not been configured!"), ephemeral=True
             )
 
         await interaction.response.defer(ephemeral=True)
@@ -132,10 +134,10 @@ class CombineManagerMixIn(RSCMixIn):
         log.debug(f"[{guild}] Default Role: {guild.default_role}")
 
         if not league_role:
-            return await interaction.followup.send(embed=ErrorEmbed(description="League role does not exist."))
+            return await interaction.followup.send(embed=ErrorEmbed(description="League role does not exist."), ephemeral=True)
 
         if not admin_role:
-            return await interaction.followup.send(embed=ErrorEmbed(description="Admin role does not exist."))
+            return await interaction.followup.send(embed=ErrorEmbed(description="Admin role does not exist."), ephemeral=True)
 
         # Admin only overwrites
         admin_overwrites: MutableMapping[discord.Role | discord.Member | discord.Object, discord.PermissionOverwrite] = {
@@ -251,7 +253,8 @@ class CombineManagerMixIn(RSCMixIn):
             embed=GreenEmbed(
                 title="Combines Started",
                 description="Combines have been started and the required channels created.",
-            )
+            ),
+            ephemeral=True,
         )
 
     @_combine_manager.command(name="stop", description="End RSC combines and delete channels")
@@ -262,16 +265,25 @@ class CombineManagerMixIn(RSCMixIn):
 
         status = await self._get_combines_active(guild)
         if not status:
-            return await interaction.response.send_message(embed=ErrorEmbed(description="Combines are not currently active."))
+            return await interaction.response.send_message(
+                embed=ErrorEmbed(description="Combines are not currently active."), ephemeral=True
+            )
 
         category = await self._get_combines_category(guild)
 
         if not category:
             return await interaction.response.send_message(
-                embed=ErrorEmbed(description="Combines category channel has not been configured!")
+                embed=ErrorEmbed(description="Combines category channel has not been configured!"), ephemeral=True
             )
 
         await interaction.response.defer(ephemeral=True)
+        # Off first, so no new lobby starts while the open ones are torn down
+        await self._set_combines_active(guild, active=False)
+
+        # Cards and DMs turn Final before the channels go with their categories
+        runner = self._combines_runner
+        lobby_ids = sorted(await runner.open_lobbies(guild))
+        failed = await runner.end_now(guild, lobby_ids)
 
         # tear down combine category
         await self.delete_combine_category(category)
@@ -280,44 +292,70 @@ class CombineManagerMixIn(RSCMixIn):
             if extra_cat:
                 await self.delete_combine_category(extra_cat)
 
-        await self._set_combines_active(guild, active=False)
+        lines = ["Combines have been ended and channels deleted.", *ended_lines(runner.league, lobby_ids, failed)]
         await interaction.followup.send(
-            embed=GreenEmbed(
-                title="Combines Stopped",
-                description="Combines have been ended and channels deleted.",
-            )
+            embed=(OrangeEmbed if failed else GreenEmbed)(title="Combines Stopped", description="\n".join(lines)),
+            ephemeral=True,
         )
 
-    @_combine_manager.command(
-        name="delrooms",
-        description="Delete all combine lobby channels. (Preserves general channels)",
+    @_combine_manager.command(name="teardown", description="End combine lobbies that are still up in Discord")
+    @app_commands.describe(lobby_id="Lobby to end. Leave empty to end every lobby.")
+    async def _combines_teardown_cmd(self, interaction: discord.Interaction, lobby_id: int | None = None):
+        await teardown_command(interaction, self._combines_runner, lobby_id)
+
+    @_combine_manager.command(name="guide", description="Post the combines how-to-play guide")
+    @app_commands.describe(
+        channel="Where to post it. Defaults to #how-to-play in the combines category.",
+        overwrite="Update the guide that's already posted there with the current one",
     )
-    async def _combines_delrooms_cmd(self, interaction: discord.Interaction):
+    async def _combines_guide_cmd(
+        self, interaction: discord.Interaction, channel: discord.TextChannel | None = None, overwrite: bool = False
+    ):
         guild = interaction.guild
         if not guild:
             return
 
         category = await self._get_combines_category(guild)
-        if not category:
-            return await interaction.response.send_message(
-                embed=ErrorEmbed(description="Combines category channel has not been configured!")
-            )
+        if not channel:
+            if not category:
+                return await interaction.response.send_message(
+                    embed=ErrorEmbed(description="Combines category channel has not been configured!"), ephemeral=True
+                )
+            channel = discord.utils.get(category.text_channels, name="how-to-play")
+            if not channel:
+                return await interaction.response.send_message(
+                    embed=ErrorEmbed(description=f"There's no #how-to-play channel in {category.mention}. Pick a channel to post in."),
+                    ephemeral=True,
+                )
 
         await interaction.response.defer(ephemeral=True)
+        existing = await anext((m async for m in channel.history(limit=100) if m.author == guild.me and is_combines_guide(m)), None)
+        if existing and not overwrite:
+            return await interaction.followup.send(
+                embed=OrangeEmbed(
+                    title="Combines Guide",
+                    description=f"A guide is already posted: {existing.jump_url}\nRun this again with `overwrite` to update it.",
+                ),
+                ephemeral=True,
+            )
 
-        # tear down combine category
-        await self.delete_combine_game_rooms(category)
-        for i in range(2, 5):
-            extra_cat = discord.utils.get(guild.categories, name=f"{category.name}-{i}")
-            if extra_cat:
-                # Delete entire category that isn't the primary
-                await self.delete_combine_category(extra_cat)
+        announcements = discord.utils.get(category.text_channels, name="combines-announcements") if category else None
+        view, files = await self.combines_guide_card(guild, announcements)
+        try:
+            # Edited in place, so the guide keeps its spot in the channel and its link
+            if existing:
+                message = await existing.edit(view=view, attachments=files, allowed_mentions=discord.AllowedMentions.none())
+            else:
+                message = await channel.send(view=view, files=files, allowed_mentions=discord.AllowedMentions.none())
+        except discord.HTTPException as exc:
+            log.warning(f"Unable to post the combines guide in #{channel.name}: {exc}")
+            return await interaction.followup.send(
+                embed=ErrorEmbed(description=f"Couldn't post the guide in {channel.mention}: {exc.text}"), ephemeral=True
+            )
 
         await interaction.followup.send(
-            embed=GreenEmbed(
-                title="Combine Rooms Deleted",
-                description="Removed all combine game lobby channels.",
-            )
+            embed=GreenEmbed(title="Combines Guide", description=f"{'Updated' if existing else 'Posted'} the guide: {message.jump_url}"),
+            ephemeral=True,
         )
 
     # Helper Functions
@@ -327,18 +365,12 @@ class CombineManagerMixIn(RSCMixIn):
         log.debug(f"[{category.guild}] Deleting combine category: {category.name}")
         channels = category.channels
         for c in channels:
-            await c.delete(reason="Combines have ended.")
+            try:
+                await c.delete(reason="Combines have ended.")
+            except discord.NotFound:
+                # Lobby teardown just deleted it, before the cache caught up
+                pass
         await category.delete(reason="Combines have ended.")
-
-    async def delete_combine_game_rooms(self, category: discord.CategoryChannel):
-        """Delete a combine category and it's associated channels"""
-        log.debug(f"[{category.guild}] Deleting combine category game rooms: {category.name}")
-
-        # Waiting rooms and other general channels don't parse as lobby channels, so they stay
-        for vc in category.voice_channels:
-            if parse_lobby_channel(vc.name):
-                log.debug(f"Deleting {vc.name}")
-                await vc.delete(reason="Combine lobby has finished.")
 
     async def send_combines_help_msg(self, channel: discord.TextChannel):
         await channel.send(content=COMBINES_HELP_1)
@@ -346,15 +378,21 @@ class CombineManagerMixIn(RSCMixIn):
         await channel.send(content=COMBINES_HELP_3)
 
     async def send_combines_how_to_play(self, channel: discord.TextChannel, announcements: discord.abc.GuildChannel | None = None):
-        """Post the how-to-play guide card. Commands it names become clickable when they're synced."""
+        """Post the how-to-play guide card."""
+        view, files = await self.combines_guide_card(channel.guild, announcements)
+        await channel.send(view=view, files=files, allowed_mentions=discord.AllowedMentions.none())
+
+    async def combines_guide_card(
+        self, guild: discord.Guild, announcements: discord.abc.GuildChannel | None = None
+    ) -> tuple[discord.ui.LayoutView, list[discord.File]]:
+        """The how-to-play guide card. Commands it names become clickable when they're synced."""
         try:
-            synced = await self.bot.tree.fetch_commands() or await self.bot.tree.fetch_commands(guild=channel.guild)
+            synced = await self.bot.tree.fetch_commands() or await self.bot.tree.fetch_commands(guild=guild)
         except discord.HTTPException as exc:
             log.warning(f"Unable to look up command mentions for the combines guide: {exc}")
             synced = []
         where = announcements.mention if announcements else "#combines-announcements"
-        view, files = combines_guide(combines_command_mentions(synced), announcements=where)
-        await channel.send(view=view, files=files, allowed_mentions=discord.AllowedMentions.none())
+        return combines_guide(combines_command_mentions(synced), announcements=where)
 
     # Config
 

@@ -23,7 +23,7 @@ The feature is **disabled by default**.
 - `category <category>` - Category that game channels are created in
 - `announcements <channel>` - Text channel that new games are announced in (optional)
 - `enable` - Start creating game channels (requires a category)
-- `disable` - Stop creating game channels. Existing channels are left alone
+- `disable` - Stop creating game channels, and end every open match as `teardown` does
 - `teardown [match_id]` - End a match that is finished on the website but still up in Discord: mark its card Final and delete its channels now. With no match ID, ends every match
 
 ### Channels

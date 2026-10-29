@@ -1,7 +1,9 @@
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import discord
 from discord import app_commands, ui
+from discord.components import _component_factory
 
 from rsc.combines.guide import (
     GUIDE_AUTHOR_ID,
@@ -9,6 +11,7 @@ from rsc.combines.guide import (
     ReplayLocationButton,
     combines_command_mentions,
     combines_guide,
+    is_combines_guide,
 )
 from rsc.combines.manager import CombineManagerMixIn
 
@@ -53,7 +56,9 @@ class TestGuide:
         assert texts[0] == "## How to play combines"
         assert "Opens 10 minutes before start. Hit **Check In** on the site or run </combines checkin:42>." in texts
         assert "Watch <#99>. Missed it? Run </combines lobbyinfo:42>." in texts
-        assert texts[-2] == "### 5 · Queue again\nCheck in again for every series. Leave the queue with </combines checkout:42>."
+        assert texts[-3] == "### 5 · Queue again\nCheck in again for every series. Leave the queue with </combines checkout:42>."
+        assert texts[-2].startswith("### Someone misplaced? Send a Numbers Report\n")
+        assert "click **Numbers Report** next to their name" in texts[-2]
         assert texts[-1] == f"-# Thanks to <@{GUIDE_AUTHOR_ID}> for putting this guide together"
 
     def test_commands_fall_back_to_inline_code(self):
@@ -73,6 +78,24 @@ class TestGuide:
     def test_within_component_limits(self):
         view, _ = combines_guide(MENTIONS)
         assert view.total_children_count <= 40
+
+
+class TestIsCombinesGuide:
+    def _message(self, view: ui.View | ui.LayoutView) -> MagicMock:
+        message = MagicMock(spec=discord.Message)
+        # Round-tripped the way Discord sends them back. to_components() is untyped dicts, the factory wants its payload TypedDicts
+        payloads: list[Any] = view.to_components()
+        message.components = [_component_factory(c, MagicMock()) for c in payloads]
+        return message
+
+    def test_recognises_a_posted_guide(self):
+        view, _ = combines_guide(MENTIONS)
+        assert is_combines_guide(self._message(view))
+
+    def test_ignores_other_cards(self):
+        view = ui.LayoutView()
+        view.add_item(ui.Container(ui.TextDisplay("## How to play combines"), ui.ActionRow(ui.Button(label="x", custom_id="other"))))
+        assert not is_combines_guide(self._message(view))
 
 
 class TestReplayLocationButton:

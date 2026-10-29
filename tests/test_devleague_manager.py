@@ -1,13 +1,12 @@
-from unittest.mock import AsyncMock, MagicMock, call
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import discord
 import pytest
 
 from rsc.devleague.manager import DevLeagueManagerMixIn
+from rsc.devleague.runner import DevLeague
 
 from .utils import command_callback
-
-teardown_cmd = command_callback(DevLeagueManagerMixIn._devleague_teardown_cmd)
 
 
 @pytest.fixture
@@ -19,65 +18,62 @@ def guild() -> MagicMock:
 def interaction(guild) -> MagicMock:
     interaction = MagicMock(spec=discord.Interaction)
     interaction.guild = guild
-    interaction.response.send_message = AsyncMock()
     interaction.response.defer = AsyncMock()
     interaction.followup.send = AsyncMock()
     return interaction
 
 
-def _cog(open_ids: set[int]) -> MagicMock:
+@pytest.fixture
+def cog() -> MagicMock:
     cog = MagicMock()
-    cog._devleague_runner.open_lobbies = AsyncMock(return_value=open_ids)
-    cog._devleague_runner.teardown = AsyncMock()
+    cog._devleague_runner.league = DevLeague(MagicMock())
+    cog._devleague_runner.open_lobbies = AsyncMock(return_value={102, 101})
+    cog._devleague_runner.end_now = AsyncMock(return_value=[])
     return cog
 
 
-def _description(send: AsyncMock) -> str:
-    assert send.await_args is not None
-    return send.await_args.kwargs["embed"].description
-
-
 class TestTeardownCommand:
-    async def test_one_match_skips_the_grace_period(self, guild, interaction):
-        cog = _cog({101, 102})
+    async def test_runs_the_shared_teardown_on_dev_league(self, cog, interaction):
+        with patch("rsc.devleague.manager.teardown_command", AsyncMock()) as teardown:
+            await command_callback(DevLeagueManagerMixIn._devleague_teardown_cmd)(cog, interaction, match_id=101)
 
-        await teardown_cmd(cog, interaction, match_id=101)
+        teardown.assert_awaited_once_with(interaction, cog._devleague_runner, 101)
 
-        cog._devleague_runner.teardown.assert_awaited_once_with(guild, 101, delay=False)
-        assert _description(interaction.followup.send) == "Ended match 101."
 
-    async def test_no_match_ends_every_open_match(self, guild, interaction):
-        cog = _cog({102, 101})
+class TestDisable:
+    async def test_turns_off_then_ends_every_open_match(self, cog, guild, interaction):
+        order = []
+        cog._set_devleague_active = AsyncMock(side_effect=lambda *args: order.append("off"))
+        cog._devleague_runner.end_now.side_effect = lambda *args: order.append("end") or []
 
-        await teardown_cmd(cog, interaction)
+        await command_callback(DevLeagueManagerMixIn._devleague_disable_cmd)(cog, interaction)
 
-        assert cog._devleague_runner.teardown.await_args_list == [
-            call(guild, 101, delay=False),
-            call(guild, 102, delay=False),
-        ]
-        assert _description(interaction.followup.send) == "Ended 2 matches: 101, 102."
+        # Off first, so no new match starts during the teardown
+        assert order == ["off", "end"]
+        cog._set_devleague_active.assert_awaited_once_with(guild, False)
+        cog._devleague_runner.end_now.assert_awaited_once_with(guild, [101, 102])
+        assert interaction.followup.send.await_args is not None
+        embed = interaction.followup.send.await_args.kwargs["embed"]
+        assert embed.description == "Dev League game channels will no longer be created.\nEnded 2 matches: 101, 102."
+        assert embed.color == discord.Color.green()
 
-    async def test_unknown_match(self, interaction):
-        cog = _cog({101})
+    async def test_orange_when_a_match_fails_to_end(self, cog, interaction):
+        cog._set_devleague_active = AsyncMock()
+        cog._devleague_runner.end_now.return_value = [102]
 
-        await teardown_cmd(cog, interaction, match_id=7)
+        await command_callback(DevLeagueManagerMixIn._devleague_disable_cmd)(cog, interaction)
 
-        cog._devleague_runner.teardown.assert_not_called()
-        assert _description(interaction.response.send_message) == "Match 7 has no live card or voice channels."
+        assert interaction.followup.send.await_args is not None
+        embed = interaction.followup.send.await_args.kwargs["embed"]
+        assert embed.color == discord.Color.orange()
+        assert "Unable to end match 102." in embed.description
 
-    async def test_nothing_to_end(self, interaction):
-        cog = _cog(set())
+    async def test_nothing_open(self, cog, interaction):
+        cog._set_devleague_active = AsyncMock()
+        cog._devleague_runner.open_lobbies.return_value = set()
 
-        await teardown_cmd(cog, interaction)
+        await command_callback(DevLeagueManagerMixIn._devleague_disable_cmd)(cog, interaction)
 
-        cog._devleague_runner.teardown.assert_not_called()
-        assert _description(interaction.response.send_message) == "There are no Dev League matches to end."
-
-    async def test_one_failure_does_not_stop_the_rest(self, interaction):
-        cog = _cog({101, 102})
-        cog._devleague_runner.teardown.side_effect = [discord.HTTPException(MagicMock(status=403), "nope"), None]
-
-        await teardown_cmd(cog, interaction)
-
-        assert cog._devleague_runner.teardown.await_count == 2
-        assert _description(interaction.followup.send) == "Ended match 102.\nUnable to end match 101. Check the bot's permissions."
+        assert interaction.followup.send.await_args is not None
+        embed = interaction.followup.send.await_args.kwargs["embed"]
+        assert embed.description == "Dev League game channels will no longer be created."

@@ -94,6 +94,7 @@ class RSCMixIn(ABC):
 
     _dm_helper: "DMHelper"
 
+    _combines_runner: "LobbyRunner"
     _devleague_runner: "LobbyRunner"
 
     # Application emoji, resolved at startup. None until then, or if unavailable.

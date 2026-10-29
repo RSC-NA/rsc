@@ -51,6 +51,9 @@ class LobbyLeague(ABC):
     name: str
     # Names one lobby in logs, e.g. "combine lobby" -> "combine lobby 101"
     label: str
+    # One lobby and several in command replies, e.g. "match" and "matches"
+    noun: str
+    nouns: str
 
     def __init__(self, cog: "RSCMixIn"):
         self.cog = cog
@@ -375,3 +378,15 @@ class LobbyRunner:
                     if parsed := parse_lobby_channel(channel.name):
                         lobby_ids.add(parsed[1])
         return lobby_ids
+
+    async def end_now(self, guild: discord.Guild, lobby_ids: list[int]) -> list[int]:
+        """Tear down each lobby without the grace period. Returns the IDs that failed."""
+        failed = []
+        # One failed lobby must not stop the rest from being ended
+        for lobby_id in lobby_ids:
+            try:
+                await self.teardown(guild, lobby_id, delay=False)
+            except discord.HTTPException as exc:
+                log.exception(f"Error tearing down {self.league.label} {lobby_id}", exc_info=exc)
+                failed.append(lobby_id)
+        return failed

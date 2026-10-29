@@ -2,7 +2,7 @@
 
 import logging
 import re
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -80,6 +80,13 @@ def combines_guide(commands: dict[str, str], announcements: str = "#combines-ann
         step("4 · Report", "Home hosts and reports the score. Away uploads replays, then confirms.", "combines_report.png"),
         ui.TextDisplay(f"### 5 · Queue again\nCheck in again for every series. Leave the queue with {command('checkout')}."),
         ui.Separator(),
+        ui.TextDisplay(
+            "### Someone misplaced? Send a Numbers Report\n"
+            "If a player's MMR looks wrong, open your match on the Dev League site and click **Numbers Report** next to their name. "
+            "The form fills in the player, their RSC ID and your lobby for you, and gives Numbers Committee replays to review.\n"
+            "-# Balanced tiers depend on these reports. Report early, report often!"
+        ),
+        ui.Separator(),
         # add_item, since a DynamicItem is typed for either kind of view and the constructor wants a LayoutView item
         ui.ActionRow(ui.Button(label="Open Dev League", url=DEV_LEAGUE_URL)).add_item(ReplayLocationButton()),
         ui.TextDisplay(f"-# Thanks to <@{GUIDE_AUTHOR_ID}> for putting this guide together"),
@@ -88,6 +95,18 @@ def combines_guide(commands: dict[str, str], announcements: str = "#combines-ann
     view = ui.LayoutView(timeout=None)
     view.add_item(container)
     return view, files
+
+
+def is_combines_guide(message: discord.Message) -> bool:
+    """Whether a message is a posted guide card, recognised by its replays button."""
+    return any(isinstance(c, discord.Button) and c.custom_id == REPLAY_LOCATION_TEMPLATE for c in _walk(message.components))
+
+
+def _walk(components: Sequence[discord.Component]) -> Iterator[discord.Component]:
+    for component in components:
+        yield component
+        if isinstance(component, (discord.Container, discord.ActionRow)):
+            yield from _walk(component.children)
 
 
 def combines_command_mentions(commands: Sequence[app_commands.AppCommand]) -> dict[str, str]:

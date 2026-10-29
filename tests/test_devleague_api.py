@@ -2,9 +2,12 @@ import pytest
 
 from rsc.devleague import api as devleague_api
 from rsc.devleague.models import DevLeagueCheckInOut, DevLeagueStatus
+from rsc.lobbies import api as lobbies_api
 
 
 class _FakeResponse:
+    status = 200
+
     def __init__(self, payload):
         self.payload = payload
 
@@ -46,37 +49,34 @@ def _patch_client_session(monkeypatch, payload):
         sessions.append(session)
         return session
 
-    monkeypatch.setattr(devleague_api.aiohttp, "ClientSession", factory)
+    monkeypatch.setattr(lobbies_api.aiohttp, "ClientSession", factory)
     return calls, sessions
 
 
 @pytest.mark.parametrize(
-    ("endpoint", "path", "payload", "model", "session_kwargs"),
+    ("endpoint", "path", "payload", "model"),
     [
         (
             devleague_api.dev_league_status,
             "/api/status",
             {"checked_in": True, "error": None, "player": "Player", "rsc_id": "RSC-1", "tier": "Major"},
             DevLeagueStatus,
-            {"trust_env": True},
         ),
         (
             devleague_api.dev_league_check_in,
             "/api/check_in",
             {"error": None, "success": "checked in"},
             DevLeagueCheckInOut,
-            {"trust_env": True},
         ),
         (
             devleague_api.dev_league_check_out,
             "/api/check_out",
             {"error": None, "success": "checked out"},
             DevLeagueCheckInOut,
-            {},
         ),
     ],
 )
-async def test_devleague_endpoint(monkeypatch, mock_member, endpoint, path, payload, model, session_kwargs):
+async def test_devleague_endpoint(monkeypatch, mock_member, endpoint, path, payload, model):
     calls, sessions = _patch_client_session(monkeypatch, payload)
 
     result = await endpoint(mock_member)
@@ -88,7 +88,8 @@ async def test_devleague_endpoint(monkeypatch, mock_member, endpoint, path, payl
             "params": {"discord_id": mock_member.id},
         },
     ]
-    assert sessions[0].kwargs == session_kwargs
+    # Every call, check_out included, honours the proxy settings and times out
+    assert sessions[0].kwargs == {"trust_env": True, "timeout": lobbies_api.TIMEOUT}
 
 
 def test_status_for_unknown_player():

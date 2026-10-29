@@ -2,16 +2,14 @@
 
 import logging
 
-import aiohttp
 import discord
-import pydantic
 from redbot.core.config import Group
 
 from rsc import const
 from rsc.combines import api, models
 from rsc.combines.lobby import LobbyMessages
 from rsc.combines.views import LobbyKind, LobbyScore
-from rsc.exceptions import BadGateway
+from rsc.exceptions import SiteUnavailable
 from rsc.lobbies.channels import Side
 from rsc.lobbies.runner import LobbyLeague, Overwrites
 
@@ -24,6 +22,8 @@ class CombinesLeague(LobbyLeague):
     kind = LobbyKind.COMBINE
     name = "Combines"
     label = "combine lobby"
+    noun = "lobby"
+    nouns = "lobbies"
 
     def store(self, guild: discord.Guild) -> Group:
         return self.cog.config.custom("Combines", str(guild.id))
@@ -59,7 +59,7 @@ class CombinesLeague(LobbyLeague):
             return None
         try:
             result = await api.combines_lobby(url, executor=executor, lobby_id=entry.card.lobby_id)
-        except (aiohttp.ClientError, BadGateway, ValueError, pydantic.ValidationError) as exc:
+        except SiteUnavailable as exc:
             log.warning(f"Unable to fetch the final score for combine {entry.card.lobby_id}: {exc}")
             return None
         if not isinstance(result, models.CombinesLobby) or result.cancelled:

@@ -1,13 +1,13 @@
 import logging
 
 import discord
-from aiohttp.client_exceptions import ClientConnectionError
 from redbot.core import app_commands
 
 from rsc.abc import RSCMixIn
 from rsc.devleague import api
 from rsc.devleague.manager import DevLeagueManagerMixIn
 from rsc.embeds import BlueEmbed, ErrorEmbed, OrangeEmbed, SuccessEmbed
+from rsc.exceptions import SiteUnavailable
 from rsc.types import DevLeagueSettings
 from rsc.utils import utils
 
@@ -22,6 +22,8 @@ defaults_guild = DevLeagueSettings(
 )
 
 BUFMAX = 1984
+
+SITE_UNAVAILABLE = "Couldn't reach the Dev League website. Try again in a moment."
 
 
 class DevLeagueMixIn(DevLeagueManagerMixIn, RSCMixIn):
@@ -60,9 +62,9 @@ class DevLeagueMixIn(DevLeagueManagerMixIn, RSCMixIn):
         await interaction.response.defer(ephemeral=True)
         try:
             result = await api.dev_league_status(interaction.user)
-        except ClientConnectionError as exc:
-            await interaction.followup.send(embed=ErrorEmbed(description="Error connecting to dev league API"))
-            raise exc
+        except SiteUnavailable as exc:
+            log.warning(f"Dev League status failed for {interaction.user.id}: {exc}")
+            return await interaction.followup.send(embed=ErrorEmbed(description=SITE_UNAVAILABLE), ephemeral=True)
 
         if result.error:
             return await interaction.followup.send(embed=ErrorEmbed(description=result.error), ephemeral=True)
@@ -77,7 +79,7 @@ class DevLeagueMixIn(DevLeagueManagerMixIn, RSCMixIn):
         embed.add_field(name="Name", value=str(result.player), inline=True)
         embed.add_field(name="Tier", value=str(result.tier), inline=True)
 
-        await interaction.followup.send(embed=embed)
+        await interaction.followup.send(embed=embed, ephemeral=True)
 
     @_dev_league.command(
         name="checkin",
@@ -97,9 +99,9 @@ class DevLeagueMixIn(DevLeagueManagerMixIn, RSCMixIn):
         await interaction.response.defer(ephemeral=True)
         try:
             result = await api.dev_league_check_in(interaction.user)
-        except ClientConnectionError as exc:
-            await interaction.followup.send(embed=ErrorEmbed(description="Error connecting to dev league API"))
-            raise exc
+        except SiteUnavailable as exc:
+            log.warning(f"Dev League check in failed for {interaction.user.id}: {exc}")
+            return await interaction.followup.send(embed=ErrorEmbed(description=SITE_UNAVAILABLE), ephemeral=True)
 
         if result.error:
             return await interaction.followup.send(embed=ErrorEmbed(description=result.error), ephemeral=True)
@@ -108,7 +110,7 @@ class DevLeagueMixIn(DevLeagueManagerMixIn, RSCMixIn):
             title="Checked In",
             description="You are now **checked in** for dev league!",
         )
-        await interaction.followup.send(embed=embed)
+        await interaction.followup.send(embed=embed, ephemeral=True)
 
     @_dev_league.command(
         name="checkout",
@@ -129,9 +131,9 @@ class DevLeagueMixIn(DevLeagueManagerMixIn, RSCMixIn):
 
         try:
             result = await api.dev_league_check_out(interaction.user)
-        except ClientConnectionError as exc:
-            await interaction.followup.send(embed=ErrorEmbed(description="Error connecting to dev league API"))
-            raise exc
+        except SiteUnavailable as exc:
+            log.warning(f"Dev League check out failed for {interaction.user.id}: {exc}")
+            return await interaction.followup.send(embed=ErrorEmbed(description=SITE_UNAVAILABLE), ephemeral=True)
 
         if result.error:
             return await interaction.followup.send(embed=ErrorEmbed(description=result.error), ephemeral=True)
@@ -140,7 +142,7 @@ class DevLeagueMixIn(DevLeagueManagerMixIn, RSCMixIn):
             title="Checked Out",
             description="You are now **checked out** for dev league!",
         )
-        await interaction.followup.send(embed=embed)
+        await interaction.followup.send(embed=embed, ephemeral=True)
 
     @_dev_league.command(
         name="optout",

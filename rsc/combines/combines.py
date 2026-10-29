@@ -8,11 +8,13 @@ from rsc.abc import RSCMixIn
 from rsc.combines import api, models
 from rsc.combines.manager import CombineManagerMixIn
 from rsc.embeds import BlueEmbed, ErrorEmbed, YellowEmbed
-from rsc.exceptions import BadGateway
+from rsc.exceptions import SiteUnavailable
 from rsc.tiers import TierMixIn
 from rsc.types import CombineSettings
 
 log = logging.getLogger("red.rsc.combines")
+
+SITE_UNAVAILABLE = "Couldn't reach the combines website. Try again in a moment."
 
 
 defaults_guild = CombineSettings(
@@ -83,18 +85,18 @@ class CombineMixIn(CombineManagerMixIn, RSCMixIn):
                 ephemeral=True,
             )
 
+        # Discord only waits 3 seconds for the first reply, and the site can be slower than that
+        await interaction.response.defer(ephemeral=True)
         try:
             result = await api.combines_check_in(url, player)
-        except BadGateway:
-            return await interaction.response.send_message(
-                embed=ErrorEmbed(description="Combines API returned 502 Bad Gateway."),
-                ephemeral=True,
-            )
+        except SiteUnavailable as exc:
+            log.warning(f"Combines check in failed for {player.id}: {exc}")
+            return await interaction.followup.send(embed=ErrorEmbed(description=SITE_UNAVAILABLE), ephemeral=True)
 
         if result.status == "error":
-            return await interaction.response.send_message(embed=ErrorEmbed(description=result.message), ephemeral=True)
+            return await interaction.followup.send(embed=ErrorEmbed(description=result.message), ephemeral=True)
 
-        await interaction.response.send_message(
+        await interaction.followup.send(
             embed=BlueEmbed(
                 title="Checked In",
                 description="You have **checked in** for a combines match. Please be patient until your match is ready.",
@@ -120,21 +122,21 @@ class CombineMixIn(CombineManagerMixIn, RSCMixIn):
                 ephemeral=True,
             )
 
+        # Discord only waits 3 seconds for the first reply, and the site can be slower than that
+        await interaction.response.defer(ephemeral=True)
         try:
             result = await api.combines_check_out(url, player)
-        except BadGateway:
-            return await interaction.response.send_message(
-                embed=ErrorEmbed(description="Combines API returned 502 Bad Gateway."),
-                ephemeral=True,
-            )
+        except SiteUnavailable as exc:
+            log.warning(f"Combines check out failed for {player.id}: {exc}")
+            return await interaction.followup.send(embed=ErrorEmbed(description=SITE_UNAVAILABLE), ephemeral=True)
 
-        if isinstance(result, models.CombinesStatus):
-            return await interaction.response.send_message(
+        if result.status == "error":
+            return await interaction.followup.send(
                 embed=ErrorEmbed(title="Combines Check Out", description=result.message),
                 ephemeral=True,
             )
 
-        await interaction.response.send_message(
+        await interaction.followup.send(
             embed=BlueEmbed(
                 title="Checked Out",
                 description="You have **checked out** of combines. Please check in if this was a mistake.",
@@ -160,16 +162,16 @@ class CombineMixIn(CombineManagerMixIn, RSCMixIn):
                 ephemeral=True,
             )
 
+        # Discord only waits 3 seconds for the first reply, and the site can be slower than that
+        await interaction.response.defer(ephemeral=True)
         try:
             result = await api.combines_lobby(url, executor=player, lobby_id=lobby_id)
-        except BadGateway:
-            return await interaction.response.send_message(
-                embed=ErrorEmbed(description="Combines API returned 502 Bad Gateway."),
-                ephemeral=True,
-            )
+        except SiteUnavailable as exc:
+            log.warning(f"Combines lobby info failed for {player.id}: {exc}")
+            return await interaction.followup.send(embed=ErrorEmbed(description=SITE_UNAVAILABLE), ephemeral=True)
 
         if isinstance(result, models.CombinesStatus):
-            return await interaction.response.send_message(embed=ErrorEmbed(description=result.message), ephemeral=True)
+            return await interaction.followup.send(embed=ErrorEmbed(description=result.message), ephemeral=True)
 
         embed = BlueEmbed(
             title=f"Combine Match {result.id}",
@@ -195,7 +197,7 @@ class CombineMixIn(CombineManagerMixIn, RSCMixIn):
         if guild.icon:
             embed.set_thumbnail(url=guild.icon.url)
 
-        await interaction.response.send_message(embed=embed, ephemeral=True)
+        await interaction.followup.send(embed=embed, ephemeral=True)
 
     @_combines.command(name="active", description="Display active combine games")
     @app_commands.autocomplete(tier=TierMixIn.tier_autocomplete)
@@ -226,19 +228,19 @@ class CombineMixIn(CombineManagerMixIn, RSCMixIn):
                 ephemeral=True,
             )
 
+        # Discord only waits 3 seconds for the first reply, and the site can be slower than that
+        await interaction.response.defer(ephemeral=True)
         try:
             results = await api.combines_active(url, player)
-        except BadGateway:
-            return await interaction.response.send_message(
-                embed=ErrorEmbed(description="Combines API returned 502 Bad Gateway."),
-                ephemeral=True,
-            )
+        except SiteUnavailable as exc:
+            log.warning(f"Combines active games failed for {player.id}: {exc}")
+            return await interaction.followup.send(embed=ErrorEmbed(description=SITE_UNAVAILABLE), ephemeral=True)
 
         if isinstance(results, models.CombinesStatus):
-            return await interaction.response.send_message(embed=ErrorEmbed(description=results.message), ephemeral=True)
+            return await interaction.followup.send(embed=ErrorEmbed(description=results.message), ephemeral=True)
 
         if not results:
-            return await interaction.response.send_message(
+            return await interaction.followup.send(
                 embed=YellowEmbed(
                     title="Active Combine Games",
                     description="There are no active games currently.",
@@ -256,7 +258,7 @@ class CombineMixIn(CombineManagerMixIn, RSCMixIn):
         embed.add_field(name="ID", value="\n".join([str(i.id) for i in filtered]))
         embed.add_field(name="Tier", value="\n".join([i.tier for i in filtered]))
 
-        await interaction.response.send_message(embed=embed, ephemeral=True)
+        await interaction.followup.send(embed=embed, ephemeral=True)
 
     # Functions
 
