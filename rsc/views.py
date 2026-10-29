@@ -50,7 +50,8 @@ class AuthorOnlyLayoutView(discord.ui.LayoutView):
             view = ResultView(
                 title="Time Out",
                 description="Sorry, you didn't respond quick enough. Please try again.",
-                colour=discord.Colour.orange(),
+                # Timeouts are always yellow
+                colour=discord.Colour.yellow(),
             )
             await self.interaction.edit_original_response(view=view)
 

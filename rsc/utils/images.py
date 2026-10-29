@@ -1,8 +1,10 @@
 import asyncio
+import functools
 import io
 import itertools
 import logging
 import math
+import unicodedata
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -255,9 +257,10 @@ def _signup_banner_base(kicker: str, headline: str, name: str, chips: list[str],
 
     kicker_top, kicker_h = box(kicker_font, kicker)
     headline_top, headline_h = box(headline_font, headline)
-    name_top, name_h = box(name_font, name)
+    name_top, name_h = box(name_font, name) if name else (0, 0)
     chip_h = 48
-    gaps = (22, 18, 26)
+    # With nothing left of the name to draw, the chips move up under the headline
+    gaps = (22, 18, 26) if name else (22, 0, 26)
     y = cy - (kicker_h + headline_h + name_h + chip_h + sum(gaps)) / 2
 
     flat = Image.new("RGBA", (w, h), (0, 0, 0, 0))
@@ -270,7 +273,8 @@ def _signup_banner_base(kicker: str, headline: str, name: str, chips: list[str],
     wd.text((left + 4, y - headline_top + 6), headline, font=headline_font, fill=(0, 0, 0, 80))
     wd.text((left, y - headline_top), headline, font=headline_font, fill=(255, 255, 255, 255))
     y += headline_h + gaps[1]
-    wd.text((left, y - name_top), name, font=name_font, fill=(*palette.name, 255))
+    if name:
+        wd.text((left, y - name_top), name, font=name_font, fill=(*palette.name, 255))
     y += name_h + gaps[2]
 
     x = left
@@ -289,10 +293,42 @@ def _signup_banner_base(kicker: str, headline: str, name: str, chips: list[str],
     return img
 
 
+# Apotek covers Latin letters, with accents, but no emoji, Greek, Cyrillic or CJK. A character it lacks
+# renders as the font's placeholder glyph, so compare a character's ink with that.
+_GLYPH_PROBE = ImageFont.truetype(str(RSC_FONT), 40)
+# Invisible format and combining marks, e.g. the joiners and variation selectors inside emoji
+_DROP_CATEGORIES = frozenset({"Cc", "Cf", "Cs", "Co", "Cn", "Mn", "Me"})
+
+
+def _ink(char: str) -> bytes:
+    canvas = Image.new("L", (96, 96))
+    ImageDraw.Draw(canvas).text((8, 8), char, font=_GLYPH_PROBE, fill=255)
+    return canvas.tobytes()
+
+
+_PLACEHOLDER_INK = _ink("\ue000")
+
+
+@functools.lru_cache(maxsize=4096)
+def _has_glyph(char: str) -> bool:
+    if char.isspace():
+        return True
+    if unicodedata.category(char) in _DROP_CATEGORIES:
+        return False
+    return _ink(char) != _PLACEHOLDER_INK
+
+
+def drawable(text: str) -> str:
+    """`text` with every character the banner font can't draw (emoji, other scripts) removed, spaces tidied."""
+    # Composed first, so an accent typed as a separate mark becomes one letter Apotek has
+    text = unicodedata.normalize("NFC", text)
+    return " ".join("".join(c for c in text if _has_glyph(c)).split())
+
+
 def render_signup_banner(*, kicker: str, headline: str, name: str, chips: list[str], permfa: bool) -> bytes:
     """Render the sign-up success banner as an animated WebP with a light sweeping across it"""
     palette = PERMFA_PALETTE if permfa else SIGNUP_PALETTE
-    base = _signup_banner_base(kicker, headline, name.upper(), [c.upper() for c in chips], palette)
+    base = _signup_banner_base(kicker, headline, drawable(name.upper()), [c.upper() for c in chips], palette)
     w, h = base.size
 
     # A soft white band, slanted, cropped at a different offset for each frame

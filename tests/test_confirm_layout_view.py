@@ -89,3 +89,4 @@ class TestClicks:
         assert view.result is False
         result = interaction.edit_original_response.await_args.kwargs["view"]
         assert _texts(result)[0] == "## Time Out"
+        assert _container(result).accent_colour == discord.Colour.yellow()

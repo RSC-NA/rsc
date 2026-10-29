@@ -72,6 +72,12 @@ class SignupKind(StrEnum):
                 raise ValueError(f"Unknown Signup Kind: {self}")
 
 
+# What each choice means for the player, shown again on the review card
+KIND_MEANING = {
+    SignupKind.FREE_AGENT: "You enter the draft, and a team can draft you onto its roster for the season.",
+    SignupKind.PERMFA: "You skip the draft and sub for teams in your tier. You're never signed to a roster.",
+}
+
 KIND_QUESTION = (
     "**How do you want to play?**\n"
     "-# **Draft eligible:** you enter the draft, and a team can draft you onto its roster for the season.\n"
@@ -243,6 +249,10 @@ def joined(items: list[str]) -> str:
     return ", ".join(items[:-1]) + " and " + items[-1]
 
 
+# Long enough for any real tracker link, short enough that 10 bad ones still fit a message
+FULL_LINK = 200
+
+
 def _code(text: str, limit: int = 80) -> str:
     """Inline code that the player's own backticks can't break"""
     text = text.replace("`", "'")
@@ -251,24 +261,34 @@ def _code(text: str, limit: int = 80) -> str:
     return f"`{text}`"
 
 
-def tracker_problem_text(trackers: list[TrackerLine]) -> str:
-    """The explanation at the top of the fix form"""
+def tracker_problem_blocks(trackers: list[TrackerLine]) -> list[str]:
+    """The explanation at the top of the fix form: what's wrong, then how to fix it.
+
+    Separate blocks, so the form shows them with room between instead of one crowded paragraph.
+    """
     bad = [(i, t) for i, t in enumerate(trackers, start=1) if not t.valid]
     if len(bad) == 1:
         number, line = bad[0]
-        lines = [f"### ⚠️ Line {number} {line.problem}", f"You entered {_code(line.raw)}."]
+        # The whole link on its own line, so the player can tell which one to fix
+        wrong = f"### Line {number} {line.problem}\n-# YOU ENTERED\n{_code(line.raw, FULL_LINK)}"
     else:
-        lines = [f"### ⚠️ {len(bad)} links need fixing"]
-        lines += [f"- Line {number}: {_code(line.raw, 50)} {line.problem}" for number, line in bad]
+        rows = [f"**Line {number}:** It {line.problem}.\n{_code(line.raw, FULL_LINK)}" for number, line in bad]
+        wrong = f"### {len(bad)} links need fixing\n" + "\n\n".join(rows)
 
     problems = {line.problem for _, line in bad}
+    fixes = []
     if problems - {TrackerProblem.NOT_STEAM64}:
-        lines.append(
+        fixes.append(
             f"Open your profile on the tracker site and copy the full address from your browser. It should look like:\n`{TRACKER_EXAMPLE}`"
         )
     if TrackerProblem.NOT_STEAM64 in problems:
-        lines.append(f"Steam profiles must use your 17-digit Steam64ID, not a custom name. [Find yours here]({STEAM_ID_URL}).")
-    return "\n".join(lines)
+        fixes.append(f"Steam profiles must use your 17-digit Steam64ID, not a custom name. [Find yours here]({STEAM_ID_URL}).")
+    return [wrong, "-# HOW TO FIX IT\n" + "\n\n".join(fixes)]
+
+
+def tracker_problem_text(trackers: list[TrackerLine]) -> str:
+    """The fix form's explanation as one string"""
+    return "\n\n".join(tracker_problem_blocks(trackers))
 
 
 def tracker_summary(answers: SignupAnswers, limit: int = 10) -> str:
@@ -280,11 +300,12 @@ def tracker_summary(answers: SignupAnswers, limit: int = 10) -> str:
     else:
         head = f"**Trackers** · {total} account{'s' if total != 1 else ''}"
     rows = []
-    for line in answers.trackers[:limit]:
+    for number, line in enumerate(answers.trackers[:limit], start=1):
         if line.valid:
             rows.append(f"- {line.platform_name} · {_code(line.player_id, 40)}")
         else:
-            rows.append(f"- ⚠️ {_code(line.raw, 50)} {line.problem}")
+            # The whole link, so the player can tell which one to fix
+            rows.append(f"**Line {number} needs fixing:** It {line.problem}.\n{_code(line.raw, FULL_LINK)}")
     if total > limit:
         rows.append(f"- and {total - limit} more")
     return "\n".join([head, *rows])
@@ -338,7 +359,8 @@ class FixTrackersModal(discord.ui.Modal):
     def __init__(self, flow: "SignupFlowView"):
         super().__init__(title="Fix your trackers", timeout=MODAL_TIMEOUT)
         self.flow = flow
-        self.add_item(TextDisplay(tracker_problem_text(flow.answers.trackers)))
+        for block in tracker_problem_blocks(flow.answers.trackers):
+            self.add_item(TextDisplay(block))
         self.links_input: TextInput = TextInput(style=discord.TextStyle.paragraph, default=flow.answers.tracker_text or None)
         self.add_item(Label(text="Tracker links", description="One per line. Your other links are kept.", component=self.links_input))
 
@@ -693,36 +715,34 @@ class SignupFlowView(AuthorOnlyLayoutView):
         nights = self.context.match_nights
         title = "RSC PERMFA SIGN-UP" if a.kind is SignupKind.PERMFA else "RSC SIGN-UP"
 
-        # Everything picked in step 2, so its Edit goes back there
-        about = [part.label for part in (a.kind, a.player_type) if part]
-        if a.region:
-            about.append(a.region.full_name)
-        setup = []
-        if a.platform:
-            setup.append(a.platform.label)
-        if a.referrer:
-            setup.append(f"heard about us from {referrer_phrase(a.referrer)}")
-        about_text = "\n".join(" · ".join(line) for line in (about, setup) if line)
+        # Everything picked in step 2, so its Edit goes back there. One fact per line.
+        facts = [
+            ("Experience", a.player_type.label if a.player_type else None),
+            ("Region", a.region.full_name if a.region else None),
+            ("Platform", a.platform.label if a.platform else None),
+            ("Heard about us", a.referrer.label if a.referrer else None),
+        ]
+        about_text = "\n".join(f"**{label}:** {value}" for label, value in facts if value)
+        about = [TextDisplay("**About you**")]
+        if a.kind:
+            # How they're signing up is the decision that matters most, so it reads as a heading
+            about.append(TextDisplay(f"### Signing up as {a.kind.label}\n-# {KIND_MEANING[a.kind]}"))
+        about.append(TextDisplay(about_text))
 
         if bad:
-            tracker_button = _FlowButton(
-                SignupFlowView.open_fix, label="Fix", style=discord.ButtonStyle.primary, emoji="\N{PENCIL}", disabled=busy
-            )
+            tracker_button = _FlowButton(SignupFlowView.open_fix, label="Fix", style=discord.ButtonStyle.primary, disabled=busy)
         else:
-            tracker_button = _FlowButton(SignupFlowView.open_name_trackers, label="Edit", emoji="\N{PENCIL}", disabled=busy)
+            tracker_button = _FlowButton(SignupFlowView.open_name_trackers, label="Edit", disabled=busy)
 
         if busy:
             footer = "-# Submitting your sign-up…"
         else:
             start = discord.utils.format_dt(nights.next_start(), "F")
-            footer = f"-# ✓ Match nights ({nights.short}, 10 PM ET · {start} for you) · ✓ Rules"
+            footer = f"-# Match nights confirmed: {nights.short}, 10 PM ET ({start} for you)\n-# Rules accepted"
 
         return Container(
             TextDisplay(f"-# {title} · REVIEW\n## Check your details"),
-            Section(
-                TextDisplay(f"**About you**\n{about_text}"),
-                accessory=_FlowButton(SignupFlowView.back_to_about, label="Edit", emoji="\N{PENCIL}", disabled=busy),
-            ),
+            Section(*about, accessory=_FlowButton(SignupFlowView.back_to_about, label="Edit", disabled=busy)),
             Separator(),
             Section(TextDisplay(f"**{a.rsc_name}**\n{tracker_summary(a)}"), accessory=tracker_button),
             Separator(),
@@ -732,7 +752,6 @@ class SignupFlowView(AuthorOnlyLayoutView):
                     SignupFlowView.submit,
                     label="Submit sign-up",
                     style=discord.ButtonStyle.success,
-                    emoji="\N{WHITE HEAVY CHECK MARK}",
                     disabled=bad or busy,
                 ),
                 _FlowButton(SignupFlowView.cancel, label="Cancel", style=discord.ButtonStyle.danger, disabled=busy),
@@ -749,15 +768,15 @@ def signup_cancelled_view(context: SignupContext) -> ResultView:
     return ResultView(
         title="Sign-up cancelled",
         description=f"Nothing was submitted. Run `/{context.command}` whenever you're ready.",
-        colour=discord.Colour.dark_grey(),
+        colour=discord.Colour.red(),
     )
 
 
 def signup_timed_out_view(context: SignupContext) -> ResultView:
     return ResultView(
-        title="\N{STOPWATCH} Sign-up timed out",
+        title="Sign-up timed out",
         description=f"Nothing was submitted. Run `/{context.command}` to start again.",
-        colour=discord.Colour.dark_grey(),
+        colour=discord.Colour.yellow(),
     )
 
 
@@ -792,14 +811,14 @@ class SignupSuccessView(discord.ui.LayoutView):
     def __init__(self, answers: SignupAnswers, context: SignupContext, *, banner: bool, nickname_too_long: bool = False):
         super().__init__(timeout=None)
         if answers.kind is SignupKind.PERMFA:
-            heading = "## \N{WHITE HEAVY CHECK MARK} PermFA request sent"
+            heading = "## PermFA request sent"
             steps = (
                 "- Staff will process your request. This can take a little while.\n"
                 "- Once you're approved, teams in your tier can pick you up as a sub."
             )
         else:
             season = f"Season {context.season_number}" if context.season_number else "next season"
-            heading = f"## \N{WHITE HEAVY CHECK MARK} You're signed up for {season}"
+            heading = f"## You're signed up for {season}"
             steps = "- Watch league notices for the Draft and Combines.\n- Check where you stand any time with `/signupstatus`."
 
         items: list[discord.ui.Item] = []

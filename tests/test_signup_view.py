@@ -21,6 +21,8 @@ from rsc.members.views.signup import (
     NameTrackersModal,
     SignupAnswers,
     SignupContext,
+    signup_cancelled_view,
+    signup_timed_out_view,
     SignupFlowView,
     SignupKind,
     SignupOutcome,
@@ -488,23 +490,25 @@ class TestFixTrackersModal:
     async def test_only_the_tracker_field(self):
         flow = await _flow_at_review(f"{STEAM}\n{BAD}")
         form = FixTrackersModal(flow)
-        assert len(form.children) == 2
+        # What's wrong and how to fix it are separate blocks, so the form isn't one crowded paragraph
+        problem, fix, field = form.children
         assert form.links_input.default == f"{STEAM}\n{BAD}"
-        problem = form.children[0]
-        assert isinstance(problem, TextDisplay)
-        assert "Line 2 isn't a tracker profile link" in problem.content
+        assert isinstance(problem, TextDisplay) and isinstance(fix, TextDisplay)
+        assert problem.content == f"### Line 2 isn't a tracker profile link\n-# YOU ENTERED\n`{BAD}`"
+        assert fix.content.startswith("-# HOW TO FIX IT\nOpen your profile on the tracker site")
+        assert isinstance(field, Label)
 
 
 class TestTrackerProblemText:
     async def test_one_bad_line(self):
         text = tracker_problem_text(await parse_tracker_links(f"{STEAM}\n{BAD}"))
-        assert text.startswith("### ⚠️ Line 2 isn't a tracker profile link")
+        assert text.startswith("### Line 2 isn't a tracker profile link")
         assert "profile/epic/YourName/overview" in text
 
     async def test_several_bad_lines(self):
         steam_name = "https://rocketleague.tracker.network/rocket-league/profile/steam/xentrick"
         text = tracker_problem_text(await parse_tracker_links(f"{BAD}\n{steam_name}"))
-        assert text.startswith("### ⚠️ 2 links need fixing")
+        assert text.startswith("### 2 links need fixing")
         assert "Steam64ID" in text
 
 
@@ -526,7 +530,10 @@ class TestSignupFlow:
 
     async def test_review_lists_step_two_under_about_you(self):
         flow = await _flow_at_review()
-        assert "**About you**\nDraft eligible · New player · US East\nEpic Games · heard about us from a friend" in _text(flow)
+        text = _text(flow)
+        # How they're signing up stands out as a heading, then one fact per line
+        assert "### Signing up as Draft eligible\n-# You enter the draft, and a team can draft you onto its roster for the season." in text
+        assert "**Experience:** New player\n**Region:** US East\n**Platform:** Epic Games\n**Heard about us:** A friend" in text
         assert "**Xentrick**\n**Trackers** · 2 accounts" in _text(flow)
 
     async def test_about_you_edit_goes_back_to_step_two(self):
@@ -547,7 +554,7 @@ class TestSignupFlow:
         await flow.to_form(interaction)
         interaction.response.send_modal.assert_not_awaited()
         assert flow.stage is SignupStage.REVIEW
-        assert "Draft eligible · New player · US West" in _text(flow)
+        assert "**Region:** US West" in _text(flow)
 
     async def test_back_from_step_two_keeps_every_answer(self):
         flow = await _flow_at_about()
@@ -716,3 +723,38 @@ class TestEndings:
         view = AlreadySignedUpView(AlreadySignedUp.PERMFA)
         assert isinstance(view.children[0], Container)
         assert not any(isinstance(item, ActionRow) for item in view.walk_children())
+
+
+class TestReviewDetails:
+    async def test_bad_tracker_shows_its_whole_link_and_line_number(self):
+        long_bad = BAD + "not-a-profile/" + "x" * 80
+        flow = await _flow_at_review(f"{STEAM}\n{long_bad}")
+        text = _text(flow)
+        # Nothing cut off, so the player can tell which link to fix
+        assert long_bad in text
+        assert "**Line 2 needs fixing:**" in text
+
+    async def test_fix_form_lists_every_bad_link_in_full(self):
+        long_bad = BAD + "y" * 90
+        text = tracker_problem_text(await parse_tracker_links(f"{long_bad}\n{BAD}"))
+        assert long_bad in text and "…" not in text
+
+    async def test_confirmations_each_on_their_own_line(self):
+        footer = _footer(await _flow_at_review())
+        nights, rules = footer.split("\n")
+        assert nights.startswith("-# Match nights confirmed: ")
+        assert rules == "-# Rules accepted"
+
+    async def test_permfa_heading(self):
+        flow = await _flow_at_review(kind=SignupKind.PERMFA)
+        assert "### Signing up as Permanent Free Agent\n-# You skip the draft" in _text(flow)
+
+
+class TestEndingColours:
+    def test_cancelled_is_red_and_timed_out_is_yellow(self):
+        context = SignupContext()
+        cancelled = signup_cancelled_view(context).children[0]
+        timed_out = signup_timed_out_view(context).children[0]
+        assert isinstance(cancelled, Container) and isinstance(timed_out, Container)
+        assert cancelled.accent_colour == discord.Colour.red()
+        assert timed_out.accent_colour == discord.Colour.yellow()
