@@ -340,6 +340,15 @@ class TestPostLobby:
         assert edit is not None
         assert _lines(_container(edit.kwargs["view"]))[:2] == ["## Final · Combine 4812", "You were on **Home**"]
 
+    async def test_late_dm_that_cannot_be_edited_is_left(self):
+        record = lobby._record_dm(_store(), _card(), LobbyTeam.HOME)
+        msg = MagicMock(spec=discord.Message)
+        msg.edit = AsyncMock(side_effect=discord.HTTPException(MagicMock(status=404), "gone"))
+
+        await record(DMOutcome.SENT, msg)
+
+        msg.edit.assert_awaited_once()
+
     async def test_failed_dm_is_ignored(self):
         store = _store({"4812": {}})
         await lobby._record_dm(store, _card(), LobbyTeam.HOME)(DMOutcome.FAILED, None)
@@ -372,6 +381,26 @@ class TestFinishLobby:
         assert post is not None and dm is not None
         assert _texts(_container(post.kwargs["view"]))[:2] == ["## Final · Combine 4812", SCORE_LINE]
         assert _lines(_container(dm.kwargs["view"]))[1] == "You were on **Away**"
+        assert store.LobbyMessages.data == {}
+
+    async def test_deleted_messages_do_not_stop_the_rest(self):
+        # The channel post and the first DM are gone, the second DM still turns Final
+        entry = LobbyMessages(card=_card(), channel_id=77, message_id=88, dms=[(5, 9, LobbyTeam.AWAY), (6, 10, LobbyTeam.HOME)])
+        store = _store({"4812": entry.model_dump(mode="json")})
+        gone = discord.HTTPException(MagicMock(status=404), "Unknown Message")
+        edits: dict[int, AsyncMock] = {77: AsyncMock(side_effect=gone), 5: AsyncMock(side_effect=gone), 6: AsyncMock()}
+
+        def messageable(channel_id, **_):
+            channel = MagicMock()
+            channel.get_partial_message.return_value.edit = edits[channel_id]
+            return channel
+
+        cog = MagicMock()
+        cog.bot.get_partial_messageable.side_effect = messageable
+
+        await finish_lobby(cog, entry, store, None)
+
+        assert all(edit.await_count == 1 for edit in edits.values())
         assert store.LobbyMessages.data == {}
 
     async def test_unreadable_record_is_skipped(self):
