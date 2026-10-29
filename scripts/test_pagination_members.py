@@ -71,7 +71,5 @@ async def get_paged_members_list():
 
 
 if __name__ == "__main__":
-    loop = asyncio.get_event_loop()
-    loop.run_until_complete(get_paged_members_list())
-    # loop.run_until_complete(get_rostered_players())
-    loop.close()
+    asyncio.run(get_paged_members_list())
+    # asyncio.run(get_rostered_players())

@@ -151,7 +151,5 @@ if __name__ == "__main__":
 
     argv = parser.parse_args()
 
-    loop = asyncio.get_event_loop()
-    loop.run_until_complete(participation(season=argv.season, csv_file=argv.csv_file))
-    # loop.run_until_complete(get_rostered_players())
-    loop.close()
+    asyncio.run(participation(season=argv.season, csv_file=argv.csv_file))
+    # asyncio.run(get_rostered_players())

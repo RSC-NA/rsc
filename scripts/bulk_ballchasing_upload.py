@@ -11,7 +11,7 @@ import ballchasing.exceptions
 from dotenv import load_dotenv
 
 if __name__ == "__main__":
-    loop = asyncio.get_event_loop()
+    runner = asyncio.Runner()
 
     parser = argparse.ArgumentParser(description="Bulk upload replays to ballchasing group.")
     parser.add_argument("group", type=str, help="Ballchasing group")
@@ -41,14 +41,12 @@ if __name__ == "__main__":
     try:
         for r in replays.glob(pattern="*.replay"):
             try:
-                result: ballchasing.models.ReplayCreated = loop.run_until_complete(
-                    bapi.upload_replay(replay_file=str(r.absolute()), group=group)
-                )
+                result: ballchasing.models.ReplayCreated = runner.run(bapi.upload_replay(replay_file=str(r.absolute()), group=group))
                 print(f"Uploaded replay: {r.name}")
             except ballchasing.exceptions.DuplicateReplay:
                 print(f"Duplicate replay: {r.name}")
             except ballchasing.exceptions.BallchasingFault:
                 print(f"Ballchasing Parser Error: {r.name}")
     finally:
-        loop.run_until_complete(bapi.close())
-        loop.close()
+        runner.run(bapi.close())
+        runner.close()

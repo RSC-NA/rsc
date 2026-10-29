@@ -80,6 +80,4 @@ async def validate_rsc_ids():
 
 
 if __name__ == "__main__":
-    loop = asyncio.get_event_loop()
-    loop.run_until_complete(validate_rsc_ids())
-    loop.close()
+    asyncio.run(validate_rsc_ids())

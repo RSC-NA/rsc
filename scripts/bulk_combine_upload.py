@@ -215,8 +215,7 @@ async def upload_all(
 
 
 if __name__ == "__main__":
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
+    runner = asyncio.Runner()
 
     parser = argparse.ArgumentParser(description="Bulk upload combine replays to a ballchasing group for a match day.")
     parser.add_argument("parent", type=str, help="Top level ballchasing group")
@@ -288,15 +287,15 @@ if __name__ == "__main__":
         # ping() reports the account's real patreon tier and retunes the
         # limiter, so the upload rate comes from ballchasing rather than the
         # tier assumed above. It also fails fast on a bad key.
-        ping = loop.run_until_complete(bapi.ping())
+        ping = runner.run(bapi.ping())
         print(f"Authenticated as {ping.name} ({bapi.patreon_type} tier)")
 
         # The lookup is read only, so a dry run still reports whether the group
         # already exists instead of guessing.
-        group = loop.run_until_complete(find_group(bapi, name=group_name, parent=parent))
+        group = runner.run(find_group(bapi, name=group_name, parent=parent))
         existing: set[str] = set()
         if group:
-            existing = loop.run_until_complete(group_replay_ids(bapi, group))
+            existing = runner.run(group_replay_ids(bapi, group))
 
         if not execute:
             print("DRY RUN (pass --execute to apply)")
@@ -314,12 +313,12 @@ if __name__ == "__main__":
         if group:
             print(f"Found existing group '{group_name}': {group} ({len(existing)} replay(s) already in it)")
         else:
-            group = loop.run_until_complete(create_group(bapi, name=group_name, parent=parent))
+            group = runner.run(create_group(bapi, name=group_name, parent=parent))
             print(f"Created group '{group_name}': {group}")
 
         print(f"Uploading {len(files)} replay(s) at {rate:.1f}/s, up to {concurrency} in flight")
         start = time.monotonic()
-        counts = loop.run_until_complete(upload_all(bapi, files, group, existing, concurrency, pacer))
+        counts = runner.run(upload_all(bapi, files, group, existing, concurrency, pacer))
         elapsed = time.monotonic() - start
 
         print(
@@ -336,5 +335,5 @@ if __name__ == "__main__":
             print("Re-run the same command to retry the failures; anything already uploaded is skipped.")
             sys.exit(1)
     finally:
-        loop.run_until_complete(bapi.close())
-        loop.close()
+        runner.run(bapi.close())
+        runner.close()

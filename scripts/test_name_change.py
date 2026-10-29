@@ -41,7 +41,5 @@ if __name__ == "__main__":
     parser.add_argument("-f", "--force", action="store_true", default=False, help="Admin Override")
     argv = parser.parse_args()
 
-    loop = asyncio.get_event_loop()
-    loop.run_until_complete(test_name_change(argv.discord_id, argv.name, argv.force))
-    # loop.run_until_complete(get_rostered_players())
-    loop.close()
+    asyncio.run(test_name_change(argv.discord_id, argv.name, argv.force))
+    # asyncio.run(get_rostered_players())

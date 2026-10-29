@@ -580,9 +580,9 @@ class TestDMHelperNonBlocking:
         helper.start()
         member = _mock_member()
         # enqueue should complete nearly instantly even with a slow consumer
-        before = asyncio.get_event_loop().time()
+        before = asyncio.get_running_loop().time()
         await helper.enqueue(member, content="hello")
-        elapsed = asyncio.get_event_loop().time() - before
+        elapsed = asyncio.get_running_loop().time() - before
         assert elapsed < 0.5, f"enqueue blocked for {elapsed:.2f}s"
         await helper.stop()
 
@@ -610,9 +610,9 @@ class TestDMHelperNonBlocking:
         # Give the consumer a moment to pick up the task
         await asyncio.sleep(0.05)
         # fast_work should complete while slow_send is still running
-        before = asyncio.get_event_loop().time()
+        before = asyncio.get_running_loop().time()
         await fast_work()
-        elapsed = asyncio.get_event_loop().time() - before
+        elapsed = asyncio.get_running_loop().time() - before
         assert elapsed < 0.1, f"Event loop blocked for {elapsed:.2f}s"
         assert result == ["done"]
         await helper.stop()

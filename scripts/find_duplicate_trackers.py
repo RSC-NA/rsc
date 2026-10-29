@@ -99,6 +99,4 @@ async def check_dupliates(trackers: dict[int | None, str]):
 
 if __name__ == "__main__":
     print("Starting event loop.")
-    loop = asyncio.get_event_loop()
-    loop.run_until_complete(validate_trackers())
-    loop.close()
+    asyncio.run(validate_trackers())

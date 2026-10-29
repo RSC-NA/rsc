@@ -297,7 +297,5 @@ if __name__ == "__main__":
     parser.add_argument("-t", "--tier", type=str, default=None, help="Tier")
     argv = parser.parse_args()
 
-    loop = asyncio.get_event_loop()
-    loop.run_until_complete(calculate_rounds(tier=argv.tier))
-    # loop.run_until_complete(get_rostered_players())
-    loop.close()
+    asyncio.run(calculate_rounds(tier=argv.tier))
+    # asyncio.run(get_rostered_players())

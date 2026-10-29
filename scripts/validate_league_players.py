@@ -114,6 +114,4 @@ async def validate_league_players():
 
 
 if __name__ == "__main__":
-    loop = asyncio.get_event_loop()
-    loop.run_until_complete(validate_league_players())
-    loop.close()
+    asyncio.run(validate_league_players())
