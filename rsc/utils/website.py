@@ -37,3 +37,19 @@ def match_page_url(site: str, match_id: int, *, league_id: int, season_id: int |
         params["season"] = season_id
     params["source"] = "matches"
     return f"{site.rstrip('/')}/matches/{match_id}/?{urlencode(params)}"
+
+
+def standings_page_url(site: str, *, league_id: int, tier: str, season_id: int | None = None) -> str:
+    """The public standings page, opened on one tier's playoff view.
+
+    `league` and `season` (a season *ID*, not its number) set the page's league/season selector,
+    and the site falls back to the current season when `season` is missing. `tier` is the tier's
+    name, as the page's tier chips use it, and `mode=playoffs` opens the playoff view rather than
+    the overall table.
+    """
+    params: dict[str, int | str] = {"league": league_id}
+    if season_id is not None:
+        params["season"] = season_id
+    params["tier"] = tier
+    params["mode"] = "playoffs"
+    return f"{site.rstrip('/')}/standings/?{urlencode(params)}"

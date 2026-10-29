@@ -60,7 +60,7 @@ This file is the working record for the refresh. Update the status table as phas
 
 ### Pick up here
 
-1. **`/playoffs`: preview it and decide.** It's built in the working tree, uncommitted.
+1. **`/playoffs`: approved and committed (2026-10-29).** Conference tiers get one graphic card per conference (`## Elite · Lunar`, `## Elite · Solar`) in the same message, each with its own summary; Full standings sits under the last card. A whole tier stays one card.
    - **Behaviour:**
      - **Default:** a Pillow "broadcast graphic", option C of https://claude.ai/artifact/Qtn68K8TFKUGhafts5pPMd, with no franchise logos. One PNG per playoff group, rendered in `asyncio.to_thread` and cached in a 32-entry LRU keyed on the standings data. A text summary (Clinched / On the bubble / Eliminated) and a grey "Full standings" link to `{site}/standings/?league=…&season=<season id>&tier=…&mode=playoffs` follow it.
      - **`/playoffs text:True`:** the race board (option A), with each team on ONE line: `1. **Aurora** 14-4 · Clinched`. The user rejected the mockup's second subtext line.

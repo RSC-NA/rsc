@@ -1,6 +1,6 @@
 import pytest
 
-from rsc.utils.website import match_page_url, website_url
+from rsc.utils.website import match_page_url, standings_page_url, website_url
 
 
 class TestWebsiteUrl:
@@ -36,3 +36,17 @@ class TestMatchPageUrl:
     def test_omits_unknown_season(self):
         url = match_page_url("https://www.rscna.com/", 36901, league_id=1)
         assert url == "https://www.rscna.com/matches/36901/?league=1&source=matches"
+
+
+class TestStandingsPageUrl:
+    def test_opens_the_tiers_playoff_view(self):
+        url = standings_page_url("https://www.rscna.com", league_id=1, season_id=11, tier="Elite")
+        assert url == "https://www.rscna.com/standings/?league=1&season=11&tier=Elite&mode=playoffs"
+
+    def test_omits_unknown_season(self):
+        url = standings_page_url("https://www.rscna.com/", league_id=1, tier="Elite")
+        assert url == "https://www.rscna.com/standings/?league=1&tier=Elite&mode=playoffs"
+
+    def test_encodes_the_tier_name(self):
+        url = standings_page_url("https://www.rscna.com", league_id=1, season_id=11, tier="Pro Am")
+        assert url == "https://www.rscna.com/standings/?league=1&season=11&tier=Pro+Am&mode=playoffs"
