@@ -25,11 +25,13 @@ from rsc.embeds import (
     SuccessEmbed,
     YellowEmbed,
 )
+from rsc.enums import TransactionType
 from rsc.exceptions import RscException
 from rsc.franchises import FranchiseMixIn
 from rsc.logs import GuildLogAdapter
 from rsc.teams import TeamMixIn
 from rsc.tiers import TierMixIn
+from rsc.transactions.views import TransactionCard
 from rsc.types import RebrandTeamDict
 from rsc.utils import utils
 from rsc.views import LinkButton
@@ -671,9 +673,23 @@ class AdminFranchiseMixIn(AdminMixIn):
                     await utils.give_fa_prefix(m)
                     await m.add_roles(fa_role, tier_fa_role)
                     if tchan:
+                        # The same release card as a cut. The franchise is gone, so there's no GM to name.
+                        card = TransactionCard(
+                            move=f"RELEASED · {tier}",
+                            name=discord.utils.escape_markdown(p.name or m.display_name),
+                            summary=f"leaves **{discord.utils.escape_markdown(t.name or 'Unknown team')}** · "
+                            f"{discord.utils.escape_markdown(fdata.name)}",
+                            player_id=m.id,
+                            colour=await utils.tier_color_by_name(guild, tier),
+                            banner=utils.transaction_banner(TransactionType.CUT),
+                            created_at=discord.utils.utcnow(),
+                            logo=await utils.fa_img_path_from_tier(tier, tiny=True),
+                        )
+                        view, files = card.render()
                         await tchan.send(
-                            f"{m.mention} has been released to Free Agency ({tier})",
-                            allowed_mentions=discord.AllowedMentions(users=True),
+                            view=view,
+                            files=files,
+                            allowed_mentions=discord.AllowedMentions(everyone=False, roles=False, users=True),
                         )
 
         # Don't give FA prefix to non-playing GM

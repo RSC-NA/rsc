@@ -1521,3 +1521,24 @@ class TestTransactionDefaults:
         assert defaults["TransRole"] is None
         assert defaults["CutMessage"] is None
         assert defaults["Substitutes"] == []
+
+
+class TestContractExpiredCard:
+    async def test_built_from_the_saved_substitute(self, mock_guild):
+        mixin = _create_mixin()
+        sub = Substitute(
+            date="2026-10-28T00:00:00",
+            franchise="Hex_Systems",
+            gm=999,
+            player_in=111,
+            player_out=222,
+            team="Quantum",
+            tier="Elite",
+        )
+        with patch("rsc.transactions.transactions.utils.tier_color_by_name", AsyncMock(return_value=discord.Colour.orange())):
+            card = await mixin.build_contract_expired_card(mock_guild, sub, name="Sub_Name")
+        assert (card.move, card.name, card.summary) == ("CONTRACT EXPIRED · Elite", r"Sub\_Name", r"leaves **Quantum** · Hex\_Systems")
+        # The sub is the subject and leaves; the starter comes back in
+        assert (card.player_id, card.starter_back_id, card.gm_id) == (111, 222, 999)
+        assert card.banner == utils.CONTRACT_EXPIRED_BANNER
+        assert isinstance(card.logo, Path) and card.logo.name == "EliteFA_64x64.png"

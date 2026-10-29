@@ -99,3 +99,14 @@ class TestRender:
     def test_within_component_limits(self):
         view, _ = _card(player_out_id=333, logo="https://cdn.example/hex.png").render()
         assert view.total_children_count <= 40
+
+
+class TestContractExpired:
+    def test_sub_leaves_and_the_starter_comes_back(self):
+        view, _ = _card(move="CONTRACT EXPIRED · Elite", summary="leaves **Quantum** · Hex Systems", starter_back_id=444).render()
+        assert _texts(view)[:3] == ["-# CONTRACT EXPIRED · Elite", "## Monty", "leaves **Quantum** · Hex Systems"]
+        assert _texts(view)[3] == "**Out** <@111> · **In** <@444>\n**GM** <@222>"
+
+    def test_banner_is_padded_like_the_others(self):
+        with Image.open(utils.CONTRACT_EXPIRED_BANNER) as image:
+            assert image.size == (1900, 160)

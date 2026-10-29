@@ -2,9 +2,9 @@ import asyncio
 import itertools
 import logging
 import re
+from typing import TYPE_CHECKING
 from collections.abc import AsyncIterator
 from datetime import datetime, time, timedelta
-from pathlib import Path
 from pprint import pformat
 
 import discord
@@ -67,6 +67,9 @@ from rsc.transactions.views import TradeAnnouncementModal, TransactionCard
 from rsc.types import Substitute, TransactionSettings
 from rsc.utils import utils
 from rsc.pagination import API_MAX_PAGE_SIZE, check_page_limit, iter_pages
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 logger = logging.getLogger("red.rsc.transactions")
 log = GuildLogAdapter(logger)
@@ -167,62 +170,18 @@ class TransactionMixIn(RSCMixIn):
             guild_tz = await self.timezone(guild)
             yesterday = datetime.now(tz=guild_tz) - timedelta(1)
 
-            # Get ContractExpired image
-            img_path = Path(__file__).parent.parent / "resources/transactions/ContractExpired.png"
-
             # Loop through checkins.
             log.debug(f"Total substitute count: {len(subs)}", guild=guild)
             for s in subs:
                 sub_date = datetime.fromisoformat(s["date"])
-                dFiles = [discord.File(img_path)]
                 if sub_date.date() <= yesterday.date():
-                    # Get FA img resource
-                    fa_icon = await utils.fa_img_from_tier(s["tier"], tiny=True)
-
-                    # Tier color
-                    tier_color = await utils.tier_color_by_name(guild, s["tier"])
-
-                    # Get Member
                     m_in = guild.get_member(s["player_in"])
                     m_out = guild.get_member(s["player_out"])
 
-                    m_in_fmt = m_in.display_name if m_in else f"<@!{s['player_in']}>"
-                    m_out_fmt = m_out.display_name if m_out else f"<@!{s['player_out']}>"
-
                     log.debug(f"Expiring Sub Contract: {s['player_in']}", guild=guild)
-                    embed = discord.Embed(color=tier_color)
-                    embed.set_image(url=f"attachment://{img_path.name}")
-                    if fa_icon:
-                        dFiles.append(fa_icon)
-                        embed.set_author(
-                            name=f"{m_in_fmt} has finished temporary contract for {s['team']}",
-                            icon_url=f"attachment://{fa_icon.filename}",
-                        )
-                    else:
-                        embed.set_author(name=f"{m_in_fmt} has finished temporary contract for {s['team']}")
-
-                    embed.add_field(
-                        name="Player In",
-                        value=m_out_fmt,
-                        inline=True,
-                    )
-                    embed.add_field(
-                        name="Player Out",
-                        value=m_in_fmt,
-                        inline=True,
-                    )
-                    embed.add_field(name="Franchise", value=s["franchise"], inline=True)
-
-                    # Send ping for player/GM then quickly remove it
-                    if tchan and hasattr(tchan, "send"):
-                        pingstr = f"<@!{s['player_in']}> <@!{s['gm']}>"
-                        tmsg = await tchan.send(
-                            content=pingstr,
-                            embed=embed,
-                            files=dFiles,
-                            allowed_mentions=discord.AllowedMentions(users=True),
-                        )
-                        await tmsg.edit(content=None, embed=embed)
+                    if tchan:
+                        card = await self.build_contract_expired_card(guild, s, name=m_in.display_name if m_in else None)
+                        await self.announce_transaction(guild, card)
 
                     await self._rm_substitute(guild, s)
                     if subbed_out_role and m_out:
@@ -1466,12 +1425,7 @@ class TransactionMixIn(RSCMixIn):
         # Get sub object and remove it from saved list
         sub_obj = await self.get_sub(player)
         if sub_obj:
-            stier = sub_obj["tier"]
-            p_in = sub_obj["player_in"]
             p_out = sub_obj["player_out"]
-            gm_id = sub_obj["gm"]
-            steam = sub_obj["team"]
-            fname = sub_obj["franchise"]
 
             # Remove subbed out role from subbed player
             subbed_out_role = await utils.get_subbed_out_role(guild)
@@ -1479,39 +1433,8 @@ class TransactionMixIn(RSCMixIn):
             if subbed_out_role and m_out:
                 await m_out.remove_roles(subbed_out_role)
 
-            # Get FA img resource
-            fa_icon = await utils.fa_img_from_tier(stier, tiny=True)
-            img_path = Path(__file__).parent.parent / "resources/transactions/ContractExpired.png"
-
-            dFiles = [discord.File(img_path)]
-            if fa_icon:
-                dFiles.append(fa_icon)
-
-            # Tier color
-            tier_color = await utils.tier_color_by_name(guild, stier)
-
-            # Post to transactions
-            tchan = await self._trans_channel(guild)
-            if tchan:
-                embed = discord.Embed(color=tier_color)
-                embed.set_image(url="attachment://ContractExpired.png")
-                embed.set_author(
-                    name=f"{player.display_name} has finished temporary contract for {steam}",
-                    icon_url=f"attachment://{fa_icon.filename}" if fa_icon else None,
-                )
-                embed.add_field(name="Player In", value=f"<@!{p_out}>", inline=True)
-                embed.add_field(name="Player Out", value=f"<@!{p_in}>", inline=True)
-                embed.add_field(name="Franchise", value=f"{fname}", inline=True)
-
-                pingstr = f"{player.mention} <@!{gm_id}>"
-
-                tmsg = await tchan.send(
-                    content=pingstr,
-                    embed=embed,
-                    files=dFiles,
-                    allowed_mentions=discord.AllowedMentions(users=True),
-                )
-                await tmsg.edit(content=None, embed=embed)
+            card = await self.build_contract_expired_card(guild, sub_obj, name=player.display_name)
+            await self.announce_transaction(guild, card)
             await self._rm_substitute(guild, sub_obj)
 
         await interaction.followup.send(
@@ -2305,6 +2228,26 @@ class TransactionMixIn(RSCMixIn):
             player_out_id=player_out.id if player_out else None,
             gm_id=gm_id,
             logo=logo,
+        )
+
+    async def build_contract_expired_card(self, guild: discord.Guild, sub: Substitute, *, name: str | None) -> TransactionCard:
+        """The card for a temporary contract ending: the sub leaves and the starter comes back in."""
+        tier = sub["tier"]
+        summary = f"leaves **{_team_name(sub['team'])}**"
+        if sub["franchise"]:
+            summary += f" · {discord.utils.escape_markdown(sub['franchise'])}"
+        return TransactionCard(
+            move=f"CONTRACT EXPIRED · {tier}" if tier else "CONTRACT EXPIRED",
+            name=discord.utils.escape_markdown(name) if name else f"<@{sub['player_in']}>",
+            summary=summary,
+            player_id=sub["player_in"],
+            colour=await utils.tier_color_by_name(guild, tier) if tier else discord.Colour.blue(),
+            banner=utils.CONTRACT_EXPIRED_BANNER,
+            created_at=discord.utils.utcnow(),
+            starter_back_id=sub["player_out"],
+            gm_id=sub["gm"] or None,
+            # The tier's free agent badge, as the old embed's author icon
+            logo=await utils.fa_img_path_from_tier(tier, tiny=True) if tier else None,
         )
 
     async def send_cut_msg(self, guild: discord.Guild, player: discord.Member) -> discord.Message | None:

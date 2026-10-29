@@ -44,6 +44,8 @@ class TransactionCard:
     created_at: datetime
     # The starter a substitute replaces
     player_out_id: int | None = None
+    # When a temporary contract ends: the starter who comes back in for the departing sub (`player_id`)
+    starter_back_id: int | None = None
     gm_id: int | None = None
     # Shown beside the text: a franchise logo or server icon URL, or a bundled image such as a free agent tier badge
     logo: str | Path | None = None
@@ -68,7 +70,9 @@ class TransactionCard:
             container.add_item(ui.Section(*texts, accessory=thumbnail))
 
         gm = f"**GM** <@{self.gm_id}>" if self.gm_id else None
-        if self.player_out_id:
+        if self.starter_back_id:
+            people = [f"**Out** <@{self.player_id}> · **In** <@{self.starter_back_id}>", gm]
+        elif self.player_out_id:
             people = [f"**In** <@{self.player_id}> · **Out** <@{self.player_out_id}>", gm]
         else:
             people = [" · ".join(filter(None, [f"**Player** <@{self.player_id}>", gm]))]

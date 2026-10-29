@@ -477,6 +477,10 @@ async def fa_img_path_from_tier(tier: str, tiny: bool = False) -> Path | None:
     return None
 
 
+# A temporary contract ending has no transaction type of its own
+CONTRACT_EXPIRED_BANNER = Path(__file__).parent.parent / "resources/transactions/card/ContractExpired.png"
+
+
 def transaction_banner(action: TransactionType) -> Path:
     """The banner image for a transaction card, padded to ~70% of the card's width (scripts/make_card_banners.py)."""
     root = Path(__file__).parent.parent / "resources/transactions/card"

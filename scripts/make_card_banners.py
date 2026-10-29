@@ -14,7 +14,7 @@ from PIL import Image
 
 # Share of the card's width the banner fills
 WIDTH = 0.7
-BANNERS = ("Released", "Signed", "Resigned", "Subbed", "Retired", "InactiveReserve", "Traded")
+BANNERS = ("Released", "Signed", "Resigned", "Subbed", "Retired", "InactiveReserve", "Traded", "ContractExpired")
 
 SOURCE = Path(__file__).resolve().parent.parent / "rsc" / "resources" / "transactions"
 OUT = SOURCE / "card"
