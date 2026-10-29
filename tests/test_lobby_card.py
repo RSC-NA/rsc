@@ -198,7 +198,11 @@ def _guild(present: set[int]) -> MagicMock:
 
 
 class _Value:
-    """Red Config value: awaitable for a read, async context manager for an edit."""
+    """Red Config value: awaitable for a read, async context manager for an edit.
+
+    Like Red, the context manager holds the value's lock, so code that also takes
+    `get_lock()` around it deadlocks here just as it does in the bot.
+    """
 
     def __init__(self, data: dict | None = None):
         self.data = data or {}
@@ -222,9 +226,11 @@ class _ValueCtx:
         return read().__await__()
 
     async def __aenter__(self):
+        await self.value.get_lock().acquire()
         return self.value.data
 
     async def __aexit__(self, *exc):
+        self.value.get_lock().release()
         return False
 
 
@@ -293,6 +299,23 @@ class TestPostLobby:
         assert await precheck() is True
         active.clear()
         assert await precheck() is False
+
+    async def test_posts_one_lobby_after_another(self):
+        # Each post must release the store's lock, or every lobby after the first hangs
+        guild = _guild({1, 2, 4})
+        channel = MagicMock(spec=discord.TextChannel)
+        channel.id = 77
+        channel.send = AsyncMock(return_value=MagicMock(id=88))
+        cog = MagicMock()
+        cog.live_emoji.return_value = LIVE
+        cog._lobby_dm_helper.enqueue = AsyncMock()
+        store = _store()
+
+        for lobby_id in (4812, 4813):
+            card = _card(lobby_id=lobby_id, home=("<@1>", "<@2>"), away=("<@4>",))
+            await asyncio.wait_for(post_lobby(cog, guild, _lobby(), card, channel, store, set()), timeout=1)
+
+        assert set(store.LobbyMessages.data) == {"4812", "4813"}
 
     async def test_sent_dm_is_recorded_for_teardown(self):
         store = _store({"4812": LobbyMessages(card=_card(), channel_id=77, message_id=88).model_dump(mode="json")})

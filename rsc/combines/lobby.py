@@ -85,7 +85,7 @@ async def post_lobby(
         message_id=msg.id,
         executor_id=next((p.discord_id for p in [*lobby.home, *lobby.away]), None),
     )
-    async with store.LobbyMessages.get_lock(), store.LobbyMessages() as saved:
+    async with store.LobbyMessages() as saved:
         saved[str(card.lobby_id)] = entry.model_dump(mode="json")
 
     key = (guild.id, card.lobby_id)
@@ -116,7 +116,7 @@ def _record_dm(store: Group, card: LobbyCard, team: LobbyTeam):
     async def record(outcome: DMOutcome, msg: discord.Message | None) -> None:
         if outcome is not DMOutcome.SENT or msg is None:
             return
-        async with store.LobbyMessages.get_lock(), store.LobbyMessages() as saved:
+        async with store.LobbyMessages() as saved:
             raw = saved.get(str(card.lobby_id))
             if raw is not None:
                 raw.setdefault("dms", []).append([msg.channel.id, msg.id, team.value])
@@ -144,7 +144,7 @@ async def lobby_messages(store: Group, lobby_id: int) -> LobbyMessages | None:
 async def finish_lobby(cog: "RSCMixIn", entry: LobbyMessages, store: Group, score: LobbyScore | None) -> None:
     """Redraw the channel post and every DM as Final, then forget the lobby."""
     card = entry.card
-    async with store.LobbyMessages.get_lock(), store.LobbyMessages() as saved:
+    async with store.LobbyMessages() as saved:
         # Read again under the lock: DMs sent since `entry` was loaded must be edited too
         raw = saved.pop(str(card.lobby_id), None)
     dms = LobbyMessages.model_validate(raw).dms if raw else entry.dms
