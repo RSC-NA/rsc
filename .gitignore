@@ -1,5 +1,6 @@
 .env
 .pytest_cache/
+htmlcov/
 .mypy_cache/
 .ruff_cache/
 .venv/
