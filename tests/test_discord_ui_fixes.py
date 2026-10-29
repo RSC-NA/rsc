@@ -1,4 +1,4 @@
-"""Phase 1 of the Discord UI refresh (docs/discord-ui-refresh.md).
+"""Phase 1 of the Discord UI refresh (docs/plans/discord-ui-refresh.md).
 
 Covers the persistent `/playerinfo` buttons, the Report Match modal's
 rejected-submission flag, and confirm/decline handlers acknowledging the click.

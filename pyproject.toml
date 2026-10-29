@@ -144,8 +144,8 @@ line-ending = "auto"
 
 [tool.codespell]
 skip = ["*.json"]
-# "ot" is the overtime field abbreviation in replay summaries, not a typo.
-ignore-words-list = "ptd,oce,nd,cros,recuse,checkin,alph,ot"
+# "ot" is the overtime field abbreviation in replay summaries, and "optin" the /devleague optin command, not typos.
+ignore-words-list = "ptd,oce,nd,cros,recuse,checkin,optin,alph,ot"
 
 [tool.pytest.ini_options]
 minversion = "7.0"
