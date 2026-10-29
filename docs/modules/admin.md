@@ -53,7 +53,7 @@ Several commands reply **publicly** in the channel rather than ephemerally: `mem
 | `/admin franchise delteam franchise tier team` | Manage Server | Deletes the matching team from the API. |
 | `/admin franchise logo franchise logo` | Manage Server | Uploads a PNG of at most 200 KB to the API. Then replaces the franchise emoji (named after the prefix), resizing to 128x128 if needed, and sets the franchise role icon if the server has role icons. |
 | `/admin franchise rebrand franchise [override]` | Manage Server | Modal for the new name, prefix and team names (one per line, highest tier first). The number of team names must match the franchise's tiers. After a confirmation, rebrands in the API, then renames the transaction channel (and re-sorts it alphabetically), the franchise role and the emoji, and re-prefixes every member who has the franchise role. `override` sets the API's `admin_override`. |
-| `/admin franchise delete franchise` | Manage Server | Meant to delete the franchise and send its players to free agency. It currently always fails, because the API cannot delete franchises (see [Gotchas](#gotchas)). |
+| `/admin franchise delete franchise` | Manage Server | Replies privately that deleting a franchise has not been implemented in the RSC API. The full flow (confirm, delete, release players to free agency, strip the GM's roles and prefix, delete the franchise role) is kept in `_process_franchise_delete` and turns on with `FRANCHISE_DELETE_SUPPORTED`. |
 | `/admin franchise transfer franchise gm` | Manage Server | After a confirmation, transfers the franchise in the API. Renames the franchise role, gives the new GM the GM and franchise roles (removing FA, Captain, AGM and tier FA roles) and their prefix. Moves the old GM to Former GM with an `FA \|` prefix and their tier FA roles. Clears the AGM role and channel access of the franchise's former AGMs, because the API drops them on transfer, and swaps transaction channel access from the old GM to the new one. |
 
 ### /admin members
@@ -153,7 +153,7 @@ Match types are `REG`, `PRE`, `PST`, `FNL` and `ANY`. Formats are `GMS`, `BO3`, 
 
 | Command | Who can run it | What it does |
 |---|---|---|
-| `/admin audit search [action] [before] [after] [user] [limit]` | Manage Server | Reads the server's Discord audit log for one action type. The entries are only written to the debug log and the command sends no reply (see [Gotchas](#gotchas)). |
+| `/admin audit search [action] [before] [after] [user] [limit]` | Manage Server | Lists up to `limit` (at most 100) entries of one action type from the server's Discord audit log, privately: when, who, the target and the reason. `action` is required. |
 
 ## Configuration
 
@@ -258,10 +258,8 @@ All role and nickname changes go through `rsc.transactions.roles` (`update_leagu
 
 ## Gotchas
 
-- **`/admin franchise delete` cannot succeed.** `delete_franchise` in [franchises.py](../../rsc/franchises/franchises.py) always raises "The API does not support deleting franchises", so none of the Discord cleanup after it runs.
+- **`/admin franchise delete` only says it isn't implemented.** The website's franchise endpoint has no DELETE. When it does, set `FRANCHISE_DELETE_SUPPORTED = True` in [franchise.py](../../rsc/admin/franchise.py) and check `delete_franchise` in [franchises.py](../../rsc/franchises/franchises.py) calls the new endpoint.
 - **The daily role sync only covers one guild.** `sync_discord_roles` skips every guild except the hard-coded ID `395806681994493964`.
-- **`/admin audit search` never replies.** It writes the matching audit entries to the debug log only, so Discord shows "The application did not respond". It also errors unless `action` is given.
-- **`/admin franchise create` fails if the franchise role already exists.** `frole` is only assigned when the role is created, so with an existing `Name (GM)` role the `add_roles` call raises after the API franchise has already been created.
 - **`/admin sync transactionchannels delete_stale:True` deletes every text channel in the category that is not named after a franchise.** Point it only at the dedicated transactions category.
 - **Franchise roles are found by prefix match.** `franchise_role_from_name` returns the first role whose name starts with the franchise name, case-insensitive. A franchise whose name is a prefix of another role's name can match the wrong role.
 - **`#inactivity-check` is found by name anywhere in the guild.** `stop`, `ping`, startup re-attach and the DM jump link all look it up by name, while `start` only checks the chosen category for duplicates.

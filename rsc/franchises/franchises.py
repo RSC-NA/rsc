@@ -247,10 +247,12 @@ class FranchiseMixIn(RSCMixIn):
             except ApiException as exc:
                 raise RscException(response=exc)
 
-            # Populate cache
-            if result.name not in self._franchise_cache[guild.id]:
+            # Populate cache. setdefault: the franchise already exists, so a cache
+            # that startup never filled must not turn this into an error.
+            cache = self._franchise_cache.setdefault(guild.id, [])
+            if result.name and result.name not in cache:
                 log.debug(f"Adding {result.name} to franchise cache")
-                self._franchise_cache[guild.id].append(result.name)
+                cache.append(result.name)
                 self._franchise_cache[guild.id].sort()
 
             return result

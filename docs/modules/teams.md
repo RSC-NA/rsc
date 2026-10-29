@@ -50,7 +50,7 @@ None of its own. On startup `_setup_guild` in [core.py](../../rsc/core.py) calls
 
 Everything lives in [teams.py](../../rsc/teams/teams.py).
 
-- `_team_cache` is a per-guild, sorted list of team names. `teams()` refreshes it through `merge_name_cache` on every call. An unfiltered call replaces it, while a filtered call can only add to it. `/admin franchise delete` also removes names from it directly.
+- `_team_cache` is a per-guild, sorted list of team names. `teams()` refreshes it through `merge_name_cache` on every call. An unfiltered call replaces it, while a filtered call can only add to it. The franchise delete flow in [admin](./admin.md) removes names from it directly, once the API supports deletion.
 - `teams_autocomplete` works like the franchise autocomplete: the first 25 names when nothing is typed, otherwise up to 25 substring matches.
 - `/roster` calls `players(team_name=...)` from [members](./members.md), then keeps only exact, case-insensitive team-name matches, because the API filter is looser than that.
 - `tier_captains` keeps captains whose status is Rostered, Renewed, IR or AGM IR. `franchise_captains` keeps captains with any tier position, including 0. A comment notes that the top tier was once dropped because 0 is falsy.

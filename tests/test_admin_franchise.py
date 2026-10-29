@@ -296,3 +296,95 @@ class TestTeamCacheUpdates:
         await command_callback(AdminFranchiseMixIn._franchise_addteam_cmd)(mixin, interaction, "Dik-Diks", "premier", "Dik-diks")
 
         assert mixin._team_cache[guild.id] == ["Dik-diks"]
+
+
+class TestFranchiseDelete:
+    async def test_says_the_api_cannot_delete_franchises(self):
+        interaction = MagicMock(spec=discord.Interaction)
+        interaction.response.send_message = AsyncMock()
+        mixin = _create_mixin(franchises=AsyncMock())
+
+        await command_callback(AdminFranchiseMixIn._franchise_delete)(mixin, interaction, franchise="Hex Systems")
+
+        assert interaction.response.send_message.await_args is not None
+        kwargs = interaction.response.send_message.await_args.kwargs
+        assert kwargs["embed"].title == "Not Implemented"
+        assert kwargs["embed"].description == "Deleting a franchise has not been implemented in the RSC API."
+        assert kwargs["ephemeral"] is True
+        # Nothing is looked up or confirmed for a command that can't do anything
+        mixin.franchises.assert_not_awaited()
+
+    async def test_runs_the_kept_flow_once_supported(self, monkeypatch):
+        monkeypatch.setattr("rsc.admin.franchise.FRANCHISE_DELETE_SUPPORTED", True)
+        interaction = MagicMock(spec=discord.Interaction)
+        mixin = _create_mixin(_process_franchise_delete=AsyncMock())
+
+        await command_callback(AdminFranchiseMixIn._franchise_delete)(mixin, interaction, franchise="Hex Systems")
+
+        mixin._process_franchise_delete.assert_awaited_once_with(interaction, "Hex Systems")
+
+
+class TestFranchiseCreate:
+    @pytest.fixture
+    def gm(self):
+        gm = _guild_member(111)
+        gm.add_roles = AsyncMock()
+        gm.edit = AsyncMock()
+        gm.display_name = "Nick"
+        return gm
+
+    @pytest.fixture
+    def gm_role(self):
+        role = MagicMock(spec=discord.Role)
+        role.name = const.GM_ROLE
+        return role
+
+    def _guild(self, *roles):
+        guild = MagicMock(spec=discord.Guild)
+        guild.id = 395806681994493964
+        guild.roles = list(roles)
+        guild.create_role = AsyncMock()
+        return guild
+
+    def _interaction(self, guild):
+        interaction = MagicMock(spec=discord.Interaction)
+        interaction.guild = guild
+        interaction.edit_original_response = AsyncMock()
+        return interaction
+
+    async def run(self, guild, gm, monkeypatch):
+        view = MagicMock()
+        view.prompt = AsyncMock()
+        view.wait = AsyncMock()
+        view.result = True
+        monkeypatch.setattr("rsc.admin.franchise.CreateFranchiseView", MagicMock(return_value=view))
+        monkeypatch.setattr("rsc.admin.franchise.utils.remove_prefix", AsyncMock(return_value="Nick"))
+        franchise = MagicMock()
+        franchise.gm.rsc_name = "Nick"
+        mixin = _create_mixin(create_franchise=AsyncMock(return_value=franchise))
+        interaction = self._interaction(guild)
+
+        await command_callback(AdminFranchiseMixIn._franchise_create)(mixin, interaction, name="Hex Systems", prefix="HX", gm=gm)
+        return interaction
+
+    async def test_reuses_an_existing_franchise_role(self, gm, gm_role, monkeypatch):
+        frole = MagicMock(spec=discord.Role)
+        frole.name = "Hex Systems (Nick)"
+        guild = self._guild(gm_role, frole)
+
+        interaction = await self.run(guild, gm, monkeypatch)
+
+        guild.create_role.assert_not_awaited()
+        gm.add_roles.assert_awaited_once_with(frole, gm_role)
+        assert interaction.edit_original_response.await_args is not None
+        assert interaction.edit_original_response.await_args.kwargs["embed"].description == "Franchise has been created."
+
+    async def test_creates_the_franchise_role_when_missing(self, gm, gm_role, monkeypatch):
+        guild = self._guild(gm_role)
+        new_role = MagicMock(spec=discord.Role)
+        guild.create_role.return_value = new_role
+
+        await self.run(guild, gm, monkeypatch)
+
+        guild.create_role.assert_awaited_once()
+        gm.add_roles.assert_awaited_once_with(new_role, gm_role)

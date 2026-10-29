@@ -505,6 +505,20 @@ class TestUploadFranchiseLogoApi:
                 await mixin.upload_franchise_logo(mock_guild, id=1, logo=b"fake data")
 
 
+class TestCreateFranchiseApi:
+    async def test_unfilled_cache_does_not_fail_after_the_franchise_is_created(self, mock_guild, mock_member):
+        mixin = _create_mixin(_api_conf={mock_guild.id: MagicMock()}, _league={mock_guild.id: 1}, _franchise_cache={})
+        created = MagicMock(spec=Franchise)
+        created.name = "Hex Systems"
+
+        with patch("rsc.franchises.franchises.FranchisesApi") as mock_api_cls, patch("rsc.abc.ApiClient"):
+            mock_api_cls.return_value.franchises_create = AsyncMock(return_value=created)
+            result = await mixin.create_franchise(mock_guild, name="Hex Systems", prefix="HX", gm=mock_member)
+
+        assert result is created
+        assert mixin._franchise_cache[mock_guild.id] == ["Hex Systems"]
+
+
 class TestDeleteFranchiseApi:
     async def test_raises_without_calling_the_api(self, mock_guild):
         mixin = _create_mixin(_api_conf={mock_guild.id: MagicMock()})

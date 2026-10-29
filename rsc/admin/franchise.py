@@ -43,6 +43,10 @@ if TYPE_CHECKING:
 logger = logging.getLogger("red.rsc.admin.franchise")
 log = GuildLogAdapter(logger)
 
+# The website's franchise endpoint leaves out DELETE, so `/admin franchise delete` only
+# says so. Flip this once the API can delete franchises; the full flow is kept below.
+FRANCHISE_DELETE_SUPPORTED = False
+
 
 def rebrand_length_errors(prefix: str, teams: list[str]) -> list[str]:
     """Report every rebrand field that exceeds the API's length limits.
@@ -562,6 +566,23 @@ class AdminFranchiseMixIn(AdminMixIn):
         interaction: discord.Interaction,
         franchise: str,
     ):
+        if not FRANCHISE_DELETE_SUPPORTED:
+            await interaction.response.send_message(
+                embed=ErrorEmbed(title="Not Implemented", description="Deleting a franchise has not been implemented in the RSC API."),
+                ephemeral=True,
+            )
+            return
+
+        await self._process_franchise_delete(interaction, franchise)
+
+    async def _process_franchise_delete(self, interaction: discord.Interaction, franchise: str):
+        """Confirm, delete the franchise in the API, then clean up Discord.
+
+        Unused until the API can delete franchises; see `FRANCHISE_DELETE_SUPPORTED`.
+        Releases the franchise's players to free agency, strips the GM's roles and
+        prefix, deletes the franchise role, and drops the franchise and its teams
+        from the autocomplete caches.
+        """
         guild = interaction.guild
         if not guild:
             return
@@ -760,12 +781,12 @@ class AdminFranchiseMixIn(AdminMixIn):
             return
 
         frole_name = f"{name} ({f.gm.rsc_name})"
-        existing_frole = discord.utils.get(guild.roles, name=frole_name)
-        if not existing_frole:
+        frole = discord.utils.get(guild.roles, name=frole_name)
+        if not frole:
             log.debug(f"Creating new franchise role: {frole_name}")
             frole = await guild.create_role(name=frole_name, reason="New franchise created")
         else:
-            log.debug("Franchise role already exists")
+            log.debug("Franchise role already exists. Reusing it.")
 
         await gm.add_roles(frole, gm_role)
 

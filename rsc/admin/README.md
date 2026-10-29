@@ -33,7 +33,7 @@ This module is designed for RSC admins to perform day to day league management.
 
 - `/admin franchise logo` - Upload a logo for a franchise
 - `/admin franchise rebrand` - Rebrand a franchise
-- `/admin franchise delete` - Delete a franchise
+- `/admin franchise delete` - Not implemented in the RSC API yet; says so
 - `/admin franchise create` - Create a franchise
 - `/admin franchise transfer` - Transfer ownership of a franchise to a new General Manager
 

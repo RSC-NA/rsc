@@ -57,7 +57,6 @@ RSC API calls (`FranchisesApi`):
 
 ## Gotchas
 
-- The API cannot delete franchises, and `delete_franchise` always raises `RscException("The API does not support deleting franchises.")`. As a result `/admin franchise delete` always fails at the API step.
+- The API cannot delete franchises, and `delete_franchise` always raises `RscException("The API does not support deleting franchises.")`. `/admin franchise delete` says so up front; see [admin](./admin.md).
 - A franchise with no GM is normal (GMs are staff records now), so `franchise.gm` can be null anywhere.
-- `create_franchise` adds the new name to `_franchise_cache[guild.id]` by direct index. If the cache was never filled for that guild (for example the API was down at startup), the franchise is created in the API and then the command fails with a `KeyError`.
 - `franchises()` with no filter is a live API request every time. The cache only holds names and is not used to answer queries.

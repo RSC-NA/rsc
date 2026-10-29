@@ -9,7 +9,7 @@ from redbot.core import app_commands
 from redbot.core.app_commands import Transform
 
 from rsc.admin import AdminMixIn
-from rsc.embeds import ErrorEmbed
+from rsc.embeds import BlueEmbed, ErrorEmbed
 from rsc.logs import GuildLogAdapter
 from rsc.transformers import DateTransformer
 
@@ -90,6 +90,39 @@ class RSCAuditLogAction(Enum, metaclass=IndexableEnumMeta):
     creator_monetization_terms_accepted               = 151
 
 
+# Most entries one search fetches. Each is one line, so this stays within a single followup.
+AUDIT_SEARCH_MAX = 100
+# Room under Discord's 4096 character embed description limit
+AUDIT_PAGE_CHARS = 4000
+
+
+def audit_entry_line(entry: discord.AuditLogEntry) -> str:
+    """One audit log entry as a line: when, who, on what, and why."""
+    who = entry.user.mention if entry.user else "Unknown user"
+    line = f"{discord.utils.format_dt(entry.created_at, 'f')} {who}"
+    target = entry.target
+    if target is not None:
+        mention = getattr(target, "mention", None)
+        line += f" → {mention or getattr(target, 'name', None) or target.id}"
+    if entry.reason:
+        line += f" ({entry.reason})"
+    return line
+
+
+def audit_pages(lines: list[str]) -> list[str]:
+    """Join lines into embed descriptions that each stay under the size limit."""
+    pages: list[str] = []
+    page = ""
+    for line in lines:
+        if page and len(page) + len(line) + 1 > AUDIT_PAGE_CHARS:
+            pages.append(page)
+            page = ""
+        page = f"{page}\n{line}" if page else line
+    if page:
+        pages.append(page)
+    return pages
+
+
 # def __iter__(cls):
 #     return iter(list(RSCAuditLogAction))
 
@@ -150,12 +183,28 @@ class AdminAuditMixIn(AdminMixIn):
         # discord.py uses MISSING (not None) to signal an unset before/after
         before_arg: datetime = before if before is not None else MISSING
         after_arg: datetime = after if after is not None else MISSING
+        limit = min(max(limit, 1), AUDIT_SEARCH_MAX)
+
+        await interaction.response.defer(ephemeral=True)
 
         if user:
             # `user` is typed as the `Snowflake` protocol with a writable `id`, which the
             # read-only `id` on Member/User cannot satisfy. It accepts either at runtime.
-            async for entry in guild.audit_logs(action=audit_action, limit=limit, before=before_arg, after=after_arg, user=user):  # ty: ignore[invalid-argument-type]
-                log.debug(f"Entry: {entry}")
+            entries = guild.audit_logs(action=audit_action, limit=limit, before=before_arg, after=after_arg, user=user)  # ty: ignore[invalid-argument-type]
         else:
-            async for entry in guild.audit_logs(action=audit_action, limit=limit, before=before_arg, after=after_arg):
-                log.debug(f"Entry: {entry}")
+            entries = guild.audit_logs(action=audit_action, limit=limit, before=before_arg, after=after_arg)
+
+        try:
+            lines = [audit_entry_line(entry) async for entry in entries]
+        except discord.Forbidden:
+            return await interaction.followup.send(
+                embed=ErrorEmbed(description="I don't have permission to view this server's audit log."), ephemeral=True
+            )
+
+        title = f"Audit Log: {audit_action.name}"
+        if not lines:
+            return await interaction.followup.send(embed=BlueEmbed(title=title, description="No matching entries."), ephemeral=True)
+
+        embeds = [BlueEmbed(title=title, description=page) for page in audit_pages(lines)]
+        for i in range(0, len(embeds), 10):
+            await interaction.followup.send(embeds=embeds[i : i + 10], ephemeral=True)
