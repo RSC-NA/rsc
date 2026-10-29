@@ -28,8 +28,8 @@ dev = [
     # Used directly by tests/conftest.py. It previously arrived as a transitive
     # of the langchain stack, so removing that stack orphaned it.
     "python-dotenv>=1.0.0",
-    "pytest>=9.0.3",
-    "pytest-asyncio>=1.3.0",
+    "pytest>=9.2.0",
+    "pytest-asyncio>=1.4.1",
     "pytest-timeout>=2.4.0",
     "pytest-cov>=7.1.0",
 ]
@@ -157,7 +157,9 @@ python_files = ["test_*.py"]
 timeout = 10
 # Integration tests hit the live staging server, so their results depend on
 # infrastructure we do not control. Run them deliberately: `pytest -m integration`.
-addopts = "-m 'not integration'"
+# The aiohttp-json-rpc and anyio pytest plugins arrive with Red and openai, and no test
+# uses them. Both use pytest APIs that pytest 10 removes, and Red's pins stop us upgrading.
+addopts = "-m 'not integration' -p no:aiohttp-json-rpc -p no:anyio"
 filterwarnings = [
     "ignore::DeprecationWarning:aiohttp_json_rpc",
     "ignore::DeprecationWarning:aiohttp",
