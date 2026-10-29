@@ -1,4 +1,5 @@
 import logging
+from collections.abc import Iterable
 
 import discord
 from rscapi.models.franchise import Franchise
@@ -17,6 +18,21 @@ from rsc.utils import utils
 
 logger = logging.getLogger("red.rsc.transactions.roles")
 log = GuildLogAdapter(logger)
+
+# Roles each move finds by name. Checked before the API call, so a missing role stops
+# the move with nothing changed, instead of failing after the API has applied it.
+# Tier and franchise roles come from the API's answer, so they can't be checked first.
+CUT_ROLES = (const.CAPTAIN_ROLE, const.FORMER_PLAYER_ROLE, const.FREE_AGENT_ROLE, const.SPECTATOR_ROLE)
+SIGN_ROLES = (const.DRAFT_ELIGIBLE, const.FORMER_PLAYER_ROLE, const.FREE_AGENT_ROLE, const.SPECTATOR_ROLE)
+SUB_ROLES = (const.SUBBED_OUT_ROLE,)
+IR_ROLES = (const.IR_ROLE,)
+RETIRE_ROLES = (const.AGM_ROLE, const.FORMER_PLAYER_ROLE, const.LEAGUE_ROLE)
+CAPTAIN_ROLES = (const.CAPTAIN_ROLE,)
+
+
+def missing_roles(guild: discord.Guild, names: Iterable[str]) -> list[str]:
+    """The roles in `names` that don't exist in the guild, in the order given."""
+    return [name for name in names if not discord.utils.get(guild.roles, name=name)]
 
 
 async def update_signed_player_discord(

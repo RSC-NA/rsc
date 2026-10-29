@@ -162,7 +162,8 @@ Each command sends the API call first and then makes the Discord changes. A fail
 
 ## Gotchas
 
-- The "Subbed Out" and "IR" roles must exist. Their lookups raise if the role is missing, and they run after the API call. With "Subbed Out" missing, `/transactions sub` stops before announcing and before recording the sub, so it will never expire in Discord. With "IR" missing, `/transactions ir` stops after the API change.
+- Before calling the API, `cut`, `sign`, `resign`, `sub`, `expire`, `ir`, `retire`, `captain`, `draft` and `trade` check that the roles they change exist (the `*_ROLES` lists in [roles.py](../../rsc/transactions/roles.py)). If any are missing they refuse privately, naming the roles, with nothing changed. `trade` checks before opening its form. Tier and franchise roles come from the API's answer, so they can't be checked first.
+- The daily sub expiry keeps expiring contracts when "Subbed Out" is missing; it logs a warning and skips removing the role.
 - `/transactions notifications` replies "Transaction committee and GM notifications are now ..." but only toggles the committee setting. GM notifications have their own toggle, `gmnotifications`.
 - The website-trade failure report tells staff to use `/transactions announce`. That command only posts free text. The command that re-announces a transaction by ID is `/transactions tools processtrade`.
 - `/transactions trade` requires the transactions channel to be set even when `announce` is false.

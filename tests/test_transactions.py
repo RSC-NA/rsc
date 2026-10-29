@@ -35,6 +35,7 @@ from rsc.transactions.transactions import (
     TransactionMixIn,
     defaults,
 )
+from rsc.transactions.roles import CUT_ROLES, RETIRE_ROLES, SIGN_ROLES, SUB_ROLES, missing_roles
 from rsc.types import Substitute
 from rsc.utils import utils
 
@@ -58,6 +59,16 @@ def _create_mixin(**attrs):
 
 
 # Fixtures: mock_guild, mock_member, mock_executor, mock_player_out are provided by conftest.py
+
+
+def _roles(*names):
+    """Guild roles with these names."""
+    roles = []
+    for name in names:
+        role = MagicMock(spec=discord.Role)
+        role.name = name
+        roles.append(role)
+    return roles
 
 
 def _make_player(discord_id, name="TestPlayer"):
@@ -938,6 +949,7 @@ class TestTradeCommandAnnouncement:
 
     @pytest.fixture
     def interaction(self, mock_guild, mock_member):
+        mock_guild.roles = _roles(*SIGN_ROLES)
         interaction = MagicMock(spec=discord.Interaction)
         interaction.guild = mock_guild
         interaction.user = mock_member
@@ -1581,3 +1593,139 @@ class TestContractExpiredCard:
         assert (card.player_id, card.starter_back_id, card.gm_id) == (111, 222, 999)
         assert card.banner == utils.CONTRACT_EXPIRED_BANNER
         assert isinstance(card.logo, Path) and card.logo.name == "EliteFA_64x64.png"
+
+
+# --- Missing roles stop a move before the API call ---
+
+
+class TestMissingRoles:
+    def test_lists_only_the_missing_roles_in_order(self, mock_guild):
+        mock_guild.roles = _roles("Free Agent")
+
+        assert missing_roles(mock_guild, ["Subbed Out", "Free Agent", "IR"]) == ["Subbed Out", "IR"]
+
+    def test_nothing_missing(self, mock_guild):
+        mock_guild.roles = _roles("Subbed Out")
+
+        assert missing_roles(mock_guild, ["Subbed Out"]) == []
+
+
+class TestMovesRefuseWithoutRoles:
+    """A move whose roles are missing changes nothing in the API."""
+
+    @pytest.fixture
+    def interaction(self, mock_guild, mock_executor):
+        interaction = MagicMock(spec=discord.Interaction)
+        interaction.guild = mock_guild
+        interaction.user = mock_executor
+        interaction.response.defer = AsyncMock()
+        interaction.response.is_done = MagicMock(return_value=True)
+        interaction.followup.send = AsyncMock()
+        return interaction
+
+    @pytest.fixture
+    def mixin(self):
+        return _create_mixin(
+            cut=AsyncMock(),
+            sign=AsyncMock(),
+            resign=AsyncMock(),
+            substitution=AsyncMock(),
+            inactive_reserve=AsyncMock(),
+            retire=AsyncMock(),
+            expire_sub=AsyncMock(),
+            draft=AsyncMock(),
+        )
+
+    def _refusal(self, interaction) -> str:
+        assert interaction.followup.send.await_args is not None
+        kwargs = interaction.followup.send.await_args.kwargs
+        assert kwargs["ephemeral"] is True
+        assert kwargs["embed"].title == "Missing Roles"
+        return kwargs["embed"].description
+
+    @pytest.mark.parametrize(
+        ("command", "api", "roles", "kwargs"),
+        [
+            ("_transactions_cut", "cut", CUT_ROLES, {}),
+            ("_transactions_sign", "sign", SIGN_ROLES, {"team": "Comets"}),
+            ("_transactions_resign", "resign", SIGN_ROLES, {"team": "Comets"}),
+            ("_transactions_retire_cmd", "retire", RETIRE_ROLES, {}),
+            ("_transactions_expire", "expire_sub", SUB_ROLES, {}),
+            ("_transactions_draft_cmd", "draft", SIGN_ROLES, {"team": "Comets", "round": 1, "pick": 1}),
+        ],
+    )
+    async def test_player_moves(self, mixin, interaction, mock_guild, mock_member, command, api, roles, kwargs):
+        # Every role but the last
+        mock_guild.roles = _roles(*roles[:-1])
+
+        await command_callback(getattr(TransactionMixIn, command))(mixin, interaction, player=mock_member, **kwargs)
+
+        getattr(mixin, api).assert_not_awaited()
+        assert f"**{roles[-1]}**" in self._refusal(interaction)
+
+    async def test_sub_without_subbed_out(self, mixin, interaction, mock_guild, mock_member, mock_player_out):
+        await command_callback(TransactionMixIn._transactions_substitute)(
+            mixin, interaction, player_in=mock_member, player_out=mock_player_out
+        )
+
+        mixin.substitution.assert_not_awaited()
+        assert "**Subbed Out**" in self._refusal(interaction)
+
+    async def test_ir_without_ir(self, mixin, interaction, mock_member):
+        action = MagicMock()
+        action.value = 0
+
+        await command_callback(TransactionMixIn._transactions_ir)(mixin, interaction, action=action, player=mock_member)
+
+        mixin.inactive_reserve.assert_not_awaited()
+        assert "**IR**" in self._refusal(interaction)
+
+    async def test_trade_refuses_before_the_modal(self, mixin, mock_guild, mock_member):
+        mixin._trans_channel = AsyncMock(return_value=MagicMock())
+        interaction = MagicMock(spec=discord.Interaction)
+        interaction.guild = mock_guild
+        interaction.user = mock_member
+        interaction.response.is_done = MagicMock(return_value=False)
+        interaction.response.send_message = AsyncMock()
+        interaction.response.send_modal = AsyncMock()
+
+        await command_callback(TransactionMixIn._transactions_trade_cmd)(mixin, interaction)
+
+        interaction.response.send_modal.assert_not_awaited()
+        assert interaction.response.send_message.await_args is not None
+        assert interaction.response.send_message.await_args.kwargs["embed"].title == "Missing Roles"
+
+    async def test_sub_goes_ahead_when_the_roles_exist(self, mixin, interaction, mock_guild, mock_member, mock_player_out):
+        mock_guild.roles = _roles(*SUB_ROLES)
+        mixin.substitution.side_effect = RscException(message="stop here")
+
+        await command_callback(TransactionMixIn._transactions_substitute)(
+            mixin, interaction, player_in=mock_member, player_out=mock_player_out
+        )
+
+        mixin.substitution.assert_awaited_once()
+
+
+class TestSubExpiryWithoutSubbedOutRole:
+    async def test_contracts_still_expire(self, mock_guild):
+        sub = Substitute(
+            date="2000-01-01T00:00:00+00:00",
+            player_in=1,
+            player_out=2,
+            team="Comets",
+            gm=3,
+            tier="Elite",
+            franchise="Comets",
+        )
+        mixin = _create_mixin(
+            _get_substitutes=AsyncMock(return_value=[sub]),
+            _trans_channel=AsyncMock(return_value=None),
+            timezone=AsyncMock(return_value=ZoneInfo("UTC")),
+            _rm_substitute=AsyncMock(),
+        )
+        mixin.bot = MagicMock()
+        mixin.bot.guilds = [mock_guild]
+
+        await TransactionMixIn.expire_sub_contract_loop.coro(mixin)
+
+        mixin._rm_substitute.assert_awaited_once_with(mock_guild, sub)

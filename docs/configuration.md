@@ -29,14 +29,14 @@ Several features find roles by their exact name. Create these before turning fea
 | `General Manager`, `Assistant GM`, `Captain` | Transactions, sync |
 | `Free Agent`, `PermFA`, `PermFA in Waiting`, `Draft Eligible`, `Spectator` | Sign-up, transactions, sync |
 | `Former Player`, `Former GM`, `Former Staff`, `Former Admin` | Retirements, sync |
-| `Subbed Out`, `IR` | Subs and injured reserve. Missing roles make those commands fail after the API change has gone through |
+| `Subbed Out`, `IR` | Subs and injured reserve |
 | `Admin` | Combines `start`; the ceiling for the bot's role commands |
 | `Muted` | Optional, Combines lobby channels |
 | `Dev League Interest` | Dev League opt-in |
 | One per tier, named exactly like the tier, plus `<Tier>FA` | Tiers, transactions, `/tiers` |
 | One per franchise | Created by `/admin sync franchiseroles` |
 
-The names are constants in [rsc/const.py](../rsc/const.py). `/admin sync requiredroles` creates most of them; it does not create `Draft Eligible`, `Former GM`, `Admin`, `Dev League Interest`, or the tier roles (use `/admin sync tiers` for those).
+Transaction commands check that the roles a move changes exist before they call the API, and refuse with the missing names if not, so a missing role never leaves a move half done. The names are constants in [rsc/const.py](../rsc/const.py). `/admin sync requiredroles` creates most of them; it does not create `Draft Eligible`, `Former GM`, `Admin`, `Dev League Interest`, or the tier roles (use `/admin sync tiers` for those).
 
 Each franchise also needs a `<franchise-name>-transactions` channel (lowercase, dashes); `/admin sync transactionchannels` creates them.
 

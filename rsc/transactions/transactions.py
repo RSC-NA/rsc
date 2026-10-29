@@ -2,7 +2,7 @@ import asyncio
 import logging
 import re
 from typing import TYPE_CHECKING
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Iterable
 from datetime import datetime, time, timedelta
 from pprint import pformat
 
@@ -57,6 +57,13 @@ from rsc.teams import TeamMixIn
 from rsc.transactions.modals import CutMsgModal, TransactionAnnouncementModal
 from rsc.transactions.trade_announce import announce_trade, apply_trade_role_updates, player_sources_from_trade
 from rsc.transactions.roles import (
+    CAPTAIN_ROLES,
+    CUT_ROLES,
+    IR_ROLES,
+    RETIRE_ROLES,
+    SIGN_ROLES,
+    SUB_ROLES,
+    missing_roles,
     update_cut_player_discord,
     update_nonplaying_discord,
     update_signed_player_discord,
@@ -164,7 +171,12 @@ class TransactionMixIn(RSCMixIn):
                 # Still need to remove player from sub list after.
                 log.warning("Substitutes found but transaction channel not set", guild=guild)
 
-            subbed_out_role = await utils.get_subbed_out_role(guild)
+            # A missing role must not stop contracts expiring, here or in other guilds
+            try:
+                subbed_out_role = await utils.get_subbed_out_role(guild)
+            except ValueError:
+                log.warning("Subbed Out role is missing. Expiring contracts without removing it.", guild=guild)
+                subbed_out_role = None
 
             guild_tz = await self.timezone(guild)
             yesterday = datetime.now(tz=guild_tz) - timedelta(1)
@@ -395,6 +407,30 @@ class TransactionMixIn(RSCMixIn):
     )
 
     # Settings
+
+    async def _refuse_without_roles(self, interaction: discord.Interaction, guild: discord.Guild, names: Iterable[str]) -> bool:
+        """Stop a move before the API call when a role it changes doesn't exist.
+
+        Returns True when the caller has been told and the command must stop.
+        """
+        missing = missing_roles(guild, names)
+        if not missing:
+            return False
+
+        log.warning(f"Refusing transaction. Missing roles: {missing}", guild=guild)
+        roles = ", ".join(f"**{name}**" for name in missing)
+        embed = ErrorEmbed(
+            title="Missing Roles",
+            description=(
+                f"Nothing has been changed. This move needs roles that don't exist in this server: {roles}\n\n"
+                "Create them, then try again. `/admin sync requiredroles` creates most of the standard roles."
+            ),
+        )
+        if interaction.response.is_done():
+            await interaction.followup.send(embed=embed, ephemeral=True)
+        else:
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+        return True
 
     @_transactions.command(name="settings", description="Display current transactions settings")
     @app_commands.checks.has_permissions(manage_guild=True)
@@ -724,6 +760,8 @@ class TransactionMixIn(RSCMixIn):
 
         # Defer
         await interaction.response.defer(ephemeral=True)
+        if await self._refuse_without_roles(interaction, guild, CUT_ROLES):
+            return
 
         try:
             result = await self.cut(
@@ -825,6 +863,9 @@ class TransactionMixIn(RSCMixIn):
 
         # Sign player
         await interaction.response.defer(ephemeral=True)
+        if await self._refuse_without_roles(interaction, guild, SIGN_ROLES):
+            return
+
         try:
             result = await self.sign(
                 guild,
@@ -925,6 +966,9 @@ class TransactionMixIn(RSCMixIn):
         #     return
 
         await interaction.response.defer(ephemeral=True)
+        if await self._refuse_without_roles(interaction, guild, SIGN_ROLES):
+            return
+
         # Process sign
         try:
             result = await self.resign(
@@ -1013,6 +1057,9 @@ class TransactionMixIn(RSCMixIn):
         #         embed=ErrorEmbed(description="Only admins can process an override.")
         #     )
         #     return
+
+        if await self._refuse_without_roles(interaction, guild, SUB_ROLES):
+            return
 
         try:
             result = await self.substitution(
@@ -1212,6 +1259,10 @@ class TransactionMixIn(RSCMixIn):
             )
             return
 
+        # Before the modal, so nobody types out a trade that can't be processed
+        if await self._refuse_without_roles(interaction, guild, SIGN_ROLES):
+            return
+
         trade_modal = TradeAnnouncementModal(timeout=MODAL_TIMEOUT)
         await interaction.response.send_modal(trade_modal)
         if await trade_modal.wait():
@@ -1322,6 +1373,9 @@ class TransactionMixIn(RSCMixIn):
                 captains.append(v)
         log.debug(f"Captain Count: {len(captains)}", guild=guild)
 
+        if await self._refuse_without_roles(interaction, guild, CAPTAIN_ROLES):
+            return
+
         results: list[discord.Member] = []
         for captain in captains:
             # Get team of player being made captain
@@ -1404,6 +1458,9 @@ class TransactionMixIn(RSCMixIn):
             return
 
         await interaction.response.defer(ephemeral=True)
+        if await self._refuse_without_roles(interaction, guild, SUB_ROLES):
+            return
+
         try:
             result = await self.expire_sub(
                 guild,
@@ -1553,6 +1610,9 @@ class TransactionMixIn(RSCMixIn):
         remove = bool(action.value)
         log.debug(f"Remove from IR: {remove}", guild=guild)
 
+        if await self._refuse_without_roles(interaction, guild, IR_ROLES):
+            return
+
         try:
             result = await self.inactive_reserve(
                 guild,
@@ -1627,6 +1687,9 @@ class TransactionMixIn(RSCMixIn):
         #     return
 
         await interaction.response.defer(ephemeral=True)
+        if await self._refuse_without_roles(interaction, guild, RETIRE_ROLES):
+            return
+
         try:
             result = await self.retire(
                 guild,
@@ -1881,6 +1944,9 @@ class TransactionMixIn(RSCMixIn):
         #     return
 
         await interaction.response.defer()
+        if await self._refuse_without_roles(interaction, guild, SIGN_ROLES):
+            return
+
         try:
             result = await self.draft(
                 guild=guild,

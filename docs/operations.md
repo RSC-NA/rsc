@@ -48,6 +48,10 @@ The guild's API key is wrong, expired or lacks permission for that league. Get a
 
 The RSC API was down or slow while the bot started, so that guild's caches are empty and autocomplete returns nothing. Once the API is back, `[p]reload rsc` rebuilds them. API calls themselves retry server errors a few times before failing.
 
+### A transaction says "Missing Roles"
+
+The move needs a role that doesn't exist in this server, such as `Subbed Out` or `IR`. Nothing was changed in the API. Create the roles it names (`/admin sync requiredroles` creates most of the standard ones), then run the command again.
+
 ### `Unable to bind web app to localhost:8008`
 
 Something else holds the port, most often a previous bot process that didn't exit. The bot keeps running without the Combines and Dev League webhooks. Find the process with `ss -ltnp 'sport = :8008'`, stop it, then `[p]reload rsc`.
