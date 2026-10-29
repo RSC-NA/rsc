@@ -64,7 +64,8 @@ class TestRaceStatuses:
             # The last wildcard, level with Hydra
             "Orbit": RaceStatus.BUBBLE,
             "Hydra": RaceStatus.BUBBLE,
-            "Wandering Nomads": RaceStatus.OUT,
+            # Two wins back is still on the bubble
+            "Wandering Nomads": RaceStatus.BUBBLE,
             "Glacier": RaceStatus.ELIMINATED,
             "Lantern": RaceStatus.ELIMINATED,
         }
@@ -75,7 +76,8 @@ class TestRaceStatuses:
         # Spartans hold the last spot a win clear of Vipers
         assert statuses["Spartans"] is RaceStatus.BUBBLE
         assert statuses["Vipers"] is RaceStatus.BUBBLE
-        assert statuses["Cyclones"] is RaceStatus.OUT
+        # Two wins behind the last spot is still on the bubble
+        assert statuses["Cyclones"] is RaceStatus.BUBBLE
         # 5 wins + 4 left = 9, level with Spartans: a tiebreaker could still go its way
         assert statuses["Neon Desert Outlaws"] is RaceStatus.OUT
         assert statuses["Bandits"] is RaceStatus.ELIMINATED
@@ -289,7 +291,7 @@ class TestGraphicMessage:
         lunar, solar = view.children
         assert isinstance(lunar, ui.Container) and isinstance(solar, ui.Container)
         kinds = [type(item).__name__ for item in lunar.children]
-        assert kinds == ["TextDisplay", "TextDisplay", "MediaGallery", "Separator", "TextDisplay"]
+        assert kinds == ["TextDisplay", "TextDisplay", "MediaGallery"]
         # The standings link closes the message, under the last card only
         assert [type(item).__name__ for item in solar.children][-1] == "ActionRow"
         assert [f.filename for f in files] == ["playoffs-1.png", "playoffs-2.png"]
@@ -306,27 +308,12 @@ class TestGraphicMessage:
         assert _texts(view)[1].startswith("## Master\n")
         assert len(files) == 1
 
-    def test_each_conference_has_its_own_summary(self):
+    def test_no_text_summary_under_the_graphic(self):
+        # The graphic already shows the statuses; only the image and, on the last card, the link remain
         lunar, solar = _card(samples.elite_hunt(), graphics=True).render()[0].children
         assert isinstance(lunar, ui.Container) and isinstance(solar, ui.Container)
-        lunar_summary = [i.content for i in lunar.children if isinstance(i, ui.TextDisplay)][-1]
-        solar_summary = [i.content for i in solar.children if isinstance(i, ui.TextDisplay)][-1]
-        assert lunar_summary.split("\n") == [
-            "**Clinched** Quantum",
-            f"**On the bubble** Orbit and Hydra, both 10-{WJ}8, for Lunar's last spot. Orbit ahead on the tiebreaker.",
-            "**Eliminated** Glacier and Lantern",
-        ]
-        assert solar_summary.split("\n") == ["**Clinched** Phoenix and Tempest", "**Eliminated** Ashfall and Drizzle"]
-
-    def test_summary_whole_tier(self):
-        summary = _texts(_card(samples.master_hunt(), graphics=True).render()[0])[-1]
-        assert f"**On the bubble** Spartans (9-{WJ}9) and Vipers (8-{WJ}10) for the last spot" in summary.split("\n")
-
-    def test_summary_before_anything_is_decided(self):
-        teams = [team(1, "Alpha", 1, 0, reason="cut", magic=9, remaining=12), team(2, "Bravo", 0, 1, delta="1 win back", remaining=12)]
-        h = hunt([group("Master", 1, teams)], fmt="TIER")
-        summary = _texts(_card(h, graphics=True).render()[0])[-1]
-        assert summary == f"**On the bubble** Alpha (1-{WJ}0) and Bravo (0-{WJ}1) for the last spot"
+        assert not any(isinstance(item, ui.Separator) for item in [*lunar.children, *solar.children])
+        assert not any("On the bubble" in t or "Clinched" in t for t in _texts(_card(samples.elite_hunt(), graphics=True).render()[0]))
 
     def test_fresh_files_each_render(self):
         card = _card(samples.master_hunt(), graphics=True)
@@ -409,7 +396,7 @@ class TestPills:
             ("Raptors", ("1 TO CLINCH", graphic.Pill.RING_GREEN)),
             ("Spartans", ("4 TO CLINCH", graphic.Pill.SOLID_AMBER)),
             ("Vipers", ("1 BACK", graphic.Pill.RING_AMBER)),
-            ("Cyclones", ("2 BACK", graphic.Pill.RING_GREY)),
+            ("Cyclones", ("2 BACK", graphic.Pill.RING_AMBER)),
             ("Bandits", ("ELIMINATED", graphic.Pill.DIM)),
         ],
     )

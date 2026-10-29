@@ -17,6 +17,10 @@ from rscapi.models.playoff_team import PlayoffTeam
 from rscapi.models.tier_playoff_hunt import TierPlayoffHunt
 
 
+# How many wins behind the team it's chasing a team can be and still be on the bubble
+BUBBLE_WINS = 2
+
+
 class RaceStatus(StrEnum):
     # In, whatever happens: the magic number is 0, or the regular season is over
     CLINCHED = "clinched"
@@ -76,9 +80,9 @@ def _measured_against(team: PlayoffTeam, group: PlayoffGroup) -> PlayoffTeam | N
 
 
 def _close_behind(team: PlayoffTeam, target: PlayoffTeam) -> bool:
-    """Level on the tiebreaker or a random draw, or a single win back."""
+    """Level on the tiebreaker or a random draw, or up to BUBBLE_WINS back."""
     delta = team.playoff_delta_label
-    return delta == "Tiebreaker" or delta.startswith("Random draw") or target.games_won - team.games_won <= 1
+    return delta == "Tiebreaker" or delta.startswith("Random draw") or target.games_won - team.games_won <= BUBBLE_WINS
 
 
 def race_statuses(group: PlayoffGroup, *, complete: bool = False) -> dict[int, RaceStatus]:

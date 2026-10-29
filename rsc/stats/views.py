@@ -7,7 +7,7 @@ import discord
 from discord import ui
 
 from rsc.stats.graphic import GRAPHIC_FORMAT
-from rsc.stats.playoffs import Race, RaceStatus, RaceTeam, chase, games_left, names, route, spots, to_clinch
+from rsc.stats.playoffs import Race, RaceTeam, chase, games_left, route, spots, to_clinch
 
 NBSP = "\N{NO-BREAK SPACE}"
 WJ = "\N{WORD JOINER}"
@@ -129,51 +129,12 @@ class PlayoffRaceCard:
         files.append(file)
         container.add_item(ui.MediaGallery(discord.MediaGalleryItem(file, description=alt_text(race, whole_tier=self.whole_tier))))
 
-        # The key facts as text too, so they're searchable and a screen reader gets them
-        container.add_item(ui.Separator())
-        container.add_item(ui.TextDisplay(self._summary([race])))
-        # The standings link closes the message, under the last card
+        # The graphic already shows who's clinched, on the bubble or out, and screen readers get its alt text.
+        # The standings link closes the message, under the last card.
         row = self._links() if links else None
         if row:
             container.add_item(row)
         return container
-
-    def _summary(self, races: list[Race]) -> str:
-        def bold_list(teams: list[RaceTeam]) -> str:
-            return names([discord.utils.escape_markdown(t.name) for t in teams])
-
-        clinched = [t for race in races for t in race.with_status(RaceStatus.CLINCHED)]
-        eliminated = [t for race in races for t in race.with_status(RaceStatus.ELIMINATED)]
-        lines = []
-        if clinched:
-            lines.append(f"**Clinched** {bold_list(clinched)}")
-        lines += filter(None, (self._bubble_line(race) for race in races))
-        if eliminated:
-            lines.append(f"**Eliminated** {bold_list(eliminated)}")
-        return "\n".join(lines) or "Nobody has clinched a spot or been eliminated yet."
-
-    def _bubble_line(self, race: Race) -> str:
-        """Who's fighting over the last spot, e.g. 'Orbit and Hydra, both 10-8, for Lunar's last spot'."""
-        bubble = race.with_status(RaceStatus.BUBBLE)
-        holding = [t for t in bubble if t.qualified]
-        chasing = [t for t in bubble if not t.qualified]
-        if not (holding and chasing):
-            return ""
-        esc = discord.utils.escape_markdown
-        spot = "last spots" if len(holding) > 1 else "last spot"
-        where = f" for the {spot}" if self.whole_tier else f" for {race.label}'s {spot}"
-        if len(holding) == len(chasing) == 1:
-            ahead, behind = holding[0], chasing[0]
-            if ahead.record == behind.record:
-                line = f"**On the bubble** {esc(ahead.name)} and {esc(behind.name)}, both {keep_together(ahead.record)},{where}."
-                delta = behind.team.playoff_delta_label
-                if delta == "Tiebreaker":
-                    line += f" {esc(ahead.name)} ahead on the tiebreaker."
-                elif delta.startswith("Random draw"):
-                    line += f" {esc(ahead.name)} ahead on a random draw."
-                return line
-        teams = names([f"{esc(t.name)} ({keep_together(t.record)})" for t in [*holding, *chasing]])
-        return f"**On the bubble** {teams}{where}"
 
     # The text race board
 
