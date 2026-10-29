@@ -47,9 +47,10 @@ Combines and Dev League run on `devleague.rscna.com`, a separate site from the m
 
 - **Client:** the `sentry-sdk` Python package, started in `init_sentry()` in [rsc/\_\_init\_\_.py](../rsc/__init__.py) when the cog loads.
 - **Project:** `rsc-discord-bot` in the `individual-s2` Sentry organization.
-- **Enabled by:** the `SENTRY_DSN` environment variable. Only the production host sets it, so dev instances report nothing. `SENTRY_ENVIRONMENT` overrides the environment tag (default `production`).
-- **What it reports:** errors only, no tracing. Every error-level log record becomes an event, which covers command and slash command errors (Red logs them with `log.exception`) and failures the cog logs itself. Lower-level log lines go along as breadcrumbs.
-- **Data:** `send_default_pii` is off, so Sentry doesn't attach user IPs or request bodies. Exception messages and log lines are sent as written.
+- **Enabled by:** the `SENTRY_DSN` environment variable. Only the production host sets it, so dev instances report nothing. `SENTRY_ENVIRONMENT` overrides the environment tag (default `production`), and `SENTRY_RELEASE` sets the release if you want issues tied to a deploy.
+- **What it reports:** errors only, no tracing. Every error-level log record becomes an event, which covers command and slash command errors (Red logs them with `log.exception`), task loop failures and failures the cog logs itself. Info and warning lines go along as breadcrumbs. Debug lines, which carry full LLM payloads, are never sent.
+- **OpenAI integration:** turned off. It reports every failed OpenAI call as unhandled, even when the llm module catches it and answers the user.
+- **Data:** `send_default_pii` and `data_collection` are left unset, so Sentry doesn't attach user IPs or request bodies. Stack frame locals are sent, with the variables that hold API keys (`key`, `openai_key`, `auth_key`, plus Sentry's default list) replaced by `[Filtered]`. Exception messages and log lines are sent as written.
 
 ## Google Cloud Storage
 
