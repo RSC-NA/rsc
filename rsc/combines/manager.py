@@ -1,5 +1,4 @@
 import logging
-import re
 from typing import TYPE_CHECKING
 
 import discord
@@ -14,6 +13,7 @@ from rsc.const import (
 )
 from rsc.combines.guide import combines_command_mentions, combines_guide
 from rsc.embeds import BlueEmbed, ErrorEmbed, GreenEmbed
+from rsc.lobbies.channels import parse_lobby_channel
 from rsc.types import CombineSettings
 from rsc.utils import utils
 
@@ -334,20 +334,9 @@ class CombineManagerMixIn(RSCMixIn):
         """Delete a combine category and it's associated channels"""
         log.debug(f"[{category.guild}] Deleting combine category game rooms: {category.name}")
 
-        combine_vc_regex = re.compile(r"^\w+-\d+-(home|away)$", flags=re.IGNORECASE)
-
-        vclist = category.channels
-        for vc in vclist:
-            if not isinstance(vc, discord.VoiceChannel):
-                continue
-
-            if not vc.category:
-                continue
-
-            if not vc.category.name.lower().startswith("combines"):
-                continue
-
-            if combine_vc_regex.match(vc.name):
+        # Waiting rooms and other general channels don't parse as lobby channels, so they stay
+        for vc in category.voice_channels:
+            if parse_lobby_channel(vc.name):
                 log.debug(f"Deleting {vc.name}")
                 await vc.delete(reason="Combine lobby has finished.")
 

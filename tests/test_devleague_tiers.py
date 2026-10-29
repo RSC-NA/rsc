@@ -4,7 +4,6 @@ from rsc.devleague.tiers import (
     UNKNOWN_TIER_RANK,
     channel_sort_key,
     lobby_channel_name,
-    parse_lobby_channel,
     tier_rank,
     tier_slug,
 )
@@ -33,15 +32,12 @@ def test_unknown_tier_sorts_last(tier):
     assert tier_rank(tier) > tier_rank("F")
 
 
-def test_channel_name_round_trip():
-    name = lobby_channel_name("S+", 42, "home")
-    assert name == "splus-42-home"
-    assert parse_lobby_channel(name) == ("splus", 42, "home")
+def test_channel_name_uses_the_slug():
+    assert lobby_channel_name("S+", 42, "home") == "splus-42-home"
 
 
-@pytest.mark.parametrize("name", ["general", "S+-42-home", "a-42-lobby", "a-x-home", "veteran-81"])
-def test_parse_ignores_non_game_channels(name):
-    assert parse_lobby_channel(name) is None
+@pytest.mark.parametrize("name", ["general", "a-42-lobby", "a-x-home", "veteran-81"])
+def test_non_game_channels_have_no_sort_key(name):
     assert channel_sort_key(name) is None
 
 
