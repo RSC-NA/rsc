@@ -33,8 +33,11 @@ repos:
       # idna, markdown, orjson and pygments with `==`, so the audit can never pass.
       # Run `uv audit` by hand to re-check whether Red has relaxed those pins.
       #
-      # Re-sync the venv after checkout/pull/rebase
+      # Re-sync the venv after checkout/pull/rebase. Every group, because the ty hook
+      # type-checks scripts/, whose imports (pandas, requests) live in the scripts group:
+      # the default sync removed them and the next commit failed ty.
       - id: uv-sync
+        args: ["--locked", "--all-groups"]
       # Mirror uv.lock into requirements.txt as a backup install source
       - id: uv-export
         name: uv-export (runtime)
