@@ -12,6 +12,7 @@ from rscapi.models.match_list import MatchList
 from rscapi.models.match_results import MatchResults
 from rscapi.models.match_score_report_request import MatchScoreReportRequest
 from rscapi.models.match_submission import MatchSubmission
+from rscapi.models.pending_series import PendingSeries
 
 from rsc.abc import RSCMixIn
 from rsc.embeds import BlueEmbed, ErrorEmbed, ExceptionErrorEmbed, YellowEmbed, ApiExceptionErrorEmbed
@@ -242,6 +243,18 @@ class MatchMixIn(RSCMixIn):
             )
             return
 
+        if not match and not day:
+            # A bye seed's next playoff series has no match until the series feeding it is
+            # reported, which on a playoff night is minutes before it starts. It carries no
+            # lobby, so it is safe to show whoever asked, franchise manager or not.
+            try:
+                series = await self.pending_series(guild, team_id)
+            except RscException as exc:
+                return await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc, title="Match Info"), ephemeral=True)
+            if series:
+                embed = await self.build_pending_series_embed(guild, series)
+                return await interaction.followup.send(embed=embed, ephemeral=True)
+
         if not match:
             return await interaction.followup.send(
                 embed=BlueEmbed(
@@ -438,6 +451,48 @@ class MatchMixIn(RSCMixIn):
             "These must be uploaded to the [RSC Website](https://www.rocketsoccarconfederation.com/replay-and-screenshot-uploads) after the game is finished."  # noqa: E501
         )
         embed.add_field(name="Additional Info", value=additional_fmt, inline=False)
+        return embed
+
+    async def build_pending_series_embed(self, guild: discord.Guild, series: PendingSeries) -> discord.Embed:
+        """A playoff series whose opponent is the winner of a series still to be reported."""
+        tier_color = await tier_color_by_name(guild, series.tier) if series.tier else discord.Color.default()
+
+        feeder = series.feeder_match
+        first, second = series.possible_opponents
+        title = f"{series.round_label} Match"
+        if series.var_date:
+            title += f": {series.var_date.strftime('%B %-d, %Y')}"
+
+        embed = discord.Embed(
+            title=title,
+            description=f"**{series.team.name}**\nversus\n**Winner of {first.name} / {second.name}**",
+            color=tier_color,
+        )
+        if series.var_date:
+            starts = int(series.var_date.timestamp())
+            embed.add_field(name="Starts", value=f"<t:{starts}:F> (<t:{starts}:R>)", inline=False)
+        embed.add_field(name="Format", value=f"Best of {series.num_games}", inline=False)
+
+        feeder_round = f"{PostSeasonType(feeder.day).name.title()} " if feeder.day else ""
+        feeder_when = f" at <t:{int(feeder.var_date.timestamp())}:t>" if feeder.var_date else ""
+        embed.add_field(
+            name="Opponent",
+            value=f"Decided by the {feeder_round}series **{feeder.home_team.name}** vs **{feeder.away_team.name}**{feeder_when}.",
+            inline=False,
+        )
+
+        if series.home is True:
+            home_fmt = f"**{series.team.name}** will be the **HOME** team and create the room."
+        elif series.home is False:
+            home_fmt = f"**{series.team.name}** will be the **AWAY** team and join the room."
+        else:
+            home_fmt = "The higher seed is the home team, so it depends on who wins that series."
+        embed.add_field(name="Home Team", value=home_fmt, inline=False)
+        embed.add_field(
+            name="Lobby Info",
+            value="The lobby is created once that series is reported. Run `/match` again then for the name and password.",
+            inline=False,
+        )
         return embed
 
     async def roster_fmt_from_match(self, guild: discord.Guild, match: Match, with_gm: bool = True) -> tuple[str, str]:

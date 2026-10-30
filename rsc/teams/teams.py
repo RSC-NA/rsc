@@ -8,7 +8,9 @@ from rscapi.exceptions import ApiException, BadRequestException, NotFoundExcepti
 from rscapi.models.high_level_match import HighLevelMatch
 from rscapi.models.league_player import LeaguePlayer
 from rscapi.models.match import Match
+from rscapi.models.pending_series import PendingSeries
 from rscapi.models.team import Team
+from rscapi.models.team_detail import TeamDetail
 from rscapi.models.team_create import TeamCreate
 from rscapi.models.team_list import TeamList
 from rscapi.models.team_player import TeamPlayer
@@ -654,7 +656,7 @@ class TeamMixIn(RSCMixIn):
         self,
         guild: discord.Guild,
         id: int,
-    ) -> Team:
+    ) -> TeamDetail:
         """Fetch team data by id"""
         async with self.api_client(guild) as client:
             try:
@@ -685,6 +687,22 @@ class TeamMixIn(RSCMixIn):
             try:
                 api = TeamsApi(client)
                 return await api.teams_next_match_retrieve(id)
+            except NotFoundException:
+                return None
+            except ApiException as exc:
+                raise RscException(exc)
+
+    async def pending_series(
+        self,
+        guild: discord.Guild,
+        id: int,
+    ) -> PendingSeries | None:
+        """The team's next playoff series while its opponent is still being decided, which
+        has no match (and so no lobby) until the series feeding it is reported."""
+        async with self.api_client(guild) as client:
+            try:
+                api = TeamsApi(client)
+                return await api.teams_pending_series_retrieve(id)
             except NotFoundException:
                 return None
             except ApiException as exc:

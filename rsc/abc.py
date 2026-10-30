@@ -26,6 +26,7 @@ from rscapi.models.intent_to_play import IntentToPlay
 from rscapi.models.league import League
 from rscapi.models.league_player import LeaguePlayer
 from rscapi.models.match import Match
+from rscapi.models.pending_series import PendingSeries
 from rscapi.models.match_list import MatchList
 from rscapi.models.match_results import MatchResults
 from rscapi.models.member import Member as RSCMember
@@ -35,6 +36,7 @@ from rscapi.models.player_season_stats_in_depth import PlayerSeasonStatsInDepth
 from rscapi.models.franchise_rebrand import FranchiseRebrand
 from rscapi.models.season import Season
 from rscapi.models.team import Team
+from rscapi.models.team_detail import TeamDetail
 from rscapi.models.team_create import TeamCreate
 from rscapi.models.team_list import TeamList
 from rscapi.models.team_player import TeamPlayer
@@ -762,11 +764,18 @@ class RSCMixIn(ABC):
     ) -> Match | None: ...
 
     @abstractmethod
+    async def pending_series(
+        self,
+        guild: discord.Guild,
+        id: int,
+    ) -> PendingSeries | None: ...
+
+    @abstractmethod
     async def team_by_id(
         self,
         guild: discord.Guild,
         id: int,
-    ) -> Team: ...
+    ) -> TeamDetail: ...
 
     @abstractmethod
     async def team_players(
