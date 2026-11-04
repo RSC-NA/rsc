@@ -124,7 +124,7 @@ uv run pre-commit run --all-files
 
 The uv hooks also keep `uv.lock` in sync with `pyproject.toml` and regenerate [requirements.txt](../requirements.txt) and [requirements-dev.txt](../requirements-dev.txt) from the lock. Commit those files whenever dependencies change; production installs from `requirements.txt`.
 
-`uv audit` is not a hook: Red pins several packages with `==` (aiohttp, click, idna, markdown, orjson, pygments), so the audit can never pass. Run it by hand to see whether Red has relaxed those pins.
+`uv audit` is not a hook, so run it by hand. Red pins aiohttp, brotli, idna, markdown, orjson and pygments with `==` at versions with known advisories. The `[tool.uv] override-dependencies` table in `pyproject.toml` raises them past those pins. When an advisory names another package Red pins, add it there. If uv then reports a conflict with one of Red's other pins, override that package to the version the error asks for. Delete the table when the bot moves off Red.
 
 ## Conventions
 
