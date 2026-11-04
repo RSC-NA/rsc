@@ -28,7 +28,7 @@ Captains are set by the transaction committee with `/transactions captain` ([tra
 
 | Command | Who can run it | What it does |
 | --- | --- | --- |
-| `/roster <team>` | Anyone (server only) | Shows the team's roster. Marks the GM `(GM)`, the captain `(C)`, or both `(GM\|C)` and lists them first. Subs show as `(Sub)`. Players subbed out and players on Inactive Reserve (`(IR)`, `(AGM IR)`) go in their own fields. |
+| `/roster <team>` | Anyone (server only) | Posts the team's roster card in the tier colour, headed by the tier, franchise, team, GM and franchise logo. Players sit under Active roster, Subbed out and Inactive reserve, each with their MMR and any of the tags GM, Captain, Sub and AGM. The GM and captain come first. Each player has a Profile button to their website page, and the card ends with Team page and Franchise page buttons. An unknown team gets a private "Team not found" reply. |
 
 ### `/captains`
 
@@ -48,11 +48,12 @@ None of its own. On startup `_setup_guild` in [core.py](../../rsc/core.py) calls
 
 ## How it works
 
-Everything lives in [teams.py](../../rsc/teams/teams.py).
+The commands and API calls live in [teams.py](../../rsc/teams/teams.py). The roster card lives in [views.py](../../rsc/teams/views.py).
 
 - `_team_cache` is a per-guild, sorted list of team names. `teams()` refreshes it through `merge_name_cache` on every call. An unfiltered call replaces it, while a filtered call can only add to it. The franchise delete flow in [admin](./admin.md) removes names from it directly, once the API supports deletion.
 - `teams_autocomplete` works like the franchise autocomplete: the first 25 names when nothing is typed, otherwise up to 25 substring matches.
 - `/roster` calls `players(team_name=...)` from [members](./members.md), then keeps only exact, case-insensitive team-name matches, because the API filter is looser than that.
+- `build_roster_card` turns the players into a `RosterCard` from [views.py](../../rsc/teams/views.py), a Components V2 card that pings nobody. The `/playerinfo` Team button sends the same card privately. Website links come from the guild's API URL (see [utils/website.py](../../rsc/utils/website.py)). A player without an RSC ID gets a greyed-out Profile button. With no API URL or league configured there is nothing to link, so the card has no buttons at all.
 - `tier_captains` keeps captains whose status is Rostered, Renewed, IR or AGM IR. `franchise_captains` keeps captains with any tier position, including 0. A comment notes that the top tier was once dropped because 0 is falsy.
 - `build_franchise_teams_embed` fetches the franchise separately to get the AGM list, because `TeamList` only carries the GM. If that lookup fails, the embed is still sent, just without AGMs.
 - `team_id_by_name` prefers an exact name match when the API returns several teams, and raises `ValueError` otherwise.
@@ -74,4 +75,5 @@ RSC API calls (`TeamsApi`):
 
 - `/teams tier` passes the tier exactly as typed, while `/captains tier` capitalises it first. Use the autocomplete value to avoid surprises.
 - `/captains team` raises an unhandled `ValueError` ("Malformed player data received from API") if the captain record is missing team, franchise, tier or Discord ID data. The user sees a generic failure.
+- A roster card holds at most 40 Discord components. A roster too big for that shows the first players and ends with "And N more on the team page". About nine players fit with one group, fewer when all three groups show.
 - When an embed would include data the API failed to return (a team with no name or tier), most of these commands stop and tell the user to open a modmail ticket.

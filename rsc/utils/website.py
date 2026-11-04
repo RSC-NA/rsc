@@ -65,3 +65,24 @@ def bracket_url(site: str, tier: str, *, league_id: int, season_id: int | None =
     if season_id is not None:
         params["season"] = season_id
     return f"{site.rstrip('/')}/playoffs/?{urlencode(params)}"
+
+
+def rsc_id_number(rsc_id: str) -> int | None:
+    """The number in an RSC ID, which keys the player page: `RSC001187` -> 1187. None if it isn't one."""
+    match = re.fullmatch(r"RSC(\d+)", rsc_id.strip(), flags=re.IGNORECASE)
+    return int(match[1]) if match else None
+
+
+def player_page_url(site: str, rsc_number: int, *, league_id: int) -> str:
+    """The public player page. `rsc_number` is the number in the player's RSC ID (see `rsc_id_number`)."""
+    return f"{site.rstrip('/')}/player/{rsc_number}/?{urlencode({'league': league_id})}"
+
+
+def team_page_url(site: str, team_id: int, *, league_id: int) -> str:
+    """The public team page."""
+    return f"{site.rstrip('/')}/team/{team_id}/?{urlencode({'league': league_id})}"
+
+
+def franchise_page_url(site: str, franchise_id: int, *, league_id: int) -> str:
+    """The public franchise page."""
+    return f"{site.rstrip('/')}/franchise/{franchise_id}/?{urlencode({'league': league_id})}"

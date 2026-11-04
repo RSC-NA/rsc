@@ -518,6 +518,18 @@ Chosen over two mockup rounds (artifacts in Other references): option A, refined
 - **Pending opponent (P1):** `## Giraffes vs TBD`, "Winner of **A** / **B**", start time, "**Lobby** Posted once the Wildcard series (time) is reported.", home/away line, then **Refresh** (persistent `MatchRefreshButton`, re-runs the lookup and swaps in the match card once it exists) and Bracket. No Wildcard match link.
 - `match_team_by_user` now returns None for staff outside the match (was HOME): they get home first and no check-in line.
 
+### 11 — `/roster` card (`RosterCard`, `rsc/teams/views.py`) — **SHIPPED** (2026-11-04)
+
+Chosen over four mockup rounds (P4 in the artifact https://claude.ai/artifact/YUH5Bh7dVufrkEqanjBjFB). Also sent, privately, by the player card's Team button.
+
+- Header Section: `-# Tier · Franchise`, `## Team`, `General Manager **name**`, franchise logo (server icon fallback). No record or next match.
+- Groups under `-# ACTIVE ROSTER`, `-# SUBBED OUT`, `-# INACTIVE RESERVE`, each shown only when non-empty. GM and captain lead their group.
+- One Section per player: `**Name**` then `-# 1610 MMR · GM · Captain`. MMR first so it lines up; roles are dot-separated tokens, never brackets or "and". Tags: GM, Captain, Sub, AGM. Plain IR gets no tag, since the label says it.
+- Each row's accessory is a grey **Profile** link button to `<site>/player/<n>/?league=<id>` (n = RSC ID digits). No RSC ID: a disabled link button, so no custom_id keeps the view in memory. No site configured: text-only rows.
+- Foot: **Team page** (`/team/<id>/`) and **Franchise page** (`/franchise/<id>/`) link buttons.
+- Capped at 40 components with `-# And N more on the team page` (about 9 players with one group, 8 with three).
+- Unknown team: ephemeral red `ResultView` "Team not found".
+
 ## 4. Action item: website match link on the report result (requested 2026-10-28)
 
 `build_match_result_embed` (`rsc/ballchasing/ballchasing.py:862`) already returns a link-only `View` with a "Ballchasing Group" button. Adding a second link button for the frontend match page is straightforward: link buttons need no handler, and they work in both legacy views and V2 `ActionRow`s.

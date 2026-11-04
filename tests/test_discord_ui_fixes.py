@@ -91,14 +91,18 @@ class TestPlayerInfoButton:
     async def test_roster_click_replies_ephemerally(self):
         cog = create_autospec(RSC, instance=True)
         cog.players.return_value = []
-        cog.build_roster_embed.return_value = discord.Embed(title="Roster")
+        cog.build_roster_card.return_value = discord.ui.LayoutView()
         interaction = _interaction(cog)
 
         await PlayerInfoButton(PlayerInfoKind.ROSTER, "Quantum").callback(interaction)
 
         interaction.response.defer.assert_awaited_once_with(ephemeral=True)
         cog.players.assert_awaited_once_with(interaction.guild, team_name="Quantum", limit=10)
-        interaction.followup.send.assert_awaited_once_with(embed=cog.build_roster_embed.return_value, ephemeral=True)
+        send = interaction.followup.send.await_args
+        assert send is not None
+        assert send.kwargs["view"] is cog.build_roster_card.return_value
+        assert send.kwargs["ephemeral"] is True
+        assert send.kwargs["allowed_mentions"].users is False
 
     async def test_franchise_click_replies_ephemerally(self):
         cog = create_autospec(RSC, instance=True)

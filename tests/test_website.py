@@ -1,6 +1,14 @@
 import pytest
 
-from rsc.utils.website import match_page_url, standings_page_url, website_url
+from rsc.utils.website import (
+    franchise_page_url,
+    match_page_url,
+    player_page_url,
+    rsc_id_number,
+    standings_page_url,
+    team_page_url,
+    website_url,
+)
 
 
 class TestWebsiteUrl:
@@ -50,3 +58,24 @@ class TestStandingsPageUrl:
     def test_encodes_the_tier_name(self):
         url = standings_page_url("https://www.rscna.com", league_id=1, season_id=11, tier="Pro Am")
         assert url == "https://www.rscna.com/standings/?league=1&season=11&tier=Pro+Am&mode=playoffs"
+
+
+class TestRscIdNumber:
+    @pytest.mark.parametrize(("rsc_id", "expected"), [("RSC001187", 1187), ("RSC000001", 1), ("rsc42", 42), (" RSC7 ", 7)])
+    def test_reads_the_number(self, rsc_id, expected):
+        assert rsc_id_number(rsc_id) == expected
+
+    @pytest.mark.parametrize("rsc_id", ["", "RSC", "1187", "RSC12a", "XYZ001187"])
+    def test_rejects_other_strings(self, rsc_id):
+        assert rsc_id_number(rsc_id) is None
+
+
+class TestEntityPageUrls:
+    def test_player_page(self):
+        assert player_page_url("https://www.rscna.com/", 1187, league_id=1) == "https://www.rscna.com/player/1187/?league=1"
+
+    def test_team_page(self):
+        assert team_page_url("https://www.rscna.com", 42, league_id=1) == "https://www.rscna.com/team/42/?league=1"
+
+    def test_franchise_page(self):
+        assert franchise_page_url("https://www.rscna.com", 7, league_id=1) == "https://www.rscna.com/franchise/7/?league=1"

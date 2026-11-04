@@ -81,13 +81,13 @@ class PlayerInfoButton(discord.ui.DynamicItem[discord.ui.Button], template=PLAYE
     async def _team_roster(self, interaction: discord.Interaction, guild: discord.Guild, cog: RSCMixIn):
         try:
             plist = await cog.players(guild, team_name=self.name, limit=10)
-            embed = await cog.build_roster_embed(guild, plist)
+            card = await cog.build_roster_card(guild, plist)
         except RscException as exc:
             return await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc), ephemeral=True)
         except (ValueError, AttributeError) as exc:
             return await interaction.followup.send(embed=ExceptionErrorEmbed(exc_message=str(exc)), ephemeral=True)
 
-        await interaction.followup.send(embed=embed, ephemeral=True)
+        await interaction.followup.send(view=card, ephemeral=True, allowed_mentions=discord.AllowedMentions.none())
 
     async def _franchise_teams(self, interaction: discord.Interaction, guild: discord.Guild, cog: RSCMixIn):
         log.debug(f"Fetching teams for {self.name}")
