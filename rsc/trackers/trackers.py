@@ -1,7 +1,6 @@
 import logging
 from collections.abc import AsyncIterator
 from datetime import datetime, timedelta
-from typing import cast
 
 import discord
 from redbot.core import app_commands
@@ -99,7 +98,7 @@ class TrackerMixIn(RSCMixIn):
                 if t.status:
                     status = TrackerLinksStatus(t.status).full_name
                 tdata.append((t.name or t.platform_id, status, date, t.id))
-            tdata.sort(key=lambda x: cast("int", x[1]))
+            tdata.sort(key=lambda x: x[1] or "")
             embed.description = "List of associated RSC trackers. Account is tracker name or platform id."
             if ids:
                 embed.add_field(name="ID", value="\n".join([str(x[3]) for x in tdata]), inline=True)
@@ -215,7 +214,7 @@ class TrackerMixIn(RSCMixIn):
         except RscException as exc:
             return await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc), ephemeral=False)
 
-        trackers.sort(key=lambda x: cast("datetime", x.last_updated), reverse=True)
+        trackers.sort(key=lambda x: x.last_updated.timestamp() if x.last_updated else 0, reverse=True)
 
         dates = []
         for x in trackers:

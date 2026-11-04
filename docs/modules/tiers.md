@@ -8,7 +8,7 @@ Tiers are created and edited on the RSC website. The bot only reads them.
 
 ## Using it
 
-Anyone can run `/tiers` to see the league's tiers as role mentions. Everything else in this module is used by other commands: when a command such as `/freeagents`, `/teams tier` or `/captains tier` offers tier suggestions as you type, those come from here.
+Anyone can run `/tiers` to see the league's tiers on a card, highest first. Each tier shows its role, MMR range, team count and team cap for the current season. The footer gives the match nights and start time when every tier shares one schedule, as a Discord timestamp that each viewer sees in their own time. Everything else in this module is used by other commands: when a command such as `/freeagents`, `/teams tier` or `/captains tier` offers tier suggestions as you type, those come from here.
 
 Each tier needs a Discord role with exactly the same name as the tier. Most tier features also expect a free agent role named `<Tier>FA` (for example `EliteFA`). Admins create these roles by hand or through the sync tools in [admin](./admin.md).
 
@@ -16,7 +16,7 @@ Each tier needs a Discord role with exactly the same name as the tier. Most tier
 
 | Command | Who can run it | What it does |
 | --- | --- | --- |
-| `/tiers` | Anyone (server only) | Lists every tier in the league as a role mention, highest tier first. |
+| `/tiers` | Anyone (server only) | Shows a card of every tier, highest first, with its role, MMR range, team count and team cap. |
 
 ## Configuration
 
@@ -28,7 +28,9 @@ None of its own. When the bot starts, `_setup_guild` in [core.py](../../rsc/core
 
 ## How it works
 
-Everything lives in [tiers.py](../../rsc/tiers/tiers.py).
+Everything lives in [tiers.py](../../rsc/tiers/tiers.py), except the `/tiers` card, which is `TiersCard` in [views.py](../../rsc/tiers/views.py).
+
+- `/tiers` is a Components V2 card built by `build_tiers_card`. It reads `tiers()` for the list and `current_season()` for each tier's `season_tier_data`, matched by tier name. It is sent with `AllowedMentions.none()`, because role mentions in a V2 text display ping, unlike in an embed. If the season fetch fails, the card still lists the tiers, under the server name, with no stats and no footer.
 
 - `_tier_cache` is a per-guild list of tier names held in memory. `tiers()` refreshes it on every call through `merge_name_cache` ([utils/cache.py](../../rsc/utils/cache.py)). An unfiltered call replaces the list. A call filtered by name can only add to it. Order follows tier position, highest first, because `tiers()` sorts by `position` descending before caching.
 - `tier_autocomplete` matches what the user typed as a case-insensitive substring and returns up to 25 choices. It returns nothing if the cache is empty.
@@ -52,6 +54,7 @@ RSC API calls (`TiersApi`):
 
 ## Gotchas
 
-- `/tiers` stops at the first tier that has no matching Discord role and replies with an error instead of a partial list.
+- A tier with no matching Discord role shows its name in bold instead of a mention.
+- The footer's start time is today's date in the server timezone combined with the API's `match_start_time`, so it follows daylight saving.
 - If the API was unreachable when the bot started, the tier cache is empty. Tier autocomplete then offers nothing, and `/freeagents` rejects every tier as invalid until something calls `tiers()` again.
 - Some commands that take a tier run `str.capitalize()` on it first (`/freeagents`, `/freeagent availability`, `/captains tier`). That lowercases everything after the first letter, so it only works for tier names with a single leading capital.

@@ -7,7 +7,7 @@ output ceiling.
 """
 
 import logging
-from typing import Any, cast
+from typing import TYPE_CHECKING
 
 import discord
 import httpx
@@ -16,6 +16,9 @@ from openai import AsyncOpenAI
 from rsc.llm.agent.safety import sanitize_response
 from rsc.llm.config import OPENAI_SUMMARY_MODEL, openai_chat_completion_options
 from rsc.logs import GuildLogAdapter
+
+if TYPE_CHECKING:
+    from openai.types.chat import ChatCompletionContentPartParam, ChatCompletionMessageParam
 
 logger = logging.getLogger("red.rsc.llm.summarize")
 log = GuildLogAdapter(logger)
@@ -71,19 +74,19 @@ async def summarize_ticket_messages(
             http_client=http_client,
         )
 
-        user_content: list[dict[str, Any]] = [{"type": "text", "text": transcript}]
+        user_content: list[ChatCompletionContentPartParam] = [{"type": "text", "text": transcript}]
         if image_data_urls:
             user_content.extend(
                 [{"type": "image_url", "image_url": {"url": image_data_url, "detail": "high"}} for image_data_url in image_data_urls]
             )
 
-        messages = [
+        messages: list[ChatCompletionMessageParam] = [
             {"role": "system", "content": TICKET_SUMMARY_SYSTEM_PROMPT},
             {"role": "user", "content": user_content},
         ]
 
         response = await llm.chat.completions.create(
-            messages=cast("Any", messages),
+            messages=messages,
             **openai_chat_completion_options(model),
         )
 

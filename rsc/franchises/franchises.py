@@ -1,6 +1,5 @@
 import logging
 from os import PathLike
-from typing import cast
 from urllib.parse import urljoin
 
 import discord
@@ -192,7 +191,7 @@ class FranchiseMixIn(RSCMixIn):
                 if not all(f.name for f in flist):
                     raise AttributeError("API returned a franchise with no name.")
 
-                flist.sort(key=lambda f: cast("str", f.name))
+                flist.sort(key=lambda f: f.name or "")
                 cached = self._franchise_cache.get(guild.id, [])
                 merged = merge_name_cache(cached, (f.name for f in flist if f.name), full_refresh=full_refresh)
                 merged.sort()

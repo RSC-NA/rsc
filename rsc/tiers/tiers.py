@@ -1,10 +1,13 @@
 import logging
-from typing import cast
+from datetime import datetime, time
+from zoneinfo import ZoneInfo
 
 import discord
+from pydantic import ValidationError
 from redbot.core import app_commands
 from rscapi import TiersApi
 from rscapi.models.player_season_stats_in_depth import PlayerSeasonStatsInDepth
+from rscapi.models.season import Season
 from rscapi.models.tier import Tier
 from rscapi.models.tier_playoff_hunt import TierPlayoffHunt
 from rscapi.models.team_season_stats import TeamSeasonStats
@@ -12,10 +15,25 @@ from rscapi.models.team_standings import TeamStandings
 
 from rsc.abc import RSCMixIn
 from rsc.const import API_TIMEOUT
-from rsc.embeds import BlueEmbed, ErrorEmbed
+from rsc.exceptions import RscException
+from rsc.tiers.views import TierRow, TiersCard
 from rsc.utils.cache import merge_name_cache
 
 log = logging.getLogger("red.rsc.tiers")
+
+
+def _league_schedule(season: Season) -> tuple[tuple[str, ...], str | None] | None:
+    """The match nights and start time, when every tier plays on the same schedule."""
+    schedules = {(tuple(d.schedule.match_nights), d.schedule.match_start_time) if d.schedule else None for d in season.season_tier_data}
+    return schedules.pop() if len(schedules) == 1 else None
+
+
+def _match_time(start: str, tz: ZoneInfo) -> datetime | None:
+    """Today's match start in the guild's timezone. `start` is the API's "HH:MM:SS"."""
+    try:
+        return datetime.combine(datetime.now(tz).date(), time.fromisoformat(start), tzinfo=tz)
+    except ValueError:
+        return None
 
 
 class TierMixIn(RSCMixIn):
@@ -52,28 +70,53 @@ class TierMixIn(RSCMixIn):
         if not guild:
             return
 
-        tiers = await self.tiers(guild)
-
-        # Get roles from guild and additional data
-        tier_roles = []
-        for t in tiers:
-            role = discord.utils.get(guild.roles, name=t.name)
-            if not role:
-                return await interaction.response.send_message(
-                    embed=ErrorEmbed(description=f"{t.name} does not have a role in the guild. Please open a modmail ticket.")
-                )
-            tier_roles.append(role)
-            # Fetch teams from each tier
-
-        embed = BlueEmbed(
-            title=f"{interaction.guild} Tiers",
-            description="\n".join([r.mention for r in tier_roles]),
-        )
-        if guild.icon:
-            embed.set_thumbnail(url=guild.icon.url)
-        await interaction.response.send_message(embed=embed)
+        await interaction.response.defer()
+        card = await self.build_tiers_card(guild)
+        await interaction.followup.send(view=card.render(), allowed_mentions=discord.AllowedMentions.none())
 
     # Functions
+
+    async def build_tiers_card(self, guild: discord.Guild) -> TiersCard:
+        tiers = await self.tiers(guild)
+        try:
+            season = await self.current_season(guild)
+        except RscException as exc:
+            log.warning(f"/tiers is showing tier names only, because the current season fetch failed: {exc}")
+            season = None
+
+        data = {d.tier: d for d in season.season_tier_data} if season else {}
+        rows = []
+        for t in tiers:
+            role = discord.utils.get(guild.roles, name=t.name)
+            d = data.get(t.name)
+            rows.append(
+                TierRow(
+                    name=t.name,
+                    role_id=role.id if role else None,
+                    mmr_min=d.mmr_min if d else None,
+                    mmr_max=d.mmr_max if d else None,
+                    teams=d.team_number if d else None,
+                    team_cap=d.team_cap if d else None,
+                )
+            )
+
+        heading = guild.name
+        if season and season.league.name and season.number is not None:
+            heading = f"{season.league.name} · Season {season.number}"
+
+        nights: tuple[str, ...] = ()
+        match_time = None
+        if season and (schedule := _league_schedule(season)):
+            nights, start = schedule
+            match_time = _match_time(start, await self.timezone(guild)) if start else None
+
+        return TiersCard(
+            heading=heading,
+            rows=tuple(rows),
+            icon_url=guild.icon.url if guild.icon else None,
+            match_nights=nights,
+            match_time=match_time,
+        )
 
     async def is_valid_tier(self, guild: discord.Guild, name: str) -> bool:
         """Check if name is in the tier cache"""
@@ -196,7 +239,11 @@ class TierMixIn(RSCMixIn):
     async def create_tier(self, guild: discord.Guild, name: str, color: int, position: int) -> Tier:
         async with self.api_client(guild) as client:
             api = TiersApi(client)
-            data = cast("Tier", {"name": name, "color": color, "position": position})
+            try:
+                data = Tier(name=name, color=color, position=position)
+            except ValidationError as exc:
+                raise RscException(message=f"Invalid tier data: {exc.errors()[0]['msg']}")
+
             log.debug(f"Create Tier Data: {data}")
             return await api.tiers_create(data)
 
