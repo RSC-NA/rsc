@@ -471,15 +471,25 @@ class TestMemberRemoveListener:
     @patch("rsc.transactions.transactions.utils.get_audit_log_reason", new_callable=AsyncMock)
     async def test_already_not_playing_is_a_success(self, mock_audit_reason, mixin, mock_guild, mock_member):
         mock_audit_reason.return_value = (None, None)
-        mixin.players.side_effect = [
-            [_make_league_player(mock_member.id, status=Status.ROSTERED)],
-            [_make_league_player(mock_member.id, status=Status.FORMER)],
-        ]
+        mixin.players.return_value = [_make_league_player(mock_member.id, status=Status.ROSTERED)]
         mixin.retire.side_effect = api_error(400, "TestPlayer is not in the league anymore.", code=ErrorCodeEnum.PLAYER_NOT_IN_LEAGUE)
 
         await mixin._transactions_on_member_remove(_make_member_remove_event(mock_guild, mock_member))
 
         mixin.retire.assert_awaited_once()
+        mixin.players.assert_awaited_once()
+        mixin._try_post_embeds.assert_not_awaited()
+
+    @patch("rsc.transactions.transactions.utils.get_audit_log_reason", new_callable=AsyncMock)
+    async def test_refusal_for_a_player_the_api_shows_as_out_is_a_success(self, mock_audit_reason, mixin, mock_guild, mock_member):
+        mock_audit_reason.return_value = (None, None)
+        mixin.players.side_effect = [[_make_league_player(mock_member.id, status=Status.ROSTERED)], []]
+        mixin.retire.side_effect = api_error(404, "Not found.", code=ErrorCodeEnum.NOT_FOUND)
+
+        await mixin._transactions_on_member_remove(_make_member_remove_event(mock_guild, mock_member))
+
+        mixin.retire.assert_awaited_once()
+        assert mixin.players.await_count == 2
         mixin._try_post_embeds.assert_not_awaited()
 
     async def test_listener_never_raises(self, mixin, mock_guild, mock_member, caplog):

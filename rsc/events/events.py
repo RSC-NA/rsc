@@ -104,7 +104,7 @@ class EventMixIn(RSCMixIn):
                 await self.poll_league_events(guild, state)
             except Exception as exc:
                 # tasks.Loop only tolerates a handful of network errors before it
-                # stops permanently, and ApiException/RscException/ValidationError
+                # stops permanently, and ApiError/ValidationError
                 # are not among them. Contain every failure to the guild it came
                 # from so one bad guild cannot kill the loop.
                 await self._record_failure(guild, state, exc)

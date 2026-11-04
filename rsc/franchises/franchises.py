@@ -6,7 +6,6 @@ import discord
 from pydantic import ValidationError
 from redbot.core import app_commands
 from rscapi import FranchisesApi
-from rscapi.exceptions import NotFoundException
 from rscapi.models.franchise import Franchise
 from rscapi.models.franchise_agm_request import FranchiseAGMRequest
 from rscapi.models.franchise_gm import FranchiseGM
@@ -18,7 +17,7 @@ from rscapi.models.franchise_transfer_request import FranchiseTransferRequest
 from rsc.abc import RSCMixIn
 from rsc.const import API_TIMEOUT
 from rsc.embeds import BlueEmbed
-from rsc.exceptions import RscException
+from rsc.exceptions import NotFoundError, RscException
 from rsc.utils.cache import merge_name_cache
 
 log = logging.getLogger("red.rsc.franchises")
@@ -375,14 +374,13 @@ class FranchiseMixIn(RSCMixIn):
         if not host:
             return None
 
-        async with self.api_client(guild) as client:
-            api = FranchisesApi(client)
-            try:
-                logo = await api.franchises_logo_retrieve(id)
-                if not (logo and logo.logo):
-                    return None
-                full_url = urljoin(host, logo.logo)
-                log.debug(f"Franchise Logo: {full_url}")
-                return full_url
-            except NotFoundException:
-                return None
+        try:
+            async with self.api_client(guild) as client:
+                logo = await FranchisesApi(client).franchises_logo_retrieve(id)
+        except NotFoundError:
+            return None
+        if not (logo and logo.logo):
+            return None
+        full_url = urljoin(host, logo.logo)
+        log.debug(f"Franchise Logo: {full_url}")
+        return full_url

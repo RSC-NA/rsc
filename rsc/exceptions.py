@@ -86,6 +86,10 @@ class SignupsClosedError(ApiError, codes={ErrorCodeEnum.SIGNUPS_CLOSED}):
     """The season is not taking signups right now"""
 
 
+class PlayerNotInLeagueError(ApiError, codes={ErrorCodeEnum.PLAYER_NOT_IN_LEAGUE}):
+    """The player is already out of the league"""
+
+
 # Discord
 
 
