@@ -522,7 +522,7 @@ Chosen over two mockup rounds (artifacts in Other references): option A, refined
 
 Chosen over four mockup rounds (P4 in the artifact https://claude.ai/artifact/YUH5Bh7dVufrkEqanjBjFB). Also sent, privately, by the player card's Team button.
 
-- Header Section: `-# Tier · Franchise`, `## Team`, `General Manager **name**`, franchise logo (server icon fallback). No record or next match.
+- Header Section: `-# Tier · Franchise`, `## Team`, `GM **name**`, franchise logo (server icon fallback). No record or next match.
 - Groups under `-# ACTIVE ROSTER`, `-# SUBBED OUT`, `-# INACTIVE RESERVE`, each shown only when non-empty. GM and captain lead their group.
 - One Section per player: `**Name**` then `-# 1610 MMR · GM · Captain`. MMR first so it lines up; roles are dot-separated tokens, never brackets or "and". Tags: GM, Captain, Sub, AGM. Plain IR gets no tag, since the label says it.
 - Each row's accessory is a grey **Profile** link button to `<site>/player/<n>/?league=<id>` (n = RSC ID digits). No RSC ID: a disabled link button, so no custom_id keeps the view in memory. No site configured: text-only rows.

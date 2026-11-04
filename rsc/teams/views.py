@@ -103,7 +103,7 @@ class RosterCard:
         esc = discord.utils.escape_markdown
         texts = [ui.TextDisplay(f"-# {esc(self.tier)} · {esc(self.franchise)}"), ui.TextDisplay(f"## {esc(self.team)}")]
         if self.gm:
-            texts.append(ui.TextDisplay(f"General Manager **{esc(self.gm)}**"))
+            texts.append(ui.TextDisplay(f"GM **{esc(self.gm)}**"))
         if self.logo_url:
             return [ui.Section(*texts, accessory=ui.Thumbnail(self.logo_url))]
         return list(texts)

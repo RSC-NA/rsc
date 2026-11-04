@@ -126,7 +126,7 @@ class TestRosterContent:
         assert _texts(view) == [
             "-# Premier · Hex Systems",
             "## Voltage",
-            "General Manager **Monty**",
+            "GM **Monty**",
             "-# ACTIVE ROSTER",
             # The GM and captain lead, the rest keep the API's order
             "**Monty**\n-# 1610 MMR · GM · Captain",
@@ -184,7 +184,7 @@ class TestRosterHeader:
         first, second = _container(view).children[:2]
         assert isinstance(first, ui.TextDisplay) and first.content == "-# Premier · Hex Systems"
         assert isinstance(second, ui.TextDisplay) and second.content == "## Voltage"
-        assert not any(t.startswith("General Manager") for t in _texts(view))
+        assert not any(t.startswith("GM ") for t in _texts(view))
 
 
 class TestRosterLinks:
