@@ -5,6 +5,7 @@ import pytest
 
 from rsc.core import RSC
 from rscapi import FranchisesApi
+from rscapi.models.error_code_enum import ErrorCodeEnum
 from rscapi.models import Franchise
 from rscapi.models.franchise_rebrand import FranchiseRebrand
 from rsc.exceptions import ApiError
@@ -88,13 +89,13 @@ class TestFranchisesPrivilegedApiCalls:
         with pytest.raises(ApiError) as exc:
             await rsc_bot_no_key.create_franchise(guild=mock_guild, name="Test Franchise", prefix="TF", gm=mock_member)
         assert exc.type is ApiError
-        assert exc.value.error_type == "NotAuthenticated"
+        assert exc.value.code is ErrorCodeEnum.NOT_AUTHENTICATED
         assert exc.value.status == 403
 
         with pytest.raises(ApiError) as exc:
             await rsc_bot_invalid_key.create_franchise(guild=mock_guild, name="Test Franchise", prefix="TF", gm=mock_member)
         assert exc.type is ApiError
-        assert exc.value.error_type == "NotAuthenticated"
+        assert exc.value.code is ErrorCodeEnum.NOT_AUTHENTICATED
         assert exc.value.status == 403
 
     @pytest.mark.asyncio
@@ -112,14 +113,14 @@ class TestFranchisesPrivilegedApiCalls:
             assert franchise.id is not None
             await rsc_bot_no_key.rebrand_franchise(guild=mock_guild, id=franchise.id, rebrand=rebrand)
         assert exc.type is ApiError
-        assert exc.value.error_type == "NotAuthenticated"
+        assert exc.value.code is ErrorCodeEnum.NOT_AUTHENTICATED
         assert exc.value.status == 403
 
         with pytest.raises(ApiError) as exc:
             assert franchise.id is not None
             await rsc_bot_invalid_key.rebrand_franchise(guild=mock_guild, id=franchise.id, rebrand=rebrand)
         assert exc.type is ApiError
-        assert exc.value.error_type == "NotAuthenticated"
+        assert exc.value.code is ErrorCodeEnum.NOT_AUTHENTICATED
         assert exc.value.status == 403
 
     @pytest.mark.asyncio
@@ -136,14 +137,14 @@ class TestFranchisesPrivilegedApiCalls:
             assert franchise.id is not None
             await rsc_bot_no_key.transfer_franchise(guild=mock_guild, id=franchise.id, gm=mock_member)
         assert exc.type is ApiError
-        assert exc.value.error_type == "NotAuthenticated"
+        assert exc.value.code is ErrorCodeEnum.NOT_AUTHENTICATED
         assert exc.value.status == 403
 
         with pytest.raises(ApiError) as exc:
             assert franchise.id is not None
             await rsc_bot_invalid_key.transfer_franchise(guild=mock_guild, id=franchise.id, gm=mock_member)
         assert exc.type is ApiError
-        assert exc.value.error_type == "NotAuthenticated"
+        assert exc.value.code is ErrorCodeEnum.NOT_AUTHENTICATED
         assert exc.value.status == 403
 
     @pytest.mark.asyncio
@@ -162,14 +163,14 @@ class TestFranchisesPrivilegedApiCalls:
             assert franchise.id is not None
             await rsc_bot_no_key.upload_franchise_logo(guild=mock_guild, id=franchise.id, logo=logo)
         assert exc.type is ApiError
-        assert exc.value.error_type == "NotAuthenticated"
+        assert exc.value.code is ErrorCodeEnum.NOT_AUTHENTICATED
         assert exc.value.status == 403
 
         with pytest.raises(ApiError) as exc:
             assert franchise.id is not None
             await rsc_bot_invalid_key.upload_franchise_logo(guild=mock_guild, id=franchise.id, logo=logo)
         assert exc.type is ApiError
-        assert exc.value.error_type == "NotAuthenticated"
+        assert exc.value.code is ErrorCodeEnum.NOT_AUTHENTICATED
         assert exc.value.status == 403
 
 

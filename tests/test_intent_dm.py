@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, create_autospec
 
 import discord
 import pytest
+from rscapi.models.error_code_enum import ErrorCodeEnum
 
 from rsc.admin.admin import MEMBER_FETCH_LIMIT, AdminMixIn
 from rsc.admin.intents import AdminIntentsMixIn
@@ -495,7 +496,7 @@ class TestCallbackGuards:
 
 class TestCallbackSignupWindow:
     async def test_signups_closed_records_nothing_and_points_at_modmail(self):
-        cog = _mock_cog(season_exc=api_error(405, "Signups are closed", error_type="SignupsClosedException"))
+        cog = _mock_cog(season_exc=api_error(405, "Signups are closed", code=ErrorCodeEnum.SIGNUPS_CLOSED))
         interaction = _mock_interaction(cog)
 
         await IntentDMButton(GUILD_ID, SEASON, returning=True).callback(interaction)

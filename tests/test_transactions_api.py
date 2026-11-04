@@ -4,6 +4,7 @@ from rsc.core import RSC
 from rsc.enums import TransactionType
 from rsc.exceptions import ApiError
 from rscapi import LeaguePlayersApi, TransactionsApi
+from rscapi.models.error_code_enum import ErrorCodeEnum
 
 pytestmark = pytest.mark.integration
 
@@ -277,13 +278,13 @@ class TestTransactionsPrivilegedApiCalls:
         with pytest.raises(ApiError) as exc:
             await rsc_bot_no_key.cut(guild=mock_guild, player=mock_member, executor=mock_member, notes="Pytest cut", override=True)
         assert exc.type is ApiError
-        assert exc.value.error_type == "NotAuthenticated"
+        assert exc.value.code is ErrorCodeEnum.NOT_AUTHENTICATED
         assert exc.value.status == 403
 
         with pytest.raises(ApiError) as exc:
             await rsc_bot_invalid_key.cut(guild=mock_guild, player=mock_member, executor=mock_member, notes="Pytest cut", override=True)
         assert exc.type is ApiError
-        assert exc.value.error_type == "NotAuthenticated"
+        assert exc.value.code is ErrorCodeEnum.NOT_AUTHENTICATED
         assert exc.value.status == 403
 
 

@@ -24,7 +24,7 @@ No Config keys. It uses the guild's league ID (see [../configuration.md](../conf
 |---|---|---|
 | `seasons(guild, number, current)` | `SeasonsApi.seasons_list` | Filtered by the guild's league. |
 | `season_by_id(guild, season_id)` | `seasons_retrieve` | |
-| `next_signup_season(guild)` | `seasons_signup_season_retrieve` | Raises `RscException` with `type == "SignupsClosedException"` when signups are closed; callers check for that. |
+| `next_signup_season(guild)` | `seasons_signup_season_retrieve` | Raises `SignupsClosedError` (API code `signups_closed`) when signups are closed; callers catch it. |
 | `next_season(guild)` | `seasons_list` | The highest-numbered season in the guild's league. Raises `LeagueNotConfigured` if there is no league ID. |
 | `player_intents(guild, season_id, player, returning, missing)` | `seasons_player_intents_list` | |
 | `franchise_standings(guild, season_id)` | `seasons_franchise_standings_list` | |
