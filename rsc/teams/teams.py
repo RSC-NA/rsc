@@ -5,7 +5,6 @@ import discord
 from pydantic import ValidationError
 from redbot.core import app_commands
 from rscapi import TeamsApi
-from rscapi.exceptions import NotFoundException
 from rscapi.models.high_level_match import HighLevelMatch
 from rscapi.models.league_player import LeaguePlayer
 from rscapi.models.match import Match
@@ -28,7 +27,7 @@ from rsc.embeds import (
     ExceptionErrorEmbed,
 )
 from rsc.enums import Status
-from rsc.exceptions import RscException
+from rsc.exceptions import NotFoundError, RscException
 from rsc.franchises import FranchiseMixIn
 from rsc.logs import GuildLogAdapter
 from rsc.teams.views import RosterCard, RosterRow, group_rows, roster_group, roster_tags
@@ -642,12 +641,11 @@ class TeamMixIn(RSCMixIn):
         guild: discord.Guild,
         id: int,
     ) -> Match | None:
-        async with self.api_client(guild) as client:
-            try:
-                api = TeamsApi(client)
-                return await api.teams_next_match_retrieve(id)
-            except NotFoundException:
-                return None
+        try:
+            async with self.api_client(guild) as client:
+                return await TeamsApi(client).teams_next_match_retrieve(id)
+        except NotFoundError:
+            return None
 
     async def pending_series(
         self,
@@ -656,12 +654,11 @@ class TeamMixIn(RSCMixIn):
     ) -> PendingSeries | None:
         """The team's next playoff series while its opponent is still being decided, which
         has no match (and so no lobby) until the series feeding it is reported."""
-        async with self.api_client(guild) as client:
-            try:
-                api = TeamsApi(client)
-                return await api.teams_pending_series_retrieve(id)
-            except NotFoundException:
-                return None
+        try:
+            async with self.api_client(guild) as client:
+                return await TeamsApi(client).teams_pending_series_retrieve(id)
+        except NotFoundError:
+            return None
 
     async def season_matches(
         self,

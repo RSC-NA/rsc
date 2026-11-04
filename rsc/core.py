@@ -14,9 +14,9 @@ from pydantic import ValidationError
 from redbot.core import Config, app_commands, commands
 from redbot.core.bot import Red
 from rscapi import ApiClient, Configuration
-from rscapi.exceptions import ApiException
 
 from rsc.abc import CompositeMetaClass
+from rsc.exceptions import ApiError
 from rsc.admin.agm import AdminAGMMixIn
 from rsc.admin.audit import AdminAuditMixIn
 from rsc.admin.franchise import AdminFranchiseMixIn
@@ -326,36 +326,13 @@ class RSC(
                     tg.create_task(self.teams(guild))
                     tg.create_task(self.prepare_season_cache(guild))
                     tg.create_task(self.setup_persistent_activity_check(guild))
-        except* ApiException as eg:
-            # API is down or not responding
+        except* ApiError as eg:
             for err in eg.exceptions:
-                if hasattr(err, "status"):
-                    log.exception(
-                        f"Setup Error. Status: {err.status} Reason: {err}",
-                        exc_info=err,
-                        guild=guild,
-                    )
-                    match err.status:
-                        case 504:
-                            log.error("Connection to RSC API timed out. (504)")
-                        case 502:
-                            log.error("Bad gateway response from RSC API. (502)")
-                        case 500:
-                            log.error("API Internal Server Error. (500)")
-                        case 403:
-                            log.error("Forbidden response from RSC API. (403)")
-                        case 401:
-                            log.error("Unauthorized response from RSC API. (401)")
-                        case _:
-                            log.error(f"Unexpected RSC API status during setup: {err.status}")
-                else:
-                    log.exception(f"Setup Error: {err}", exc_info=err, guild=guild)
+                log.exception(f"Setup Error: {err}", exc_info=err, guild=guild)
         except* ValidationError as eg:
             for verr in eg.exceptions:
                 log.exception(f"*ValidationError: {verr!r}", exc_info=verr, guild=guild)
         except* Exception as eg:
-            # teams() re-raises ApiException as RscException, which is not an
-            # ApiException and would otherwise escape every handler above.
             for exc in eg.exceptions:
                 log.exception(f"Setup Error: {exc!r}", exc_info=exc, guild=guild)
 

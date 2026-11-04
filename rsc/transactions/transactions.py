@@ -40,7 +40,7 @@ from rsc.embeds import (
     YellowEmbed,
 )
 from rsc.enums import INACTIVE_STATUS_VALUES, Status, TransactionType, is_inactive_status
-from rsc.exceptions import ApiError, MalformedTransactionResponse, RscException, TradeParserException
+from rsc.exceptions import ApiError, MalformedTransactionResponse, PlayerNotInLeagueError, RscException, TradeParserException
 from rsc.franchises import FranchiseMixIn
 from rsc.logs import GuildLogAdapter
 from rsc.teams import TeamMixIn
@@ -2397,6 +2397,9 @@ class TransactionMixIn(RSCMixIn):
                     notes="Player left the RSC discord server",
                     override=True,
                 )
+            except PlayerNotInLeagueError:
+                log.info(f"{RETIRE_LOG_PREFIX} {member.id} is already not playing this season. Nothing to retire.", guild=guild)
+                return True, None
             except RscException as exc:
                 last_reason = str(exc)
                 if not self._retire_is_retryable(exc):
