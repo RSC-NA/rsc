@@ -461,13 +461,30 @@ class TestMemberRemoveListener:
         mixin.retire.assert_awaited_once()
         mixin._try_post_embeds.assert_awaited_once()
         assert "will not be retried" in caplog.text
+        assert f"after {RETIRE_MAX_ATTEMPTS} attempt" not in caplog.text
 
+    @pytest.mark.parametrize("inactive_status", [Status.FORMER, Status.DROPPED, Status.BANNED])
+    async def test_already_inactive_player_is_not_retired(self, inactive_status, mixin, mock_guild, mock_member):
+        """A player retired months ago can still leave the server. That is not a failed retirement."""
+        mixin.players.return_value = [_make_league_player(mock_member.id, status=inactive_status)]
+        mixin.retire.side_effect = RscException(response=_api_exception(400, "TestPlayer is not in the league anymore."))
+
+        await mixin._transactions_on_member_remove(_make_member_remove_event(mock_guild, mock_member))
+
+        mixin.retire.assert_not_awaited()
+        mixin._try_post_embeds.assert_not_awaited()
+        mixin.announce_to_transaction_committee.assert_not_awaited()
+
+    @pytest.mark.parametrize(
+        "detail",
+        ["TestPlayer is not currently playing this season.", "TestPlayer is not in the league anymore."],
+    )
     @patch("rsc.transactions.transactions.utils.get_audit_log_reason", new_callable=AsyncMock)
-    async def test_already_not_playing_is_a_success(self, mock_audit_reason, mixin, mock_guild, mock_member):
-        """'not currently playing this season' means the desired end state already holds."""
+    async def test_already_not_playing_is_a_success(self, mock_audit_reason, detail, mixin, mock_guild, mock_member):
+        """The API refusing because the player is already out means the desired end state holds."""
         mock_audit_reason.return_value = (None, None)
         mixin.players.return_value = [_make_league_player(mock_member.id, status=Status.ROSTERED)]
-        mixin.retire.side_effect = RscException(response=_api_exception(400, "TestPlayer is not currently playing this season."))
+        mixin.retire.side_effect = RscException(response=_api_exception(400, detail))
 
         await mixin._transactions_on_member_remove(_make_member_remove_event(mock_guild, mock_member))
 

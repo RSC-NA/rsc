@@ -275,11 +275,21 @@ class TransactionMixIn(RSCMixIn):
 
         player_before_retire = players[0]
 
+        # The API rejects retiring a player who is already out, so posting one
+        # would report a phantom failure to staff.
+        if is_inactive_status(player_before_retire.status):
+            log.info(
+                f"{RETIRE_LOG_PREFIX} {member.display_name} ({member.id}) left but is already "
+                f"{Status(player_before_retire.status).full_name}. No action taken.",
+                guild=guild,
+            )
+            return
+
         verified, failure_reason = await self._attempt_retire(guild, member)
         if not verified:
             log.error(
-                f"{RETIRE_LOG_PREFIX} unable to retire {member.display_name} ({member.id}) "
-                f"after {RETIRE_MAX_ATTEMPTS} attempt(s). Player may still be active in API. Reason: {failure_reason}",
+                f"{RETIRE_LOG_PREFIX} unable to retire {member.display_name} ({member.id}). "
+                f"Player may still be active in API. Reason: {failure_reason}",
                 guild=guild,
             )
             await self._report_retire_failure(guild, member, reason=failure_reason)

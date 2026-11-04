@@ -37,7 +37,7 @@ async def translate_api_error(exc: RscApiException):
         return PastOffseasonDeadline(response=exc)
     elif reason.startswith("Player cannot be cut until"):
         return NotEnoughMatchDays(response=exc)
-    elif reason.endswith(" is not currently playing this season."):
+    elif reason.endswith((" is not currently playing this season.", " is not in the league anymore.")):
         return NotLeaguePlayer(response=exc)
 
     # Default
