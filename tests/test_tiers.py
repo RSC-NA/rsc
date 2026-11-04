@@ -2,7 +2,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import discord
 import pytest
-from rscapi.exceptions import ApiException
+from tests.utils import api_exception
 from rscapi.models.team_standings import TeamStandings
 from rscapi.models.tier import Tier
 
@@ -411,7 +411,7 @@ class TestTierStandings:
         mock_api.tiers_standings_list.assert_awaited_once_with(id=1, season_number=5)
 
     async def test_raises_rsc_exception_on_api_error(self, mock_guild):
-        exc = ApiException(status=404, reason="Not Found")
+        exc = api_exception(404, "Not Found")
         mixin = _create_mixin(_api_conf={mock_guild.id: MagicMock()})
 
         with patch("rsc.abc.ApiClient") as mock_client:
@@ -457,7 +457,7 @@ class TestTierPlayoffHunt:
 
         with patch("rsc.abc.ApiClient") as mock_client:
             mock_api = AsyncMock()
-            mock_api.tiers_playoffs_retrieve.side_effect = ApiException(status=404, reason="Not Found")
+            mock_api.tiers_playoffs_retrieve.side_effect = api_exception(404, "Not Found")
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
             with patch("rsc.tiers.tiers.TiersApi", return_value=mock_api), pytest.raises(RscException):
@@ -481,7 +481,7 @@ class TestCreateTier:
         assert result.name == "Bronze"
 
     async def test_raises_rsc_exception_on_api_error(self, mock_guild):
-        exc = ApiException(status=400, reason="Bad Request")
+        exc = api_exception(400, "Bad Request")
         mixin = _create_mixin(_api_conf={mock_guild.id: MagicMock()})
 
         with patch("rsc.abc.ApiClient") as mock_client:
@@ -509,7 +509,7 @@ class TestDeleteTier:
         mock_api.tiers_destroy.assert_awaited_once_with(5)
 
     async def test_raises_rsc_exception_on_api_error(self, mock_guild):
-        exc = ApiException(status=404, reason="Not Found")
+        exc = api_exception(404, "Not Found")
         mixin = _create_mixin(_api_conf={mock_guild.id: MagicMock()})
 
         with patch("rsc.abc.ApiClient") as mock_client:

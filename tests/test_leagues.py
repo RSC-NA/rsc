@@ -1,7 +1,7 @@
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from rscapi.exceptions import ApiException
+from tests.utils import api_exception
 
 from rsc.enums import Status
 from rsc.exceptions import RscException
@@ -45,7 +45,7 @@ class TestLeaguesApi:
 
         with patch("rsc.abc.ApiClient") as mock_client:
             mock_api = AsyncMock()
-            mock_api.leagues_list.side_effect = ApiException(status=500, reason="Error")
+            mock_api.leagues_list.side_effect = api_exception(500, "Error")
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
             with patch("rsc.leagues.leagues.LeaguesApi", return_value=mock_api), pytest.raises(RscException):
@@ -167,7 +167,7 @@ class TestPlayersApi:
 
         with patch("rsc.abc.ApiClient") as mock_client:
             mock_api = AsyncMock()
-            mock_api.league_players_list.side_effect = ApiException(status=500, reason="Error")
+            mock_api.league_players_list.side_effect = api_exception(500, "Error")
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
             with patch("rsc.leagues.leagues.LeaguePlayersApi", return_value=mock_api), pytest.raises(RscException):
@@ -265,7 +265,7 @@ class TestUpdateLeaguePlayer:
 
         with patch("rsc.abc.ApiClient") as mock_client:
             mock_api = AsyncMock()
-            mock_api.league_players_partial_update.side_effect = ApiException(status=400, reason="Bad")
+            mock_api.league_players_partial_update.side_effect = api_exception(400, "Bad")
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
             with patch("rsc.leagues.leagues.LeaguePlayersApi", return_value=mock_api), pytest.raises(RscException):

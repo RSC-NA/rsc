@@ -7,7 +7,7 @@ from rsc.core import RSC
 from rscapi import FranchisesApi
 from rscapi.models import Franchise
 from rscapi.models.franchise_rebrand import FranchiseRebrand
-from rsc.exceptions import RscException
+from rsc.exceptions import ApiError
 
 pytestmark = pytest.mark.integration
 
@@ -85,21 +85,17 @@ class TestFranchisesPrivilegedApiCalls:
     @pytest.mark.asyncio
     async def test_create_franchise_privileged_api_call(self, rsc_bot_no_key: RSC, rsc_bot_invalid_key: RSC, mock_guild, mock_member):
         """Test that create_franchise() API call raises NotImplementedError."""
-        with pytest.raises(RscException) as exc:
+        with pytest.raises(ApiError) as exc:
             await rsc_bot_no_key.create_franchise(guild=mock_guild, name="Test Franchise", prefix="TF", gm=mock_member)
-        assert exc.type == RscException
-        assert exc.value.type == "NotAuthenticated"
-        assert exc.value.response.reason == "Forbidden"
+        assert exc.type is ApiError
+        assert exc.value.error_type == "NotAuthenticated"
         assert exc.value.status == 403
-        assert exc.value.response.status == 403
 
-        with pytest.raises(RscException) as exc:
+        with pytest.raises(ApiError) as exc:
             await rsc_bot_invalid_key.create_franchise(guild=mock_guild, name="Test Franchise", prefix="TF", gm=mock_member)
-        assert exc.type == RscException
-        assert exc.value.type == "NotAuthenticated"
-        assert exc.value.response.reason == "Forbidden"
+        assert exc.type is ApiError
+        assert exc.value.error_type == "NotAuthenticated"
         assert exc.value.status == 403
-        assert exc.value.response.status == 403
 
     @pytest.mark.asyncio
     async def test_rebrand_franchise_privileged_api_call(self, rsc_bot_no_key: RSC, rsc_bot_invalid_key: RSC, mock_guild, mock_member):
@@ -112,23 +108,19 @@ class TestFranchisesPrivilegedApiCalls:
         print(f"Testing rebrand_franchise() on franchise ID {franchise.id}, Name: {franchise.name}")
 
         rebrand = FranchiseRebrand(name="New Franchise Name", prefix="NF", teams=[], admin_override=False)
-        with pytest.raises(RscException) as exc:
+        with pytest.raises(ApiError) as exc:
             assert franchise.id is not None
             await rsc_bot_no_key.rebrand_franchise(guild=mock_guild, id=franchise.id, rebrand=rebrand)
-        assert exc.type == RscException
-        assert exc.value.type == "NotAuthenticated"
-        assert exc.value.response.reason == "Forbidden"
+        assert exc.type is ApiError
+        assert exc.value.error_type == "NotAuthenticated"
         assert exc.value.status == 403
-        assert exc.value.response.status == 403
 
-        with pytest.raises(RscException) as exc:
+        with pytest.raises(ApiError) as exc:
             assert franchise.id is not None
             await rsc_bot_invalid_key.rebrand_franchise(guild=mock_guild, id=franchise.id, rebrand=rebrand)
-        assert exc.type == RscException
-        assert exc.value.type == "NotAuthenticated"
-        assert exc.value.response.reason == "Forbidden"
+        assert exc.type is ApiError
+        assert exc.value.error_type == "NotAuthenticated"
         assert exc.value.status == 403
-        assert exc.value.response.status == 403
 
     @pytest.mark.asyncio
     async def test_transfer_franchise_privileged_api_call(self, rsc_bot_no_key: RSC, rsc_bot_invalid_key: RSC, mock_guild, mock_member):
@@ -140,23 +132,19 @@ class TestFranchisesPrivilegedApiCalls:
         franchise = flist.pop(0)
         print(f"Testing transfer_franchise() on franchise ID {franchise.id}, Name: {franchise.name}")
 
-        with pytest.raises(RscException) as exc:
+        with pytest.raises(ApiError) as exc:
             assert franchise.id is not None
             await rsc_bot_no_key.transfer_franchise(guild=mock_guild, id=franchise.id, gm=mock_member)
-        assert exc.type == RscException
-        assert exc.value.type == "NotAuthenticated"
-        assert exc.value.response.reason == "Forbidden"
+        assert exc.type is ApiError
+        assert exc.value.error_type == "NotAuthenticated"
         assert exc.value.status == 403
-        assert exc.value.response.status == 403
 
-        with pytest.raises(RscException) as exc:
+        with pytest.raises(ApiError) as exc:
             assert franchise.id is not None
             await rsc_bot_invalid_key.transfer_franchise(guild=mock_guild, id=franchise.id, gm=mock_member)
-        assert exc.type == RscException
-        assert exc.value.type == "NotAuthenticated"
-        assert exc.value.response.reason == "Forbidden"
+        assert exc.type is ApiError
+        assert exc.value.error_type == "NotAuthenticated"
         assert exc.value.status == 403
-        assert exc.value.response.status == 403
 
     @pytest.mark.asyncio
     async def test_upload_logo_privileged_api_call(self, rsc_bot_no_key: RSC, rsc_bot_invalid_key: RSC, mock_guild, mock_member):
@@ -170,23 +158,19 @@ class TestFranchisesPrivilegedApiCalls:
 
         logo = bytes("fake image data", "utf-8")
 
-        with pytest.raises(RscException) as exc:
+        with pytest.raises(ApiError) as exc:
             assert franchise.id is not None
             await rsc_bot_no_key.upload_franchise_logo(guild=mock_guild, id=franchise.id, logo=logo)
-        assert exc.type == RscException
-        assert exc.value.type == "NotAuthenticated"
-        assert exc.value.response.reason == "Forbidden"
+        assert exc.type is ApiError
+        assert exc.value.error_type == "NotAuthenticated"
         assert exc.value.status == 403
-        assert exc.value.response.status == 403
 
-        with pytest.raises(RscException) as exc:
+        with pytest.raises(ApiError) as exc:
             assert franchise.id is not None
             await rsc_bot_invalid_key.upload_franchise_logo(guild=mock_guild, id=franchise.id, logo=logo)
-        assert exc.type == RscException
-        assert exc.value.type == "NotAuthenticated"
-        assert exc.value.response.reason == "Forbidden"
+        assert exc.type is ApiError
+        assert exc.value.error_type == "NotAuthenticated"
         assert exc.value.status == 403
-        assert exc.value.response.status == 403
 
 
 class TestFranchisesApiDataStructures:

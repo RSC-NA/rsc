@@ -3,15 +3,13 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import discord
 import pytest
-from rscapi.exceptions import ApiException
 from rscapi.models.league_player_status_enum import LeaguePlayerStatusEnum
 from rscapi.models.name_change_history import NameChangeHistory
 
 from rsc.admin.members import AdminMembersMixIn
 from rsc.enums import ACTIVE_STATUSES, INACTIVE_STATUSES, StaffPositions, Status, is_inactive_status
-from rsc.exceptions import RscException
 
-from .utils import command_callback, subcommands
+from .utils import api_error, command_callback, subcommands
 
 
 def _create_mixin(**attrs):
@@ -178,7 +176,7 @@ class TestAdminElevatedRolesCommand:
         assert _sent_embed(interaction).fields[0].name == "Unknown"
 
     async def test_api_error_returns_error_embed(self, mock_guild, mock_member):
-        exc = RscException(response=ApiException(status=500, reason="Error"))
+        exc = api_error(500, "Error")
         mixin = _create_mixin(member_elevated_roles=AsyncMock(side_effect=exc))
         interaction = _mock_interaction(mock_guild)
 
@@ -406,7 +404,7 @@ class TestAdminNotInServerCommand:
         mixin.total_players.assert_not_awaited()
 
     async def test_api_error_returns_error_embed(self, mock_guild):
-        exc = RscException(response=ApiException(status=500, reason="Error"))
+        exc = api_error(500, "Error")
         mixin = _notinserver_mixin([], total_players=AsyncMock(side_effect=exc))
         interaction = _notinserver_interaction(mock_guild)
 

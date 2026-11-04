@@ -1,7 +1,7 @@
 import pytest
 
 from rsc.core import RSC
-from rsc.exceptions import RscException
+from rsc.exceptions import ApiError
 from rscapi import MatchesApi, TeamsApi
 from rscapi.models import MatchResults
 
@@ -109,7 +109,7 @@ class TestMatchesApiCalls:
             await rsc_bot.report_match(mock_guild, match.id, home_score=2, away_score=2, ballchasing_group=bc_group, executor=mock_member)
             print(f"✓ upload_match_media() succeeded for match {match.id}")
 
-        except RscException as e:
+        except ApiError as e:
             # Expected to fail with fake URL
             if e.status in [400, 404]:
                 print(f"✓ upload_match_media() correctly handled invalid URL (status {e.status})")
@@ -140,8 +140,8 @@ class TestMatchesApiCalls:
         try:
             await rsc_bot.match_results(mock_guild, INVALID_MATCH_ID)
             pytest.fail(f"match_results() should have raised RscException for invalid ID {INVALID_MATCH_ID}")
-        except RscException as e:
-            print(f"Match results status code for invalid ID {INVALID_MATCH_ID}: {e.status} {e.reason}")
+        except ApiError as e:
+            print(f"Match results status code for invalid ID {INVALID_MATCH_ID}: {e.status} {e.message}")
             if e.status == 404:
                 print(f"✓ match_results() correctly raised 404 for invalid ID {INVALID_MATCH_ID}")
             else:

@@ -10,9 +10,8 @@ from rsc.admin.admin import MEMBER_FETCH_LIMIT, AdminMixIn
 from rsc.admin.intents import AdminIntentsMixIn
 from rsc.admin.views import INTENT_DM_TEMPLATE, IntentDMButton, build_intent_dm_view, modmail_reference
 from rsc.core import RSC
-from rsc.exceptions import RscException
 
-from .utils import custom_ids
+from .utils import api_error, custom_ids
 
 # Called unbound with a stub `self`; the mixin needs a full cog to instantiate.
 resolve_missing_members = AdminIntentsMixIn._resolve_missing_members
@@ -30,14 +29,6 @@ def _mock_season(number=SEASON, season_id=100):
     season.number = number
     season.id = season_id
     return season
-
-
-def _rsc_exception(*, exc_type=None, status=None, reason=None):
-    exc = RscException(message=reason or "boom")
-    exc.type = exc_type
-    exc.status = status
-    exc.reason = reason
-    return exc
 
 
 def _autospec_cog():
@@ -504,7 +495,7 @@ class TestCallbackGuards:
 
 class TestCallbackSignupWindow:
     async def test_signups_closed_records_nothing_and_points_at_modmail(self):
-        cog = _mock_cog(season_exc=_rsc_exception(exc_type="SignupsClosedException"))
+        cog = _mock_cog(season_exc=api_error(405, "Signups are closed", error_type="SignupsClosedException"))
         interaction = _mock_interaction(cog)
 
         await IntentDMButton(GUILD_ID, SEASON, returning=True).callback(interaction)
@@ -542,7 +533,7 @@ class TestCallbackSignupWindow:
         assert "/signup" in embed.description
 
     async def test_other_api_error_keeps_buttons_for_retry(self):
-        cog = _mock_cog(season_exc=_rsc_exception(status=500, reason="boom"))
+        cog = _mock_cog(season_exc=api_error(500, "boom"))
         interaction = _mock_interaction(cog)
 
         await IntentDMButton(GUILD_ID, SEASON, returning=True).callback(interaction)
@@ -582,7 +573,7 @@ class TestCallbackDeclare:
     async def test_already_declared_conflict_is_friendly(self):
         cog = _mock_cog(
             season=_mock_season(),
-            declare_exc=_rsc_exception(status=409, reason="Already declared."),
+            declare_exc=api_error(409, "Already declared."),
         )
         interaction = _mock_interaction(cog)
 
@@ -625,7 +616,7 @@ class TestCallbackDeclare:
     async def test_declare_failure_keeps_buttons_and_hides_internals(self):
         cog = _mock_cog(
             season=_mock_season(),
-            declare_exc=_rsc_exception(status=503, reason="upstream exploded"),
+            declare_exc=api_error(503, "upstream exploded"),
         )
         interaction = _mock_interaction(cog)
 

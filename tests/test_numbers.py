@@ -2,7 +2,7 @@ from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from rscapi.exceptions import ApiException
+from tests.utils import api_exception
 
 from rsc.exceptions import RscException
 from rsc.numbers.numbers import NumberMixIn
@@ -66,7 +66,7 @@ class TestMmrPullsApi:
 
         with patch("rsc.abc.ApiClient") as mock_client:
             mock_api = AsyncMock()
-            mock_api.numbers_mmr_list.side_effect = ApiException(status=500, reason="Error")
+            mock_api.numbers_mmr_list.side_effect = api_exception(500, "Error")
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
             with patch("rsc.numbers.numbers.NumbersApi", return_value=mock_api), pytest.raises(RscException):

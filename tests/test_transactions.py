@@ -1,11 +1,9 @@
-import json
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 from zoneinfo import ZoneInfo
 
 import discord
 import pytest
-from rscapi.exceptions import ApiException
 from rscapi.models.player import Player
 from rscapi.models.player_transaction_updates import PlayerTransactionUpdates
 from rscapi.models.transaction_response import TransactionResponse
@@ -20,8 +18,8 @@ from rscapi.models.league_player import LeaguePlayer
 
 from rsc.enums import Status, TransactionType
 from rsc.exceptions import (
+    ApiError,
     MalformedTransactionResponse,
-    PastTransactionsEndDate,
     RscException,
     TradeParserException,
 )
@@ -41,7 +39,7 @@ from rsc.utils import utils
 
 from .test_trade_announce import COMETS_GM, FLARES_GM, WOLVES_GM, pick_trade, player_update
 from .test_trade_announce import response as trade_response
-from .utils import command_callback
+from .utils import api_error, api_exception, command_callback
 
 
 def _create_mixin(**attrs):
@@ -271,12 +269,6 @@ class TestLeaguePlayerFromTransaction:
         assert result is ptu_target
 
 
-def _api_exception(status: int, detail: str = "boom") -> ApiException:
-    exc = ApiException(status=status)
-    exc.body = json.dumps({"detail": detail})
-    return exc
-
-
 class TestMemberRemoveListener:
     @pytest.fixture
     def mixin(self, mock_guild):
@@ -399,7 +391,7 @@ class TestMemberRemoveListener:
     # Failure paths that used to abort the retirement silently
 
     async def test_player_lookup_failure_is_not_treated_as_non_player(self, mixin, mock_guild, mock_member, caplog):
-        mixin.players.side_effect = RscException(response=_api_exception(502))
+        mixin.players.side_effect = api_error(502)
 
         with caplog.at_level("ERROR", logger="red.rsc.transactions"):
             await mixin._transactions_on_member_remove(_make_member_remove_event(mock_guild, mock_member))
@@ -437,8 +429,8 @@ class TestMemberRemoveListener:
         player_update = _make_ptu(mock_member.id, status=Status.FORMER)
         mixin.players.return_value = [_make_league_player(mock_member.id, status=Status.ROSTERED)]
         mixin.retire.side_effect = [
-            RscException(response=_api_exception(502)),
-            RscException(response=_api_exception(504)),
+            api_error(502),
+            api_error(504),
             _make_transaction_response(type=TransactionType.RETIRE, player_updates=[player_update]),
         ]
 
@@ -451,8 +443,8 @@ class TestMemberRemoveListener:
 
     async def test_non_retryable_api_error_does_not_retry(self, mixin, mock_guild, mock_member, caplog):
         mixin.players.return_value = [_make_league_player(mock_member.id, status=Status.ROSTERED)]
-        mixin.retire.side_effect = RscException(
-            response=_api_exception(400, "Cannot admin override transaction for league you are not an admin in")
+        mixin.retire.side_effect = api_error(
+            403, "Cannot admin override transaction for league executor is not an admin in", error_type="MissingPermissionException"
         )
 
         with caplog.at_level("ERROR", logger="red.rsc.transactions"):
@@ -467,7 +459,7 @@ class TestMemberRemoveListener:
     async def test_already_inactive_player_is_not_retired(self, inactive_status, mixin, mock_guild, mock_member):
         """A player retired months ago can still leave the server. That is not a failed retirement."""
         mixin.players.return_value = [_make_league_player(mock_member.id, status=inactive_status)]
-        mixin.retire.side_effect = RscException(response=_api_exception(400, "TestPlayer is not in the league anymore."))
+        mixin.retire.side_effect = api_error(400, "TestPlayer is not in the league anymore.", error_type="TransactionError")
 
         await mixin._transactions_on_member_remove(_make_member_remove_event(mock_guild, mock_member))
 
@@ -475,16 +467,14 @@ class TestMemberRemoveListener:
         mixin._try_post_embeds.assert_not_awaited()
         mixin.announce_to_transaction_committee.assert_not_awaited()
 
-    @pytest.mark.parametrize(
-        "detail",
-        ["TestPlayer is not currently playing this season.", "TestPlayer is not in the league anymore."],
-    )
     @patch("rsc.transactions.transactions.utils.get_audit_log_reason", new_callable=AsyncMock)
-    async def test_already_not_playing_is_a_success(self, mock_audit_reason, detail, mixin, mock_guild, mock_member):
-        """The API refusing because the player is already out means the desired end state holds."""
+    async def test_already_not_playing_is_a_success(self, mock_audit_reason, mixin, mock_guild, mock_member):
         mock_audit_reason.return_value = (None, None)
-        mixin.players.return_value = [_make_league_player(mock_member.id, status=Status.ROSTERED)]
-        mixin.retire.side_effect = RscException(response=_api_exception(400, detail))
+        mixin.players.side_effect = [
+            [_make_league_player(mock_member.id, status=Status.ROSTERED)],
+            [_make_league_player(mock_member.id, status=Status.FORMER)],
+        ]
+        mixin.retire.side_effect = api_error(400, "TestPlayer is not in the league anymore.", error_type="TransactionError")
 
         await mixin._transactions_on_member_remove(_make_member_remove_event(mock_guild, mock_member))
 
@@ -1041,8 +1031,7 @@ class TestSignApi:
     @patch("rsc.abc.ApiClient")
     async def test_sign_api_exception(self, mock_client_cls, mock_api_cls, mixin, mock_guild, mock_member, mock_executor):
         mock_api = AsyncMock()
-        exc = ApiException(status=400, reason="Bad Request")
-        exc.body = json.dumps({"detail": "Unable to find team name TestTeam"})
+        exc = api_exception(400, "Unable to find team name TestTeam", error_type="TransactionError")
         mock_api.transactions_sign_create.side_effect = exc
         mock_api_cls.return_value = mock_api
 
@@ -1081,10 +1070,11 @@ class TestCutApi:
 
     @patch("rsc.transactions.transactions.TransactionsApi")
     @patch("rsc.abc.ApiClient")
-    async def test_cut_api_exception_translated(self, mock_client_cls, mock_api_cls, mixin, mock_guild, mock_member, mock_executor):
+    async def test_cut_api_exception_keeps_server_message(
+        self, mock_client_cls, mock_api_cls, mixin, mock_guild, mock_member, mock_executor
+    ):
         mock_api = AsyncMock()
-        exc = ApiException(status=400, reason="Bad Request")
-        exc.body = json.dumps({"detail": "Cannot cut a player past the transactions end date for S25"})
+        exc = api_exception(400, "Cannot cut a player past the transactions end date for S25", error_type="TransactionError")
         mock_api.transactions_cut_create.side_effect = exc
         mock_api_cls.return_value = mock_api
 
@@ -1093,7 +1083,7 @@ class TestCutApi:
         mock_ctx.__aexit__ = AsyncMock(return_value=False)
         mock_client_cls.return_value = mock_ctx
 
-        with pytest.raises(PastTransactionsEndDate):
+        with pytest.raises(ApiError, match="past the transactions end date for S25"):
             await mixin.cut(mock_guild, mock_member, mock_executor)
 
 
@@ -1154,8 +1144,7 @@ class TestSubstitutionApi:
         self, mock_client_cls, mock_api_cls, mixin, mock_guild, mock_member, mock_player_out, mock_executor
     ):
         mock_api = AsyncMock()
-        exc = ApiException(status=400, reason="Bad Request")
-        exc.body = json.dumps({"detail": "Some error"})
+        exc = api_exception(400, "Some error", error_type="TransactionError")
         mock_api.transactions_substitution_create.side_effect = exc
         mock_api_cls.return_value = mock_api
 
@@ -1358,8 +1347,7 @@ class TestValidateFranchiseFuturesApi:
     @patch("rsc.abc.ApiClient")
     async def test_validate_futures_api_exception(self, mock_client_cls, mock_api_cls, mixin, mock_guild):
         mock_api = AsyncMock()
-        exc = ApiException(status=400, reason="Bad Request")
-        exc.body = json.dumps({"detail": "Validation failed"})
+        exc = api_exception(400, "Validation failed", error_type="TransactionError")
         mock_api.transactions_trade_validate_futures_create.side_effect = exc
         mock_api_cls.return_value = mock_api
 
@@ -1482,7 +1470,7 @@ class TestTransactionHistoryApi:
     @patch("rsc.abc.ApiClient")
     async def test_history_api_exception(self, mock_client_cls, mock_api_cls, mixin, mock_guild):
         mock_api = AsyncMock()
-        exc = ApiException(status=500, reason="Internal Server Error")
+        exc = api_exception(500, "Internal Server Error")
         exc.body = None
         mock_api.transactions_history_list.side_effect = exc
         mock_api_cls.return_value = mock_api

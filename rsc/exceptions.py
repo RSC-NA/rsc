@@ -1,151 +1,102 @@
 import json
 import logging
+from collections.abc import Collection, Mapping
+from typing import Any, ClassVar
 
-from rscapi.exceptions import ApiException as RscApiException
-from rscapi.exceptions import BadRequestException, ServiceException
+from rscapi.exceptions import ApiException
 
 log = logging.getLogger("red.rsc.exceptions")
-
-
-async def translate_api_error(exc: RscApiException):
-    log.debug(f"ApiException Status: {exc.status}")
-    if exc.status == 500:
-        return InternalServerError(response=exc)
-
-    if not exc.body:
-        return RscException(response=exc)
-
-    log.debug(f"ApiException Body: {exc.body}")
-    body = json.loads(exc.body)
-    reason = body.get("detail")
-
-    if not reason:
-        return RscException(response=exc)
-
-    # TransactionsExceptions
-    if reason.startswith("Cannot cut a player past the transactions end date for"):
-        return PastTransactionsEndDate(response=exc)
-    elif reason.startswith("Unable to find team name "):
-        return TeamDoesNotExist(response=exc)
-    elif reason.startswith("Cannot admin override transaction for league you are not an admin in"):
-        return NotAdmin(response=exc)
-    elif reason.startswith("Cannot cut a player during the offseason, reason was:"):
-        return NotAllowedInOffseason(response=exc)
-    elif reason.startswith("Player cannot be cut as they are not finished their IR period yet."):
-        return MustFinishIRPeriod(response=exc)
-    elif reason == "Cut is past the offseason cut deadline.":
-        return PastOffseasonDeadline(response=exc)
-    elif reason.startswith("Player cannot be cut until"):
-        return NotEnoughMatchDays(response=exc)
-    elif reason.endswith((" is not currently playing this season.", " is not in the league anymore.")):
-        return NotLeaguePlayer(response=exc)
-
-    # Default
-    return RscException(response=exc)
 
 
 class RscException(Exception):  # noqa: N818
     """Base exception type for RSC Bot"""
 
-    def __init__(self, *args, **kwargs):
-        self.response = kwargs.pop("response", None)
-        self.message = kwargs.pop("message", None)
-        self.reason = None
-        self.status = None
-        self.extra = None
-        self.type = None
-        log.debug(f"ExceptionType: {type(self.response)}")
-        if self.response is not None and isinstance(self.response, RscApiException):
-            self.status = self.response.status
-            try:
-                if self.response.body:
-                    body = json.loads(self.response.body)
-                    log.debug(f"Response Body: {body}")
-                    if body.get("detail"):
-                        log.debug("Found 'detail' in response body")
-                        self.reason = body.get("detail")
-                    elif body.get("message"):
-                        log.debug("Found 'message' in response body")
-                        self.reason = body.get("message")
-
-                    if body.get("extra"):
-                        self.extra = body.get("extra")
-
-                    self.type = body.get("type")
-            except json.JSONDecodeError:
-                log.error(f"Unable to JSON decode API exception body. Status: {self.status} Body: {self.response.body}")
-                self.reason = "Received unknown error from server."
-                self.type = "UnknownError"
-        elif isinstance(self.response, BadRequestException) or (len(args) > 0 and isinstance(args[0], BadRequestException)):
-            log.debug("BadRequestException encountered")
-            self.status = args[0].status
-            if args[0].body:
-                body = json.loads(args[0].body)
-            elif self.response and self.response.body:
-                body = json.loads(self.response.body)
-
-            if body:
-                if body.get("detail"):
-                    self.reason = body.get("detail")
-                elif body.get("message"):
-                    self.reason = body.get("message")
-                self.type = body.get("type")
-        elif isinstance(self.response, ServiceException):
-            self.status = self.response.status
-            self.reason = self.response.reason
-            self.type = "ServiceException"
-
-        if hasattr(self, "reason"):
-            log.debug("Status: %s, Reason: %s, Type: %s", self.status, self.reason, self.type)
-
-        super().__init__(self.message, *args, **kwargs)
+    def __init__(self, message: str | None = None):
+        self.message = message
+        super().__init__(message)
 
     def __str__(self) -> str:
-        if self.message:
-            return str(self.message)
-
-        parts = []
-        if self.status:
-            parts.append(f"[{self.status}]")
-        if self.type:
-            parts.append(f"{self.type}:")
-        if self.reason:
-            parts.append(str(self.reason))
-        if self.extra:
-            parts.append(f"(extra: {self.extra})")
-
-        if parts:
-            return " ".join(parts)
-
-        # Fall back to a message passed positionally, e.g. RscException("boom")
-        for arg in self.args:
-            if isinstance(arg, str) and arg:
-                return arg
-
-        return self.__doc__ or type(self).__name__
-
-
-# Generic
+        return self.message or self.__doc__ or type(self).__name__
 
 
 class LeagueNotConfigured(RscException):
     """Guild does not have a league configured"""
 
 
-class InternalServerError(RscException):
-    """Server returned 500 Internal Server Error"""
-
-
-class BadGateway(RscException):
-    """Server returned 502 Bad Gateway"""
-
-
-class CombinesError(RscException):
-    """Combines returned error status message"""
-
-
 class SiteUnavailable(RscException):
     """The combines or Dev League site couldn't be reached, or sent back something unusable"""
+
+
+class ApiError(RscException):
+    """The RSC API answered a request with an error."""
+
+    _by_status: ClassVar[dict[int, type["ApiError"]]] = {}
+    _by_error_type: ClassVar[dict[str, type["ApiError"]]] = {}
+
+    def __init_subclass__(cls, *, statuses: Collection[int] = (), error_type: str | None = None, **kwargs: object):
+        super().__init_subclass__(**kwargs)
+        for status in statuses:
+            ApiError._by_status[status] = cls
+        if error_type is not None:
+            ApiError._by_error_type[error_type] = cls
+
+    def __init__(self, status: int, message: str, *, error_type: str | None = None, extra: Mapping[str, Any] | None = None):
+        super().__init__(message)
+        self.message: str = message
+        self.status = status
+        self.error_type = error_type
+        self.extra: dict[str, Any] = dict(extra or {})
+
+    @classmethod
+    def from_exception(cls, exc: ApiException) -> "ApiError":
+        envelope = _json_object(exc.body)
+        message = envelope.get("message") or exc.reason or "The RSC API returned an error without a message."
+        error_type = envelope.get("type")
+        error_type = error_type if isinstance(error_type, str) else None
+        extra = envelope.get("extra")
+        error_cls = cls._by_error_type.get(error_type or "") or cls._by_status.get(exc.status) or ApiError
+        return error_cls(
+            exc.status or 0,
+            message if isinstance(message, str) else str(message),
+            error_type=error_type,
+            extra=extra if isinstance(extra, Mapping) else None,
+        )
+
+    def __str__(self) -> str:
+        parts = [f"[{self.status}]"]
+        if self.error_type:
+            parts.append(f"{self.error_type}:")
+        parts.append(self.message)
+        if self.extra:
+            parts.append(f"(extra: {self.extra})")
+        return " ".join(parts)
+
+
+def _json_object(body: str | None) -> dict[str, Any]:
+    if not body:
+        return {}
+    try:
+        parsed = json.loads(body)
+    except ValueError:
+        log.warning(f"RSC API sent an error body that is not JSON: {body[:200]!r}")
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
+
+
+class NotFoundError(ApiError, statuses={404}):
+    """The RSC API has no such record"""
+
+
+class ConflictError(ApiError, statuses={409}):
+    """The request conflicts with the record's current state"""
+
+
+class ServerError(ApiError, statuses=range(500, 600)):
+    """The RSC API failed on its side"""
+
+
+class SignupsClosedError(ApiError, error_type="SignupsClosedException"):
+    """The season is not taking signups right now"""
 
 
 # Discord
@@ -165,77 +116,12 @@ class DiscordNameTooLong(ValueError):  # noqa: N818
         super().__init__(f"Discord name is too long ({member_id}): {nickname}")
 
 
-# Member
-
-
-class MemberException(RscException):
-    """Generic Member Exception Base Type"""
-
-
-class MemberDoesNotExist(MemberException):
-    """Member does not exist"""
-
-
-class NotLeaguePlayer(MemberException):
-    """Member is not playing in the league this season"""
-
-
-# League
-
-
-class LeagueException(RscException):
-    """Generic Transaction Exception Base Type"""
-
-
-class LeagueDoesNotExist(LeagueException):
-    """League does not exist"""
-
-
-# Teams
-
-
-class TeamsException(RscException):
-    """Generic Teams Exception Base Type"""
-
-
-class TeamDoesNotExist(TeamsException):
-    """Team does not exist"""
-
-
 # Transactions
-
-
-class TransactionException(RscException):
-    """Generic Transaction Exception Base Type"""
 
 
 class TradeParserException(RscException):
     """Error occurred during trade parsing"""
 
 
-class PastTransactionsEndDate(TransactionException):
-    """Attempt to cut a player past the transactions end date"""
-
-
-class NotAdmin(TransactionException):
-    """Attempted admin override in a league that user is not an admin"""
-
-
-class NotAllowedInOffseason(TransactionException):
-    """Transaction is not allowed during the offseason"""
-
-
-class MustFinishIRPeriod(TransactionException):
-    """Player has not finished their IR period"""
-
-
-class PastOffseasonDeadline(TransactionException):
-    """Past offseason deadline"""
-
-
-class NotEnoughMatchDays(TransactionException):
-    """Not enough match days have passed"""
-
-
-class MalformedTransactionResponse(TransactionException):
+class MalformedTransactionResponse(RscException):
     """TransactionResponse did not contain expected data"""

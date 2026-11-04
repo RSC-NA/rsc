@@ -6,18 +6,16 @@ from zoneinfo import ZoneInfo
 
 import discord
 from discord import ui
-from rscapi.exceptions import ApiException
 from rscapi.models.season import Season
 from rscapi.models.season_league import SeasonLeague
 from rscapi.models.season_schedule import SeasonSchedule
 from rscapi.models.season_tier_data import SeasonTierData
 from rscapi.models.tier import Tier
 
-from rsc.exceptions import RscException
 from rsc.tiers.tiers import TierMixIn
 from rsc.tiers.views import TierRow, TiersCard
 
-from .utils import command_callback
+from .utils import api_error, command_callback
 
 TZ = ZoneInfo("America/New_York")
 ICON = "https://example.com/icon.png"
@@ -132,7 +130,7 @@ class TestTiersCommand:
 
     async def test_season_fetch_failure_still_lists_the_tiers(self, mock_guild):
         guild = _with_roles(mock_guild, *NAMES)
-        failure = RscException(ApiException(status=503, reason="Service Unavailable"))
+        failure = api_error(503, "Service Unavailable")
 
         texts = _texts((await _send(_mixin(season=failure), guild))["view"])
 

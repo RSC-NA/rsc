@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import discord
 import pytest
 from discord import ui
-from rscapi.exceptions import ApiException, NotFoundException
+from tests.utils import api_exception
 from rscapi.models.pending_series import PendingSeries
 
 from rsc.ballchasing.views import FALLBACK_LOGO
@@ -116,11 +116,11 @@ class TestPendingSeriesApi:
         assert await self._call(mock_guild, return_value=series) is series
 
     async def test_no_pending_series_is_none(self, mock_guild):
-        assert await self._call(mock_guild, side_effect=NotFoundException(status=404, reason="Not Found")) is None
+        assert await self._call(mock_guild, side_effect=api_exception(404, "Not Found")) is None
 
     async def test_other_api_errors_raise(self, mock_guild):
         with pytest.raises(RscException):
-            await self._call(mock_guild, side_effect=ApiException(status=500, reason="Error"))
+            await self._call(mock_guild, side_effect=api_exception(500, "Error"))
 
 
 class TestPendingSeriesCard:

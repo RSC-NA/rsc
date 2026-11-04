@@ -2,7 +2,7 @@ import pytest
 
 from rsc.core import RSC
 from rsc.enums import TransactionType
-from rsc.exceptions import RscException
+from rsc.exceptions import ApiError
 from rscapi import LeaguePlayersApi, TransactionsApi
 
 pytestmark = pytest.mark.integration
@@ -67,9 +67,9 @@ class TestTransactionsApiCalls:
                 guild=mock_guild, player=mock_member, team=team.name, executor=mock_member, notes="Development Bot Pytest", override=True
             )
             print(f"✓ sign() succeeded for player {mock_member.id}")
-        except RscException as e:
+        except ApiError as e:
             if e.status in [400, 404, 409]:
-                print(f"✓ sign() correctly handled business rule (status {e.status}): {e.reason}")
+                print(f"✓ sign() correctly handled business rule (status {e.status}): {e.message}")
             else:
                 raise
 
@@ -80,9 +80,9 @@ class TestTransactionsApiCalls:
         try:
             await rsc_bot.cut(guild=mock_guild, player=mock_member, executor=mock_member, notes="Development Bot Pytest", override=True)
             print(f"✓ cut() succeeded for player {mock_member.id}")
-        except RscException as e:
+        except ApiError as e:
             if e.status in [400, 404, 409]:
-                print(f"✓ cut() correctly handled business rule (status {e.status}): {e.reason}")
+                print(f"✓ cut() correctly handled business rule (status {e.status}): {e.message}")
             else:
                 raise
 
@@ -104,9 +104,9 @@ class TestTransactionsApiCalls:
                 guild=mock_guild, player=mock_member, team=team.name, executor=mock_member, notes="Development Bot Pytest", override=True
             )
             print(f"✓ resign() succeeded for player {mock_member.id}")
-        except RscException as e:
+        except ApiError as e:
             if e.status in [400, 404, 409]:
-                print(f"✓ resign() correctly handled business rule (status {e.status}): {e.reason}")
+                print(f"✓ resign() correctly handled business rule (status {e.status}): {e.message}")
             else:
                 raise
 
@@ -126,9 +126,9 @@ class TestTransactionsApiCalls:
 
             await rsc_bot.set_captain(mock_guild, player.id)
             print(f"✓ set_captain() succeeded for player {player.id}")
-        except RscException as e:
+        except ApiError as e:
             if e.status in [400, 404, 409]:
-                print(f"✓ set_captain() correctly handled business rule (status {e.status}): {e.reason}")
+                print(f"✓ set_captain() correctly handled business rule (status {e.status}): {e.message}")
             else:
                 raise
 
@@ -146,9 +146,9 @@ class TestTransactionsApiCalls:
                 override=True,
             )
             print("✓ substitution() succeeded")
-        except RscException as e:
+        except ApiError as e:
             if e.status in [400, 404, 409]:
-                print(f"✓ substitution() correctly handled business rule (status {e.status}): {e.reason}")
+                print(f"✓ substitution() correctly handled business rule (status {e.status}): {e.message}")
             else:
                 raise
 
@@ -159,9 +159,9 @@ class TestTransactionsApiCalls:
         try:
             await rsc_bot.expire_sub(guild=mock_guild, player=mock_member, executor=mock_member)
             print(f"✓ expire_sub() succeeded for player {mock_member.id}")
-        except RscException as e:
+        except ApiError as e:
             if e.status in [400, 404, 409]:
-                print(f"✓ expire_sub() correctly handled business rule (status {e.status}): {e.reason}")
+                print(f"✓ expire_sub() correctly handled business rule (status {e.status}): {e.message}")
             else:
                 raise
 
@@ -172,9 +172,9 @@ class TestTransactionsApiCalls:
         try:
             await rsc_bot.retire(guild=mock_guild, player=mock_member, executor=mock_member, notes="Development Bot Pytest", override=True)
             print(f"✓ retire() succeeded for player {mock_member.id}")
-        except RscException as e:
+        except ApiError as e:
             if e.status in [400, 404, 409]:
-                print(f"✓ retire() correctly handled business rule (status {e.status}): {e.reason}")
+                print(f"✓ retire() correctly handled business rule (status {e.status}): {e.message}")
             else:
                 raise
 
@@ -187,9 +187,9 @@ class TestTransactionsApiCalls:
                 guild=mock_guild, player=mock_member, executor=mock_member, notes="Test IR", override=True, redshirt=False, remove=False
             )
             print(f"✓ inactive_reserve() succeeded for player {mock_member.id}")
-        except RscException as e:
+        except ApiError as e:
             if e.status in [400, 404, 409]:
-                print(f"✓ inactive_reserve() correctly handled business rule (status {e.status}): {e.reason}")
+                print(f"✓ inactive_reserve() correctly handled business rule (status {e.status}): {e.message}")
             else:
                 raise
 
@@ -241,9 +241,9 @@ class TestTransactionsApiCalls:
 
             await rsc_bot.trade(guild=mock_guild, trades=trade_items, executor=mock_member, notes="Test trade", override=True)
             print("✓ trade() succeeded unexpectedly")
-        except RscException as e:
+        except ApiError as e:
             if e.status in [400, 404, 409]:
-                print(f"✓ trade() correctly handled business rule (status {e.status}): {e.reason}")
+                print(f"✓ trade() correctly handled business rule (status {e.status}): {e.message}")
             else:
                 raise
 
@@ -263,9 +263,9 @@ class TestTransactionsApiCalls:
 
             await rsc_bot.draft(guild=mock_guild, player=mock_member, executor=mock_member, team=team.name, round=1, pick=1, override=True)
             print(f"✓ draft() succeeded for player {mock_member.id}")
-        except RscException as e:
+        except ApiError as e:
             if e.status in [400, 404, 409]:
-                print(f"✓ draft() correctly handled business rule (status {e.status}): {e.reason}")
+                print(f"✓ draft() correctly handled business rule (status {e.status}): {e.message}")
             else:
                 raise
 
@@ -274,21 +274,17 @@ class TestTransactionsPrivilegedApiCalls:
     @pytest.mark.asyncio
     async def test_cut_privileged_api_call(self, rsc_bot_no_key: RSC, rsc_bot_invalid_key: RSC, mock_guild, mock_member):
         """Test that cut() API call raises NotImplementedError."""
-        with pytest.raises(RscException) as exc:
+        with pytest.raises(ApiError) as exc:
             await rsc_bot_no_key.cut(guild=mock_guild, player=mock_member, executor=mock_member, notes="Pytest cut", override=True)
-        assert exc.type == RscException
-        assert exc.value.type == "NotAuthenticated"
-        assert exc.value.response.reason == "Forbidden"
+        assert exc.type is ApiError
+        assert exc.value.error_type == "NotAuthenticated"
         assert exc.value.status == 403
-        assert exc.value.response.status == 403
 
-        with pytest.raises(RscException) as exc:
+        with pytest.raises(ApiError) as exc:
             await rsc_bot_invalid_key.cut(guild=mock_guild, player=mock_member, executor=mock_member, notes="Pytest cut", override=True)
-        assert exc.type == RscException
-        assert exc.value.type == "NotAuthenticated"
-        assert exc.value.response.reason == "Forbidden"
+        assert exc.type is ApiError
+        assert exc.value.error_type == "NotAuthenticated"
         assert exc.value.status == 403
-        assert exc.value.response.status == 403
 
 
 class TestTransactionsApiDataStructures:

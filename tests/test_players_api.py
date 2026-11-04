@@ -2,7 +2,7 @@ import pytest
 
 from rsc.core import RSC
 from rsc.enums import Status
-from rsc.exceptions import RscException
+from rsc.exceptions import ApiError
 from rscapi import LeaguePlayersApi, LeaguesApi
 
 pytestmark = pytest.mark.integration
@@ -108,23 +108,19 @@ class TestPlayersPrivilegedApiCalls:
             pytest.skip("No player found to test patch_player()")
         player = plist.pop(0)
 
-        with pytest.raises(RscException) as exc:
+        with pytest.raises(ApiError) as exc:
             assert player.id is not None
             await rsc_bot_no_key.update_league_player(guild=mock_guild, player_id=player.id, executor=mock_member, current_mmr=600)
-        assert exc.type == RscException
-        assert exc.value.type == "NotAuthenticated"
-        assert exc.value.response.reason == "Forbidden"
+        assert exc.type is ApiError
+        assert exc.value.error_type == "NotAuthenticated"
         assert exc.value.status == 403
-        assert exc.value.response.status == 403
 
-        with pytest.raises(RscException) as exc:
+        with pytest.raises(ApiError) as exc:
             assert player.id is not None
             await rsc_bot_invalid_key.update_league_player(guild=mock_guild, player_id=player.id, executor=mock_member, current_mmr=600)
-        assert exc.type == RscException
-        assert exc.value.type == "NotAuthenticated"
-        assert exc.value.response.reason == "Forbidden"
+        assert exc.type is ApiError
+        assert exc.value.error_type == "NotAuthenticated"
         assert exc.value.status == 403
-        assert exc.value.response.status == 403
 
 
 class TestPlayersApiDataStructures:

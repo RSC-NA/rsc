@@ -12,7 +12,7 @@ import pytest
 import discord
 
 from rsc.core import RSC
-from rsc.exceptions import RscException
+from rsc.exceptions import ServerError
 
 from rscapi import Configuration
 
@@ -71,10 +71,8 @@ def pytest_runtest_call(item):
         return (yield)
     except TRANSPORT_ERRORS as exc:
         pytest.skip(f"Staging API unreachable: {exc!r}")
-    except RscException as exc:
-        if exc.status and exc.status >= 500:
-            pytest.skip(f"Staging API returned HTTP {exc.status}")
-        raise
+    except ServerError as exc:
+        pytest.skip(f"Staging API returned HTTP {exc.status}")
 
 
 @pytest.fixture(scope="session")

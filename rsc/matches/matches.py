@@ -6,7 +6,6 @@ from collections.abc import AsyncIterator
 import discord
 from redbot.core import app_commands
 from rscapi import MatchesApi, TeamsApi
-from rscapi.exceptions import ApiException
 from rscapi.models.franchise_list import FranchiseList
 from rscapi.models.match import Match
 from rscapi.models.match_list import MatchList
@@ -289,7 +288,7 @@ class MatchMixIn(RSCMixIn):
                 return ExceptionErrorEmbed(str(exc))
             return await self.match_card(guild, match, side)
         except RscException as exc:
-            log.debug(f"Match Return Status: {exc.status}")
+            log.debug(f"Match lookup failed: {exc}")
             return ApiExceptionErrorEmbed(exc, title="Match Info")
 
     async def match_card(self, guild: discord.Guild, match: Match, side: MatchTeamEnum | None) -> MatchCard:
@@ -584,24 +583,21 @@ class MatchMixIn(RSCMixIn):
         check_page_limit(limit, caller="matches()")
         async with self.api_client(guild) as client:
             api = MatchesApi(client)
-            try:
-                matches: PaginatedMatchListList = await api.matches_list(
-                    date__lt=date__lt.isoformat() if date__lt else None,
-                    date__gt=date__gt.isoformat() if date__gt else None,
-                    season=season,
-                    season_number=season_number,
-                    match_team_type=str(match_team_type),
-                    team_name=team_name,
-                    day=day,
-                    match_type=str(match_type) if match_type else None,
-                    match_format=str(match_format) if match_format else None,
-                    league=self._league[guild.id],
-                    limit=limit,
-                    offset=offset,
-                )
-                return matches.results
-            except ApiException as exc:
-                raise RscException(response=exc)
+            matches: PaginatedMatchListList = await api.matches_list(
+                date__lt=date__lt.isoformat() if date__lt else None,
+                date__gt=date__gt.isoformat() if date__gt else None,
+                season=season,
+                season_number=season_number,
+                match_team_type=str(match_team_type),
+                team_name=team_name,
+                day=day,
+                match_type=str(match_type) if match_type else None,
+                match_format=str(match_format) if match_format else None,
+                league=self._league[guild.id],
+                limit=limit,
+                offset=offset,
+            )
+            return matches.results
 
     async def paged_matches(
         self,
@@ -622,23 +618,20 @@ class MatchMixIn(RSCMixIn):
             api = MatchesApi(client)
 
             async def fetch(limit: int, offset: int) -> PaginatedMatchListList:
-                try:
-                    return await api.matches_list(
-                        date__lt=date__lt.isoformat() if date__lt else None,
-                        date__gt=date__gt.isoformat() if date__gt else None,
-                        season=season,
-                        season_number=season_number,
-                        match_team_type=str(match_team_type),
-                        team_name=team_name,
-                        day=day,
-                        match_type=str(match_type) if match_type else None,
-                        match_format=str(match_format) if match_format else None,
-                        league=self._league[guild.id],
-                        limit=limit,
-                        offset=offset,
-                    )
-                except ApiException as exc:
-                    raise RscException(exc)
+                return await api.matches_list(
+                    date__lt=date__lt.isoformat() if date__lt else None,
+                    date__gt=date__gt.isoformat() if date__gt else None,
+                    season=season,
+                    season_number=season_number,
+                    match_team_type=str(match_team_type),
+                    team_name=team_name,
+                    day=day,
+                    match_type=str(match_type) if match_type else None,
+                    match_format=str(match_format) if match_format else None,
+                    league=self._league[guild.id],
+                    limit=limit,
+                    offset=offset,
+                )
 
             async for match in iter_pages(fetch, per_page=per_page):
                 yield match
@@ -646,16 +639,13 @@ class MatchMixIn(RSCMixIn):
     async def match_by_day(self, guild: discord.Guild, team_id: int, day: int, preseason: bool = False) -> Match:
         async with self.api_client(guild) as client:
             api = TeamsApi(client)
-            try:
-                log.debug(f"Fetching match for team ID: {team_id} on day: {day} (preseason={preseason})", guild=guild)
-                match: Match = await api.teams_match_retrieve(
-                    id=team_id,
-                    day=day,
-                    preseason=preseason,
-                )
-                return match
-            except ApiException as exc:
-                raise RscException(response=exc)
+            log.debug(f"Fetching match for team ID: {team_id} on day: {day} (preseason={preseason})", guild=guild)
+            match: Match = await api.teams_match_retrieve(
+                id=team_id,
+                day=day,
+                preseason=preseason,
+            )
+            return match
 
     async def find_match(
         self,
@@ -674,21 +664,18 @@ class MatchMixIn(RSCMixIn):
         async with self.api_client(guild) as client:
             api = MatchesApi(client)
             teams_fmt = ",".join(teams)
-            try:
-                resp = await api.matches_find_match_retrieve(
-                    teams=teams_fmt,
-                    date__lt=date_lt,
-                    date__gt=date_gt,
-                    season=season,
-                    season_number=season_number,
-                    day=day,
-                    match_type=str(match_type) if match_type else None,
-                    match_format=str(match_format) if match_format else None,
-                    league=self._league[guild.id],
-                )
-                return resp.results
-            except ApiException as exc:
-                raise RscException(response=exc)
+            resp = await api.matches_find_match_retrieve(
+                teams=teams_fmt,
+                date__lt=date_lt,
+                date__gt=date_gt,
+                season=season,
+                season_number=season_number,
+                day=day,
+                match_type=str(match_type) if match_type else None,
+                match_format=str(match_format) if match_format else None,
+                league=self._league[guild.id],
+            )
+            return resp.results
 
     async def match_by_id(self, guild: discord.Guild, id: int) -> Match:
         async with self.api_client(guild) as client:
@@ -707,18 +694,15 @@ class MatchMixIn(RSCMixIn):
     ) -> MatchResults:
         async with self.api_client(guild) as client:
             api = MatchesApi(client)
-            try:
-                data = MatchScoreReportRequest(
-                    ballchasing_group=ballchasing_group,
-                    home_score=home_score,
-                    away_score=away_score,
-                    executor=executor.id,
-                    override=override,
-                )
-                log.debug(f"Match Score Report ({match_id}): {data}")
-                return await api.matches_score_report_create(match_id, data)
-            except ApiException as exc:
-                raise RscException(response=exc)
+            data = MatchScoreReportRequest(
+                ballchasing_group=ballchasing_group,
+                home_score=home_score,
+                away_score=away_score,
+                executor=executor.id,
+                override=override,
+            )
+            log.debug(f"Match Score Report ({match_id}): {data}")
+            return await api.matches_score_report_create(match_id, data)
 
     async def create_match(
         self,
@@ -731,24 +715,18 @@ class MatchMixIn(RSCMixIn):
     ) -> Match:
         async with self.api_client(guild) as client:
             api = MatchesApi(client)
-            try:
-                data = MatchSubmission(
-                    home_team=home_team_id,
-                    away_team=away_team_id,
-                    match_format=MatchFormatEnum(match_format.value),
-                    match_type=MatchTypeEnum(match_type.value),
-                    day=day,
-                )
-                log.debug(f"Match Create: {data}")
-                return await api.matches_create(data)
-            except ApiException as exc:
-                raise RscException(response=exc)
+            data = MatchSubmission(
+                home_team=home_team_id,
+                away_team=away_team_id,
+                match_format=MatchFormatEnum(match_format.value),
+                match_type=MatchTypeEnum(match_type.value),
+                day=day,
+            )
+            log.debug(f"Match Create: {data}")
+            return await api.matches_create(data)
 
     async def match_results(self, guild: discord.Guild, id: int) -> MatchResults:
         """Fetch Match results object by ID"""
         async with self.api_client(guild) as client:
             api = MatchesApi(client)
-            try:
-                return await api.matches_results_retrieve(id)
-            except ApiException as exc:
-                raise RscException(response=exc)
+            return await api.matches_results_retrieve(id)

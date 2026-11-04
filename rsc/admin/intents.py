@@ -18,7 +18,7 @@ from rsc.embeds import (
     SuccessEmbed,
     YellowEmbed,
 )
-from rsc.exceptions import LeagueNotConfigured, RscException
+from rsc.exceptions import ConflictError, LeagueNotConfigured, RscException, SignupsClosedError
 from rsc.logs import GuildLogAdapter
 
 logger = logging.getLogger("red.rsc.admin.intents")
@@ -68,11 +68,11 @@ class AdminIntentsMixIn(AdminMixIn):
                 admin_overrride=override,
             )
             log.debug(f"Intent Result: {result}")
+        except ConflictError as exc:
+            return await interaction.edit_original_response(
+                embed=YellowEmbed(title="Intent to Play", description=exc.message),
+            )
         except RscException as exc:
-            if exc.status == 409:
-                return await interaction.edit_original_response(
-                    embed=YellowEmbed(title="Intent to Play", description=exc.reason),
-                )
             return await interaction.edit_original_response(
                 embed=ApiExceptionErrorEmbed(exc),
             )
@@ -113,11 +113,11 @@ class AdminIntentsMixIn(AdminMixIn):
                 admin_overrride=override,
             )
             log.debug(f"Intent Result: {result}")
+        except ConflictError as exc:
+            return await interaction.edit_original_response(
+                embed=YellowEmbed(title="Intent to Play", description=exc.message),
+            )
         except RscException as exc:
-            if exc.status == 409:
-                return await interaction.edit_original_response(
-                    embed=YellowEmbed(title="Intent to Play", description=exc.reason),
-                )
             return await interaction.edit_original_response(
                 embed=ApiExceptionErrorEmbed(exc),
             )
@@ -210,12 +210,11 @@ class AdminIntentsMixIn(AdminMixIn):
                     description="League ID has not been configured for this guild.",
                 )
             )
+        except SignupsClosedError:
+            log.debug("No signup season currently open. Defaulting to current season.")
+            next_season = await self.current_season(guild)
         except RscException as exc:
-            if exc.type == "SignupsClosedException":
-                log.debug("No signup season currently open. Defaulting to current season.")
-                next_season = await self.current_season(guild)
-            else:
-                return await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc))
+            return await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc))
 
         if not (next_season and next_season.id and next_season.number):
             return await interaction.followup.send(
@@ -304,19 +303,19 @@ class AdminIntentsMixIn(AdminMixIn):
 
         try:
             season = await self.next_signup_season(guild)
-        except RscException as exc:
-            if exc.type == "SignupsClosedException":
-                await interaction.followup.send(
-                    embed=OrangeEmbed(
-                        title="Signups Are Closed",
-                        description=(
-                            "Signups are not currently open, so intent DMs would be pointless.\n\n"
-                            "Players who still need to sign up should open a ModMail ticket."
-                        ),
+        except SignupsClosedError:
+            await interaction.followup.send(
+                embed=OrangeEmbed(
+                    title="Signups Are Closed",
+                    description=(
+                        "Signups are not currently open, so intent DMs would be pointless.\n\n"
+                        "Players who still need to sign up should open a ModMail ticket."
                     ),
-                    ephemeral=True,
-                )
-                return None
+                ),
+                ephemeral=True,
+            )
+            return None
+        except RscException as exc:
             await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc), ephemeral=True)
             return None
 

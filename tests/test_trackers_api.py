@@ -3,7 +3,7 @@ from rscapi import TrackerLinksApi
 
 from rsc.core import RSC
 from rsc.enums import TrackerLinksStatus
-from rsc.exceptions import RscException
+from rsc.exceptions import ApiError
 
 pytestmark = pytest.mark.integration
 
@@ -187,9 +187,9 @@ class TestTrackerMutationApiCalls:
             assert result.id is not None
             await rsc_bot.rm_tracker(mock_guild, tracker_id=result.id)
             print(f"✓ Cleaned up tracker {result.id}")
-        except RscException as e:
-            if e.type == "MissingObjectException":
-                pytest.skip(f"Generated test member is not present in the API: {e.reason}")
+        except ApiError as e:
+            if e.error_type == "MissingObjectException":
+                pytest.skip(f"Generated test member is not present in the API: {e.message}")
             pytest.fail(f"add_tracker() raised RscException: {e}")
 
     @pytest.mark.asyncio

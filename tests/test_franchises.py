@@ -2,14 +2,14 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import discord
 import pytest
-from rscapi.exceptions import ApiException, NotFoundException
+from tests.utils import api_exception
 from rscapi.models.franchise import Franchise
 from rscapi.models.franchise_gm import FranchiseGM
 from rscapi.models.franchise_list import FranchiseList
 from rscapi.models.rebrand_a_franchise import RebrandAFranchise
 
 from rsc.const import API_TIMEOUT
-from rsc.exceptions import RscException
+from rsc.exceptions import NotFoundError, RscException
 from rsc.franchises.franchises import FranchiseMixIn
 
 GUILD_ID = 395806681994493964
@@ -498,7 +498,7 @@ class TestUploadFranchiseLogoApi:
 
         with patch("rsc.abc.ApiClient") as mock_client:
             mock_api = AsyncMock()
-            mock_api.franchises_upload_logo_update.side_effect = ApiException(status=400, reason="Bad Request")
+            mock_api.franchises_upload_logo_update.side_effect = api_exception(400, "Bad Request")
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
             with patch("rsc.franchises.franchises.FranchisesApi", return_value=mock_api), pytest.raises(RscException):
@@ -555,7 +555,7 @@ class TestRebrandFranchiseApi:
 
         with patch("rsc.abc.ApiClient") as mock_client:
             mock_api = AsyncMock()
-            mock_api.franchises_rebrand_update.side_effect = ApiException(status=400, reason="Bad Request")
+            mock_api.franchises_rebrand_update.side_effect = api_exception(400, "Bad Request")
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
             with patch("rsc.franchises.franchises.FranchisesApi", return_value=mock_api), pytest.raises(RscException):
@@ -588,7 +588,7 @@ class TestTransferFranchiseApi:
 
         with patch("rsc.abc.ApiClient") as mock_client:
             mock_api = AsyncMock()
-            mock_api.franchises_transfer_franchise_update.side_effect = ApiException(status=403, reason="Forbidden")
+            mock_api.franchises_transfer_franchise_update.side_effect = api_exception(403, "Forbidden")
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
             with patch("rsc.franchises.franchises.FranchisesApi", return_value=mock_api), pytest.raises(RscException):
@@ -648,7 +648,7 @@ class TestFranchiseLogoApi:
 
         with patch("rsc.abc.ApiClient") as mock_client:
             mock_api = AsyncMock()
-            mock_api.franchises_logo_retrieve.side_effect = NotFoundException(status=404, reason="Not Found")
+            mock_api.franchises_logo_retrieve.side_effect = api_exception(404, "Not Found")
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
             with patch("rsc.franchises.franchises.FranchisesApi", return_value=mock_api):
@@ -664,7 +664,7 @@ class TestFranchiseLogoApi:
 
         with patch("rsc.abc.ApiClient") as mock_client:
             mock_api = AsyncMock()
-            mock_api.franchises_logo_retrieve.side_effect = ApiException(status=500, reason="Server Error")
+            mock_api.franchises_logo_retrieve.side_effect = api_exception(500, "Server Error")
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
             with patch("rsc.franchises.franchises.FranchisesApi", return_value=mock_api), pytest.raises(RscException):
@@ -728,7 +728,7 @@ class TestAddAgmApi:
 
         with patch("rsc.abc.ApiClient") as mock_client:
             mock_api = AsyncMock()
-            mock_api.franchises_add_agm_update.side_effect = ApiException(status=403, reason="Forbidden")
+            mock_api.franchises_add_agm_update.side_effect = api_exception(403, "Forbidden")
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
             with patch("rsc.franchises.franchises.FranchisesApi", return_value=mock_api), pytest.raises(RscException):
@@ -760,13 +760,11 @@ class TestRemoveAgmApi:
 
         with patch("rsc.abc.ApiClient") as mock_client:
             mock_api = AsyncMock()
-            mock_api.franchises_remove_agm_update.side_effect = ApiException(status=404, reason="Not Found")
+            mock_api.franchises_remove_agm_update.side_effect = api_exception(404, "Not Found")
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
-            with patch("rsc.franchises.franchises.FranchisesApi", return_value=mock_api), pytest.raises(RscException) as exc:
+            with patch("rsc.franchises.franchises.FranchisesApi", return_value=mock_api), pytest.raises(NotFoundError):
                 await mixin.remove_agm(mock_guild, 7, agm=mock_member, executor=222)
-
-        assert exc.value.status == 404
 
 
 class TestFranchisesAgmOf:

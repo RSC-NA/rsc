@@ -1,10 +1,16 @@
+import json
 import random
 import string
 from collections.abc import Callable, Coroutine
+from http import HTTPStatus
+from types import SimpleNamespace
 from typing import Any, TypeVar
 
 import discord
 from discord import app_commands
+from rscapi.exceptions import ApiException
+
+from rsc.exceptions import ApiError
 
 T = TypeVar("T")
 
@@ -46,3 +52,20 @@ def custom_ids(view: discord.ui.View) -> list[str]:
             assert child.custom_id is not None, child
             ids.append(child.custom_id)
     return ids
+
+
+def api_exception(
+    status: int, message: str = "boom", *, error_type: str = "APIException", extra: dict[str, Any] | None = None
+) -> ApiException:
+    """`ApiException.from_response` raises the status subclass (`NotFoundException` for a 404) instead of returning it."""
+    body = json.dumps({"message": message, "extra": extra or {}, "type": error_type, "status_code": status})
+    http_resp = SimpleNamespace(status=status, reason=HTTPStatus(status).phrase, data=body.encode(), headers={})
+    try:
+        ApiException.from_response(http_resp=http_resp, body=body, data=None)
+    except ApiException as exc:
+        return exc
+    raise AssertionError("ApiException.from_response always raises")
+
+
+def api_error(status: int, message: str = "boom", **kwargs: Any) -> ApiError:
+    return ApiError.from_exception(api_exception(status, message, **kwargs))

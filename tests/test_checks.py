@@ -2,7 +2,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import discord
 import pytest
-from rscapi.exceptions import ApiException
 
 from rsc.checks import elevated_role_required
 from rsc.enums import StaffPositions
@@ -10,7 +9,7 @@ from rsc.exceptions import RscException
 from rsc.members.members import ELEVATED_ROLE_TTL, MemberMixIn
 from rsc.trackers.trackers import TrackerMixIn
 
-from .utils import subcommands
+from .utils import api_error, api_exception, subcommands
 
 TRACKER_POSITIONS = (
     StaffPositions.ADMIN,
@@ -138,7 +137,7 @@ class TestElevatedRoleRequired:
     async def test_api_failure_fails_closed(self, mock_guild):
         cmd, called = _guarded()
         mixin = _create_mixin()
-        mixin.elevated_positions = AsyncMock(side_effect=RscException(response=ApiException(status=500, reason="Error")))
+        mixin.elevated_positions = AsyncMock(side_effect=api_error(500, "Error"))
         interaction = _mock_interaction(mock_guild, manage_guild=False)
 
         await cmd(mixin, interaction)
@@ -149,7 +148,7 @@ class TestElevatedRoleRequired:
     async def test_api_failure_still_allows_guild_manager(self, mock_guild):
         cmd, called = _guarded()
         mixin = _create_mixin()
-        mixin.elevated_positions = AsyncMock(side_effect=RscException(response=ApiException(status=500, reason="Error")))
+        mixin.elevated_positions = AsyncMock(side_effect=api_error(500, "Error"))
         interaction = _mock_interaction(mock_guild, manage_guild=True)
 
         result = await cmd(mixin, interaction)
@@ -300,7 +299,7 @@ class TestElevatedPositionsCache:
     async def test_api_exception_becomes_rsc_exception(self, mock_guild):
         mixin = _create_mixin(_api_conf={mock_guild.id: MagicMock()}, _league={mock_guild.id: 1})
         mock_api = AsyncMock()
-        mock_api.members_elevated_roles_list.side_effect = ApiException(status=500, reason="Error")
+        mock_api.members_elevated_roles_list.side_effect = api_exception(500, "Error")
 
         with patch("rsc.abc.ApiClient") as mock_client:
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())

@@ -1,7 +1,7 @@
 import pytest
 
 from rsc.core import RSC
-from rsc.exceptions import RscException
+from rsc.exceptions import ApiError
 from rscapi import SeasonsApi
 
 pytestmark = pytest.mark.integration
@@ -59,7 +59,7 @@ class TestSeasonsApiCalls:
                 print(f"  - ID: {result.id}, Number: {result.number}")
             else:
                 print("✓ next_season() returned None (no next season)")
-        except RscException as e:
+        except ApiError as e:
             if e.status == 404:
                 print("✓ next_season() correctly handled no next season (404)")
             else:
@@ -75,7 +75,7 @@ class TestSeasonsApiCalls:
                 print(f"  - ID: {result.id}, Number: {result.number}")
             else:
                 print("✓ next_signup_season() returned None (no signup season)")
-        except RscException as e:
+        except ApiError as e:
             if e.status == 404:
                 print("✓ next_signup_season() correctly handled no signup season (404)")
             else:

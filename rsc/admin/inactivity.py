@@ -52,14 +52,11 @@ class AdminInactivityMixIn(AdminMixIn):
         if not msg_id:
             return
 
-        # Get API configuration since view is independent of RscMixIn
-        conf = self._api_conf.get(guild.id)
-        if not conf:
+        if not self._api_conf.get(guild.id):
             log.error(f"{guild.name} has an inactivity check but no API configuration")
             return
 
-        league_id = self._league.get(guild.id)
-        if not league_id:
+        if not self._league.get(guild.id):
             log.error(f"{guild.name} has an inactivity check but no league ID")
             return
 
@@ -71,7 +68,7 @@ class AdminInactivityMixIn(AdminMixIn):
 
         log.debug(f"[{guild.name}] Making activity check persistent: {msg_id}")
         # Create and attach view to persistent message ID
-        inactive_view = InactiveCheckView(guild=guild, league_id=league_id, api_conf=conf)
+        inactive_view = InactiveCheckView(guild=guild, rsc=self)
         self.bot.add_view(inactive_view, message_id=msg_id)
 
     # Commands
@@ -159,7 +156,7 @@ class AdminInactivityMixIn(AdminMixIn):
         if guild.icon:
             embed.set_thumbnail(url=guild.icon.url)
 
-        inactive_view = InactiveCheckView(guild=guild, league_id=league_id, api_conf=conf)
+        inactive_view = InactiveCheckView(guild=guild, rsc=self)
 
         msg = await inactive_channel.send(
             content=ping_fmt,

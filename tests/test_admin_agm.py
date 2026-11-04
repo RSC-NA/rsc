@@ -2,13 +2,11 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import discord
 import pytest
-from rscapi.exceptions import ApiException
 
 from rsc.admin.agm import AdminAGMMixIn
 from rsc.enums import Status
-from rsc.exceptions import RscException
 
-from .utils import command_callback, subcommands
+from .utils import api_error, command_callback, subcommands
 
 FRANCHISE = "The Ocean"
 FRANCHISE_ID = 7
@@ -160,7 +158,7 @@ class TestAgmAddCommand:
         mixin = _base_mixin(
             mock_guild,
             channel,
-            add_agm=AsyncMock(side_effect=RscException(response=ApiException(status=403, reason="Forbidden"))),
+            add_agm=AsyncMock(side_effect=api_error(403, "Forbidden")),
         )
         interaction = _mock_interaction(mock_guild)
         agm = _mock_agm()
@@ -182,9 +180,7 @@ class TestAgmAddCommand:
         mixin = _base_mixin(
             mock_guild,
             channel,
-            add_agm=AsyncMock(
-                side_effect=RscException(response=ApiException(status=403, reason="Executor cannot modify staff roles for this league."))
-            ),
+            add_agm=AsyncMock(side_effect=api_error(403, "Executor cannot modify staff roles for this league.")),
         )
         interaction = _mock_interaction(mock_guild)
         agm = _mock_agm()
@@ -199,7 +195,7 @@ class TestAgmAddCommand:
         mixin = _base_mixin(
             mock_guild,
             channel,
-            franchises_agm_of=AsyncMock(side_effect=RscException(response=ApiException(status=500, reason="Error"))),
+            franchises_agm_of=AsyncMock(side_effect=api_error(500, "Error")),
         )
         interaction = _mock_interaction(mock_guild)
         agm = _mock_agm()
@@ -257,7 +253,7 @@ class TestAgmAddCommand:
             mock_guild,
             channel,
             franchises_agm_of=AsyncMock(return_value=[_franchise(OTHER_FRANCHISE_ID, OTHER_FRANCHISE)]),
-            remove_agm=AsyncMock(side_effect=RscException(response=ApiException(status=403, reason="Forbidden"))),
+            remove_agm=AsyncMock(side_effect=api_error(403, "Forbidden")),
         )
         interaction = _mock_interaction(mock_guild)
         agm = _mock_agm()
@@ -382,7 +378,7 @@ class TestAgmRemoveCommand:
             mock_guild,
             channel,
             franchises_agm_of=AsyncMock(return_value=[_franchise()]),
-            remove_agm=AsyncMock(side_effect=RscException(response=ApiException(status=404, reason="Not Found"))),
+            remove_agm=AsyncMock(side_effect=api_error(404, "Not Found")),
         )
         interaction = _mock_interaction(mock_guild)
         agm = _mock_agm()
@@ -400,7 +396,7 @@ class TestAgmRemoveCommand:
             mock_guild,
             channel,
             franchises_agm_of=AsyncMock(return_value=[_franchise()]),
-            remove_agm=AsyncMock(side_effect=RscException(response=ApiException(status=403, reason="Forbidden"))),
+            remove_agm=AsyncMock(side_effect=api_error(403, "Forbidden")),
         )
         interaction = _mock_interaction(mock_guild)
         agm = _mock_agm()
@@ -416,7 +412,7 @@ class TestAgmRemoveCommand:
         mixin = _base_mixin(
             mock_guild,
             channel,
-            franchises_agm_of=AsyncMock(side_effect=RscException(response=ApiException(status=500, reason="Error"))),
+            franchises_agm_of=AsyncMock(side_effect=api_error(500, "Error")),
         )
         interaction = _mock_interaction(mock_guild)
         agm = _mock_agm()

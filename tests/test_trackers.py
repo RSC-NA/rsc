@@ -1,12 +1,11 @@
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from rscapi.exceptions import ApiException
 
 from rsc.exceptions import RscException
 from rsc.trackers.trackers import TrackerMixIn
 
-from .utils import command_callback
+from .utils import api_error, api_exception, command_callback
 
 GUILD_ID = 395806681994493964
 
@@ -44,7 +43,7 @@ class TestTrackersApi:
 
         with patch("rsc.abc.ApiClient") as mock_client:
             mock_api = AsyncMock()
-            mock_api.tracker_links_list.side_effect = ApiException(status=500, reason="Error")
+            mock_api.tracker_links_list.side_effect = api_exception(500, "Error")
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
             with patch("rsc.trackers.trackers.TrackerLinksApi", return_value=mock_api), pytest.raises(RscException):
@@ -215,7 +214,7 @@ class TestAccountsCommand:
     """`/accounts` used to fall through to an unbound `trackers` after reporting an API error."""
 
     async def test_api_error_is_reported_once(self, mock_guild):
-        exc = RscException(response=ApiException(status=500, reason="Error"))
+        exc = api_error(500, "Error")
         mixin = _create_mixin(trackers=AsyncMock(side_effect=exc))
         interaction = MagicMock()
         interaction.guild = mock_guild
