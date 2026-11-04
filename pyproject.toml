@@ -33,6 +33,7 @@ dev = [
     "pytest-asyncio>=1.4.1",
     "pytest-timeout>=2.4.0",
     "pytest-cov>=7.1.0",
+    "pytest-xdist>=3.8.0",
 ]
 # Third-party imports of the one-off utilities in scripts/. The bot itself does not need them.
 scripts = [
@@ -189,12 +190,6 @@ exclude_also = [
     "@(typing\\.)?overload",
     "raise NotImplementedError",
     "if __name__ == .__main__.:",
-]
-
-[tool.ty.environment]
-extra-paths = [
-    "/home/xentrick/dev/python-replay-parser",
-    "/home/xentrick/dev/rsc-api-client",
 ]
 
 [tool.uv.sources]
