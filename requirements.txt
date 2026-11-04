@@ -107,6 +107,8 @@ packaging==26.0 ; platform_python_implementation == 'CPython' and sys_platform =
     # via red-discordbot
 pillow==13.0.0 ; platform_python_implementation == 'CPython' and sys_platform == 'linux'
     # via rsc-discord-bot
+pip==26.2.2 ; platform_python_implementation == 'CPython' and sys_platform == 'linux'
+    # via rsc-discord-bot
 platformdirs==4.3.6 ; platform_python_implementation == 'CPython' and sys_platform == 'linux'
     # via red-discordbot
 propcache==0.5.4 ; platform_python_implementation == 'CPython' and sys_platform == 'linux'

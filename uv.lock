@@ -1183,6 +1183,7 @@ dependencies = [
     { name = "httpx" },
     { name = "openai" },
     { name = "pillow" },
+    { name = "pip" },
     { name = "pydantic" },
     { name = "python-ballchasing" },
     { name = "pytz" },
@@ -1198,7 +1199,6 @@ dependencies = [
 [package.dev-dependencies]
 dev = [
     { name = "ipdb" },
-    { name = "pip" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "pytest-cov" },
@@ -1225,6 +1225,7 @@ requires-dist = [
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "openai", specifier = ">=2.28.0" },
     { name = "pillow", specifier = ">=13.0.0" },
+    { name = "pip", specifier = ">=26.2.2" },
     { name = "pydantic", specifier = ">=2.11.10" },
     { name = "python-ballchasing", git = "https://github.com/xentrick/python-ballchasing.git" },
     { name = "pytz", specifier = ">=2026.1.post1" },
@@ -1240,7 +1241,6 @@ requires-dist = [
 [package.metadata.requires-dev]
 dev = [
     { name = "ipdb", specifier = ">=0.13.13" },
-    { name = "pip", specifier = ">=26.2.2" },
     { name = "pytest", specifier = ">=9.2.0" },
     { name = "pytest-asyncio", specifier = ">=1.4.1" },
     { name = "pytest-cov", specifier = ">=7.1.0" },

@@ -44,6 +44,19 @@ jobs:
       - run: uv sync --locked --all-groups
       - run: uvx pre-commit run ty --all-files
 
+  runtime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.3.3
+        with:
+          cache-suffix: runtime
+      # Production installs only the runtime dependencies, so an import that only the
+      # dev group satisfies (Red's undeclared pip) has to fail here, not on the host.
+      - run: uv sync --locked --no-dev
+      - run: uv run --no-sync python -c "import redbot.__main__, redbot.core.bot, rsc"
+
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 10

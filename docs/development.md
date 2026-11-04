@@ -4,7 +4,7 @@ How to get a working copy running, how to test it, and the conventions the codeb
 
 ## Prerequisites
 
-- Python 3.11, the newest version Red-DiscordBot 3.5.24 supports (`Requires-Python <3.12`). [.python-version](../.python-version) pins `3.11` and `pyproject.toml` allows `>=3.11,<3.12`, so uv picks the latest 3.11 release.
+- Python 3.11, the newest version Red-DiscordBot 3.5.24 supports (`Requires-Python <3.12`). [.python-version](../.python-version) pins `3.11.15`, which uv downloads if it isn't installed, so development, CI and production run the same interpreter. `pyproject.toml` allows `>=3.11,<3.12`.
 - [uv](https://docs.astral.sh/uv/). Every command below goes through it. Production installs with plain pip instead, see [Deployment](deployment.md).
 - A Discord application and bot token for a **test** bot, plus a test server you control. Never develop against the production bot.
 - An RSC API key for the staging API (`https://staging-api.rscna.com/api/v1`), if you want the bot to do anything league-related.
