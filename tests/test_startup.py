@@ -1,6 +1,7 @@
 """Startup path: cache preparation, guild isolation, and client lifetime."""
 
 import asyncio
+import logging
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import discord
@@ -18,6 +19,7 @@ from rsc.admin.views import ActivityCheckDMButton, IntentDMButton, PermFAPollBut
 from rsc.combines.guide import ReplayLocationButton
 from rsc.combines.runner import CombinesLeague
 from rsc.core import RSC
+from rsc.developer.recorder import ExceptionRecorder
 from rsc.devleague.runner import DevLeague
 from rsc.lobbies.runner import LobbyRunner
 from rsc.matches.views import MatchRefreshButton
@@ -417,23 +419,29 @@ class TestSetupIsolation:
         assert peak == 3
 
 
+def _unloadable_cog(**attrs):
+    defaults = {
+        "bot": MagicMock(),
+        "expire_sub_contract_loop": MagicMock(),
+        "expire_free_agent_checkins_loop": MagicMock(),
+        "sync_discord_roles": MagicMock(),
+        "rsc_events_loop": MagicMock(),
+        "retire_audit_loop": MagicMock(),
+        "cancel_permfa_poll_timers": MagicMock(),
+        "_dm_helper": AsyncMock(),
+        "_exception_recorder": ExceptionRecorder(),
+        "close_ballchasing_sessions": AsyncMock(),
+        "close_api_clients": AsyncMock(),
+        "_web_runner": None,
+    }
+    return _create_cog(**(defaults | attrs))
+
+
 class TestCogUnload:
     async def test_removes_dm_button_templates(self):
         """Templates live on the bot, so a reload would otherwise keep the old classes."""
         bot = MagicMock()
-        cog = _create_cog(
-            bot=bot,
-            expire_sub_contract_loop=MagicMock(),
-            expire_free_agent_checkins_loop=MagicMock(),
-            sync_discord_roles=MagicMock(),
-            rsc_events_loop=MagicMock(),
-            retire_audit_loop=MagicMock(),
-            cancel_permfa_poll_timers=MagicMock(),
-            _dm_helper=AsyncMock(),
-            close_ballchasing_sessions=AsyncMock(),
-            close_api_clients=AsyncMock(),
-            _web_runner=None,
-        )
+        cog = _unloadable_cog(bot=bot)
 
         await cog.cog_unload()
 
@@ -446,6 +454,20 @@ class TestCogUnload:
             ReplayLocationButton,
             MatchRefreshButton,
         )
+
+    async def test_detaches_exception_recorder_from_root_logger(self):
+        """The root logger outlives the cog, so a reload would otherwise stack recorders."""
+        recorder = ExceptionRecorder()
+        root = logging.getLogger()
+        root.addHandler(recorder)
+        try:
+            cog = _unloadable_cog(_exception_recorder=recorder)
+
+            await cog.cog_unload()
+
+            assert recorder not in root.handlers
+        finally:
+            root.removeHandler(recorder)
 
 
 class TestStartWebapp:

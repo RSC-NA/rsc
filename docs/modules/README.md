@@ -44,7 +44,7 @@ Each feature lives in its own package under [rsc/](../../rsc/) and adds one or m
 | [moderator](moderator.md) | ModMail ticket routing (moderation commands are stubs) | `/assign`, `/unassign`, `/resolve`, `/thread ...` |
 | [utils](utils.md) | Shared helpers (DM queue, caches, images) plus ID, role and accolade commands | `/getid`, `/addrole`, `/accolades ...` |
 | [extras](extras.md) | Fun commands | `/8ball`, `/roll`, `/rps` |
-| [developer](developer.md) | Log tail and a test command for the operator | `/logs tail`, `/devtest` |
+| [developer](developer.md) | Log tail, recent exceptions and a test command for the operator | `/logs tail`, `/logs traceback`, `/devtest` |
 
 The core settings and `/help` live in the cog itself; see [Configuration](../configuration.md) and [Architecture](../architecture.md).
 

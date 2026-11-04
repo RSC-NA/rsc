@@ -67,6 +67,7 @@ from rsc.exceptions import ApiError
 
 if TYPE_CHECKING:
     from rsc.combines.models import CombinesLobby
+    from rsc.developer.recorder import ExceptionRecorder
     from rsc.events.models import EventPage, LeagueEventData
     from rsc.lobbies.runner import LobbyRunner
     from rsc.matches.views import MatchCard, PendingSeriesCard
@@ -98,6 +99,8 @@ class RSCMixIn(ABC):
     _elevated_role_cache: dict[int, dict[int, tuple[float, frozenset[str]]]]
 
     _dm_helper: "DMHelper"
+
+    _exception_recorder: "ExceptionRecorder"
 
     _combines_runner: "LobbyRunner"
     _devleague_runner: "LobbyRunner"

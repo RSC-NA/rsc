@@ -203,6 +203,9 @@ class RSC(
         # Discard rather than drain. Draining sends one DM per `rate` seconds, so a
         # large queued batch would block the reload for many minutes.
         await self._dm_helper.stop(drain=False)
+        # The root logger outlives the cog, so a reload would otherwise stack a
+        # second recorder beside the old one.
+        logging.getLogger().removeHandler(self._exception_recorder)
         await self.close_ballchasing_sessions()
         await self.close_api_clients()
         if self._web_runner is not None:
