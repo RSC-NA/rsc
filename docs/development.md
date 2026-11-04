@@ -5,7 +5,7 @@ How to get a working copy running, how to test it, and the conventions the codeb
 ## Prerequisites
 
 - Python 3.12 (the repo pins `3.12.12` in [.python-version](../.python-version); `pyproject.toml` allows 3.11 and up).
-- [uv](https://docs.astral.sh/uv/). Every command below goes through it. Don't use pip: `requirements.txt` mixes hashes with git dependencies, and pip refuses that combination.
+- [uv](https://docs.astral.sh/uv/). Every command below goes through it. Production installs with plain pip instead, see [Deployment](deployment.md).
 - A Discord application and bot token for a **test** bot, plus a test server you control. Never develop against the production bot.
 - An RSC API key for the staging API (`https://staging-api.rscna.com/api/v1`), if you want the bot to do anything league-related.
 
