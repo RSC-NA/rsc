@@ -1,6 +1,5 @@
 import logging
 from datetime import datetime
-from typing import cast
 
 import discord
 from redbot.core import app_commands
@@ -83,13 +82,8 @@ class AdminMembersMixIn(AdminMixIn):
         else:
             embed.description = f"Member: {member.mention}"
 
-        # Undated entries are partitioned out rather than given a sentinel key.
-        # Sorting on `x.date_changed or "None"` compared a str against a datetime
-        # and raised TypeError as soon as any entry had a null date.
-        dated = [h for h in history if h.date_changed]
-        undated = [h for h in history if not h.date_changed]
-        dated.sort(key=lambda x: cast("datetime", x.date_changed), reverse=True)
-        history = dated + undated
+        # Undated entries sort last
+        history.sort(key=lambda x: x.date_changed.timestamp() if x.date_changed else 0, reverse=True)
         log.debug(f"Post sort: {history}")
 
         def executor_name(h: NameChangeHistory) -> str:

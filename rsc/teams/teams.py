@@ -1,8 +1,8 @@
 import logging
 from collections.abc import Callable
-from typing import cast
 
 import discord
+from pydantic import ValidationError
 from redbot.core import app_commands
 from rscapi import TeamsApi
 from rscapi.exceptions import ApiException, BadRequestException, NotFoundException
@@ -11,11 +11,13 @@ from rscapi.models.league_player import LeaguePlayer
 from rscapi.models.match import Match
 from rscapi.models.pending_series import PendingSeries
 from rscapi.models.team import Team
-from rscapi.models.team_detail import TeamDetail
 from rscapi.models.team_create import TeamCreate
+from rscapi.models.team_detail import TeamDetail
+from rscapi.models.team_franchise import TeamFranchise
 from rscapi.models.team_list import TeamList
 from rscapi.models.team_player import TeamPlayer
 from rscapi.models.team_season_stats import TeamSeasonStats
+from rscapi.models.tier_reference import TierReference
 
 from rsc.abc import RSCMixIn
 from rsc.const import API_TIMEOUT
@@ -685,7 +687,7 @@ class TeamMixIn(RSCMixIn):
             try:
                 api = TeamsApi(client)
                 matches = await api.teams_season_matches_list(id, preseason=preseason, season_number=season)
-                matches.sort(key=lambda x: cast("int", x.day))
+                matches.sort(key=lambda x: x.day or 0)
                 return matches
             except ApiException as exc:
                 raise RscException(exc)
@@ -714,15 +716,15 @@ class TeamMixIn(RSCMixIn):
         try:
             async with self.api_client(guild) as client:
                 api = TeamsApi(client)
-                data = cast(
-                    "TeamCreate",
-                    {
-                        "name": name,
-                        "franchise": {"name": franchise},
-                        "tier": {"name": tier},
-                        "league": self._league[guild.id],
-                    },
-                )
+                try:
+                    data = TeamCreate(
+                        name=name,
+                        franchise=TeamFranchise(name=franchise),
+                        tier=TierReference(name=tier),
+                        league=self._league[guild.id],
+                    )
+                except ValidationError as exc:
+                    raise RscException(message=f"Invalid team data: {exc.errors()[0]['msg']}")
                 result = await api.teams_create(data)
                 return result
         except (ApiException, BadRequestException) as exc:

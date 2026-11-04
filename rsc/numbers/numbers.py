@@ -1,7 +1,5 @@
 import logging
 from datetime import datetime
-from typing import cast
-
 import discord
 from redbot.core import app_commands
 from rscapi import NumbersApi
@@ -175,7 +173,7 @@ class NumberMixIn(RSCMixIn):
 
         pulls_fmt = await self.filter_no_games_played_mmr_pulls(pulls)
         log.debug(f"Total Filtered MMR pulls: {len(pulls)}")
-        pulls_fmt.sort(key=lambda x: cast("int", x.threes_games_played), reverse=True)
+        pulls_fmt.sort(key=lambda x: x.threes_games_played or 0, reverse=True)
 
         embed = YellowEmbed(
             title="Player Games Played",

@@ -1,7 +1,5 @@
 import logging
 from enum import IntEnum
-from typing import cast
-
 import discord
 from discord.ui import ActionRow, Container, Separator, TextDisplay
 
@@ -17,14 +15,16 @@ class IntentState(IntEnum):
     CANCELLED = 2
 
 
-class _IntentSelect(discord.ui.Select):
+class _IntentSelect(discord.ui.Select["IntentToPlayView"]):
     def __init__(self):
         super().__init__(placeholder="What is your intent?", min_values=1, max_values=1)
         self.add_option(label="Returning next season", value="yes", emoji="\N{WHITE HEAVY CHECK MARK}")
         self.add_option(label="Not returning next season", value="no", emoji="\N{CROSS MARK}")
 
     async def callback(self, interaction: discord.Interaction):
-        view = cast("IntentToPlayView", self.view)
+        view = self.view
+        if view is None:
+            return
         view.result = self.values[0] == "yes"
         # Mark chosen option as default so it shows when disabled
         for opt in self.options:
@@ -32,7 +32,7 @@ class _IntentSelect(discord.ui.Select):
         await interaction.response.defer(ephemeral=True)
 
 
-class _ConfirmButton(discord.ui.Button):
+class _ConfirmButton(discord.ui.Button["IntentToPlayView"]):
     def __init__(self):
         super().__init__(
             label="Confirm",
@@ -40,11 +40,13 @@ class _ConfirmButton(discord.ui.Button):
         )
 
     async def callback(self, interaction: discord.Interaction):
-        view = cast("IntentToPlayView", self.view)
+        view = self.view
+        if view is None:
+            return
         await view.confirm(interaction)
 
 
-class _CancelButton(discord.ui.Button):
+class _CancelButton(discord.ui.Button["IntentToPlayView"]):
     def __init__(self):
         super().__init__(
             label="Cancel",
@@ -52,7 +54,9 @@ class _CancelButton(discord.ui.Button):
         )
 
     async def callback(self, interaction: discord.Interaction):
-        view = cast("IntentToPlayView", self.view)
+        view = self.view
+        if view is None:
+            return
         view.state = IntentState.CANCELLED
         view.stop()
         await interaction.response.defer(ephemeral=True)

@@ -188,7 +188,7 @@ class IntentDMButton(discord.ui.DynamicItem[discord.ui.Button], template=INTENT_
             returning=match["returning"] == "yes",
         )
 
-    async def callback(self, interaction: discord.Interaction):
+    async def callback(self, interaction: discord.Interaction["Red"]):
         # Acknowledge before anything else. Every branch below hits the RSC API,
         # which can easily exceed the 3 second initial response deadline.
         await interaction.response.defer()
@@ -203,8 +203,8 @@ class IntentDMButton(discord.ui.DynamicItem[discord.ui.Button], template=INTENT_
             with contextlib.suppress(discord.HTTPException):
                 await self._retry(interaction, self._late_error() if self.declared else self._player_error())
 
-    async def _declare(self, interaction: discord.Interaction):
-        bot = cast("Red", interaction.client)
+    async def _declare(self, interaction: discord.Interaction["Red"]):
+        bot = interaction.client
         raw_cog = bot.get_cog(RSC_COG_NAME)
         guild = bot.get_guild(self.guild_id)
         if not (raw_cog and guild):
@@ -403,7 +403,7 @@ class ActivityCheckDMButton(discord.ui.DynamicItem[discord.ui.Button], template=
             active=match["active"] == "yes",
         )
 
-    async def callback(self, interaction: discord.Interaction):
+    async def callback(self, interaction: discord.Interaction["Red"]):
         # Acknowledge before anything else. Every branch below hits the RSC API,
         # which can easily exceed the 3 second initial response deadline.
         await interaction.response.defer()
@@ -418,8 +418,8 @@ class ActivityCheckDMButton(discord.ui.DynamicItem[discord.ui.Button], template=
             with contextlib.suppress(discord.HTTPException):
                 await self._retry(interaction, self._late_error() if self.submitted else self._player_error())
 
-    async def _submit(self, interaction: discord.Interaction):
-        bot = cast("Red", interaction.client)
+    async def _submit(self, interaction: discord.Interaction["Red"]):
+        bot = interaction.client
         raw_cog = bot.get_cog(RSC_COG_NAME)
         guild = bot.get_guild(self.guild_id)
         if not (raw_cog and guild):
@@ -624,7 +624,7 @@ class PermFAPollButton(discord.ui.DynamicItem[discord.ui.Button], template=PERMF
             yes=match["choice"] == "yes",
         )
 
-    async def callback(self, interaction: discord.Interaction):
+    async def callback(self, interaction: discord.Interaction["Red"]):
         # Acknowledge first. Recording the answer takes a lock shared with the
         # DM queue and the close sweep, which may briefly hold it.
         await interaction.response.defer()
@@ -639,11 +639,11 @@ class PermFAPollButton(discord.ui.DynamicItem[discord.ui.Button], template=PERMF
             with contextlib.suppress(discord.HTTPException):
                 await self._retry(interaction, self._player_error())
 
-    async def _respond(self, interaction: discord.Interaction):
+    async def _respond(self, interaction: discord.Interaction["Red"]):
         # Runtime import: `rsc.admin.permfa_poll` imports this module
         from rsc.admin.permfa_poll import PREVIEW_POLL_ID, PollResponse  # noqa: PLC0415
 
-        bot = cast("Red", interaction.client)
+        bot = interaction.client
         raw_cog = bot.get_cog(RSC_COG_NAME)
         if not raw_cog:
             log.warning(f"[PermFA Poll DM] Unable to resolve {RSC_COG_NAME} cog")

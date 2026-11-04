@@ -1,9 +1,9 @@
 import logging
 from datetime import datetime, time
-from typing import cast
 from zoneinfo import ZoneInfo
 
 import discord
+from pydantic import ValidationError
 from redbot.core import app_commands
 from rscapi import TiersApi
 from rscapi.exceptions import ApiException
@@ -252,7 +252,11 @@ class TierMixIn(RSCMixIn):
     async def create_tier(self, guild: discord.Guild, name: str, color: int, position: int) -> Tier:
         async with self.api_client(guild) as client:
             api = TiersApi(client)
-            data = cast("Tier", {"name": name, "color": color, "position": position})
+            try:
+                data = Tier(name=name, color=color, position=position)
+            except ValidationError as exc:
+                raise RscException(message=f"Invalid tier data: {exc.errors()[0]['msg']}")
+
             log.debug(f"Create Tier Data: {data}")
             try:
                 return await api.tiers_create(data)
