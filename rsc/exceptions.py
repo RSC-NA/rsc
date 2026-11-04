@@ -1,9 +1,10 @@
-import json
 import logging
 from collections.abc import Collection, Mapping
 from typing import Any, ClassVar
 
 from rscapi.exceptions import ApiException
+from rscapi.models.error import Error
+from rscapi.models.error_code_enum import ErrorCodeEnum
 
 log = logging.getLogger("red.rsc.exceptions")
 
@@ -30,57 +31,43 @@ class SiteUnavailable(RscException):
 class ApiError(RscException):
     """The RSC API answered a request with an error."""
 
+    _by_code: ClassVar[dict[ErrorCodeEnum, type["ApiError"]]] = {}
     _by_status: ClassVar[dict[int, type["ApiError"]]] = {}
-    _by_error_type: ClassVar[dict[str, type["ApiError"]]] = {}
 
-    def __init_subclass__(cls, *, statuses: Collection[int] = (), error_type: str | None = None, **kwargs: object):
+    def __init_subclass__(cls, *, codes: Collection[ErrorCodeEnum] = (), statuses: Collection[int] = (), **kwargs: object):
         super().__init_subclass__(**kwargs)
+        for code in codes:
+            ApiError._by_code[code] = cls
         for status in statuses:
             ApiError._by_status[status] = cls
-        if error_type is not None:
-            ApiError._by_error_type[error_type] = cls
 
-    def __init__(self, status: int, message: str, *, error_type: str | None = None, extra: Mapping[str, Any] | None = None):
+    def __init__(self, status: int, message: str, *, code: ErrorCodeEnum | None = None, extra: Mapping[str, Any] | None = None):
         super().__init__(message)
         self.message: str = message
         self.status = status
-        self.error_type = error_type
+        self.code = code
         self.extra: dict[str, Any] = dict(extra or {})
 
     @classmethod
     def from_exception(cls, exc: ApiException) -> "ApiError":
-        envelope = _json_object(exc.body)
-        message = envelope.get("message") or exc.reason or "The RSC API returned an error without a message."
-        error_type = envelope.get("type")
-        error_type = error_type if isinstance(error_type, str) else None
-        extra = envelope.get("extra")
-        error_cls = cls._by_error_type.get(error_type or "") or cls._by_status.get(exc.status) or ApiError
-        return error_cls(
-            exc.status or 0,
-            message if isinstance(message, str) else str(message),
-            error_type=error_type,
-            extra=extra if isinstance(extra, Mapping) else None,
-        )
+        status = exc.status or 0
+        if isinstance(exc.data, Error):
+            error_cls = cls._by_code.get(exc.data.code) or cls._by_status.get(status) or ApiError
+            return error_cls(status, exc.data.message, code=exc.data.code, extra=exc.data.extra)
+
+        if exc.body:
+            log.warning(f"RSC API sent an error body that is not its error envelope: {exc.body[:200]!r}")
+        error_cls = cls._by_status.get(status) or ApiError
+        return error_cls(status, exc.reason or "The RSC API returned an error without a message.")
 
     def __str__(self) -> str:
         parts = [f"[{self.status}]"]
-        if self.error_type:
-            parts.append(f"{self.error_type}:")
+        if self.code:
+            parts.append(f"{self.code.value}:")
         parts.append(self.message)
         if self.extra:
             parts.append(f"(extra: {self.extra})")
         return " ".join(parts)
-
-
-def _json_object(body: str | None) -> dict[str, Any]:
-    if not body:
-        return {}
-    try:
-        parsed = json.loads(body)
-    except ValueError:
-        log.warning(f"RSC API sent an error body that is not JSON: {body[:200]!r}")
-        return {}
-    return parsed if isinstance(parsed, dict) else {}
 
 
 class NotFoundError(ApiError, statuses={404}):
@@ -95,7 +82,7 @@ class ServerError(ApiError, statuses=range(500, 600)):
     """The RSC API failed on its side"""
 
 
-class SignupsClosedError(ApiError, error_type="SignupsClosedException"):
+class SignupsClosedError(ApiError, codes={ErrorCodeEnum.SIGNUPS_CLOSED}):
     """The season is not taking signups right now"""
 
 

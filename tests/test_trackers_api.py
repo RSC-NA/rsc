@@ -1,5 +1,6 @@
 import pytest
 from rscapi import TrackerLinksApi
+from rscapi.models.error_code_enum import ErrorCodeEnum
 
 from rsc.core import RSC
 from rsc.enums import TrackerLinksStatus
@@ -188,7 +189,7 @@ class TestTrackerMutationApiCalls:
             await rsc_bot.rm_tracker(mock_guild, tracker_id=result.id)
             print(f"✓ Cleaned up tracker {result.id}")
         except ApiError as e:
-            if e.error_type == "MissingObjectException":
+            if e.code is ErrorCodeEnum.NOT_FOUND:
                 pytest.skip(f"Generated test member is not present in the API: {e.message}")
             pytest.fail(f"add_tracker() raised RscException: {e}")
 

@@ -4,6 +4,7 @@ from rsc.core import RSC
 from rsc.enums import Status
 from rsc.exceptions import ApiError
 from rscapi import LeaguePlayersApi, LeaguesApi
+from rscapi.models.error_code_enum import ErrorCodeEnum
 
 pytestmark = pytest.mark.integration
 
@@ -112,14 +113,14 @@ class TestPlayersPrivilegedApiCalls:
             assert player.id is not None
             await rsc_bot_no_key.update_league_player(guild=mock_guild, player_id=player.id, executor=mock_member, current_mmr=600)
         assert exc.type is ApiError
-        assert exc.value.error_type == "NotAuthenticated"
+        assert exc.value.code is ErrorCodeEnum.NOT_AUTHENTICATED
         assert exc.value.status == 403
 
         with pytest.raises(ApiError) as exc:
             assert player.id is not None
             await rsc_bot_invalid_key.update_league_player(guild=mock_guild, player_id=player.id, executor=mock_member, current_mmr=600)
         assert exc.type is ApiError
-        assert exc.value.error_type == "NotAuthenticated"
+        assert exc.value.code is ErrorCodeEnum.NOT_AUTHENTICATED
         assert exc.value.status == 403
 
 

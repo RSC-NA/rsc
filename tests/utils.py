@@ -8,7 +8,10 @@ from typing import Any, TypeVar
 
 import discord
 from discord import app_commands
+from rscapi import ApiClient
 from rscapi.exceptions import ApiException
+from rscapi.rest import RESTResponse
+from rscapi.models.error_code_enum import ErrorCodeEnum
 
 from rsc.exceptions import ApiError
 
@@ -55,16 +58,20 @@ def custom_ids(view: discord.ui.View) -> list[str]:
 
 
 def api_exception(
-    status: int, message: str = "boom", *, error_type: str = "APIException", extra: dict[str, Any] | None = None
+    status: int, message: str = "boom", *, code: ErrorCodeEnum = ErrorCodeEnum.ERROR, extra: dict[str, Any] | None = None
 ) -> ApiException:
-    """`ApiException.from_response` raises the status subclass (`NotFoundException` for a 404) instead of returning it."""
-    body = json.dumps({"message": message, "extra": extra or {}, "type": error_type, "status_code": status})
-    http_resp = SimpleNamespace(status=status, reason=HTTPStatus(status).phrase, data=body.encode(), headers={})
+    body = {"message": message, "extra": extra or {}, "type": "APIException", "status_code": status, "code": code.value}
+    return raw_api_exception(status, json.dumps(body))
+
+
+def raw_api_exception(status: int, body: str) -> ApiException:
+    response = RESTResponse(SimpleNamespace(status=status, reason=HTTPStatus(status).phrase, headers={}))
+    response.data = body.encode()
     try:
-        ApiException.from_response(http_resp=http_resp, body=body, data=None)
+        ApiClient().response_deserialize(response_data=response, response_types_map={"4XX": "Error", "5XX": "Error"})
     except ApiException as exc:
         return exc
-    raise AssertionError("ApiException.from_response always raises")
+    raise AssertionError("an error status always raises")
 
 
 def api_error(status: int, message: str = "boom", **kwargs: Any) -> ApiError:

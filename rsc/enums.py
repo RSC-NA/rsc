@@ -150,6 +150,8 @@ class EventAction(StrEnum):
     EVERYONE_NOTICE = "ENC"
     GM_NOTICE = "GNC"
     TRADE_NOTICE = "TNC"
+    ACTIVITY_CHECK_OPENED = "ACO"
+    ACTIVITY_CHECK_CLOSED = "ACC"
     # Transaction
     PLAYER_SIGNED = "PSG"
     PLAYER_CUT = "PCT"
@@ -158,6 +160,8 @@ class EventAction(StrEnum):
     PLAYER_TRADED = "PTR"
     WAIVER_CLAIM_WON = "WCW"
     WAIVER_CLAIM_LOST = "WCL"
+    PLAYER_INACTIVE = "PIA"
+    PLAYER_INACTIVE_RETURN = "PIR"
     # System - these are an operational error stream, not league activity.
     TRACKER_MERGE_FAILED = "TMF"
     TRACKER_VALIDATION_FAILED = "TVF"
@@ -185,6 +189,10 @@ class EventAction(StrEnum):
                 return "GM Notice"
             case EventAction.TRADE_NOTICE:
                 return "Trade Notice"
+            case EventAction.ACTIVITY_CHECK_OPENED:
+                return "Activity Check Opened"
+            case EventAction.ACTIVITY_CHECK_CLOSED:
+                return "Activity Check Closed"
             case EventAction.PLAYER_SIGNED:
                 return "Player Signed"
             case EventAction.PLAYER_CUT:
@@ -199,6 +207,10 @@ class EventAction(StrEnum):
                 return "Waiver Claim Won"
             case EventAction.WAIVER_CLAIM_LOST:
                 return "Waiver Claim Lost"
+            case EventAction.PLAYER_INACTIVE:
+                return "Player Marked Inactive"
+            case EventAction.PLAYER_INACTIVE_RETURN:
+                return "Inactive Player Returned to Waivers"
             case EventAction.TRACKER_MERGE_FAILED:
                 return "Tracker Merge Failed"
             case EventAction.TRACKER_VALIDATION_FAILED:
