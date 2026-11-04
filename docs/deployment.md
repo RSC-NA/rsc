@@ -1,48 +1,41 @@
 # Deployment
 
-How the production bot is installed and updated. Today it runs on a VPS from a Python virtual environment; a move to Docker is planned (see [Future: Docker](#future-docker)).
+How the production bot is installed and updated. Today it runs on a VPS from a uv-managed virtual environment under systemd; a move to Docker is planned (see [Future: Docker](#future-docker)).
 
 ## What production consists of
 
-- A Linux VPS.
-- A Python 3.11 virtual environment containing Red-DiscordBot 3.5.24 and this cog's dependencies. 3.11 is the newest Python Red 3.5.24 supports.
-- One Red instance (the bot account) that has joined every RSC server it serves. Each server is a guild with its own API URL, key and league configured.
+- A Debian VPS, with the bot running as the `nickm` user.
+- A checkout of this repo at `~/repos/rsc`, and the virtual environment `uv sync --locked --no-dev` builds from it at `~/repos/rsc/.venv`. That venv holds Python 3.11.15, Red-DiscordBot 3.5.24 and every runtime dependency, exactly as [uv.lock](../uv.lock) pins them. 3.11 is the newest Python Red 3.5.24 supports.
+- One Red instance, `rscbot2` (the bot account), that has joined every RSC server it serves. Each server is a guild with its own API URL, key and league configured.
+- The systemd unit `red2@rscbot2.service`, an instance of the `/etc/systemd/system/red2@.service` template. Its drop-in, `/etc/systemd/system/red2@rscbot2.service.d/override.conf`, sets the interpreter and the Sentry DSN (see [The systemd unit](#the-systemd-unit)).
 - The cog itself, installed from this GitHub repo through Red's Downloader.
-- Red's data directory (`~/.local/share/Red-DiscordBot` by default), which holds the instance config, every guild's `Config` values, and the installed cog code.
+- Red's data directory (`~/.local/share/Red-DiscordBot`), which holds every guild's `Config` values and the installed cog code, and Red's instance registry (`~/.config/Red-DiscordBot/config.json`), which maps each instance name to its data path.
+- Two other Red instances on the same host, `RSCBot` and `RSC6Mans`, run from their own `red@.service` units. They share the instance registry and the data directory root with `rscbot2`, so anything that rewrites `config.json` (such as `redbot-setup`) affects all three.
 - Optionally, the RSC website on the same host or reachable through a local proxy, so it can post lobby webhooks to `localhost:8008`.
 
 ## First install
 
-1. **Create the environment.** Production runs Python 3.11. Make a venv and install Red into it:
+1. **Install uv and build the environment.** Clone the repo and let uv build the venv. It downloads Python 3.11.15 (pinned in [.python-version](../.python-version)) if that version isn't installed, then installs Red and the cog's dependencies from `uv.lock`:
 
    ```sh
-   python3.11 -m venv ~/redenv
-   ~/redenv/bin/python -m pip install Red-DiscordBot==3.5.24
+   curl -LsSf https://astral.sh/uv/install.sh | sh
+   git clone https://github.com/RSC-NA/rsc.git ~/repos/rsc
+   cd ~/repos/rsc && uv sync --locked --no-dev
    ```
 
-   The Red version must match the `red-discordbot` pin in [pyproject.toml](../pyproject.toml): it pins discord.py, aiohttp and others that the cog is tested against.
+   `red-discordbot` is a dependency in [pyproject.toml](../pyproject.toml), so this installs Red too. Red's Downloader doesn't install the cog's dependencies, so this venv is the only place they come from.
 
-2. **Create the Red instance.**
+2. **Create the Red instance.** Back up `~/.config/Red-DiscordBot/config.json` first, because `redbot-setup` rewrites it and other instances on the host depend on it.
 
    ```sh
-   ~/redenv/bin/redbot-setup
+   ~/repos/rsc/.venv/bin/redbot-setup
    ```
 
    Pick an instance name and data location. You need the bot token from the Discord developer portal. Enable the privileged gateway intents for the bot there, as Red's install guide describes; the cog reads member lists and roles.
 
-3. **Install the cog's Python dependencies.** Red's Downloader doesn't install them.
+3. **Run it under systemd** with a drop-in that points at the venv and sets the Sentry DSN. See [The systemd unit](#the-systemd-unit).
 
-   ```sh
-   ~/redenv/bin/python -m pip install --no-deps -r requirements.txt
-   ```
-
-   Run this from a checkout of the repo at the commit you're deploying. Repeat it whenever `requirements.txt` changes.
-
-   `requirements.txt` is every package from `uv.lock`, pinned, so pip has nothing to resolve. `--no-deps` is required: `pyproject.toml` overrides some of Red's exact pins (aiohttp and others, for security fixes), and without it pip refuses Red's metadata. Afterwards `pip check` lists those Red pins as mismatches. That is expected.
-
-4. **Set the Sentry DSN** in the environment Red starts from, so errors go to the `rsc-discord-bot` Sentry project (see [External services](external-services.md#sentry)). For a systemd unit, add `Environment=SENTRY_DSN=<dsn>` to `[Service]`. Without it the bot runs normally and reports nothing.
-
-5. **Start Red** (`~/redenv/bin/redbot <instance>`), then install and load the cog from Discord:
+4. **Start Red**, then install and load the cog from Discord:
 
    ```
    [p]load downloader
@@ -53,11 +46,33 @@ How the production bot is installed and updated. Today it runs on a VPS from a P
    [p]slash sync
    ```
 
-6. **Configure each server.** See [Configuration](configuration.md). At minimum, in every guild: `/rsc url`, `/rsc key`, `/rsc league`. Then work through the feature settings that guild uses.
+5. **Configure each server.** See [Configuration](configuration.md). At minimum, in every guild: `/rsc url`, `/rsc key`, `/rsc league`. Then work through the feature settings that guild uses.
 
-### Keeping Red running
+### The systemd unit
 
-Run Red under something that restarts it when it exits and on reboot, so a crash or VPS restart doesn't take the bot down. Red's own guide shows a systemd unit for this ([Linux autostart](https://docs.discord.red/en/stable/autostart_systemd.html)). `[p]restart` and `[p]shutdown` rely on the supervisor to bring the bot back.
+`red2@.service` sets `User`, `Restart=always` and a default `ExecStart`. The instance's drop-in replaces the interpreter and adds the Sentry DSN, so errors go to the `rsc-discord-bot` Sentry project (see [External services](external-services.md#sentry)):
+
+```
+# /etc/systemd/system/red2@rscbot2.service.d/override.conf
+[Service]
+Environment=SENTRY_DSN=<dsn>
+ExecStart=
+ExecStart=/home/nickm/repos/rsc/.venv/bin/python -O -m redbot --no-prompt --owner 138778232802508801 %I
+```
+
+The empty `ExecStart=` clears the command inherited from the template; without it systemd sees two commands and refuses to start the unit. Leaving the template alone keeps the change to this one instance. After editing the drop-in, run `sudo systemctl daemon-reload`, then check `systemctl show red2@rscbot2.service -p ExecStart` lists only the `.venv` interpreter. Without the DSN the bot runs normally and reports nothing.
+
+`Restart=always` brings the bot back after a crash, a VPS reboot, `[p]restart` and `[p]shutdown`. Logs go to `journalctl -u red2@rscbot2.service` as well as Red's own log files (see [Operations](operations.md)).
+
+### Installing with pip instead
+
+A host without uv can install the same pinned set into any Python 3.11 virtual environment:
+
+```sh
+<venv>/bin/python -m pip install --no-deps -r requirements.txt
+```
+
+[requirements.txt](../requirements.txt) is exported from `uv.lock` with every package pinned, so pip has nothing to resolve. `--no-deps` is required: `pyproject.toml` overrides some of Red's exact pins (aiohttp and others, for security fixes), and without it pip refuses Red's metadata. Afterwards `pip check` lists those Red pins as mismatches. That is expected.
 
 ## Updating
 
@@ -69,14 +84,14 @@ For most changes:
 
 Red pulls the repo and reloads the cog. Then check:
 
-- **Did `requirements.txt` change?** Install it into the venv (step 3 above) *before* updating, or the reload fails on a missing import.
+- **Did `uv.lock` change?** Run `cd ~/repos/rsc && git pull && uv sync --locked --no-dev` *before* updating, or the reload fails on a missing import.
 - **Did any slash command's name, options, choices or description change?** Run `[p]slash sync`. Discord clients may take a moment to show the change.
-- **Did the Red version pin change?** Upgrade Red in the venv and restart the bot rather than reloading.
+- **Did the Red version pin change?** Run the same `uv sync`, then `sudo systemctl restart red2@rscbot2.service` rather than reloading.
 - **Is a long DM batch in progress?** A reload discards the queued DMs, it doesn't send them. Wait for the batch to finish.
 
 A reload re-runs setup for every guild. Watch the log for `Finished preparing caches.` and for per-guild setup errors (see [Operations](operations.md)).
 
-To roll back, pin the repo to an earlier commit or branch with Downloader, or check out the earlier commit and reinstall, then reload.
+To roll back, pin the repo to an earlier commit or branch with Downloader, check out the same commit in `~/repos/rsc` and run `uv sync --locked --no-dev`, then reload.
 
 ## Network and the webhook server
 
@@ -113,7 +128,7 @@ To restore, stop the bot, run `tar -xzf rsc_bot_backup.tar.gz -C /` as the bot's
 
 Moving to a container is planned but not done. Things the image and compose file will need to handle:
 
-- Python 3.11 with Red pinned to the version in `pyproject.toml`, and `requirements.txt` installed with `pip install --no-deps`.
+- The venv built with `uv sync --locked --no-dev`, which brings Python 3.11.15 and the pinned Red.
 - Red's data directory on a persistent volume, since it holds every guild's settings and the installed cog.
 - The bot token passed in at runtime, not baked into the image.
 - The webhook server: it binds to `localhost` inside the container, so the website can't reach it through a published port until the bind address is made configurable, or the website runs in the same network namespace.

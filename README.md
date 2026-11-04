@@ -17,7 +17,7 @@ The full documentation lives in [docs/](docs/README.md): development setup, arch
 
 Follow the Red Discord Bot installation guide for [Windows](https://docs.discord.red/en/stable/install_windows.html) or [Linux/Mac](https://docs.discord.red/en/stable/install_linux_mac.html). You'll need to also [create a Discord bot account](https://discordpy.readthedocs.io/en/latest/discord.html) to get a token for use during the bot setup. After you have the bot setup, running, and invited to one of your Discord servers, you can begin installing and loading the cogs to the bot using the following commands in Discord (where `<p>` represents the prefix you selected your bot to use).
 
-The cog's Python dependencies are not installed by Red's Downloader. Install them into the bot's virtual environment first, and again whenever `requirements.txt` changes:
+The cog's Python dependencies are not installed by Red's Downloader. Production builds Red's virtual environment from this repo with `uv sync --locked --no-dev` (see [Deployment](docs/deployment.md)). Without uv, install them into the bot's virtual environment first, and again whenever `requirements.txt` changes:
 
 ```sh
 <bot venv>/bin/python -m pip install --no-deps -r requirements.txt
