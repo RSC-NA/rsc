@@ -5,13 +5,12 @@ from enum import StrEnum
 from typing import Any
 
 import discord
-from redbot.core.bot import Red
 
 from rsc.abc import RSCMixIn
-from rsc.const import RSC_COG_NAME
-from rsc.embeds import ApiExceptionErrorEmbed, ErrorEmbed, ExceptionErrorEmbed
+from rsc.embeds import ApiExceptionErrorEmbed, ExceptionErrorEmbed
 from rsc.exceptions import RscException
 from rsc.trackers.views import tracker_accounts_card
+from rsc.views import ready_cog
 
 log = logging.getLogger("red.rsc.members.views.player_info")
 
@@ -70,7 +69,7 @@ class PlayerInfoButton(discord.ui.DynamicItem[discord.ui.Button], template=PLAYE
         if not guild:
             return
 
-        cog = await _ready_cog(interaction, guild)
+        cog = await ready_cog(interaction, guild)
         if not cog:
             return
 
@@ -140,7 +139,7 @@ class PlayerTrackersButton(discord.ui.DynamicItem[discord.ui.Button], template=P
         guild = interaction.guild
         if not guild:
             return
-        cog = await _ready_cog(interaction, guild)
+        cog = await ready_cog(interaction, guild)
         if not cog:
             return
 
@@ -210,21 +209,3 @@ class PlayerCard:
         view = discord.ui.LayoutView(timeout=None)
         view.add_item(container)
         return view
-
-
-async def _ready_cog(interaction: discord.Interaction, guild: discord.Guild) -> RSCMixIn | None:
-    """The RSC cog, or None after telling the clicker the bot is still starting.
-
-    The API wrappers index `_api_conf`/`_league` directly, so a click before
-    setup() finishes after a restart would raise KeyError, not RscException.
-    """
-    bot = interaction.client
-    cog = bot.get_cog(RSC_COG_NAME) if isinstance(bot, Red) else None
-    if isinstance(cog, RSCMixIn) and cog._api_conf.get(guild.id) and cog._league.get(guild.id):
-        return cog
-    log.warning(f"[{guild.name}] Player info button clicked before {RSC_COG_NAME} was ready")
-    await interaction.followup.send(
-        embed=ErrorEmbed(description="The bot is still starting up. Please try again in a minute."),
-        ephemeral=True,
-    )
-    return None

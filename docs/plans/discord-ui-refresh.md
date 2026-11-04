@@ -86,6 +86,8 @@ Nothing is in progress. **Phases 4–6 are deferred** until the user picks them 
   - sign-up flow options https://claude.ai/artifact/XxQ7yNyQeijx5iC84nUmMo
   - `/playoffs` options https://claude.ai/artifact/Qtn68K8TFKUGhafts5pPMd
   - trade options https://claude.ai/artifact/2qEpVfCpyXZzBL7deCrC4S
+  - `/match` options, round 1 https://claude.ai/artifact/6g7EpSZtcCByiLuh2VSxi4
+  - `/match` option A refined, final https://claude.ai/artifact/JoSaWijLyaTSMim7emF3wb
   - original refresh summary https://claude.ai/artifact/WYTJx7XV1zyXCtg3WQVeJe
 - **Mockup sources:** in the session scratchpad `/tmp/claude-1000/-home-xentrick-dev-rsc/b157e061-8ce0-4cbb-ad9a-1aff0931280b/scratchpad/`: `compare/`, `tx-options/`, `signup-options/`, `playoffs-options/`, `trade-options/`. Being under `/tmp`, they may not survive a reboot; the published artifacts are the durable copy. A backup of `developer.py` from before the sign-up merge is there as `developer-before-signup-b.py`.
 - **Working agreements:**
@@ -500,6 +502,21 @@ Mockups: https://claude.ai/artifact/U1MT35ybTVDssnV1rFhfEm (round 3, variant S).
 
 - **Redesign requested (2026-10-28, after live review):** the form → message → form hand-off is "really bad". The new direction is Components V2 messages for every choice (selects and toggle buttons; radios and checkboxes only exist in forms), with the player actively confirming the match nights and the rules before Continue enables. Exactly one form at the end holds the typed answers (in-game name, tracker links), followed by the existing review and success cards. Mockups of 2–3 flow options are being drawn. rsc-15 has paused the two-form build until one is chosen.
   - **Requirement for the build (not the mockups):** the in-game name field needs a short hint that the name must match the one on the player's tracker link, e.g. Label description "Must match the name on your tracker link."
+
+### 10 — `/match` card (`MatchCard`, `PendingSeriesCard`, `rsc/matches/views.py`) — **BUILT, awaiting live preview** (2026-11-04)
+
+Chosen over two mockup rounds (artifacts in Other references): option A, refined.
+
+- **Match card**, one Container in the tier colour:
+  - `-# Elite · Match Day 7 · 4-game series` (or `Best of 5`), `## Home vs Away`, `<t:F> · <t:R>`. No header thumbnail.
+  - **Lobby** and **Password** on separate lines, values in inline code (L2).
+  - Check-in line (K2): "You're **home**. Create the lobby, then ping @captain, the Opp captain, in #match-check-in when your team is ready." Away: "@captain, the Opp captain, pings you in #match-check-in when the lobby is up." The channel is found by name (`MATCH_CHECK_IN_CHANNEL`); no setting. Opposing GM when no captain is in the server.
+  - One Section per team, the viewer's team first (R7): `### Team`, `-# Your team · home · Franchise · GM @gm`, then the roster in a code block with no indent, tagged as before (`(C)`, `(Sub)`/`(Subbed In)`/`(Subbed Out)`, `(IR)`, `(AGM IR)`, `(GM)`). Names keep the franchise tag; `strip_trailing_accolades` drops the accolade emoji. Franchise logo as the thumbnail.
+  - `-# Turn on crossplay. Save every replay and screenshot the scoreboard before you leave. Report with /reportmatch.` The website upload link is gone.
+  - Grey link buttons: Match page, plus Bracket in the playoffs (`bracket_url`: `/playoffs/?tier=…&league=…&season=…`).
+  - Ephemeral, `AllowedMentions.none()`: mentions are for tapping, not pinging. Team and franchise names are escaped; player names go raw into the code block, with backtick runs broken by a zero-width space.
+- **Pending opponent (P1):** `## Giraffes vs TBD`, "Winner of **A** / **B**", start time, "**Lobby** Posted once the Wildcard series (time) is reported.", home/away line, then **Refresh** (persistent `MatchRefreshButton`, re-runs the lookup and swaps in the match card once it exists) and Bracket. No Wildcard match link.
+- `match_team_by_user` now returns None for staff outside the match (was HOME): they get home first and no check-in line.
 
 ## 4. Action item: website match link on the report result (requested 2026-10-28)
 

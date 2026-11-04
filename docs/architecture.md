@@ -151,7 +151,7 @@ Never create a second queue: two queues would double the send rate and trip Disc
 
 ## Persistent buttons
 
-Buttons that must keep working after a restart (Intent to Play DMs, activity checks, PermFA polls, the `/playerinfo` card buttons, the combines replay location button) are discord.py `DynamicItem`s. Their guild, season or other state is encoded in the `custom_id` and matched by a regex, so one registration in `DYNAMIC_ITEMS` ([rsc/core.py](../rsc/core.py)) serves every message ever sent. Other views are ordinary timed views.
+Buttons that must keep working after a restart (Intent to Play DMs, activity checks, PermFA polls, the `/playerinfo` card buttons, the combines replay location button, Refresh on the `/match` pending card) are discord.py `DynamicItem`s. Their guild, season or other state is encoded in the `custom_id` and matched by a regex, so one registration in `DYNAMIC_ITEMS` ([rsc/core.py](../rsc/core.py)) serves every message ever sent. A button that needs the cog gets it from `ready_cog()` in [rsc/views.py](../rsc/views.py), which tells the clicker the bot is still starting if setup hasn't finished. Other views are ordinary timed views.
 
 ## Discord UI
 

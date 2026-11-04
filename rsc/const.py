@@ -58,6 +58,11 @@ SPECTATOR_ROLE = "Spectator"
 SUBBED_OUT_ROLE = "Subbed Out"
 PERM_FA_WAITING_ROLE = "PermFA in Waiting"
 
+# Channel Names
+#
+# Found by name, not by a setting, so a server without the channel still gets the card, minus the link.
+MATCH_CHECK_IN_CHANNEL = "match-check-in"
+
 # Cog
 #
 # Name the RSC cog is registered under. Persistent DM components resolve the cog

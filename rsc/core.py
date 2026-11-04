@@ -50,6 +50,7 @@ from rsc.llm.rulebook import load_rulebooks
 from rsc.lobbies.runner import LobbyRunner
 from rsc.logs import GuildLogAdapter
 from rsc.matches import MatchMixIn
+from rsc.matches.views import MatchRefreshButton
 from rsc.members import MemberMixIn
 from rsc.members.views import PlayerInfoButton, PlayerTrackersButton
 from rsc.moderator import ModeratorMixIn, ThreadMixIn
@@ -84,7 +85,15 @@ defaults_guild = {
 
 
 # Persistent buttons, answered by custom_id template after a restart. Registered on the bot, not the cog.
-DYNAMIC_ITEMS = (IntentDMButton, ActivityCheckDMButton, PermFAPollButton, PlayerInfoButton, PlayerTrackersButton, ReplayLocationButton)
+DYNAMIC_ITEMS = (
+    IntentDMButton,
+    ActivityCheckDMButton,
+    PermFAPollButton,
+    PlayerInfoButton,
+    PlayerTrackersButton,
+    ReplayLocationButton,
+    MatchRefreshButton,
+)
 
 
 class RSC(
@@ -210,7 +219,7 @@ class RSC(
             await self.start_webapp()
 
             # Intent to Play, activity check and PermFA poll DM buttons, plus the
-            # public /playerinfo card buttons.
+            # public /playerinfo card buttons and Refresh on the /match pending card.
             #
             # Registered once globally, not per guild and not per message. The guild
             # and season (or poll, or team) live in the custom_id and are matched by

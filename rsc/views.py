@@ -2,11 +2,33 @@ import logging
 
 import discord
 from discord.ui import ActionRow, Container, Separator, TextDisplay, TextInput
+from redbot.core.bot import Red
 from rscapi.models.league import League
 
-from rsc.const import DEFAULT_TIMEOUT
+from rsc.abc import RSCMixIn
+from rsc.const import DEFAULT_TIMEOUT, RSC_COG_NAME
+from rsc.embeds import ErrorEmbed
 
 log = logging.getLogger("red.rsc.views")
+
+
+async def ready_cog(interaction: discord.Interaction, guild: discord.Guild) -> RSCMixIn | None:
+    """The RSC cog for a persistent button, or None after telling the clicker the bot is still starting.
+
+    The API wrappers index `_api_conf`/`_league` directly, so a click before
+    setup() finishes after a restart would raise KeyError, not RscException.
+    Call it after deferring: it answers with a followup.
+    """
+    bot = interaction.client
+    cog = bot.get_cog(RSC_COG_NAME) if isinstance(bot, Red) else None
+    if isinstance(cog, RSCMixIn) and cog._api_conf.get(guild.id) and cog._league.get(guild.id):
+        return cog
+    log.warning(f"[{guild.name}] Button clicked before {RSC_COG_NAME} was ready")
+    await interaction.followup.send(
+        embed=ErrorEmbed(description="The bot is still starting up. Please try again in a minute."),
+        ephemeral=True,
+    )
+    return None
 
 
 # Generic View structures for use in any module

@@ -67,6 +67,7 @@ if TYPE_CHECKING:
     from rsc.combines.models import CombinesLobby
     from rsc.events.models import EventPage, LeagueEventData
     from rsc.lobbies.runner import LobbyRunner
+    from rsc.matches.views import MatchCard, PendingSeriesCard
     from rsc.utils.dm import DMHelper
 
 
@@ -464,6 +465,20 @@ class RSCMixIn(ABC):
         executor: discord.Member,
         override: bool = False,
     ) -> MatchResults: ...
+
+    @abstractmethod
+    async def match_reply(
+        self,
+        guild: discord.Guild,
+        member: discord.Member,
+        team_id: int,
+        *,
+        asked: bool,
+        day: int | None = None,
+    ) -> "MatchCard | PendingSeriesCard | discord.Embed | None": ...
+
+    @abstractmethod
+    async def match_page_link(self, guild: discord.Guild, match: Match) -> str | None: ...
 
     @abstractmethod
     async def is_match_day(self, guild: discord.Guild) -> bool: ...

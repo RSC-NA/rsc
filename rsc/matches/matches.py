@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from datetime import datetime
 from collections.abc import AsyncIterator
@@ -12,9 +13,12 @@ from rscapi.models.match_list import MatchList
 from rscapi.models.match_results import MatchResults
 from rscapi.models.match_score_report_request import MatchScoreReportRequest
 from rscapi.models.match_submission import MatchSubmission
+from rscapi.models.match_team import MatchTeam
 from rscapi.models.pending_series import PendingSeries
 
 from rsc.abc import RSCMixIn
+from rsc.ballchasing.views import match_label
+from rsc.const import MATCH_CHECK_IN_CHANNEL
 from rsc.embeds import BlueEmbed, ErrorEmbed, ExceptionErrorEmbed, YellowEmbed, ApiExceptionErrorEmbed
 from rsc.enums import (
     MatchFormat,
@@ -22,13 +26,14 @@ from rsc.enums import (
     MatchType,
     PostSeasonType,
     Status,
-    SubStatus,
 )
 from rsc.exceptions import RscException
 from rsc.logs import GuildLogAdapter
+from rsc.matches.views import NO_UPCOMING_MATCH, Contact, MatchCard, PendingSeriesCard, TeamBlock, player_line, series_label
 from rsc.teams import TeamMixIn
 from rsc.pagination import API_MAX_PAGE_SIZE, check_page_limit, iter_pages
-from rsc.utils.utils import tier_color_by_name
+from rsc.utils.utils import strip_trailing_accolades, tier_color_by_name
+from rsc.utils.website import bracket_url, website_url
 
 from rscapi.models.paginated_match_list_list import PaginatedMatchListList
 from rscapi.models.match_format_enum import MatchFormatEnum
@@ -39,8 +44,12 @@ log = GuildLogAdapter(logger)
 
 
 class MatchMixIn(RSCMixIn):
+    # guild.id -> the `/reportmatch` mention the /match card ends with
+    _reportmatch_mentions: dict[int, str]
+
     def __init__(self) -> None:
         log.debug("Initializing MatchMixIn")
+        self._reportmatch_mentions = {}
         super().__init__()
 
     # App Commands
@@ -209,21 +218,33 @@ class MatchMixIn(RSCMixIn):
                 )
                 return
 
-            # Get API ID of team
             team_id = player.team.id
 
-            # # Get API id of team
-            # try:
-            #     if team:
-            #         log.debug(f"Getting Team ID: {team}")
-            #         team_id = await self.team_id_by_name(guild, name=team)
-            #     else:
-            #         log.debug(f"Getting Team ID: {player[0].team.name}")
-            #         team_id = await self.team_id_by_name(guild, name=player[0].team.name)
-            # except ValueError as exc:
-            #     return await interaction.followup.send(embed=ExceptionErrorEmbed(exc_message=str(exc)), ephemeral=True)
+        reply = await self.match_reply(guild, interaction.user, team_id, asked=bool(team), day=day)
+        if reply is None:
+            reply = BlueEmbed(title="Match Info", description=NO_UPCOMING_MATCH)
+        if isinstance(reply, discord.Embed):
+            return await interaction.followup.send(embed=reply, ephemeral=True)
+        view, files = reply.render()
+        await interaction.followup.send(view=view, files=files, ephemeral=True, allowed_mentions=discord.AllowedMentions.none())
 
-        # Get teams next match
+    # Functions
+
+    async def match_reply(
+        self,
+        guild: discord.Guild,
+        member: discord.Member,
+        team_id: int,
+        *,
+        asked: bool,
+        day: int | None = None,
+    ) -> MatchCard | PendingSeriesCard | discord.Embed | None:
+        """What `/match` shows `member` for a team: its match card, its pending playoff series,
+        an error embed, or None when it has no upcoming match. Refresh on the pending card asks again.
+
+        `asked` is whether `/match` named the team. A named team's match carries a lobby, so only
+        its franchise managers and staff may see it.
+        """
         try:
             if day:
                 log.debug(f"Getting match for team: {team_id} on day: {day}", guild=guild)
@@ -232,69 +253,174 @@ class MatchMixIn(RSCMixIn):
             else:
                 log.debug(f"Getting match for team: {team_id}", guild=guild)
                 match = await self.next_match(guild, team_id)
-        except RscException as exc:
-            log.debug(f"Match Return Status: {exc.status}")
-            await interaction.followup.send(
-                embed=ApiExceptionErrorEmbed(
-                    exc,
-                    title="Match Info",
-                ),
-                ephemeral=True,
-            )
-            return
 
-        if not match and not day:
-            # A bye seed's next playoff series has no match until the series feeding it is
-            # reported, which on a playoff night is minutes before it starts. It carries no
-            # lobby, so it is safe to show whoever asked, franchise manager or not.
-            try:
+            if not match:
+                if day:
+                    return None
+                # A bye seed's next playoff series has no match until the series feeding it is
+                # reported, which on a playoff night is minutes before it starts. It carries no
+                # lobby, so it is safe to show whoever asked, franchise manager or not.
                 series = await self.pending_series(guild, team_id)
-            except RscException as exc:
-                return await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc, title="Match Info"), ephemeral=True)
-            if series:
-                embed = await self.build_pending_series_embed(guild, series)
-                return await interaction.followup.send(embed=embed, ephemeral=True)
+                return await self.pending_series_card(guild, series, team_id=team_id, asked=asked) if series else None
 
-        if not match:
-            return await interaction.followup.send(
-                embed=BlueEmbed(
-                    title="Match Info",
-                    description="You do not have any upcoming matches.",
-                ),
-                ephemeral=True,
-            )
-
-        # Resolved once and reused below, so the command makes a single AGM
-        # lookup instead of one per check.
-        try:
-            agm_franchise = await self.agm_franchise_of(guild, interaction.user.id)
-        except RscException as exc:
-            return await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc, title="Match Info"), ephemeral=True)
-
-        # If team was specified, user must be GM or admin
-        if team and not (
-            await self.is_match_franchise_gm(member=interaction.user, match=match)
-            or await self.is_match_franchise_agm(member=interaction.user, match=match, agm_franchise=agm_franchise)
-            or interaction.user.guild_permissions.manage_guild
-        ):
-            return await interaction.followup.send(
-                embed=ErrorEmbed(
+            # Resolved once and reused below, so the command makes a single AGM
+            # lookup instead of one per check.
+            agm_franchise = await self.agm_franchise_of(guild, member.id)
+            try:
+                is_gm = asked and await self.is_match_franchise_gm(member=member, match=match)
+            except AttributeError as exc:
+                # A Refresh click is already acknowledged, so an exception here would leave it unanswered
+                return ExceptionErrorEmbed(str(exc))
+            if asked and not (
+                is_gm
+                or await self.is_match_franchise_agm(member=member, match=match, agm_franchise=agm_franchise)
+                or member.guild_permissions.manage_guild
+            ):
+                return ErrorEmbed(
                     description=(
                         "Only franchise managers can specify a team for match information. "
                         "If you are not a GM or AGM, please simply run `/match` to get your teams match information."
                     )
                 )
-            )
 
-        # Is interaction user away/home
+            try:
+                side = await self.match_team_by_user(match, member, agm_franchise=agm_franchise)
+            except ValueError as exc:
+                return ExceptionErrorEmbed(str(exc))
+            return await self.match_card(guild, match, side)
+        except RscException as exc:
+            log.debug(f"Match Return Status: {exc.status}")
+            return ApiExceptionErrorEmbed(exc, title="Match Info")
+
+    async def match_card(self, guild: discord.Guild, match: Match, side: MatchTeamEnum | None) -> MatchCard:
+        """Gather what the `/match` card shows. See `MatchCard.render`."""
+        home, away = match.home_team, match.away_team
+        colour = await tier_color_by_name(guild, home.tier) if home.tier else discord.Colour.default()
+        home_logo, away_logo = await asyncio.gather(
+            self.franchise_logo_url(guild, home.franchise),
+            self.franchise_logo_url(guild, away.franchise),
+        )
+
+        contact = None
+        if side:
+            opponent = away if side is MatchTeamEnum.HOME else home
+            captain = next((m for p in opponent.players or [] if p.captain and (m := guild.get_member(p.discord_id))), None)
+            gm = guild.get_member(opponent.gm.discord_id) if opponent.gm and opponent.gm.discord_id else None
+            if captain:
+                contact = Contact(captain.mention, "captain")
+            elif gm:
+                contact = Contact(gm.mention, "GM")
+        check_in = discord.utils.get(guild.text_channels, name=MATCH_CHECK_IN_CHANNEL)
+
+        playoffs = match.match_type in (MatchType.POSTSEASON, MatchType.FINALS)
+        return MatchCard(
+            tier=home.tier,
+            label=match_label(match),
+            series=series_label(match.match_format, match.num_games),
+            starts=match.var_date,
+            lobby_name=match.game_name,
+            lobby_pass=match.game_pass,
+            home=self._team_block(guild, home, home_logo),
+            away=self._team_block(guild, away, away_logo),
+            side=side,
+            contact=contact,
+            check_in_channel=check_in.mention if check_in else None,
+            match_url=await self.match_page_link(guild, match),
+            bracket_url=await self.bracket_link(guild, home.tier, match.season_number) if playoffs else None,
+            reportmatch=await self.reportmatch_mention(guild),
+            colour=colour,
+        )
+
+    @staticmethod
+    def _team_block(guild: discord.Guild, team: MatchTeam, logo_url: str | None) -> TeamBlock:
+        gm_id = team.gm.discord_id if team.gm else None
+        gm_member = guild.get_member(gm_id) if gm_id else None
+        if gm_member:
+            gm = gm_member.mention
+        elif team.gm and team.gm.rsc_name:
+            gm = discord.utils.escape_markdown(team.gm.rsc_name)
+        else:
+            gm = None
+
+        players: list[str] = []
+        for p in team.players or []:
+            member = guild.get_member(p.discord_id)
+            name = strip_trailing_accolades(member.display_name) if member else p.name
+            if line := player_line(name, p, is_gm=p.discord_id == gm_id):
+                players.append(line)
+        return TeamBlock(name=team.name, franchise=team.franchise, gm=gm, logo_url=logo_url, players=tuple(players))
+
+    async def pending_series_card(self, guild: discord.Guild, series: PendingSeries, *, team_id: int, asked: bool) -> PendingSeriesCard:
+        """Gather what the pending-opponent card shows. See `PendingSeriesCard.render`."""
+        feeder = series.feeder_match
         try:
-            user_team = await self.match_team_by_user(match, interaction.user, agm_franchise=agm_franchise)
-            embed = await self.build_match_embed(guild, match, user_team=user_team, with_gm=True)
-        except ValueError as exc:
-            return await interaction.followup.send(embed=ExceptionErrorEmbed(str(exc)))
-        await interaction.followup.send(embed=embed, ephemeral=True)
+            feeder_round = PostSeasonType(feeder.day).name.title() if feeder.day else None
+        except ValueError:
+            feeder_round = None
+        return PendingSeriesCard(
+            team_id=team_id,
+            asked=asked,
+            tier=series.tier,
+            round_label=series.round_label,
+            series=series_label(series.match_format, series.num_games),
+            team=series.team.name,
+            opponents=tuple(t.name for t in series.possible_opponents),
+            starts=series.var_date,
+            feeder_round=feeder_round,
+            feeder_starts=feeder.var_date,
+            home=series.home,
+            logo_url=await self.team_logo_url(guild, series.team.name, team_id),
+            # A pending series is always in the current season, which the bracket opens on
+            bracket_url=await self.bracket_link(guild, series.tier),
+            colour=await tier_color_by_name(guild, series.tier),
+        )
 
-    # Functions
+    async def franchise_logo_url(self, guild: discord.Guild, franchise: str | None) -> str | None:
+        """The franchise's logo, else the server icon."""
+        logo_url = None
+        if franchise:
+            try:
+                fsearch = await self.franchises(guild, name=franchise)
+                if fsearch and fsearch[0].id:
+                    logo_url = await self.franchise_logo(guild=guild, id=fsearch[0].id)
+            except RscException as exc:
+                log.warning(f"Unable to fetch the {franchise} logo: {exc}", guild=guild)
+        return logo_url or (guild.icon.url if guild.icon else None)
+
+    async def team_logo_url(self, guild: discord.Guild, name: str, team_id: int) -> str | None:
+        """The logo of the team's franchise, else the server icon."""
+        logo_url = None
+        try:
+            team = next((t for t in await self.teams(guild, name=name) if t.id == team_id), None)
+            if team and team.franchise.id:
+                logo_url = await self.franchise_logo(guild=guild, id=team.franchise.id)
+        except RscException as exc:
+            log.warning(f"Unable to fetch the {name} franchise logo: {exc}", guild=guild)
+        return logo_url or (guild.icon.url if guild.icon else None)
+
+    async def bracket_link(self, guild: discord.Guild, tier: str | None, season_number: int | None = None) -> str | None:
+        """The tier's playoff bracket on the league website, or None if it can't be built."""
+        conf = self._api_conf.get(guild.id)
+        league_id = self._league.get(guild.id)
+        site = website_url(conf.host) if conf else None
+        if not (site and league_id and tier):
+            return None
+        season_id = await self.season_id_for_number(guild, season_number) if season_number else None
+        return bracket_url(site, tier, league_id=league_id, season_id=season_id)
+
+    async def reportmatch_mention(self, guild: discord.Guild) -> str:
+        """A clickable `/reportmatch`, looked up once per server: fetching synced commands is an API call."""
+        if mention := self._reportmatch_mentions.get(guild.id):
+            return mention
+        try:
+            synced = await self.bot.tree.fetch_commands() or await self.bot.tree.fetch_commands(guild=guild)
+        except discord.HTTPException as exc:
+            log.warning(f"Unable to look up the /reportmatch mention: {exc}", guild=guild)
+            return "`/reportmatch`"
+        command = next((c for c in synced if c.name == "reportmatch"), None)
+        mention = command.mention if command else "`/reportmatch`"
+        self._reportmatch_mentions[guild.id] = mention
+        return mention
 
     async def discord_member_in_match(self, member: discord.Member, match: Match) -> bool:
         if not (match.home_team.players and match.away_team.players):
@@ -350,8 +476,8 @@ class MatchMixIn(RSCMixIn):
         match: Match,
         member: discord.Member,
         agm_franchise: FranchiseList | None = None,
-    ) -> MatchTeamEnum:
-        """Determine if the user is on the home or away team"""
+    ) -> MatchTeamEnum | None:
+        """The member's side of the match, or None for staff with no part in it."""
         # Check if GM of team
         if match.home_team.gm and match.home_team.gm.discord_id == member.id:
             return MatchTeamEnum.HOME
@@ -370,239 +496,17 @@ class MatchMixIn(RSCMixIn):
                 if p.discord_id == member.id:
                     return MatchTeamEnum.AWAY
 
-        # Check AGM. Ahead of the admin fallback below, so an admin who is also
-        # the away franchise's AGM gets AWAY rather than a blanket HOME.
+        # Ahead of the staff check below, so an admin who is also the away
+        # franchise's AGM gets AWAY rather than no side.
         agm_team = await self.match_franchise_agm_team(member, match, agm_franchise)
         if agm_team:
             return agm_team
 
-        # As a final check, we need to return a value to admins running the command.
-        # Without this, we block the use of commands that validate players.
+        # Staff may look at any match. They get the card without a side.
         if member.guild_permissions.manage_guild:
-            return MatchTeamEnum.HOME
+            return None
 
         raise ValueError(f"{member.display_name} is not a valid player in this match")
-
-    async def build_match_embed(
-        self,
-        guild: discord.Guild,
-        match: Match,
-        user_team: MatchTeamEnum | None = None,
-        with_gm: bool = True,
-    ) -> discord.Embed:
-        """Build the match information embed"""
-        # Get embed color by tier
-        tier = match.home_team.tier
-
-        tier_color = discord.Color.default()
-        if tier:
-            tier_color = await tier_color_by_name(guild, tier)
-
-        # Format match day
-        if match.match_type == MatchType.PRESEASON:
-            md = f"Preseason Match {match.day}"
-        elif match.match_type == MatchType.REGULAR:
-            md = f"Match Day {match.day}"
-        else:
-            if match.day is None:
-                raise ValueError(f"Unknown postseason match day (round): {match.day}")
-            playoff_round = PostSeasonType(match.day)
-            md = f"{playoff_round.name} Match".title()
-
-        # Format Date
-        if not match.var_date:
-            raise AttributeError("Match does not contain a valid DateTime object")
-        date_str = match.var_date.strftime("%B %-d, %Y")
-
-        # Description
-        desc = f"**{match.home_team.name}**\nversus\n**{match.away_team.name}**"
-
-        # Lobby Info
-        lobby_info = f"Name: **{match.game_name}**\nPass: **{match.game_pass}**"
-
-        # Teams
-        home_fmt, away_fmt = await self.roster_fmt_from_match(guild, match, with_gm=with_gm)
-
-        # Create embed
-        embed = discord.Embed(title=f"{md}: {date_str}", description=desc, color=tier_color)
-
-        embed.add_field(name="Lobby Info", value=lobby_info, inline=False)
-        embed.add_field(name="Home Team", value=home_fmt, inline=False)
-        embed.add_field(name="Away Team", value=away_fmt, inline=False)
-
-        # User Team for additional info
-        additional_fmt = ""
-        if user_team == MatchTeamEnum.HOME:
-            additional_fmt += (
-                "You are the **HOME** team.\x20"
-                "You will create the room using the above information.\x20"
-                "Contact the other team when your team is ready to begin the match.\x20"
-                "Do **not** join a team before the away team does.\n\n"
-            )
-        elif user_team == MatchTeamEnum.AWAY:
-            additional_fmt += (
-                "You are the **AWAY** team.\x20"
-                "You will join the room using the above information once the other team contacts you.\x20"
-                "Do not begin joining a team until your entire team is ready to begin playing.\n\n"
-            )
-        additional_fmt += (
-            "Be sure that **crossplay is enabled** and to save all replays and screenshots of the end-of-game scoreboard.\x20"
-            "Do not leave the game until screenshots have been taken.\x20"
-            "These must be uploaded to the [RSC Website](https://www.rocketsoccarconfederation.com/replay-and-screenshot-uploads) after the game is finished."  # noqa: E501
-        )
-        embed.add_field(name="Additional Info", value=additional_fmt, inline=False)
-        return embed
-
-    async def build_pending_series_embed(self, guild: discord.Guild, series: PendingSeries) -> discord.Embed:
-        """A playoff series whose opponent is the winner of a series still to be reported."""
-        tier_color = await tier_color_by_name(guild, series.tier) if series.tier else discord.Color.default()
-
-        feeder = series.feeder_match
-        first, second = series.possible_opponents
-        title = f"{series.round_label} Match"
-        if series.var_date:
-            title += f": {series.var_date.strftime('%B %-d, %Y')}"
-
-        embed = discord.Embed(
-            title=title,
-            description=f"**{series.team.name}**\nversus\n**Winner of {first.name} / {second.name}**",
-            color=tier_color,
-        )
-        if series.var_date:
-            starts = int(series.var_date.timestamp())
-            embed.add_field(name="Starts", value=f"<t:{starts}:F> (<t:{starts}:R>)", inline=False)
-        embed.add_field(name="Format", value=f"Best of {series.num_games}", inline=False)
-
-        feeder_round = f"{PostSeasonType(feeder.day).name.title()} " if feeder.day else ""
-        feeder_when = f" at <t:{int(feeder.var_date.timestamp())}:t>" if feeder.var_date else ""
-        embed.add_field(
-            name="Opponent",
-            value=f"Decided by the {feeder_round}series **{feeder.home_team.name}** vs **{feeder.away_team.name}**{feeder_when}.",
-            inline=False,
-        )
-
-        if series.home is True:
-            home_fmt = f"**{series.team.name}** will be the **HOME** team and create the room."
-        elif series.home is False:
-            home_fmt = f"**{series.team.name}** will be the **AWAY** team and join the room."
-        else:
-            home_fmt = "The higher seed is the home team, so it depends on who wins that series."
-        embed.add_field(name="Home Team", value=home_fmt, inline=False)
-        embed.add_field(
-            name="Lobby Info",
-            value="The lobby is created once that series is reported. Run `/match` again then for the name and password.",
-            inline=False,
-        )
-        return embed
-
-    async def roster_fmt_from_match(self, guild: discord.Guild, match: Match, with_gm: bool = True) -> tuple[str, str]:
-        """Return formatted roster string from Match"""
-        home_players: list[str] = []
-        away_players: list[str] = []
-
-        if not (match.home_team.players and match.away_team.players):
-            raise AttributeError("Match is missing players on home or away team.")
-
-        home_gm: str | None = None
-        away_gm: str | None = None
-
-        # Get GM for each team.
-        if with_gm and match.home_team.franchise and match.away_team.franchise:
-            hgm = await self.franchise_gm_by_name(guild, name=match.home_team.franchise)
-            if hgm and hgm.rsc_name:
-                home_gm = hgm.rsc_name
-
-            agm = await self.franchise_gm_by_name(guild, name=match.away_team.franchise)
-            if agm and agm.rsc_name:
-                away_gm = agm.rsc_name
-
-        # Home
-        for p in match.home_team.players:
-            m = guild.get_member(p.discord_id)
-            name = m.display_name if m else p.name
-
-            # Captain
-            if p.captain:
-                name = f"{name} (C)"
-
-            # Additional status formatting
-            match p.status:
-                case Status.FREE_AGENT | Status.PERM_FA:
-                    if p.sub_status == SubStatus.OUT:
-                        name = f"{name} (Subbed Out)"
-                    elif p.sub_status == SubStatus.IN:
-                        name = f"{name} (Subbed In)"
-                    else:
-                        name = f"{name} (Sub)"
-                case Status.IR:
-                    name = f"{name} (IR)"
-                case Status.AGMIR | Status.IR:
-                    name = f"{name} (AGM IR)"
-                case Status.ROSTERED | Status.RENEWED:
-                    pass
-                case _:
-                    # Not a valid status for rostered player
-                    continue
-
-            # GM
-            if isinstance(m, discord.Member) and match.home_team.gm and match.home_team.gm.discord_id == m.id:
-                name = f"{name} (GM)"
-
-            home_players.append(name)
-
-        # Away
-        for p in match.away_team.players:
-            m = guild.get_member(p.discord_id)
-            name = m.display_name if m else p.name
-
-            # Captain
-            if p.captain:
-                name = f"{name} (C)"
-
-            # Additional status formatting
-            match p.status:
-                case Status.FREE_AGENT | Status.PERM_FA:
-                    if p.sub_status == SubStatus.OUT:
-                        name = f"{name} (Subbed Out)"
-                    elif p.sub_status == SubStatus.IN:
-                        name = f"{name} (Subbed In)"
-                    else:
-                        name = f"{name} (Sub)"
-                case Status.IR:
-                    name = f"{name} (IR)"
-                case Status.AGMIR | Status.IR:
-                    name = f"{name} (AGM IR)"
-                case Status.ROSTERED | Status.RENEWED:
-                    pass
-                case _:
-                    # Not a valid status for rostered player
-                    continue
-
-            # GM
-            if isinstance(m, discord.Member) and match.away_team.gm and match.away_team.gm.discord_id == m.id:
-                name = f"{name} (GM)"
-
-            away_players.append(name)
-
-        # Home team roster formatting
-        home_fmt = "```\n"
-        if home_gm:
-            home_fmt += f"{match.home_team.name} - {match.home_team.franchise} ({home_gm})\n"
-        else:
-            home_fmt += f"{match.home_team.name} - {match.home_team.franchise}\n"
-        home_fmt += "\n".join([f"\t{p}" for p in home_players])
-        home_fmt += "\n```"
-
-        # Away team roster formatting
-        away_fmt = "```\n"
-        if away_gm:
-            away_fmt += f"{match.away_team.name} - {match.away_team.franchise} ({away_gm})\n"
-        else:
-            away_fmt += f"{match.away_team.name} - {match.away_team.franchise}\n"
-        away_fmt += "\n".join([f"\t{p}" for p in away_players])
-        away_fmt += "\n```"
-
-        return (home_fmt, away_fmt)
 
     async def is_match_franchise_gm(self, member: discord.Member, match: Match) -> bool:
         if not (match.home_team.gm and match.away_team.gm):

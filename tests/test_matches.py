@@ -330,19 +330,17 @@ class TestMatchTeamByUser:
 
         assert await mixin.match_team_by_user(match, mock_member) == MatchTeamEnum.AWAY
 
-    async def test_admin_gets_home(self, mock_member):
+    async def test_admin_outside_the_match_gets_no_side(self, mock_member):
         match = _make_match(home_gm_id=999, away_gm_id=888, home_players=[], away_players=[])
         mixin = _create_mixin(agm_franchise_of=AsyncMock(return_value=None))
-        # Give manage_guild permission
         perms = discord.Permissions(manage_guild=True)
         type(mock_member).guild_permissions = PropertyMock(return_value=perms)
 
-        result = await mixin.match_team_by_user(match, mock_member)
-        assert result == MatchTeamEnum.HOME
+        assert await mixin.match_team_by_user(match, mock_member) is None
 
     async def test_admin_who_is_the_away_agm_gets_away(self, mock_member):
         """The AGM check runs ahead of the admin fallback, so an admin who
-        actually staffs the away franchise is not flattened to HOME."""
+        actually staffs the away franchise still gets a side."""
         match = _make_match(
             home_gm_id=999, away_gm_id=888, home_players=[], away_players=[], home_franchise="Eagles", away_franchise="Hawks"
         )

@@ -20,6 +20,7 @@ from rsc.combines.runner import CombinesLeague
 from rsc.core import RSC
 from rsc.devleague.runner import DevLeague
 from rsc.lobbies.runner import LobbyRunner
+from rsc.matches.views import MatchRefreshButton
 from rsc.members.views import PlayerInfoButton, PlayerTrackersButton
 from rsc.tiers.tiers import TierMixIn
 
@@ -379,7 +380,13 @@ class TestSetupIsolation:
         # Every DM button template must register, or clicks on those DMs die
         # silently after a restart.
         bot.add_dynamic_items.assert_called_once_with(
-            IntentDMButton, ActivityCheckDMButton, PermFAPollButton, PlayerInfoButton, PlayerTrackersButton, ReplayLocationButton
+            IntentDMButton,
+            ActivityCheckDMButton,
+            PermFAPollButton,
+            PlayerInfoButton,
+            PlayerTrackersButton,
+            ReplayLocationButton,
+            MatchRefreshButton,
         )
 
     async def test_prepares_guilds_concurrently(self):
@@ -431,7 +438,13 @@ class TestCogUnload:
         await cog.cog_unload()
 
         bot.remove_dynamic_items.assert_called_once_with(
-            IntentDMButton, ActivityCheckDMButton, PermFAPollButton, PlayerInfoButton, PlayerTrackersButton, ReplayLocationButton
+            IntentDMButton,
+            ActivityCheckDMButton,
+            PermFAPollButton,
+            PlayerInfoButton,
+            PlayerTrackersButton,
+            ReplayLocationButton,
+            MatchRefreshButton,
         )
 
 
