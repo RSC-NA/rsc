@@ -1,7 +1,7 @@
 [project]
 name = "RSC-Discord-Bot"
 version = "1.0.0"
-requires-python = ">=3.11"
+requires-python = ">=3.11,<3.12"
 dependencies = [
     "aiofiles>=24.1.0",
     "aiohttp-retry>=2.9.1",
@@ -202,6 +202,8 @@ rscapi = { git = "https://github.com/RSC-NA/rsc-api-client.git" }
 # Red-DiscordBot pins these with `==` at versions with open advisories. Drop this
 # table once the bot no longer depends on Red (#10).
 [tool.uv]
+# Development (WSL) and production (Debian) are both Linux on CPython.
+environments = ["sys_platform == 'linux' and platform_python_implementation == 'CPython'"]
 override-dependencies = [
     "aiohttp>=3.14.4",
     "brotli>=1.2.1",
