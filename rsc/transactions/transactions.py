@@ -10,7 +10,6 @@ import discord
 from discord.ext import tasks
 from redbot.core import app_commands, commands
 from rscapi import LeaguePlayersApi, TransactionsApi
-from rscapi.exceptions import ApiException
 from rscapi.models.draft_input import DraftInput
 from rscapi.models.draft_pick_trade import DraftPickTrade
 from rscapi.models.franchise_futures_validation import FranchiseFuturesValidation
@@ -41,16 +40,7 @@ from rsc.embeds import (
     YellowEmbed,
 )
 from rsc.enums import INACTIVE_STATUS_VALUES, Status, TransactionType, is_inactive_status
-from rsc.exceptions import (
-    BadGateway,
-    InternalServerError,
-    MalformedTransactionResponse,
-    MemberDoesNotExist,
-    NotLeaguePlayer,
-    RscException,
-    TradeParserException,
-    translate_api_error,
-)
+from rsc.exceptions import ApiError, MalformedTransactionResponse, RscException, TradeParserException
 from rsc.franchises import FranchiseMixIn
 from rsc.logs import GuildLogAdapter
 from rsc.teams import TeamMixIn
@@ -783,7 +773,7 @@ class TransactionMixIn(RSCMixIn):
             )
             log.debug(f"Cut Result: {result}", guild=guild)
         except RscException as exc:
-            log.warning(f"Transaction Exception: {exc.reason}", guild=guild)
+            log.warning(f"Transaction Exception: {exc.message}", guild=guild)
             await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc), ephemeral=True)
             return
 
@@ -888,7 +878,7 @@ class TransactionMixIn(RSCMixIn):
             log.debug(f"Sign Result: {result}]", guild=guild)
             tiers = await self.tiers(guild=guild)
         except RscException as exc:
-            log.warning(f"Transaction Exception: {exc.reason}", guild=guild)
+            log.warning(f"Transaction Exception: {exc.message}", guild=guild)
             await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc), ephemeral=True)
             return
 
@@ -992,7 +982,7 @@ class TransactionMixIn(RSCMixIn):
             log.debug(f"Re-sign Result: {result}]", guild=guild)
             tiers = await self.tiers(guild=guild)
         except RscException as exc:
-            log.warning(f"Transaction Exception: {exc.reason}", guild=guild)
+            log.warning(f"Transaction Exception: {exc.message}", guild=guild)
             await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc), ephemeral=True)
             return
 
@@ -1288,7 +1278,7 @@ class TransactionMixIn(RSCMixIn):
             log.debug(pformat(trade_items))
         except TradeParserException as exc:
             await interaction.followup.send(
-                embed=ExceptionErrorEmbed(title="Trade Parsing Error", exc_message=exc.message),
+                embed=ExceptionErrorEmbed(title="Trade Parsing Error", exc_message=str(exc)),
                 ephemeral=True,
             )
             return
@@ -2374,30 +2364,11 @@ class TransactionMixIn(RSCMixIn):
     def _retire_is_retryable(exc: RscException) -> bool:
         """Whether a failed retire is worth trying again.
 
-        Fails open on a status of `None`, which is what a transport error or an
-        unparsable body produces. `RETIRE_MAX_ATTEMPTS` bounds the damage, and
-        giving up on a network blip is the failure mode we are trying to remove.
+        Fails open on anything that is not an API answer. `RETIRE_MAX_ATTEMPTS`
+        bounds the damage, and giving up on a network blip is the failure mode we
+        are trying to remove.
         """
-        if isinstance(exc, InternalServerError | BadGateway):
-            return True
-        if exc.status is None:
-            return True
-        return exc.status in RETRYABLE_RETIRE_STATUS
-
-    async def _retire_error(self, exc: RscException) -> RscException:
-        """Refine a bare `RscException` from `retire()` into a specific subclass.
-
-        `retire()` raises `RscException(response=exc)` directly, so the API's
-        `detail` string is never mapped to the types in `rsc.exceptions`. Running
-        it through `translate_api_error` is what lets "not currently playing this
-        season" be recognised as success rather than an error.
-        """
-        if isinstance(exc.response, ApiException):
-            try:
-                return await translate_api_error(exc.response)
-            except Exception:  # Classification must never mask the original error.
-                return exc
-        return exc
+        return not isinstance(exc, ApiError) or exc.status in RETRYABLE_RETIRE_STATUS
 
     async def _player_is_retired(self, guild: discord.Guild, discord_id: int) -> bool:
         """Read back whether the API already considers this player retired."""
@@ -2427,18 +2398,15 @@ class TransactionMixIn(RSCMixIn):
                     override=True,
                 )
             except RscException as exc:
-                translated = await self._retire_error(exc)
+                last_reason = str(exc)
+                if not self._retire_is_retryable(exc):
+                    if await self._player_is_retired(guild, member.id):
+                        log.info(
+                            f"{RETIRE_LOG_PREFIX} {member.id} is already not playing this season. Nothing to retire.",
+                            guild=guild,
+                        )
+                        return True, None
 
-                # Not playing is the desired end state, so this is a success.
-                if isinstance(translated, NotLeaguePlayer | MemberDoesNotExist):
-                    log.info(
-                        f"{RETIRE_LOG_PREFIX} {member.id} is already not playing this season. Nothing to retire.",
-                        guild=guild,
-                    )
-                    return True, None
-
-                last_reason = str(translated)
-                if not self._retire_is_retryable(translated):
                     log.error(
                         f"{RETIRE_LOG_PREFIX} retire rejected for {member.id} and will not be retried: {last_reason}",
                         guild=guild,
@@ -2868,10 +2836,7 @@ class TransactionMixIn(RSCMixIn):
                 admin_override=override,
             )
             log.debug(f"Sign Parameters: {data}", guild=guild)
-            try:
-                return await api.transactions_sign_create(data)
-            except ApiException as exc:
-                raise await translate_api_error(exc)
+            return await api.transactions_sign_create(data)
 
     async def cut(
         self,
@@ -2892,10 +2857,7 @@ class TransactionMixIn(RSCMixIn):
                 admin_override=override,
             )
             log.debug(f"Cut Parameters: {data}", guild=guild)
-            try:
-                return await api.transactions_cut_create(data)
-            except ApiException as exc:
-                raise await translate_api_error(exc)
+            return await api.transactions_cut_create(data)
 
     async def resign(
         self,
@@ -2918,10 +2880,7 @@ class TransactionMixIn(RSCMixIn):
                 admin_override=override,
             )
             log.debug(f"Resign Parameters: {data}", guild=guild)
-            try:
-                return await api.transactions_resign_create(data)
-            except ApiException as exc:
-                raise await translate_api_error(exc)
+            return await api.transactions_resign_create(data)
 
     async def set_captain(self, guild: discord.Guild, id: int) -> LeaguePlayer:
         """Set a player as captain using their discord ID"""
@@ -2950,10 +2909,7 @@ class TransactionMixIn(RSCMixIn):
                 admin_override=override,
             )
             log.debug(f"Sub Data: {data}", guild=guild)
-            try:
-                return await api.transactions_substitution_create(data)
-            except ApiException as exc:
-                raise RscException(response=exc)
+            return await api.transactions_substitution_create(data)
 
     async def expire_sub(
         self,
@@ -2966,10 +2922,7 @@ class TransactionMixIn(RSCMixIn):
             api = TransactionsApi(client)
             data = PlayerInput(league=self._league[guild.id], player=player.id, executor=executor.id)
             log.debug(f"Expire Sub Data: {data}", guild=guild)
-            try:
-                return await api.transactions_expire_create(data)
-            except ApiException as exc:
-                raise RscException(response=exc)
+            return await api.transactions_expire_create(data)
 
     async def retire(
         self,
@@ -2990,10 +2943,7 @@ class TransactionMixIn(RSCMixIn):
                 admin_override=override,
             )
             log.debug(f"Retire Data: {data}", guild=guild)
-            try:
-                return await api.transactions_retire_create(data)
-            except ApiException as exc:
-                raise RscException(response=exc)
+            return await api.transactions_retire_create(data)
 
     async def inactive_reserve(
         self,
@@ -3018,10 +2968,7 @@ class TransactionMixIn(RSCMixIn):
                 remove_from_ir=remove,
             )
             log.debug(f"IR Data: {data}", guild=guild)
-            try:
-                return await api.transactions_inactive_reserve_create(data)
-            except ApiException as exc:
-                raise RscException(response=exc)
+            return await api.transactions_inactive_reserve_create(data)
 
     async def transaction_history(
         self,
@@ -3044,20 +2991,17 @@ class TransactionMixIn(RSCMixIn):
                 f"Transaction History Query. Player: {player_id} Executor: {executor_id} Season: {season} Type: {trans_type}",
                 guild=guild,
             )
-            try:
-                league_id = self._league[guild.id]
-                trans_list = await api.transactions_history_list(
-                    league=league_id,
-                    player=player_id,
-                    executor=executor_id,
-                    transaction_type=t_type,
-                    season_number=season,
-                    limit=limit,
-                    offset=offset,
-                )
-                return trans_list.results
-            except ApiException as exc:
-                raise RscException(response=exc)
+            league_id = self._league[guild.id]
+            trans_list = await api.transactions_history_list(
+                league=league_id,
+                player=player_id,
+                executor=executor_id,
+                transaction_type=t_type,
+                season_number=season,
+                limit=limit,
+                offset=offset,
+            )
+            return trans_list.results
 
     async def paged_transaction_history(
         self,
@@ -3082,18 +3026,15 @@ class TransactionMixIn(RSCMixIn):
 
             async def fetch(limit: int, offset: int) -> PaginatedTransactionResponseList:
                 log.debug(f"Offset: {offset}")
-                try:
-                    return await api.transactions_history_list(
-                        league=self._league[guild.id],
-                        player=player_id,
-                        executor=executor_id,
-                        transaction_type=t_type,
-                        season_number=season,
-                        limit=limit,
-                        offset=offset,
-                    )
-                except ApiException as exc:
-                    raise RscException(response=exc)
+                return await api.transactions_history_list(
+                    league=self._league[guild.id],
+                    player=player_id,
+                    executor=executor_id,
+                    transaction_type=t_type,
+                    season_number=season,
+                    limit=limit,
+                    offset=offset,
+                )
 
             async for transaction in iter_pages(fetch, per_page=per_page):
                 yield transaction
@@ -3102,10 +3043,7 @@ class TransactionMixIn(RSCMixIn):
         """Fetch transaction history based on specified criteria"""
         async with self.api_client(guild) as client:
             api = TransactionsApi(client)
-            try:
-                return await api.transactions_history_retrieve(id=transaction_id)
-            except ApiException as exc:
-                raise RscException(response=exc)
+            return await api.transactions_history_retrieve(id=transaction_id)
 
     async def trade(
         self,
@@ -3118,18 +3056,15 @@ class TransactionMixIn(RSCMixIn):
         """Fetch transaction history based on specified criteria"""
         async with self.api_client(guild) as client:
             api = TransactionsApi(client)
-            try:
-                schema = TradeTransaction(
-                    league=self._league[guild.id],
-                    trades=trades,
-                    executor=executor.id,
-                    notes=notes or "",
-                    admin_override=override,
-                )
-                log.debug(f"Schema: {pformat(schema)}", guild=guild)
-                return await api.transactions_trade_create(schema)
-            except ApiException as exc:
-                raise RscException(response=exc)
+            schema = TradeTransaction(
+                league=self._league[guild.id],
+                trades=trades,
+                executor=executor.id,
+                notes=notes or "",
+                admin_override=override,
+            )
+            log.debug(f"Schema: {pformat(schema)}", guild=guild)
+            return await api.transactions_trade_create(schema)
 
     async def validate_franchise_futures(
         self,
@@ -3139,15 +3074,12 @@ class TransactionMixIn(RSCMixIn):
         """Validate a franchise future board."""
         async with self.api_client(guild) as client:
             api = TransactionsApi(client)
-            try:
-                schema = FranchiseFuturesValidation(
-                    league=self._league[guild.id],
-                    franchise_name=franchise_name,
-                )
-                log.debug(f"Futures validation schema: {schema}", guild=guild)
-                return await api.transactions_trade_validate_futures_create(schema)
-            except ApiException as exc:
-                raise RscException(response=exc)
+            schema = FranchiseFuturesValidation(
+                league=self._league[guild.id],
+                franchise_name=franchise_name,
+            )
+            log.debug(f"Futures validation schema: {schema}", guild=guild)
+            return await api.transactions_trade_validate_futures_create(schema)
 
     async def draft(
         self,
@@ -3162,20 +3094,17 @@ class TransactionMixIn(RSCMixIn):
         """Fetch transaction history based on specified criteria"""
         async with self.api_client(guild) as client:
             api = TransactionsApi(client)
-            try:
-                draft_pick = DraftInput(
-                    league=self._league[guild.id],
-                    player=player.id,
-                    executor=executor.id,
-                    team=team,
-                    round=round,
-                    number=pick,
-                    admin_override=override,
-                )
-                log.debug(f"Draft Schema: {pformat(draft_pick)}", guild=guild)
-                return await api.transactions_draft_create(draft_pick)
-            except ApiException as exc:
-                raise RscException(response=exc)
+            draft_pick = DraftInput(
+                league=self._league[guild.id],
+                player=player.id,
+                executor=executor.id,
+                team=team,
+                round=round,
+                number=pick,
+                admin_override=override,
+            )
+            log.debug(f"Draft Schema: {pformat(draft_pick)}", guild=guild)
+            return await api.transactions_draft_create(draft_pick)
 
     # Config
 

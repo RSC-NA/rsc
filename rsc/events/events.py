@@ -9,7 +9,6 @@ import discord
 from discord.ext import tasks
 from redbot.core import app_commands
 from rscapi import IntegrationsApi
-from rscapi.exceptions import ApiException
 
 from rsc.abc import RSCMixIn
 from rsc.checks import bot_owner_required
@@ -847,19 +846,16 @@ class EventMixIn(RSCMixIn):
 
         async with self.api_client(guild) as client:
             api = IntegrationsApi(client)
-            try:
-                page = await api.integrations_events_list(
-                    ordering=ordering,
-                    id__gt=id__gt,
-                    limit=limit,
-                    is_public=is_public,
-                    league=league,
-                    guild_id=guild_id,
-                    include_global=global_scope,
-                    _request_timeout=API_TIMEOUT,
-                )
-            except ApiException as exc:
-                raise RscException(response=exc) from exc
+            page = await api.integrations_events_list(
+                ordering=ordering,
+                id__gt=id__gt,
+                limit=limit,
+                is_public=is_public,
+                league=league,
+                guild_id=guild_id,
+                include_global=global_scope,
+                _request_timeout=API_TIMEOUT,
+            )
 
         events = []
         for raw in page.results:
@@ -876,10 +872,7 @@ class EventMixIn(RSCMixIn):
         """Fetch a single league event by id."""
         async with self.api_client(guild) as client:
             api = IntegrationsApi(client)
-            try:
-                event = await api.integrations_events_retrieve(id=event_id, _request_timeout=API_TIMEOUT)
-            except ApiException as exc:
-                raise RscException(response=exc) from exc
+            event = await api.integrations_events_retrieve(id=event_id, _request_timeout=API_TIMEOUT)
         return LeagueEventData.from_api(event)
 
 

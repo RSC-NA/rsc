@@ -6,7 +6,6 @@ from collections.abc import AsyncIterator
 import discord
 from redbot.core import app_commands, commands
 from rscapi import ElevatedRolesApi, MembersApi
-from rscapi.exceptions import ApiException
 from rscapi.models.activity_request import ActivityRequest
 from rscapi.models.activity_check import ActivityCheck
 from rscapi.models.create_member_input import CreateMemberInput
@@ -43,7 +42,7 @@ from rsc.embeds import (
     YellowEmbed,
 )
 from rsc.enums import Platform, PlayerType, Referrer, RegionPreference, StaffPositions, Status
-from rsc.exceptions import DiscordNameTooLong, LeagueNotConfigured, RscException
+from rsc.exceptions import ConflictError, DiscordNameTooLong, LeagueNotConfigured, RscException, SignupsClosedError
 from rsc.franchises import FranchiseMixIn
 from rsc.logs import GuildLogAdapter
 from rsc.members.views.intent import IntentState, IntentToPlayView
@@ -155,12 +154,11 @@ class MemberMixIn(RSCMixIn):
                     description="League ID has not been configured for this guild.",
                 )
             )
+        except SignupsClosedError:
+            log.debug("No signup season currently open. Defaulting to current season.")
+            next_season = await self.current_season(guild)
         except RscException as exc:
-            if exc.type == "SignupsClosedException":
-                log.debug("No signup season currently open. Defaulting to current season.")
-                next_season = await self.current_season(guild)
-            else:
-                return await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc))
+            return await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc))
 
         if not next_season:
             return await interaction.followup.send(
@@ -258,12 +256,11 @@ class MemberMixIn(RSCMixIn):
                     description="League ID has not been configured for this guild.",
                 )
             )
+        except SignupsClosedError:
+            log.debug("No signup season currently open. Defaulting to current season.")
+            next_season = await self.current_season(guild)
         except RscException as exc:
-            if exc.type == "SignupsClosedException":
-                log.debug("No signup season currently open. Defaulting to current season.")
-                next_season = await self.current_season(guild)
-            else:
-                return await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc))
+            return await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc))
 
         if not next_season:
             return await interaction.followup.send(
@@ -349,12 +346,11 @@ class MemberMixIn(RSCMixIn):
                     description="League ID has not been configured for this guild.",
                 )
             )
+        except SignupsClosedError:
+            log.debug("No signup season currently open. Defaulting to current season.")
+            next_season = await self.current_season(guild)
         except RscException as exc:
-            if exc.type == "SignupsClosedException":
-                log.debug("No signup season currently open. Defaulting to current season.")
-                next_season = await self.current_season(guild)
-            else:
-                return await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc))
+            return await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc))
 
         log.debug(f"Next Season: {next_season}")
 
@@ -498,15 +494,15 @@ class MemberMixIn(RSCMixIn):
                 ),
                 ephemeral=True,
             )
+        except SignupsClosedError:
+            return await interaction.response.send_message(
+                embed=YellowEmbed(
+                    title="Signups Closed",
+                    description="Signups are not currently open for RSC. Please try again when the next season is accepting signups.",
+                ),
+                ephemeral=True,
+            )
         except RscException as exc:
-            if exc.type == "SignupsClosedException":
-                return await interaction.response.send_message(
-                    embed=YellowEmbed(
-                        title="Signups Closed",
-                        description="Signups are not currently open for RSC. Please try again when the next season is accepting signups.",
-                    ),
-                    ephemeral=True,
-                )
             return await interaction.response.send_message(embed=ApiExceptionErrorEmbed(exc), ephemeral=True)
 
         if not (signup_season and signup_season.id and signup_season.number):
@@ -640,8 +636,8 @@ class MemberMixIn(RSCMixIn):
             log.debug(f"Signup result: {result}")
         except RscException as exc:
             title = "RSC PermFA Sign-up" if permfa else "RSC Sign-up"
-            match exc.status:
-                case 409:
+            match exc:
+                case ConflictError():
                     view = AlreadySignedUpView(
                         AlreadySignedUp.PERMFA if permfa else AlreadySignedUp.SIGNUP,
                         interaction=reply,
@@ -649,15 +645,15 @@ class MemberMixIn(RSCMixIn):
                         on_intent=None if permfa else lambda i: self._intent_to_play_flow(i, guild, user),
                     )
                     return await reply.edit_original_response(view=view)
-                case 405:
+                case SignupsClosedError():
                     return await reply.edit_original_response(
-                        view=ResultView(title=title, description=exc.reason or "Request not allowed.", colour=discord.Colour.yellow())
+                        view=ResultView(title=title, description=exc.message or "Request not allowed.", colour=discord.Colour.yellow())
                     )
                 case _:
                     return await reply.edit_original_response(
                         view=ResultView(
                             title="API Error",
-                            description=exc.reason or "An unexpected error occurred.",
+                            description=exc.message or "An unexpected error occurred.",
                             colour=discord.Colour.red(),
                         )
                     )
@@ -877,21 +873,20 @@ class MemberMixIn(RSCMixIn):
                 returning=intent_view.result,
             )
             log.debug(f"Intent Result: {result}")
-        except RscException as exc:
-            if exc.status == 409:
-                await interaction.edit_original_response(
-                    view=ResultView(
-                        title="Intent to Play",
-                        description=exc.reason or "Conflict error.",
-                        colour=discord.Colour.yellow(),
-                    )
+        except ConflictError as exc:
+            await interaction.edit_original_response(
+                view=ResultView(
+                    title="Intent to Play",
+                    description=exc.message or "Conflict error.",
+                    colour=discord.Colour.yellow(),
                 )
-                return
-
+            )
+            return
+        except RscException as exc:
             await interaction.edit_original_response(
                 view=ResultView(
                     title="API Error",
-                    description=exc.reason or "An unexpected error occurred.",
+                    description=exc.message or "An unexpected error occurred.",
                     colour=discord.Colour.red(),
                 )
             )
@@ -997,17 +992,14 @@ class MemberMixIn(RSCMixIn):
         check_page_limit(limit, caller="members()")
         async with self.api_client(guild) as client:
             api = MembersApi(client)
-            try:
-                members = await api.members_list(
-                    rsc_name=rsc_name,
-                    discord_username=discord_username,
-                    discord_id=discord_id,
-                    limit=limit,
-                    offset=offset,
-                )
-                return members.results
-            except ApiException as exc:
-                raise RscException(exc)
+            members = await api.members_list(
+                rsc_name=rsc_name,
+                discord_username=discord_username,
+                discord_id=discord_id,
+                limit=limit,
+                offset=offset,
+            )
+            return members.results
 
     async def paged_members(
         self,
@@ -1021,16 +1013,13 @@ class MemberMixIn(RSCMixIn):
             api = MembersApi(client)
 
             async def fetch(limit: int, offset: int) -> PaginatedMemberList:
-                try:
-                    return await api.members_list(
-                        rsc_name=rsc_name,
-                        discord_username=discord_username,
-                        discord_id=discord_id,
-                        limit=limit,
-                        offset=offset,
-                    )
-                except ApiException as exc:
-                    raise RscException(exc)
+                return await api.members_list(
+                    rsc_name=rsc_name,
+                    discord_username=discord_username,
+                    discord_id=discord_id,
+                    limit=limit,
+                    offset=offset,
+                )
 
             async for member in iter_pages(fetch, per_page=per_page):
                 yield member
@@ -1050,14 +1039,11 @@ class MemberMixIn(RSCMixIn):
         """
         async with self.api_client(guild) as client:
             api = MembersApi(client)
-            try:
-                return await api.members_elevated_roles_list(
-                    member_id=discord_id,
-                    league=self._league[guild.id],
-                    position=position,
-                )
-            except ApiException as exc:
-                raise RscException(exc)
+            return await api.members_elevated_roles_list(
+                member_id=discord_id,
+                league=self._league[guild.id],
+                position=position,
+            )
 
     async def create_elevated_role(
         self,
@@ -1082,11 +1068,8 @@ class MemberMixIn(RSCMixIn):
 
         async with self.api_client(guild) as client:
             api = MembersApi(client)
-            try:
-                log.debug(f"Creating elevated role for {discord_id}: {data}", guild=guild)
-                result = await api.members_elevated_roles_create(member_id=discord_id, elevated_role_input=data)
-            except ApiException as exc:
-                raise RscException(exc)
+            log.debug(f"Creating elevated role for {discord_id}: {data}", guild=guild)
+            result = await api.members_elevated_roles_create(member_id=discord_id, elevated_role_input=data)
 
         self.invalidate_elevated_role_cache(guild, discord_id)
         return result
@@ -1099,11 +1082,8 @@ class MemberMixIn(RSCMixIn):
         """
         async with self.api_client(guild) as client:
             api = MembersApi(client)
-            try:
-                log.debug(f"Deleting elevated role {role_id} for {discord_id}", guild=guild)
-                await api.members_elevated_roles_destroy(member_id=discord_id, id=role_id)
-            except ApiException as exc:
-                raise RscException(exc)
+            log.debug(f"Deleting elevated role {role_id} for {discord_id}", guild=guild)
+            await api.members_elevated_roles_destroy(member_id=discord_id, id=role_id)
 
         self.invalidate_elevated_role_cache(guild, discord_id)
 
@@ -1123,14 +1103,11 @@ class MemberMixIn(RSCMixIn):
         """
         async with self.api_client(guild) as client:
             api = ElevatedRolesApi(client)
-            try:
-                roles = await api.elevated_roles_list(
-                    league=self._league[guild.id],
-                    position=position,
-                    limit=limit,
-                )
-            except ApiException as exc:
-                raise RscException(exc)
+            roles = await api.elevated_roles_list(
+                league=self._league[guild.id],
+                position=position,
+                limit=limit,
+            )
             return roles.results or []
 
     async def signup(
@@ -1163,11 +1140,8 @@ class MemberMixIn(RSCMixIn):
                 executor=executor.id if executor else None,
                 admin_override=override,
             )
-            try:
-                log.debug(f"Signup Data: {data}")
-                return await api.members_signup_create(member.id, data)
-            except ApiException as exc:
-                raise RscException(response=exc)
+            log.debug(f"Signup Data: {data}")
+            return await api.members_signup_create(member.id, data)
 
     async def create_member(
         self,
@@ -1183,10 +1157,7 @@ class MemberMixIn(RSCMixIn):
                 rsc_name=rsc_name or member.display_name,
             )
             log.debug(f"Member Creation Data: {data}")
-            try:
-                return await api.members_create(data)
-            except ApiException as exc:
-                raise RscException(response=exc)
+            return await api.members_create(data)
 
     async def delete_member(
         self,
@@ -1195,10 +1166,7 @@ class MemberMixIn(RSCMixIn):
     ):
         async with self.api_client(guild) as client:
             api = MembersApi(client)
-            try:
-                await api.members_destroy(member.id)
-            except ApiException as exc:
-                raise RscException(response=exc)
+            await api.members_destroy(member.id)
 
     async def change_member_name(
         self,
@@ -1210,20 +1178,17 @@ class MemberMixIn(RSCMixIn):
     ) -> Member:
         async with self.api_client(guild) as client:
             api = MembersApi(client)
-            try:
-                # `executor` is only sent when we know who ran the command. The
-                # API defaults it to the authenticated caller (the bot's own key),
-                # so passing an explicit null would discard that default rather
-                # than fall back to it.
-                data = PatchedMemberNameChangeRequest(
-                    name=name,
-                    admin_override=override,
-                    **({"executor": executor} if executor is not None else {}),
-                )
-                log.debug(f"NameChange Data. Name: {data.name} Override: {data.admin_override} Executor: {executor}")
-                return await api.members_name_change_partial_update(id, data)
-            except ApiException as exc:
-                raise RscException(response=exc)
+            # `executor` is only sent when we know who ran the command. The
+            # API defaults it to the authenticated caller (the bot's own key),
+            # so passing an explicit null would discard that default rather
+            # than fall back to it.
+            data = PatchedMemberNameChangeRequest(
+                name=name,
+                admin_override=override,
+                **({"executor": executor} if executor is not None else {}),
+            )
+            log.debug(f"NameChange Data. Name: {data.name} Override: {data.admin_override} Executor: {executor}")
+            return await api.members_name_change_partial_update(id, data)
 
     async def player_stats(
         self,
@@ -1234,18 +1199,15 @@ class MemberMixIn(RSCMixIn):
     ) -> PlayerSeasonStats:
         async with self.api_client(guild) as client:
             api = MembersApi(client)
-            try:
-                # `members_postseason_stats_retrieve` is deprecated in favour of
-                # the `stats_type` discriminator on the regular stats endpoint.
-                stats_type = StatsTypeEnum.PST if postseason else StatsTypeEnum.REG
-                return await api.members_stats_retrieve(
-                    player.id,
-                    self._league[guild.id],
-                    season_number=season,
-                    stats_type=stats_type.value,
-                )
-            except ApiException as exc:
-                raise RscException(response=exc)
+            # `members_postseason_stats_retrieve` is deprecated in favour of
+            # the `stats_type` discriminator on the regular stats endpoint.
+            stats_type = StatsTypeEnum.PST if postseason else StatsTypeEnum.REG
+            return await api.members_stats_retrieve(
+                player.id,
+                self._league[guild.id],
+                season_number=season,
+                stats_type=stats_type.value,
+            )
 
     async def declare_intent(
         self,
@@ -1263,12 +1225,9 @@ class MemberMixIn(RSCMixIn):
                 executor=executor.id if executor else None,
                 admin_override=admin_overrride,
             )
-            try:
-                member_id = member.id if isinstance(member, discord.Member) else member
-                log.debug(f"Intent Data ({member_id}): {data}")
-                return await api.members_intent_to_play_create(member_id, data)
-            except ApiException as exc:
-                raise RscException(response=exc)
+            member_id = member.id if isinstance(member, discord.Member) else member
+            log.debug(f"Intent Data ({member_id}): {data}")
+            return await api.members_intent_to_play_create(member_id, data)
 
     async def permfa_signup(
         self,
@@ -1300,11 +1259,8 @@ class MemberMixIn(RSCMixIn):
                 executor=executor.id if executor else None,
                 admin_override=override,
             )
-            try:
-                log.debug(f"PermFA Signup Data: {data}")
-                return await api.members_permfa_signup_create(member.id, data)
-            except ApiException as exc:
-                raise RscException(response=exc)
+            log.debug(f"PermFA Signup Data: {data}")
+            return await api.members_permfa_signup_create(member.id, data)
 
     async def activity_check(
         self,
@@ -1332,31 +1288,22 @@ class MemberMixIn(RSCMixIn):
                 executor=executor_id,
                 admin_override=override,
             )
-            try:
-                log.debug(f"[{player_id}] Activity Check: {data}")
-                return await api.members_activity_check_create(player_id, data)
-            except ApiException as exc:
-                raise RscException(response=exc)
+            log.debug(f"[{player_id}] Activity Check: {data}")
+            return await api.members_activity_check_create(player_id, data)
 
     async def transfer_membership(self, guild: discord.Guild, old: int, new: discord.Member) -> Member:
         async with self.api_client(guild) as client:
             api = MembersApi(client)
             data = MemberTransferRequest(new_account=new.id)
-            try:
-                log.debug(f"Transferring {old} membership to {new.id}", guild=guild)
-                return await api.members_transfer_account_create(id=old, member_transfer_request=data)
-            except ApiException as exc:
-                raise RscException(response=exc)
+            log.debug(f"Transferring {old} membership to {new.id}", guild=guild)
+            return await api.members_transfer_account_create(id=old, member_transfer_request=data)
 
     async def name_history(self, guild: discord.Guild, member: discord.Member, offset: int = 0, limit: int = 25) -> list[NameChangeHistory]:
         async with self.api_client(guild) as client:
             api = MembersApi(client)
-            try:
-                log.debug(f"Fetching name history for {member.id}", guild=guild)
-                history = await api.members_name_changes_list(member.id, offset=offset, limit=limit)
-                return history.results
-            except ApiException as exc:
-                raise RscException(response=exc)
+            log.debug(f"Fetching name history for {member.id}", guild=guild)
+            history = await api.members_name_changes_list(member.id, offset=offset, limit=limit)
+            return history.results
 
     async def make_league_player(
         self,
@@ -1380,14 +1327,11 @@ class MemberMixIn(RSCMixIn):
                 team_name=team_name,
                 contract_length=contract_length,
             )
-            try:
-                log.debug(
-                    f"Converting {member.display_name} ({member.id}) to league player.",
-                    guild=guild,
-                )
-                return await api.members_make_player_create(id=member.id, league_player_signup=data)
-            except ApiException as exc:
-                raise RscException(response=exc)
+            log.debug(
+                f"Converting {member.display_name} ({member.id}) to league player.",
+                guild=guild,
+            )
+            return await api.members_make_player_create(id=member.id, league_player_signup=data)
 
     async def drop_player_from_league(
         self,
@@ -1399,11 +1343,8 @@ class MemberMixIn(RSCMixIn):
             data = MemberLeagueDropRequest(
                 league=self._league[guild.id],
             )
-            try:
-                log.debug(
-                    f"Droppping {member.display_name} ({member.id}) from league {data}",
-                    guild=guild,
-                )
-                return await api.members_member_league_drop_create(id=member.id, member_league_drop_request=data)
-            except ApiException as exc:
-                raise RscException(response=exc)
+            log.debug(
+                f"Droppping {member.display_name} ({member.id}) from league {data}",
+                guild=guild,
+            )
+            return await api.members_member_league_drop_create(id=member.id, member_league_drop_request=data)

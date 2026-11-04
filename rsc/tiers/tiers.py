@@ -4,7 +4,6 @@ from typing import cast
 import discord
 from redbot.core import app_commands
 from rscapi import TiersApi
-from rscapi.exceptions import ApiException
 from rscapi.models.player_season_stats_in_depth import PlayerSeasonStatsInDepth
 from rscapi.models.tier import Tier
 from rscapi.models.tier_playoff_hunt import TierPlayoffHunt
@@ -14,7 +13,6 @@ from rscapi.models.team_standings import TeamStandings
 from rsc.abc import RSCMixIn
 from rsc.const import API_TIMEOUT
 from rsc.embeds import BlueEmbed, ErrorEmbed
-from rsc.exceptions import RscException
 from rsc.utils.cache import merge_name_cache
 
 log = logging.getLogger("red.rsc.tiers")
@@ -144,26 +142,20 @@ class TierMixIn(RSCMixIn):
         """Fetch a list of tiers"""
         async with self.api_client(guild) as client:
             api = TiersApi(client)
-            try:
-                standings: list[TeamStandings] = await api.tiers_standings_list(id=tier_id, season_number=season)
-                standings.sort(key=lambda t: (t.rank, t.team))
-                return standings
-            except ApiException as exc:
-                raise RscException(response=exc)
+            standings: list[TeamStandings] = await api.tiers_standings_list(id=tier_id, season_number=season)
+            standings.sort(key=lambda t: (t.rank, t.team))
+            return standings
 
     async def tier_playoff_hunt(self, guild: discord.Guild, tier_id: int, season: int | None = None) -> TierPlayoffHunt:
         """The tier's playoff hunt: each playoff group's teams in standings order, with the cut line."""
         async with self.api_client(guild) as client:
             api = TiersApi(client)
-            try:
-                return await api.tiers_playoffs_retrieve(
-                    id=tier_id,
-                    league=self._league[guild.id],
-                    season_number=season,
-                    _request_timeout=API_TIMEOUT,
-                )
-            except ApiException as exc:
-                raise RscException(response=exc)
+            return await api.tiers_playoffs_retrieve(
+                id=tier_id,
+                league=self._league[guild.id],
+                season_number=season,
+                _request_timeout=API_TIMEOUT,
+            )
 
     async def tier_player_stats(
         self,
@@ -178,15 +170,12 @@ class TierMixIn(RSCMixIn):
         """
         async with self.api_client(guild) as client:
             api = TiersApi(client)
-            try:
-                return await api.tiers_player_stats_list(
-                    id=tier_id,
-                    league=self._league[guild.id],
-                    season_number=season,
-                    _request_timeout=API_TIMEOUT,
-                )
-            except ApiException as exc:
-                raise RscException(response=exc)
+            return await api.tiers_player_stats_list(
+                id=tier_id,
+                league=self._league[guild.id],
+                season_number=season,
+                _request_timeout=API_TIMEOUT,
+            )
 
     async def tier_team_stats(
         self,
@@ -197,30 +186,21 @@ class TierMixIn(RSCMixIn):
         """Season stats for every team in a tier, in a single request."""
         async with self.api_client(guild) as client:
             api = TiersApi(client)
-            try:
-                return await api.tiers_team_stats_list(
-                    id=tier_id,
-                    league=self._league[guild.id],
-                    season_number=season,
-                    _request_timeout=API_TIMEOUT,
-                )
-            except ApiException as exc:
-                raise RscException(response=exc)
+            return await api.tiers_team_stats_list(
+                id=tier_id,
+                league=self._league[guild.id],
+                season_number=season,
+                _request_timeout=API_TIMEOUT,
+            )
 
     async def create_tier(self, guild: discord.Guild, name: str, color: int, position: int) -> Tier:
         async with self.api_client(guild) as client:
             api = TiersApi(client)
             data = cast("Tier", {"name": name, "color": color, "position": position})
             log.debug(f"Create Tier Data: {data}")
-            try:
-                return await api.tiers_create(data)
-            except ApiException as exc:
-                raise RscException(response=exc)
+            return await api.tiers_create(data)
 
     async def delete_tier(self, guild: discord.Guild, id: int) -> None:
         async with self.api_client(guild) as client:
             api = TiersApi(client)
-            try:
-                return await api.tiers_destroy(id)
-            except ApiException as exc:
-                raise RscException(response=exc)
+            return await api.tiers_destroy(id)

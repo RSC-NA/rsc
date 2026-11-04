@@ -98,7 +98,7 @@ async def _dispatch(ctx: AgentContext, call: ResponseFunctionToolCall) -> str:
         else:
             result = await run()
     except RscException as exc:
-        reason = exc.reason or exc.message or "request failed"
+        reason = exc.message or "request failed"
         log.warning(f"Tool {name} API error: {reason}", guild=ctx.guild)
         return f"ERROR: RSC API - {reason}"
     except TimeoutError:

@@ -9,10 +9,9 @@ import discord
 import pytest
 from discord import ui
 from PIL import Image
-from rscapi.exceptions import ApiException
 from rscapi.models.tier_playoff_hunt import TierPlayoffHunt
+from tests.utils import api_error
 
-from rsc.exceptions import RscException
 from rsc.stats import graphic
 from rsc.stats.graphic import GraphicCache, pill, race_graphics, render_graphics
 from rsc.stats.playoffs import RaceStatus, RaceTeam, build_races, is_eliminated, race_statuses
@@ -613,7 +612,7 @@ class TestPlayoffsCommandTier:
 
     async def test_player_lookup_api_error_is_reported(self):
         cog = _cmd_cog()
-        cog.players.side_effect = RscException(ApiException(status=500, reason="Server Error"))
+        cog.players.side_effect = api_error(500, "Server Error")
         interaction = _interaction()
 
         await playoffs_cmd(cog, interaction)

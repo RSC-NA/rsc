@@ -5,7 +5,6 @@ from typing import cast
 import discord
 from redbot.core import app_commands
 from rscapi import NumbersApi
-from rscapi.exceptions import ApiException
 from rscapi.models.paginated_player_mmr_list import PaginatedPlayerMMRList
 from rscapi.models.player_mmr import PlayerMMR
 
@@ -260,21 +259,18 @@ class NumberMixIn(RSCMixIn):
             api = NumbersApi(client)
 
             async def fetch(limit: int, offset: int) -> PaginatedPlayerMMRList:
-                try:
-                    return await api.numbers_mmr_list(
-                        pulled=pulled,
-                        pulled_before=pulled_before.isoformat() if pulled_before else None,
-                        pulled_after=pulled_after.isoformat() if pulled_after else None,
-                        discord_id=player.id if player else None,
-                        rscid=rscid,
-                        rscid_begin=rscid_begin,
-                        rscid_end=rscid_end,
-                        psyonix_season=psyonix_season,
-                        limit=limit,
-                        offset=offset,
-                    )
-                except ApiException as exc:
-                    raise RscException(response=exc)
+                return await api.numbers_mmr_list(
+                    pulled=pulled,
+                    pulled_before=pulled_before.isoformat() if pulled_before else None,
+                    pulled_after=pulled_after.isoformat() if pulled_after else None,
+                    discord_id=player.id if player else None,
+                    rscid=rscid,
+                    rscid_begin=rscid_begin,
+                    rscid_end=rscid_end,
+                    psyonix_season=psyonix_season,
+                    limit=limit,
+                    offset=offset,
+                )
 
             return [pull async for pull in iter_pages(fetch)]
 

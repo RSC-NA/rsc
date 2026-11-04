@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock, MagicMock, patch, PropertyMock
 
 import discord
 import pytest
-from rscapi.exceptions import ApiException
+from tests.utils import api_exception
 
 from rsc.enums import MatchFormat, MatchTeamEnum, MatchType, Status
 from rsc.exceptions import RscException
@@ -389,7 +389,7 @@ class TestMatchesApi:
 
         with patch("rsc.abc.ApiClient") as mock_client:
             mock_api = AsyncMock()
-            mock_api.matches_list.side_effect = ApiException(status=500, reason="Error")
+            mock_api.matches_list.side_effect = api_exception(500, "Error")
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
             with patch("rsc.matches.matches.MatchesApi", return_value=mock_api), pytest.raises(RscException):
@@ -416,7 +416,7 @@ class TestMatchByDayApi:
 
         with patch("rsc.abc.ApiClient") as mock_client:
             mock_api = AsyncMock()
-            mock_api.teams_match_retrieve.side_effect = ApiException(status=404, reason="Not Found")
+            mock_api.teams_match_retrieve.side_effect = api_exception(404, "Not Found")
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
             with patch("rsc.matches.matches.TeamsApi", return_value=mock_api), pytest.raises(RscException):
@@ -487,7 +487,7 @@ class TestReportMatchApi:
 
         with patch("rsc.abc.ApiClient") as mock_client:
             mock_api = AsyncMock()
-            mock_api.matches_score_report_create.side_effect = ApiException(status=400, reason="Bad")
+            mock_api.matches_score_report_create.side_effect = api_exception(400, "Bad")
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
             with patch("rsc.matches.matches.MatchesApi", return_value=mock_api), pytest.raises(RscException):
@@ -544,7 +544,7 @@ class TestMatchResultsApi:
 
         with patch("rsc.abc.ApiClient") as mock_client:
             mock_api = AsyncMock()
-            mock_api.matches_results_retrieve.side_effect = ApiException(status=500, reason="Error")
+            mock_api.matches_results_retrieve.side_effect = api_exception(500, "Error")
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
             with patch("rsc.matches.matches.MatchesApi", return_value=mock_api), pytest.raises(RscException):

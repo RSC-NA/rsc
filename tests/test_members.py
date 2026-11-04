@@ -4,7 +4,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import discord
 import pytest
-from rscapi.exceptions import ApiException
 from rscapi.models.member import Member
 
 from rsc.enums import Platform, PlayerType, Referrer, RegionPreference, StaffPositions, Status
@@ -23,7 +22,7 @@ from rsc.members.views.signup import (
     SignupSuccessView,
 )
 
-from .utils import command_callback
+from .utils import api_error, api_exception, command_callback
 
 GUILD_ID = 395806681994493964
 
@@ -107,7 +106,7 @@ class TestMembersApi:
 
         with patch("rsc.abc.ApiClient") as mock_client:
             mock_api = AsyncMock()
-            mock_api.members_list.side_effect = ApiException(status=500, reason="Error")
+            mock_api.members_list.side_effect = api_exception(500, "Error")
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
             with patch("rsc.members.members.MembersApi", return_value=mock_api), pytest.raises(RscException):
@@ -152,7 +151,7 @@ class TestSignupApi:
 
         with patch("rsc.abc.ApiClient") as mock_client:
             mock_api = AsyncMock()
-            mock_api.members_signup_create.side_effect = ApiException(status=400, reason="Bad")
+            mock_api.members_signup_create.side_effect = api_exception(400, "Bad")
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
             with patch("rsc.members.members.MembersApi", return_value=mock_api), pytest.raises(RscException):
@@ -191,7 +190,7 @@ class TestCreateMemberApi:
 
         with patch("rsc.abc.ApiClient") as mock_client:
             mock_api = AsyncMock()
-            mock_api.members_create.side_effect = ApiException(status=400, reason="Bad")
+            mock_api.members_create.side_effect = api_exception(400, "Bad")
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
             with patch("rsc.members.members.MembersApi", return_value=mock_api), pytest.raises(RscException):
@@ -220,7 +219,7 @@ class TestDeleteMemberApi:
 
         with patch("rsc.abc.ApiClient") as mock_client:
             mock_api = AsyncMock()
-            mock_api.members_destroy.side_effect = ApiException(status=404, reason="Not Found")
+            mock_api.members_destroy.side_effect = api_exception(404, "Not Found")
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
             with patch("rsc.members.members.MembersApi", return_value=mock_api), pytest.raises(RscException):
@@ -250,7 +249,7 @@ class TestChangeMemberNameApi:
 
         with patch("rsc.abc.ApiClient") as mock_client:
             mock_api = AsyncMock()
-            mock_api.members_name_change_partial_update.side_effect = ApiException(status=400, reason="Bad")
+            mock_api.members_name_change_partial_update.side_effect = api_exception(400, "Bad")
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
             with patch("rsc.members.members.MembersApi", return_value=mock_api), pytest.raises(RscException):
@@ -478,7 +477,7 @@ class TestMakeLeaguePlayerApi:
 
         with patch("rsc.abc.ApiClient") as mock_client:
             mock_api = AsyncMock()
-            mock_api.members_make_player_create.side_effect = ApiException(status=400, reason="Bad")
+            mock_api.members_make_player_create.side_effect = api_exception(400, "Bad")
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
             with patch("rsc.members.members.MembersApi", return_value=mock_api), pytest.raises(RscException):
@@ -521,7 +520,7 @@ class TestDropPlayerFromLeagueApi:
 
         with patch("rsc.abc.ApiClient") as mock_client:
             mock_api = AsyncMock()
-            mock_api.members_member_league_drop_create.side_effect = ApiException(status=400, reason="Bad")
+            mock_api.members_member_league_drop_create.side_effect = api_exception(400, "Bad")
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
             with patch("rsc.members.members.MembersApi", return_value=mock_api), pytest.raises(RscException):
@@ -573,7 +572,7 @@ class TestMemberElevatedRolesApi:
 
         with patch("rsc.abc.ApiClient") as mock_client:
             mock_api = AsyncMock()
-            mock_api.members_elevated_roles_list.side_effect = ApiException(status=500, reason="Error")
+            mock_api.members_elevated_roles_list.side_effect = api_exception(500, "Error")
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
             with patch("rsc.members.members.MembersApi", return_value=mock_api), pytest.raises(RscException):
@@ -682,7 +681,7 @@ class TestCreateElevatedRoleApi:
 
         with patch("rsc.abc.ApiClient") as mock_client:
             mock_api = AsyncMock()
-            mock_api.members_elevated_roles_create.side_effect = ApiException(status=403, reason="Forbidden")
+            mock_api.members_elevated_roles_create.side_effect = api_exception(403, "Forbidden")
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
             with patch("rsc.members.members.MembersApi", return_value=mock_api), pytest.raises(RscException):
@@ -724,7 +723,7 @@ class TestDeleteElevatedRoleApi:
 
         with patch("rsc.abc.ApiClient") as mock_client:
             mock_api = AsyncMock()
-            mock_api.members_elevated_roles_destroy.side_effect = ApiException(status=404, reason="Not Found")
+            mock_api.members_elevated_roles_destroy.side_effect = api_exception(404, "Not Found")
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
             with patch("rsc.members.members.MembersApi", return_value=mock_api), pytest.raises(RscException):
@@ -850,7 +849,7 @@ class TestSignupFlow:
         assert kwargs["attachments"] == []
 
     async def test_duplicate_shows_already_signed_up(self, mock_guild, mock_member):
-        mixin = _signup_mixin(signup=AsyncMock(side_effect=RscException(response=ApiException(status=409, reason="Conflict"))))
+        mixin = _signup_mixin(signup=AsyncMock(side_effect=api_error(409, "Conflict")))
         flow = _flow_mock(SignupKind.FREE_AGENT)
         await _run_flow(mixin, mock_guild, mock_member, flow)
         view = flow.submit_interaction.edit_original_response.await_args.kwargs["view"]
@@ -903,7 +902,7 @@ class TestSignupPrefill:
         mixin.create_member.assert_awaited_once()
 
     async def test_lookup_errors_leave_the_form_empty(self, mock_guild, mock_member):
-        error = RscException(response=ApiException(status=500, reason="Down"))
+        error = api_error(500, "Down")
         mixin = _signup_mixin(trackers=AsyncMock(side_effect=error))
         prefill = await mixin._signup_prefill(mock_guild, mock_member, None, looked_up=True)
         assert prefill.trackers == ()
@@ -931,7 +930,7 @@ class TestPermFAPrecheck:
         assert await self._run(mock_guild, mock_member, Status.DROPPED) is None
 
     async def test_lookup_error_falls_through_to_the_form(self, mock_guild, mock_member):
-        mixin = _signup_mixin(members=AsyncMock(side_effect=RscException(response=ApiException(status=500, reason="Down"))))
+        mixin = _signup_mixin(members=AsyncMock(side_effect=api_error(500, "Down")))
         assert await mixin._permfa_precheck(mock_guild, mock_member) == (None, None)
 
 

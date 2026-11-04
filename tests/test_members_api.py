@@ -7,7 +7,7 @@ import discord
 
 from rsc.core import RSC
 from rsc.enums import Platform, PlayerType, Referrer, RegionPreference, StaffPositions
-from rsc.exceptions import RscException
+from rsc.exceptions import ApiError, RscException
 from rscapi import ApiClient, ElevatedRolesApi, MembersApi
 
 from .utils import random_string
@@ -140,7 +140,7 @@ class TestMembersApiCalls:
         if not franchises:
             pytest.skip("No franchises on the API")
 
-        with pytest.raises(RscException) as exc:
+        with pytest.raises(ApiError) as exc:
             assert franchises[0].id is not None
             await rsc_bot.remove_agm(mock_guild, franchises[0].id, agm=mock_member, executor=mock_member)
         assert exc.value.status in (403, 404), f"Unexpected status for a non-AGM removal: {exc.value.status}"
@@ -196,9 +196,9 @@ class TestMembersApiCalls:
             result = await rsc_bot.change_member_name(guild=mock_guild, id=member.discord_id, name=new_name, override=True)
             assert result is not None
             print(f"✓ change_member_name() succeeded for member {member.discord_id}")
-        except RscException as e:
+        except ApiError as e:
             # Some name changes may fail due to business rules
-            print(f"✓ change_member_name() handled business rule: {e.reason}")
+            print(f"✓ change_member_name() handled business rule: {e.message}")
 
     @pytest.mark.asyncio
     async def test_player_stats_api_call(self, rsc_bot: RSC, mock_guild):
@@ -216,7 +216,7 @@ class TestMembersApiCalls:
             result = await rsc_bot.player_stats(guild=mock_guild, player=mock_player)
             assert result is not None
             print(f"✓ player_stats() succeeded for player {member.discord_id}")
-        except RscException as e:
+        except ApiError as e:
             # Player may not have stats
             if e.status == 404:
                 print("✓ player_stats() correctly handled player with no stats (404)")
@@ -250,9 +250,9 @@ class TestMembersApiCalls:
                 new=mock_member,
             )
             print("✓ transfer_membership() succeeded unexpectedly")
-        except RscException as e:
+        except ApiError as e:
             # Expected to fail for non-existent members or other business rules
-            print(f"✓ transfer_membership() correctly handled business rule: {e.reason}")
+            print(f"✓ transfer_membership() correctly handled business rule: {e.message}")
 
     @pytest.mark.asyncio
     async def test_delete_member_api_call(self, rsc_bot: RSC, mock_guild, generated_discord_member):
@@ -262,12 +262,12 @@ class TestMembersApiCalls:
             await rsc_bot.create_member(guild=mock_guild, member=generated_discord_member, rsc_name="Temp Player")
             await rsc_bot.delete_member(guild=mock_guild, member=generated_discord_member)
             print("✓ delete_member() succeeded")
-        except RscException as e:
+        except ApiError as e:
             # Expected to fail for non-existent members
             if e.status == 404:
                 print("✓ delete_member() correctly handled non-existent member (404)")
             else:
-                print(f"✓ delete_member() handled business rule: {e.reason}")
+                print(f"✓ delete_member() handled business rule: {e.message}")
 
 
 class TestMembersApiDataStructures:
@@ -320,10 +320,10 @@ class TestMembersApiBusinessLogic:
                 accepted_match_nights=True,
             )
             print(f"✓ signup() succeeded for member {generated_discord_member.id}")
-        except RscException as e:
+        except ApiError as e:
             # Expected scenarios: already signed up, season not open, etc.
             if e.status in [409, 405]:
-                print(f"✓ signup() correctly handled business rule (status {e.status}): {e.reason}")
+                print(f"✓ signup() correctly handled business rule (status {e.status}): {e.message}")
             else:
                 raise
 
@@ -345,10 +345,10 @@ class TestMembersApiBusinessLogic:
                 accepted_match_nights=True,
             )
             print(f"✓ permfa_signup() succeeded for member {generated_discord_member.id}")
-        except RscException as e:
+        except ApiError as e:
             # Expected scenarios: already signed up, etc.
             if e.status in [409, 405]:
-                print(f"✓ permfa_signup() correctly handled business rule (status {e.status}): {e.reason}")
+                print(f"✓ permfa_signup() correctly handled business rule (status {e.status}): {e.message}")
             else:
                 raise
 
@@ -362,10 +362,10 @@ class TestMembersApiBusinessLogic:
 
             await rsc_bot.declare_intent(guild=mock_guild, member=mock_member, returning=True)
             print(f"✓ declare_intent() succeeded for member {mock_member.id}")
-        except RscException as e:
+        except ApiError as e:
             # Expected scenarios: not eligible, already declared, etc.
             if e.status in [409, 404, 405]:
-                print(f"✓ declare_intent() correctly handled business rule (status {e.status}): {e.reason}")
+                print(f"✓ declare_intent() correctly handled business rule (status {e.status}): {e.message}")
             else:
                 raise
 

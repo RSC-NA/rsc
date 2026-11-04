@@ -8,7 +8,7 @@ from rsc.admin.modals import AgmMessageModal
 from rsc.const import MODAL_TIMEOUT
 from rsc.embeds import ApiExceptionErrorEmbed, BlueEmbed, ErrorEmbed
 from rsc.enums import Status
-from rsc.exceptions import RscException
+from rsc.exceptions import NotFoundError, RscException
 from rsc.franchises import FranchiseMixIn
 from rsc.logs import GuildLogAdapter
 from rsc.transactions.roles import update_league_player_discord
@@ -251,13 +251,10 @@ class AdminAGMMixIn(AdminMixIn):
             try:
                 await self.remove_agm(guild, fdata.id, agm=agm, executor=interaction.user)
                 deleted = 1
+            except NotFoundError:
+                log.warning(f"AGM record for {agm.id} on franchise {fdata.id} was already removed.", guild=guild)
             except RscException as exc:
-                # Already gone is the outcome we wanted. Anything else aborts
-                # before Discord is touched so the two stay consistent.
-                if exc.status == 404:
-                    log.warning(f"AGM record for {agm.id} on franchise {fdata.id} was already removed.", guild=guild)
-                else:
-                    return await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc), ephemeral=True)
+                return await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc), ephemeral=True)
 
         # Reconcile the rest of their discord state against the API, which now
         # has no AGM record for them. Removing only the AGM role would leave a

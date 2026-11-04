@@ -5,7 +5,7 @@ from typing import cast
 import discord
 from redbot.core import app_commands
 from rscapi import TeamsApi
-from rscapi.exceptions import ApiException, BadRequestException, NotFoundException
+from rscapi.exceptions import NotFoundException
 from rscapi.models.high_level_match import HighLevelMatch
 from rscapi.models.league_player import LeaguePlayer
 from rscapi.models.match import Match
@@ -593,30 +593,27 @@ class TeamMixIn(RSCMixIn):
         full_refresh = not any((season_numbers, franchise, name, tier))
 
         async with self.api_client(guild) as client:
-            try:
-                api = TeamsApi(client)
-                teams = await api.teams_list(
-                    seasons=season_numbers,
-                    franchise=franchise,
-                    name=name,
-                    tier=tier,
-                    league=self._league[guild.id],
-                    _request_timeout=API_TIMEOUT,
-                )
-                # Populate cache
-                if teams:
-                    if not all(t.name for t in teams):
-                        raise AttributeError("API returned a team with no name.")
+            api = TeamsApi(client)
+            teams = await api.teams_list(
+                seasons=season_numbers,
+                franchise=franchise,
+                name=name,
+                tier=tier,
+                league=self._league[guild.id],
+                _request_timeout=API_TIMEOUT,
+            )
+            # Populate cache
+            if teams:
+                if not all(t.name for t in teams):
+                    raise AttributeError("API returned a team with no name.")
 
-                    cached = self._team_cache.get(guild.id, [])
-                    merged = merge_name_cache(cached, (t.name for t in teams if t.name), full_refresh=full_refresh)
-                    merged.sort()
-                    if merged != cached:
-                        log.debug(f"[{guild.name}] Team cache now holds {len(merged)} teams")
-                    self._team_cache[guild.id] = merged
-                return teams
-            except ApiException as exc:
-                raise RscException(exc)
+                cached = self._team_cache.get(guild.id, [])
+                merged = merge_name_cache(cached, (t.name for t in teams if t.name), full_refresh=full_refresh)
+                merged.sort()
+                if merged != cached:
+                    log.debug(f"[{guild.name}] Team cache now holds {len(merged)} teams")
+                self._team_cache[guild.id] = merged
+            return teams
 
     async def team_by_id(
         self,
@@ -625,11 +622,8 @@ class TeamMixIn(RSCMixIn):
     ) -> TeamDetail:
         """Fetch team data by id"""
         async with self.api_client(guild) as client:
-            try:
-                api = TeamsApi(client)
-                return await api.teams_retrieve(id)
-            except ApiException as exc:
-                raise RscException(exc)
+            api = TeamsApi(client)
+            return await api.teams_retrieve(id)
 
     async def team_players(
         self,
@@ -638,11 +632,8 @@ class TeamMixIn(RSCMixIn):
     ) -> list[TeamPlayer]:
         """Fetch team data by id"""
         async with self.api_client(guild) as client:
-            try:
-                api = TeamsApi(client)
-                return await api.teams_players_list(id)
-            except ApiException as exc:
-                raise RscException(exc)
+            api = TeamsApi(client)
+            return await api.teams_players_list(id)
 
     async def next_match(
         self,
@@ -655,8 +646,6 @@ class TeamMixIn(RSCMixIn):
                 return await api.teams_next_match_retrieve(id)
             except NotFoundException:
                 return None
-            except ApiException as exc:
-                raise RscException(exc)
 
     async def pending_series(
         self,
@@ -671,8 +660,6 @@ class TeamMixIn(RSCMixIn):
                 return await api.teams_pending_series_retrieve(id)
             except NotFoundException:
                 return None
-            except ApiException as exc:
-                raise RscException(exc)
 
     async def season_matches(
         self,
@@ -682,13 +669,10 @@ class TeamMixIn(RSCMixIn):
         preseason: bool = False,
     ) -> list[HighLevelMatch]:
         async with self.api_client(guild) as client:
-            try:
-                api = TeamsApi(client)
-                matches = await api.teams_season_matches_list(id, preseason=preseason, season_number=season)
-                matches.sort(key=lambda x: cast("int", x.day))
-                return matches
-            except ApiException as exc:
-                raise RscException(exc)
+            api = TeamsApi(client)
+            matches = await api.teams_season_matches_list(id, preseason=preseason, season_number=season)
+            matches.sort(key=lambda x: cast("int", x.day))
+            return matches
 
     async def team_stats(
         self,
@@ -696,13 +680,10 @@ class TeamMixIn(RSCMixIn):
         team_id: int,
         season: int | None = None,
     ) -> TeamSeasonStats:
-        try:
-            async with self.api_client(guild) as client:
-                api = TeamsApi(client)
-                stats = await api.teams_stats_retrieve(team_id, season_number=season)
-                return stats
-        except ApiException as exc:
-            raise RscException(exc)
+        async with self.api_client(guild) as client:
+            api = TeamsApi(client)
+            stats = await api.teams_stats_retrieve(team_id, season_number=season)
+            return stats
 
     async def create_team(
         self,
@@ -711,28 +692,21 @@ class TeamMixIn(RSCMixIn):
         franchise: str,
         tier: str,
     ) -> TeamCreate:
-        try:
-            async with self.api_client(guild) as client:
-                api = TeamsApi(client)
-                data = cast(
-                    "TeamCreate",
-                    {
-                        "name": name,
-                        "franchise": {"name": franchise},
-                        "tier": {"name": tier},
-                        "league": self._league[guild.id],
-                    },
-                )
-                result = await api.teams_create(data)
-                return result
-        except (ApiException, BadRequestException) as exc:
-            log.debug(f"Exception during team creation: {type(exc)}")
-            raise RscException(exc)
+        async with self.api_client(guild) as client:
+            api = TeamsApi(client)
+            data = cast(
+                "TeamCreate",
+                {
+                    "name": name,
+                    "franchise": {"name": franchise},
+                    "tier": {"name": tier},
+                    "league": self._league[guild.id],
+                },
+            )
+            result = await api.teams_create(data)
+            return result
 
     async def delete_team(self, guild: discord.Guild, team_id: int):
-        try:
-            async with self.api_client(guild) as client:
-                api = TeamsApi(client)
-                await api.teams_destroy(team_id)
-        except (ApiException, BadRequestException) as exc:
-            raise RscException(exc)
+        async with self.api_client(guild) as client:
+            api = TeamsApi(client)
+            await api.teams_destroy(team_id)

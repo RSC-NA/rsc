@@ -14,6 +14,7 @@ from discord.ext.commands import CogMeta as DPYCogMeta
 from redbot.core import Config as RedConfig
 from redbot.core.bot import Red
 from rscapi import ApiClient, Configuration as ApiConfig
+from rscapi.exceptions import ApiException
 from rscapi.models.activity_check import ActivityCheck
 from rscapi.models.deleted import Deleted
 from rscapi.models.elevated_role import ElevatedRole
@@ -62,6 +63,7 @@ from rsc.enums import (
     TransactionType,
 )
 from rsc.pagination import API_MAX_PAGE_SIZE
+from rsc.exceptions import ApiError
 
 if TYPE_CHECKING:
     from rsc.combines.models import CombinesLobby
@@ -114,6 +116,9 @@ class RSCMixIn(ABC):
         `ApiClient.close()`, so the previous `async with ApiClient(...)` pattern
         paid a fresh TCP + TLS handshake on every single call. The session is
         safe for concurrent use and is torn down by `close_api_clients()`.
+
+        Every `ApiException` raised inside the block leaves it as an `ApiError`,
+        so this is the one place the API's error responses are parsed.
         """
         # Lazily initialized: a mixin used standalone has not run RSC.__init__.
         cache = getattr(self, "_api_clients", None)
@@ -124,7 +129,10 @@ class RSCMixIn(ABC):
         if client is None:
             client = ApiClient(self._api_conf[guild.id])
             cache[guild.id] = client
-        yield client
+        try:
+            yield client
+        except ApiException as exc:
+            raise ApiError.from_exception(exc) from exc
 
     async def close_api_clients(self):
         """Close every long lived API client and drop them from the cache."""

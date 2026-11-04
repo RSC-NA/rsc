@@ -349,7 +349,7 @@ class AdminMatchMixIn(AdminMixIn):
             )
         except RscException as exc:
             # The prompt is a Components V2 message, which can't carry an embed.
-            reason = exc.reason or exc.message or "The API rejected the corrected score."
+            reason = exc.message or "The API rejected the corrected score."
             return await interaction.edit_original_response(view=state_view("The API refused the fix", reason, discord.Colour.red()))
 
         outcome = await self._bracket_after_fix(guild, meeting, change) if isinstance(change, NewWinner) else change
@@ -460,5 +460,5 @@ class AdminMatchMixIn(AdminMixIn):
                 return Moved(nxt)
             pending = await self.pending_series(guild, winner.id) if winner.id is not None else None
         except RscException as exc:
-            return Unchecked(change.next_round, exc.reason or exc.message or "the API did not answer.")
+            return Unchecked(change.next_round, exc.message or "the API did not answer.")
         return Waiting(winner, pending) if pending else NotMoved(change)

@@ -4,7 +4,6 @@ from operator import attrgetter
 
 import discord
 from rscapi import SeasonsApi
-from rscapi.exceptions import ApiException
 from rscapi.models import ActivityCheck
 from rscapi.models.franchise_standings import FranchiseStandings
 from rscapi.models.intent_to_play import IntentToPlay
@@ -37,7 +36,7 @@ class SeasonsMixIn(RSCMixIn):
         try:
             seasons = await self.seasons(guild)
         except RscException as exc:
-            log.warning(f"[{guild.name}] Unable to cache seasons: {exc.reason or exc}")
+            log.warning(f"[{guild.name}] Unable to cache seasons: {exc.message or exc}")
             return
         self._season_cache[guild.id] = {s.number: s.id for s in seasons if s.number is not None and s.id is not None}
 
@@ -87,31 +86,22 @@ class SeasonsMixIn(RSCMixIn):
         async with self.api_client(guild) as client:
             api = SeasonsApi(client)
             league_id = self._league[guild.id]
-            try:
-                season_list = await api.seasons_list(league=league_id, number=number, current=current)
-                return season_list
-            except ApiException as exc:
-                raise RscException(response=exc)
+            season_list = await api.seasons_list(league=league_id, number=number, current=current)
+            return season_list
 
     async def season_by_id(self, guild: discord.Guild, season_id: int) -> Season:
         async with self.api_client(guild) as client:
             api = SeasonsApi(client)
-            try:
-                return await api.seasons_retrieve(season_id)
-            except ApiException as exc:
-                raise RscException(response=exc)
+            return await api.seasons_retrieve(season_id)
 
     async def next_signup_season(self, guild: discord.Guild) -> Season | None:
         """Query to API to find out if signups are open for any season"""
         async with self.api_client(guild) as client:
             api = SeasonsApi(client)
             league_id = self._league[guild.id]
-            try:
-                signup_season = await api.seasons_signup_season_retrieve(league=league_id)
-                log.debug("Signup Season Number: %d", signup_season.number if signup_season else None)
-                return signup_season
-            except ApiException as exc:
-                raise RscException(response=exc)
+            signup_season = await api.seasons_signup_season_retrieve(league=league_id)
+            log.debug("Signup Season Number: %d", signup_season.number if signup_season else None)
+            return signup_season
 
     async def player_intents(
         self,
@@ -123,25 +113,19 @@ class SeasonsMixIn(RSCMixIn):
     ) -> list[IntentToPlay]:
         async with self.api_client(guild) as client:
             api = SeasonsApi(client)
-            try:
-                discord_id = player.id if player else None
-                log.debug(f"Season Intent Data. Season: {season_id} Discord: {discord_id} Returning: {returning} Missing: {missing}")
-                return await api.seasons_player_intents_list(
-                    season_id,
-                    discord_id=discord_id,
-                    returning=returning,
-                    missing=missing,
-                )
-            except ApiException as exc:
-                raise RscException(response=exc)
+            discord_id = player.id if player else None
+            log.debug(f"Season Intent Data. Season: {season_id} Discord: {discord_id} Returning: {returning} Missing: {missing}")
+            return await api.seasons_player_intents_list(
+                season_id,
+                discord_id=discord_id,
+                returning=returning,
+                missing=missing,
+            )
 
     async def franchise_standings(self, guild: discord.Guild, season_id: int) -> list[FranchiseStandings]:
         async with self.api_client(guild) as client:
             api = SeasonsApi(client)
-            try:
-                return await api.seasons_franchise_standings_list(season_id)
-            except ApiException as exc:
-                raise RscException(response=exc)
+            return await api.seasons_franchise_standings_list(season_id)
 
     async def season_activity_checks(
         self,
@@ -158,20 +142,17 @@ class SeasonsMixIn(RSCMixIn):
         check_page_limit(limit, caller="season_activity_checks()")
         async with self.api_client(guild) as client:
             api = SeasonsApi(client)
-            try:
-                resp = await api.seasons_activity_check_list(
-                    season=season_id,
-                    season_number=season_number,
-                    discord_id=discord_id,
-                    completed=completed,
-                    returning_status=returning,
-                    missing=missing,
-                    limit=limit,
-                    offset=offset,
-                )
-                return resp.results
-            except ApiException as exc:
-                raise RscException(response=exc)
+            resp = await api.seasons_activity_check_list(
+                season=season_id,
+                season_number=season_number,
+                discord_id=discord_id,
+                completed=completed,
+                returning_status=returning,
+                missing=missing,
+                limit=limit,
+                offset=offset,
+            )
+            return resp.results
 
     async def paged_activity_checks(
         self,
@@ -189,19 +170,16 @@ class SeasonsMixIn(RSCMixIn):
             api = SeasonsApi(client)
 
             async def fetch(limit: int, offset: int) -> PaginatedActivityCheckList:
-                try:
-                    return await api.seasons_activity_check_list(
-                        season=season_id,
-                        season_number=season_number,
-                        discord_id=discord_id,
-                        completed=completed,
-                        returning_status=returning,
-                        missing=missing,
-                        limit=limit,
-                        offset=offset,
-                    )
-                except ApiException as exc:
-                    raise RscException(response=exc)
+                return await api.seasons_activity_check_list(
+                    season=season_id,
+                    season_number=season_number,
+                    discord_id=discord_id,
+                    completed=completed,
+                    returning_status=returning,
+                    missing=missing,
+                    limit=limit,
+                    offset=offset,
+                )
 
             async for check in iter_pages(fetch, per_page=per_page):
                 yield check

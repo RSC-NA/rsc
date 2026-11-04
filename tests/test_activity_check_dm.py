@@ -17,9 +17,8 @@ from rsc.admin.views import (
     build_activity_check_dm_view,
 )
 from rsc.core import RSC
-from rsc.exceptions import RscException
 
-from .utils import custom_ids
+from .utils import api_error, custom_ids
 
 TEMPLATE = ActivityCheckDMButton.__discord_ui_compiled_template__
 
@@ -29,14 +28,6 @@ SEASON_ID = 100
 LEAGUE_ID = 1
 MSG_ID = 987654321
 MODMAIL_ID = 1489437974008565840
-
-
-def _rsc_exception(*, exc_type=None, status=None, reason=None):
-    exc = RscException(message=reason or "boom")
-    exc.type = exc_type
-    exc.status = status
-    exc.reason = reason
-    return exc
 
 
 def _mock_season(number=SEASON, season_id=SEASON_ID):
@@ -257,7 +248,7 @@ class TestCallbackGuards:
         cog.activity_check.assert_not_awaited()
 
     async def test_season_lookup_failure_is_retryable(self):
-        cog = _mock_cog(season_exc=_rsc_exception(status=500, reason="boom"))
+        cog = _mock_cog(season_exc=api_error(500, "boom"))
         interaction = _mock_interaction(cog)
 
         await ActivityCheckDMButton(GUILD_ID, SEASON, True).callback(interaction)
@@ -300,7 +291,7 @@ class TestCallbackSubmit:
     async def test_duplicate_submission_is_terminal(self):
         """This endpoint has no 409, so a duplicate cannot be told from a real
         failure by status code. An empty missing-check probe means already done."""
-        cog = _mock_cog(submit_exc=_rsc_exception(status=400, reason="bad"), still_missing=False)
+        cog = _mock_cog(submit_exc=api_error(400, "bad"), still_missing=False)
         interaction = _mock_interaction(cog)
 
         await ActivityCheckDMButton(GUILD_ID, SEASON, True).callback(interaction)
@@ -312,7 +303,7 @@ class TestCallbackSubmit:
         interaction.followup.send.assert_not_awaited()
 
     async def test_genuine_failure_is_retryable(self):
-        cog = _mock_cog(submit_exc=_rsc_exception(status=400, reason="bad"), still_missing=True)
+        cog = _mock_cog(submit_exc=api_error(400, "bad"), still_missing=True)
         interaction = _mock_interaction(cog)
 
         await ActivityCheckDMButton(GUILD_ID, SEASON, True).callback(interaction)
@@ -321,8 +312,8 @@ class TestCallbackSubmit:
 
     async def test_probe_failure_fails_open_to_retry(self):
         """A failed probe must not be reported as 'already completed'."""
-        cog = _mock_cog(submit_exc=_rsc_exception(status=400, reason="bad"))
-        cog.season_activity_checks.side_effect = _rsc_exception(status=500, reason="down")
+        cog = _mock_cog(submit_exc=api_error(400, "bad"))
+        cog.season_activity_checks.side_effect = api_error(500, "down")
         interaction = _mock_interaction(cog)
 
         await ActivityCheckDMButton(GUILD_ID, SEASON, True).callback(interaction)

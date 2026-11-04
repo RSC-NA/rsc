@@ -7,7 +7,7 @@ from redbot.core import app_commands
 from rsc.admin import AdminMixIn
 from rsc.embeds import ApiExceptionErrorEmbed, BlueEmbed, ErrorEmbed, YellowEmbed
 from rsc.enums import Status
-from rsc.exceptions import LeagueNotConfigured, RscException
+from rsc.exceptions import LeagueNotConfigured, RscException, SignupsClosedError
 from rsc.logs import GuildLogAdapter
 
 logger = logging.getLogger("red.rsc.admin.stats")
@@ -47,12 +47,11 @@ class AdminStatsMixIn(AdminMixIn):
                     description="League ID has not been configured for this guild.",
                 )
             )
+        except SignupsClosedError:
+            log.debug("No signup season currently open. Defaulting to current season.")
+            next_season = await self.current_season(guild)
         except RscException as exc:
-            if exc.type == "SignupsClosedException":
-                log.debug("No signup season currently open. Defaulting to current season.")
-                next_season = await self.current_season(guild)
-            else:
-                return await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc))
+            return await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc))
 
         if not next_season:
             return await interaction.followup.send(
@@ -126,12 +125,11 @@ class AdminStatsMixIn(AdminMixIn):
                     description="League ID has not been configured for this guild.",
                 )
             )
+        except SignupsClosedError:
+            log.debug("No signup season currently open. Defaulting to current season.")
+            next_season = await self.current_season(guild)
         except RscException as exc:
-            if exc.type == "SignupsClosedException":
-                log.debug("No signup season currently open. Defaulting to current season.")
-                next_season = await self.current_season(guild)
-            else:
-                return await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc))
+            return await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc))
 
         if not next_season:
             return await interaction.followup.send(
@@ -279,12 +277,11 @@ class AdminStatsMixIn(AdminMixIn):
                     description="League ID has not been configured for this guild.",
                 )
             )
+        except SignupsClosedError:
+            log.debug("No signup season currently open. Defaulting to current season.")
+            next_season = await self.current_season(guild)
         except RscException as exc:
-            if exc.type == "SignupsClosedException":
-                log.debug("No signup season currently open. Defaulting to current season.")
-                next_season = await self.current_season(guild)
-            else:
-                return await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc))
+            return await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc))
 
         if not next_season:
             return await interaction.followup.send(

@@ -6,7 +6,6 @@ from aiohttp import web
 import discord
 from redbot.core import app_commands
 from rscapi import LeaguePlayersApi, LeaguesApi
-from rscapi.exceptions import ApiException
 from rscapi.models.league import League
 from rscapi.models.league_player import LeaguePlayer
 from rscapi.models.league_player_status_enum import LeaguePlayerStatusEnum
@@ -17,7 +16,6 @@ from rscapi.models.season import Season
 from rsc.abc import RSCMixIn
 from rsc.embeds import BlueEmbed, ErrorEmbed, YellowEmbed
 from rsc.enums import Status
-from rsc.exceptions import RscException
 from rsc.tiers import TierMixIn
 from rsc.utils import utils
 from rsc.pagination import API_MAX_PAGE_SIZE, check_page_limit, iter_pages
@@ -213,48 +211,33 @@ class LeagueMixIn(RSCMixIn):
 
     async def leagues(self, guild: discord.Guild) -> list[League]:
         """Get a list of leagues from the API"""
-        try:
-            async with self.api_client(guild) as client:
-                api = LeaguesApi(client)
-                return await api.leagues_list()
-        except ApiException as exc:
-            raise RscException(exc)
+        async with self.api_client(guild) as client:
+            api = LeaguesApi(client)
+            return await api.leagues_list()
 
     async def league(self, guild: discord.Guild) -> League | None:
         """Get data for the guilds configured league"""
-        try:
-            async with self.api_client(guild) as client:
-                api = LeaguesApi(client)
-                return await api.leagues_retrieve(self._league[guild.id])
-        except ApiException as exc:
-            raise RscException(exc)
+        async with self.api_client(guild) as client:
+            api = LeaguesApi(client)
+            return await api.leagues_retrieve(self._league[guild.id])
 
     async def league_by_id(self, guild: discord.Guild, id: int) -> League | None:
         """Fetch a league from the API by ID"""
-        try:
-            async with self.api_client(guild) as client:
-                api = LeaguesApi(client)
-                return await api.leagues_retrieve(id)
-        except ApiException as exc:
-            raise RscException(exc)
+        async with self.api_client(guild) as client:
+            api = LeaguesApi(client)
+            return await api.leagues_retrieve(id)
 
     async def current_season(self, guild: discord.Guild) -> Season | None:
         """Get current season of league from API"""
-        try:
-            async with self.api_client(guild) as client:
-                api = LeaguesApi(client)
-                return await api.leagues_current_season_retrieve(self._league[guild.id])
-        except ApiException as exc:
-            raise RscException(exc)
+        async with self.api_client(guild) as client:
+            api = LeaguesApi(client)
+            return await api.leagues_current_season_retrieve(self._league[guild.id])
 
     async def league_seasons(self, guild: discord.Guild) -> list[Season]:
         """Get current season of league from API"""
-        try:
-            async with self.api_client(guild) as client:
-                api = LeaguesApi(client)
-                return await api.leagues_seasons_list(self._league[guild.id])
-        except ApiException as exc:
-            raise RscException(exc)
+        async with self.api_client(guild) as client:
+            api = LeaguesApi(client)
+            return await api.leagues_seasons_list(self._league[guild.id])
 
     async def players(
         self,
@@ -282,25 +265,22 @@ class LeagueMixIn(RSCMixIn):
         check_page_limit(limit, caller="players()")
         async with self.api_client(guild) as client:
             api = LeaguePlayersApi(client)
-            try:
-                players = await api.league_players_list(
-                    status=str(status) if status else None,
-                    name=name,
-                    tier=tier,
-                    tier_name=tier_name,
-                    season=season,
-                    season_number=season_number,
-                    league=self._league[guild.id],
-                    team_name=team_name,
-                    franchise=franchise,
-                    discord_id=discord_id,
-                    captain=captain,
-                    limit=limit,
-                    offset=offset,
-                )
-                return players.results
-            except ApiException as exc:
-                raise RscException(exc)
+            players = await api.league_players_list(
+                status=str(status) if status else None,
+                name=name,
+                tier=tier,
+                tier_name=tier_name,
+                season=season,
+                season_number=season_number,
+                league=self._league[guild.id],
+                team_name=team_name,
+                franchise=franchise,
+                discord_id=discord_id,
+                captain=captain,
+                limit=limit,
+                offset=offset,
+            )
+            return players.results
 
     async def player_count(
         self,
@@ -317,25 +297,22 @@ class LeagueMixIn(RSCMixIn):
     ) -> int:
         async with self.api_client(guild) as client:
             api = LeaguePlayersApi(client)
-            try:
-                # Get one player to get the count, we don't actually care about the data here
-                players = await api.league_players_list(
-                    status=str(status) if status else None,
-                    name=name,
-                    tier=tier,
-                    tier_name=tier_name,
-                    season=season,
-                    season_number=season_number,
-                    league=self._league[guild.id],
-                    team_name=team_name,
-                    franchise=franchise,
-                    discord_id=discord_id,
-                    limit=1,
-                    offset=0,
-                )
-                return players.count
-            except ApiException as exc:
-                raise RscException(exc)
+            # Get one player to get the count, we don't actually care about the data here
+            players = await api.league_players_list(
+                status=str(status) if status else None,
+                name=name,
+                tier=tier,
+                tier_name=tier_name,
+                season=season,
+                season_number=season_number,
+                league=self._league[guild.id],
+                team_name=team_name,
+                franchise=franchise,
+                discord_id=discord_id,
+                limit=1,
+                offset=0,
+            )
+            return players.count
 
     async def total_players(
         self,
@@ -352,24 +329,21 @@ class LeagueMixIn(RSCMixIn):
     ) -> int:
         async with self.api_client(guild) as client:
             api = LeaguePlayersApi(client)
-            try:
-                players = await api.league_players_list(
-                    status=str(status) if status else None,
-                    name=name,
-                    tier=tier,
-                    tier_name=tier_name,
-                    season=season,
-                    season_number=season_number,
-                    league=self._league[guild.id],
-                    team_name=team_name,
-                    franchise=franchise,
-                    discord_id=discord_id,
-                    limit=1,
-                    offset=0,
-                )
-                return players.count
-            except ApiException as exc:
-                raise RscException(exc)
+            players = await api.league_players_list(
+                status=str(status) if status else None,
+                name=name,
+                tier=tier,
+                tier_name=tier_name,
+                season=season,
+                season_number=season_number,
+                league=self._league[guild.id],
+                team_name=team_name,
+                franchise=franchise,
+                discord_id=discord_id,
+                limit=1,
+                offset=0,
+            )
+            return players.count
 
     async def paged_players(
         self,
@@ -391,24 +365,21 @@ class LeagueMixIn(RSCMixIn):
             api = LeaguePlayersApi(client)
 
             async def fetch(limit: int, offset: int) -> PaginatedLeaguePlayerList:
-                try:
-                    return await api.league_players_list(
-                        status=str(status) if status else None,
-                        name=name,
-                        tier=tier,
-                        tier_name=tier_name,
-                        season=season,
-                        season_number=season_number,
-                        league=self._league[guild.id],
-                        team_name=team_name,
-                        franchise=franchise,
-                        discord_id=discord_id,
-                        captain=captain,
-                        limit=limit,
-                        offset=offset,
-                    )
-                except ApiException as exc:
-                    raise RscException(exc)
+                return await api.league_players_list(
+                    status=str(status) if status else None,
+                    name=name,
+                    tier=tier,
+                    tier_name=tier_name,
+                    season=season,
+                    season_number=season_number,
+                    league=self._league[guild.id],
+                    team_name=team_name,
+                    franchise=franchise,
+                    discord_id=discord_id,
+                    captain=captain,
+                    limit=limit,
+                    offset=offset,
+                )
 
             async for player in iter_pages(fetch, per_page=per_page):
                 yield player
@@ -452,12 +423,9 @@ class LeagueMixIn(RSCMixIn):
         async with self.api_client(guild) as client:
             api = LeaguePlayersApi(client)
             log.debug(f"League Player Patch: {data}")
-            try:
-                result = await api.league_players_partial_update(
-                    id=player_id,
-                    patched_league_player_patch=data,
-                )
-                log.debug(f"Patch Result: {result}")
-                return result
-            except ApiException as exc:
-                raise RscException(response=exc)
+            result = await api.league_players_partial_update(
+                id=player_id,
+                patched_league_player_patch=data,
+            )
+            log.debug(f"Patch Result: {result}")
+            return result

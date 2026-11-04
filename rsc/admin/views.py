@@ -5,10 +5,6 @@ from enum import IntEnum
 from typing import TYPE_CHECKING, Any, cast
 
 import discord
-from rscapi import ApiClient, Configuration, MembersApi
-from rscapi.exceptions import ApiException
-from rscapi.models.activity_request import ActivityRequest
-from rscapi.models.activity_check import ActivityCheck
 
 from rsc.const import DEFAULT_MODMAIL_BOT_ID, DEFAULT_TIMEOUT, RSC_COG_NAME
 from rsc.embeds import (
@@ -19,7 +15,7 @@ from rsc.embeds import (
     RedEmbed,
     YellowEmbed,
 )
-from rsc.exceptions import RscException
+from rsc.exceptions import ConflictError, RscException, SignupsClosedError
 from rsc.types import RebrandTeamDict
 from rsc.views import (
     AuthorOnlyView,
@@ -51,17 +47,10 @@ class CreateState(IntEnum):
 
 
 class InactiveCheckView(discord.ui.View):
-    def __init__(
-        self,
-        guild: discord.Guild,
-        league_id: int,
-        api_conf: Configuration,
-        timeout: float | None = None,
-    ):
+    def __init__(self, guild: discord.Guild, rsc: "RSCMixIn", timeout: float | None = None):
         super().__init__(timeout=timeout)
         self._guild = guild
-        self._league_id = league_id
-        self._api_conf = api_conf
+        self._rsc = rsc
 
     @discord.ui.button(
         label="I'm active",
@@ -74,10 +63,10 @@ class InactiveCheckView(discord.ui.View):
 
         await interaction.response.defer(ephemeral=True)
         try:
-            result = await self.call_api(interaction.user, returning_status=True)
+            result = await self._rsc.activity_check(self._guild, interaction.user, returning_status=True)
             log.debug(f"Active Result: {result}")
         except RscException as exc:
-            log.warning(f"[{self._guild.name}] Activity Check Error: {exc.reason}")
+            log.warning(f"[{self._guild.name}] Activity Check Error: {exc.message}")
             return await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc), ephemeral=True)
 
         await interaction.followup.send(
@@ -99,10 +88,10 @@ class InactiveCheckView(discord.ui.View):
 
         await interaction.response.defer(ephemeral=True)
         try:
-            result = await self.call_api(interaction.user, returning_status=False)
+            result = await self._rsc.activity_check(self._guild, interaction.user, returning_status=False)
             log.debug(f"Active Result: {result}")
         except RscException as exc:
-            log.warning(f"[{self._guild.name}] Activity Check Error: {exc.reason}")
+            log.warning(f"[{self._guild.name}] Activity Check Error: {exc.message}")
             return await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc), ephemeral=True)
 
         await interaction.followup.send(
@@ -114,21 +103,6 @@ class InactiveCheckView(discord.ui.View):
             ),
             ephemeral=True,
         )
-
-    async def call_api(self, player: discord.Member, returning_status: bool) -> ActivityCheck:
-        async with ApiClient(self._api_conf) as client:
-            api = MembersApi(client)
-            data = ActivityRequest(
-                league=self._league_id,
-                admin_override=False,
-                executor=0,
-                returning_status=returning_status,
-            )
-            try:
-                log.debug(f"[{player.id}] Activity Check: {data}")
-                return await api.members_activity_check_create(player.id, data)
-            except ApiException as exc:
-                raise RscException(response=exc)
 
 
 INTENT_DM_TEMPLATE = r"intent_dm:(?P<guild>\d+):(?P<season>\d+):(?P<returning>yes|no)"
@@ -225,19 +199,19 @@ class IntentDMButton(discord.ui.DynamicItem[discord.ui.Button], template=INTENT_
         # Signups closed is the authoritative deadline check
         try:
             season = await cog.next_signup_season(guild)
-        except RscException as exc:
-            if exc.type == "SignupsClosedException":
-                return await self._finish(
-                    interaction,
-                    OrangeEmbed(
-                        title="Signups Are Closed",
-                        description=(
-                            f"Signups for **{guild.name}** have closed, so intent can no longer be declared here.\n\n"
-                            f"If you still need to sign up, please message {modmail} to open a ticket."
-                        ),
+        except SignupsClosedError:
+            return await self._finish(
+                interaction,
+                OrangeEmbed(
+                    title="Signups Are Closed",
+                    description=(
+                        f"Signups for **{guild.name}** have closed, so intent can no longer be declared here.\n\n"
+                        f"If you still need to sign up, please message {modmail} to open a ticket."
                     ),
-                )
-            log.warning(f"[{guild.name}] [Intent DM] Error fetching signup season: {exc.reason}")
+                ),
+            )
+        except RscException as exc:
+            log.warning(f"[{guild.name}] [Intent DM] Error fetching signup season: {exc.message}")
             return await self._retry(interaction, self._player_error(modmail))
 
         if not (season and season.number):
@@ -270,16 +244,16 @@ class IntentDMButton(discord.ui.DynamicItem[discord.ui.Button], template=INTENT_
             result = await cog.declare_intent(guild=guild, member=interaction.user.id, returning=self.returning)
             self.declared = True
             log.debug(f"[{guild.name}] [Intent DM] Result for {interaction.user.id}: {result}")
+        except ConflictError as exc:
+            return await self._finish(
+                interaction,
+                YellowEmbed(
+                    title="Intent to Play",
+                    description=exc.message or "You have already declared your intent for this season.",
+                ),
+            )
         except RscException as exc:
-            if exc.status == 409:
-                return await self._finish(
-                    interaction,
-                    YellowEmbed(
-                        title="Intent to Play",
-                        description=exc.reason or "You have already declared your intent for this season.",
-                    ),
-                )
-            log.warning(f"[{guild.name}] [Intent DM] Error declaring intent: {exc.reason}")
+            log.warning(f"[{guild.name}] [Intent DM] Error declaring intent: {exc.message}")
             return await self._retry(interaction, self._player_error(modmail))
 
         if self.returning:
@@ -454,7 +428,7 @@ class ActivityCheckDMButton(discord.ui.DynamicItem[discord.ui.Button], template=
         try:
             season = await cog.current_season(guild)
         except RscException as exc:
-            log.warning(f"[{guild.name}] [Activity DM] Error fetching current season: {exc.reason}")
+            log.warning(f"[{guild.name}] [Activity DM] Error fetching current season: {exc.message}")
             return await self._retry(interaction, self._player_error(modmail))
 
         if not (season and season.id and season.number):
@@ -491,7 +465,7 @@ class ActivityCheckDMButton(discord.ui.DynamicItem[discord.ui.Button], template=
                         description="You have already completed your activity check for this season.",
                     ),
                 )
-            log.warning(f"[{guild.name}] [Activity DM] Error submitting activity check: {exc.reason}")
+            log.warning(f"[{guild.name}] [Activity DM] Error submitting activity check: {exc.message}")
             return await self._retry(interaction, self._player_error(modmail))
 
         if self.active:

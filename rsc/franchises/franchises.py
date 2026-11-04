@@ -7,7 +7,7 @@ import discord
 from pydantic import ValidationError
 from redbot.core import app_commands
 from rscapi import FranchisesApi
-from rscapi.exceptions import ApiException, NotFoundException
+from rscapi.exceptions import NotFoundException
 from rscapi.models.franchise import Franchise
 from rscapi.models.franchise_agm_request import FranchiseAGMRequest
 from rscapi.models.franchise_gm import FranchiseGM
@@ -214,11 +214,8 @@ class FranchiseMixIn(RSCMixIn):
     ) -> Franchise:
         async with self.api_client(guild) as client:
             api = FranchisesApi(client)
-            try:
-                logo_param = str(logo) if isinstance(logo, PathLike) else logo
-                return await api.franchises_upload_logo_update(id=id, logo=logo_param)
-            except ApiException as exc:
-                raise RscException(response=exc)
+            logo_param = str(logo) if isinstance(logo, PathLike) else logo
+            return await api.franchises_upload_logo_update(id=id, logo=logo_param)
 
     async def create_franchise(
         self,
@@ -242,10 +239,7 @@ class FranchiseMixIn(RSCMixIn):
                 raise RscException(message=f"Invalid franchise data: {exc.errors()[0]['msg']}")
 
             log.debug(f"Create Franchise Data: {data}")
-            try:
-                result = await api.franchises_create(data)
-            except ApiException as exc:
-                raise RscException(response=exc)
+            result = await api.franchises_create(data)
 
             # Populate cache. setdefault: the franchise already exists, so a cache
             # that startup never filled must not turn this into an error.
@@ -265,21 +259,15 @@ class FranchiseMixIn(RSCMixIn):
     async def rebrand_franchise(self, guild: discord.Guild, id: int, rebrand: FranchiseRebrand) -> Franchise:
         async with self.api_client(guild) as client:
             api = FranchisesApi(client)
-            try:
-                log.debug(f"Rebrand Params: {rebrand}")
-                return await api.franchises_rebrand_update(id, rebrand)
-            except ApiException as exc:
-                raise RscException(response=exc)
+            log.debug(f"Rebrand Params: {rebrand}")
+            return await api.franchises_rebrand_update(id, rebrand)
 
     async def transfer_franchise(self, guild: discord.Guild, id: int, gm: discord.Member) -> Franchise:
         async with self.api_client(guild) as client:
             api = FranchisesApi(client)
-            try:
-                data = FranchiseTransferRequest(general_manager=gm.id, league=self._league[guild.id])
-                log.debug(f"Transfer Params: {data}")
-                return await api.franchises_transfer_franchise_update(id, data)
-            except ApiException as exc:
-                raise RscException(response=exc)
+            data = FranchiseTransferRequest(general_manager=gm.id, league=self._league[guild.id])
+            log.debug(f"Transfer Params: {data}")
+            return await api.franchises_transfer_franchise_update(id, data)
 
     async def add_agm(
         self, guild: discord.Guild, id: int, agm: discord.Member | discord.User | int, executor: discord.Member | discord.User | int
@@ -299,12 +287,9 @@ class FranchiseMixIn(RSCMixIn):
 
         async with self.api_client(guild) as client:
             api = FranchisesApi(client)
-            try:
-                data = FranchiseAGMRequest(agm=agm_id, executor=executor_id)
-                log.debug(f"Add AGM Params: franchise={id} {data}")
-                return await api.franchises_add_agm_update(id=id, franchise_agm_request=data)
-            except ApiException as exc:
-                raise RscException(response=exc)
+            data = FranchiseAGMRequest(agm=agm_id, executor=executor_id)
+            log.debug(f"Add AGM Params: franchise={id} {data}")
+            return await api.franchises_add_agm_update(id=id, franchise_agm_request=data)
 
     async def remove_agm(
         self, guild: discord.Guild, id: int, agm: discord.Member | discord.User | int, executor: discord.Member | discord.User | int
@@ -320,12 +305,9 @@ class FranchiseMixIn(RSCMixIn):
 
         async with self.api_client(guild) as client:
             api = FranchisesApi(client)
-            try:
-                data = FranchiseAGMRequest(agm=agm_id, executor=executor_id)
-                log.debug(f"Remove AGM Params: franchise={id} {data}")
-                return await api.franchises_remove_agm_update(id=id, franchise_agm_request=data)
-            except ApiException as exc:
-                raise RscException(response=exc)
+            data = FranchiseAGMRequest(agm=agm_id, executor=executor_id)
+            log.debug(f"Remove AGM Params: franchise={id} {data}")
+            return await api.franchises_remove_agm_update(id=id, franchise_agm_request=data)
 
     async def franchises_agm_of(self, guild: discord.Guild, discord_id: int) -> list[FranchiseList]:
         """Every franchise in this league that lists `discord_id` as an AGM.
@@ -405,5 +387,3 @@ class FranchiseMixIn(RSCMixIn):
                 return full_url
             except NotFoundException:
                 return None
-            except ApiException as exc:
-                raise RscException(response=exc)

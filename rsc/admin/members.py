@@ -21,7 +21,7 @@ from rsc.embeds import (
     OrangeEmbed,
 )
 from rsc.enums import ACTIVE_STATUSES, Platform, PlayerType, Referrer, RegionPreference, StaffPositions, Status
-from rsc.exceptions import DiscordNameTooLong, RscException, LeagueNotConfigured
+from rsc.exceptions import DiscordNameTooLong, LeagueNotConfigured, RscException, SignupsClosedError
 from rsc.logs import GuildLogAdapter
 from rsc.teams import TeamMixIn
 from rsc.tiers import TierMixIn
@@ -692,12 +692,11 @@ class AdminMembersMixIn(AdminMixIn):
                     description="League ID has not been configured for this guild.",
                 )
             )
+        except SignupsClosedError:
+            log.debug("No signup season currently open. Defaulting to current season.")
+            next_season = await self.current_season(guild)
         except RscException as exc:
-            if exc.type == "SignupsClosedException":
-                log.debug("No signup season currently open. Defaulting to current season.")
-                next_season = await self.current_season(guild)
-            else:
-                return await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc))
+            return await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc))
 
         if not next_season:
             return await interaction.followup.send(
