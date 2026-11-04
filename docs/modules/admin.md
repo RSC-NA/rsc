@@ -115,6 +115,7 @@ Several commands reply **publicly** in the channel rather than ephemerally: `mem
 |---|---|---|
 | `/admin matches create match_type format home_team away_team [day]` | Manage Server | Creates a match in the API. Both teams must be in the same tier. `day` is 0 to 20. |
 | `/admin matches playoff round format home_team away_team` | Manage Server | Creates a postseason match. `round` (Playoff, Wildcard, Quarterfinals, Semifinals, Finals) is stored as the match day. |
+| `/admin matches fix home away home_wins away_wins` | Manage Server | Corrects a reported match this season: regular season, preseason or a playoff series. Finds the match by its two teams in either order, counting only meetings that have been reported. When more than one reported meeting matches, a dropdown lists them newest first with their recorded score and date, then turns into the confirmation. The confirmation shows the new score with the recorded one struck through, and on Save overwrites the result with `override`, keeping the stored ballchasing group. For a playoff series, the API moves a changed winner into the next series if that series has not been played. The confirmation names the round and opponent the new winner takes over, or warns when the old winner already played it, and the reply shows the next series and its start time, with a Match page link. For a regular season match, the confirmation warns that the API reseeds playoffs after every result, so if the tier's playoffs are already seeded the fix can change the seeds and repoint unplayed playoff matches. Your API account needs the Stats or Admin staff position. |
 | `/admin matches bulk` | Manage Server | Modal that takes a JSON list such as `[{"day":1,"type":"REG","format":"BO3","home":"Team1","away":"Team2"}]` and creates each match in order. |
 
 Match types are `REG`, `PRE`, `PST`, `FNL` and `ANY`. Formats are `GMS`, `BO3`, `BO5` and `BO7`.
@@ -267,6 +268,8 @@ All role and nickname changes go through `rsc.transactions.roles` (`update_leagu
 - **`/admin intents dm` refuses once signups close**, while `populate`, `stats intents` and `members signupstatus` fall back to the current season.
 - **`/admin intents setbyid` takes the Discord ID as an integer option.** Discord integer options cannot hold full snowflakes. The code comment in `/admin members transfer` gives this as the reason that command takes its ID as a string.
 - **`/admin matches bulk` stops at the first failure.** Matches created before the failure stay in the API. The error lists them, so you know where to resume.
+- **`/admin matches fix` cannot undo a played next round.** When the old winner already played their next series, the API leaves it alone and the reply warns you to fix that round by hand.
+- **A regular season `/admin matches fix` can reshuffle a seeded bracket.** Seeds come from standings, so the API recomputes them after the corrected result and repoints any unplayed playoff match.
 - **`/admin dmcancel` drops everything** in the shared queue, including DMs from other features such as lobby notifications. There is no confirmation.
 - **The PermFA poll only collects answers.** It changes no player status. Its tier argument is matched by name (capitalised) against the poll records in Config.
 - **`/admin bulkretire` and `/admin retire departed` retire with `admin_override=True`.**

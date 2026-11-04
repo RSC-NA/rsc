@@ -5,9 +5,27 @@ from typing import TYPE_CHECKING
 import discord
 from pydantic import ValidationError
 from redbot.core import app_commands
+from rscapi.models.match import Match
+from rscapi.models.match_team import MatchTeam
 
 from rsc.admin import AdminMixIn
 from rsc.admin.modals import BulkMatchModal
+from rsc.admin.match_fix import (
+    Fix,
+    MeetingPickerView,
+    Moved,
+    NewWinner,
+    NotMoved,
+    Takeover,
+    Unchecked,
+    Waiting,
+    confirm_body,
+    fix_change,
+    result_view,
+    state_view,
+)
+from rsc.ballchasing.ballchasing import normalize_scores
+from rsc.ballchasing.modals import score_error
 from rsc.const import MODAL_TIMEOUT
 from rsc.embeds import (
     ApiExceptionErrorEmbed,
@@ -21,12 +39,15 @@ from rsc.enums import MatchFormat, MatchType, PostSeasonType
 from rsc.exceptions import RscException
 from rsc.logs import GuildLogAdapter
 from rsc.teams import TeamMixIn
+from rsc.views import ConfirmLayoutView
 
 if TYPE_CHECKING:
     from rsc.admin.models import CreateMatchData
 
 logger = logging.getLogger("red.rsc.admin.match")
 log = GuildLogAdapter(logger)
+
+PLAYOFF_MATCH_TYPES = (MatchType.POSTSEASON, MatchType.FINALS)
 
 
 class AdminMatchMixIn(AdminMixIn):
@@ -233,6 +254,112 @@ class AdminMatchMixIn(AdminMixIn):
         embed.add_field(name="Away Team", value=ateam.name, inline=True)
         await interaction.followup.send(embed=embed)
 
+    @_matches.command(name="fix", description="Correct a reported match result")
+    @app_commands.describe(
+        home="Home team of the match",
+        away="Away team of the match",
+        home_wins="Games the home team won",
+        away_wins="Games the away team won",
+    )
+    @app_commands.autocomplete(home=TeamMixIn.teams_autocomplete, away=TeamMixIn.teams_autocomplete)
+    async def _matches_fix_cmd(
+        self,
+        interaction: discord.Interaction,
+        home: str,
+        away: str,
+        home_wins: app_commands.Range[int, 0, 7],
+        away_wins: app_commands.Range[int, 0, 7],
+    ):
+        guild = interaction.guild
+        executor = interaction.user
+        if not (guild and isinstance(executor, discord.Member)):
+            return
+
+        await interaction.response.defer(ephemeral=True)
+        try:
+            meetings = await self.find_match(guild, teams=[home, away], match_type=MatchType.ANY)
+        except RscException as exc:
+            return await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc), ephemeral=True)
+
+        reported = [m for m in meetings if m.results and m.id]
+        if not reported:
+            if meetings:
+                description = f"**{home}** vs **{away}** has not been reported yet. Report it with `/reportmatch`."
+            else:
+                description = f"No match this season between **{home}** and **{away}**."
+            return await interaction.followup.send(embed=ErrorEmbed(description=description), ephemeral=True)
+
+        picker = None
+        if len(reported) > 1:
+            picker = MeetingPickerView(interaction, reported, home=home, away=away, tz=await self.timezone(guild))
+            await interaction.followup.send(view=picker, ephemeral=True)
+            await picker.wait()
+        meeting = picker.choice if picker else reported[0]
+        if not (meeting and meeting.id and meeting.results):
+            return
+
+        async def show(view: discord.ui.LayoutView) -> None:
+            """Turn the picker into `view`, so the admin is left with one message."""
+            if picker:
+                await interaction.edit_original_response(view=view)
+            else:
+                await interaction.followup.send(view=view, ephemeral=True)
+
+        new = normalize_scores(home, home_wins, away_wins, meeting)
+        if error := score_error(*new, meeting):
+            return await show(state_view("That score doesn't fit", error, discord.Colour.red()))
+
+        old = (meeting.results.home_wins or 0, meeting.results.away_wins or 0)
+        if new == old:
+            teams = f"{discord.utils.escape_markdown(meeting.home_team.name)} vs {discord.utils.escape_markdown(meeting.away_team.name)}"
+            return await show(
+                state_view("Nothing to change", f"{teams} is already recorded as {old[0]}\N{EN DASH}{old[1]}.", discord.Colour.greyple())
+            )
+
+        try:
+            logo_url = await self.winning_logo_url(guild, meeting, *new)
+        except RscException:
+            # The logo is decoration; a failed lookup must not block the fix
+            logo_url = guild.icon.url if guild.icon else None
+        fix = Fix(meeting, old, new, logo_url=logo_url)
+        change = fix_change(fix)
+        preview = await self._takeover(guild, meeting, change) if isinstance(change, NewWinner) else change
+        view = ConfirmLayoutView(
+            interaction,
+            body=confirm_body(fix, preview),
+            confirm_label="Save",
+            working_title="Saving",
+            working_description="Saving the corrected result...",
+            cancelled_description="The result is unchanged.",
+        )
+        await show(view)
+        await view.wait()
+        if not view.result:
+            return
+
+        try:
+            await self.report_match(
+                guild,
+                match_id=meeting.id,
+                ballchasing_group=meeting.results.ballchasing_group,
+                home_score=new[0],
+                away_score=new[1],
+                executor=executor,
+                override=True,
+            )
+        except RscException as exc:
+            # The prompt is a Components V2 message, which can't carry an embed.
+            reason = exc.reason or exc.message or "The API rejected the corrected score."
+            return await interaction.edit_original_response(view=state_view("The API refused the fix", reason, discord.Colour.red()))
+
+        outcome = await self._bracket_after_fix(guild, meeting, change) if isinstance(change, NewWinner) else change
+        try:
+            match_url = await self.match_page_link(guild, meeting)
+        except RscException:
+            # The score is already saved, so show the result without the link
+            match_url = None
+        await interaction.edit_original_response(view=result_view(fix, outcome, match_url))
+
     # Matches Group Commands
     @_matches.command(name="bulk", description="Create bulk RSC matches")
     async def _matches_bulk_create_cmd(self, interaction: discord.Interaction):
@@ -307,3 +434,31 @@ class AdminMatchMixIn(AdminMixIn):
             description=f"**{len(success)}** matches have been created in the API.",
         )
         await bulk_modal.interaction.edit_original_response(embed=embed)
+
+    async def _next_round_match(self, guild: discord.Guild, match: Match, team: MatchTeam) -> Match | None:
+        """`team`'s playoff match in the round after `match`, if it exists yet."""
+        # Not next_match: it drops matches past their start, and a fix made then still
+        # repoints an unplayed next series. A series winner always plays the next round.
+        found = await self.find_match(guild, teams=[team.name], match_type=MatchType.ANY, day=(match.day or 0) + 1)
+        return next((m for m in found if m.match_type in PLAYOFF_MATCH_TYPES), None)
+
+    async def _takeover(self, guild: discord.Guild, match: Match, change: NewWinner) -> Takeover:
+        """The next-round match the new winner will take from the old winner, for the confirm card."""
+        if change.old_winner is None:
+            return Takeover(change, None)
+        try:
+            return Takeover(change, await self._next_round_match(guild, match, change.old_winner))
+        except RscException:
+            # Only the confirm's wording depends on it, so it must not stop the fix
+            return Takeover(change, None)
+
+    async def _bracket_after_fix(self, guild: discord.Guild, match: Match, change: NewWinner) -> Moved | Waiting | NotMoved | Unchecked:
+        """Where the API put the new series winner after the corrected result was saved."""
+        winner = change.winner
+        try:
+            if nxt := await self._next_round_match(guild, match, winner):
+                return Moved(nxt)
+            pending = await self.pending_series(guild, winner.id) if winner.id is not None else None
+        except RscException as exc:
+            return Unchecked(change.next_round, exc.reason or exc.message or "the API did not answer.")
+        return Waiting(winner, pending) if pending else NotMoved(change)
