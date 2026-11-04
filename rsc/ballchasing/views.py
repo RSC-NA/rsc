@@ -23,6 +23,14 @@ _PLAYOFF_ROUNDS = {
 }
 
 
+def round_label(day: int) -> str:
+    """The playoff round played on match day `day`, as in 'Semifinals'."""
+    try:
+        return _PLAYOFF_ROUNDS[PostSeasonType(day)]
+    except ValueError:
+        return "Playoffs"
+
+
 def match_label(match: Match) -> str:
     """'Match Day 7', 'Preseason 2', or the playoff round."""
     day = match.day or 0
@@ -30,14 +38,22 @@ def match_label(match: Match) -> str:
         case MatchType.PRESEASON:
             return f"Preseason {day}"
         case MatchType.POSTSEASON:
-            try:
-                return _PLAYOFF_ROUNDS[PostSeasonType(day)]
-            except ValueError:
-                return "Playoffs"
+            return round_label(day)
         case MatchType.FINALS:
             return "Finals"
         case _:
             return f"Match Day {day}"
+
+
+def score(home_wins: int, away_wins: int) -> str:
+    """A score that stays on one line on phones: no-break spaces around the dash, and a word joiner after it."""
+    return f"{home_wins}\N{NO-BREAK SPACE}\N{EN DASH}\N{WORD JOINER}\N{NO-BREAK SPACE}{away_wins}"
+
+
+def scoreline(match: Match, home_wins: int, away_wins: int) -> str:
+    """The heading of a result card: both teams and the score between them."""
+    home, away = discord.utils.escape_markdown(match.home_team.name), discord.utils.escape_markdown(match.away_team.name)
+    return f"## {home} {score(home_wins, away_wins)} {away}"
 
 
 @dataclass(frozen=True)
@@ -59,12 +75,9 @@ class MatchResultCard:
 
         `replays` adds the upload summary for the reporter's private copy.
         """
-        home, away = self.match.home_team, self.match.away_team
         home_wins, away_wins = self.result.home_wins or 0, self.result.away_wins or 0
-        label = " · ".join(filter(None, [home.tier, match_label(self.match), "Final"]))
-        # No-break spaces around the dash, and a word joiner after it, keep the score on one line on phones
-        score = f"{home_wins}\N{NO-BREAK SPACE}\N{EN DASH}\N{WORD JOINER}\N{NO-BREAK SPACE}{away_wins}"
-        headline = f"## {discord.utils.escape_markdown(home.name)} {score} {discord.utils.escape_markdown(away.name)}"
+        label = " · ".join(filter(None, [self.match.home_team.tier, match_label(self.match), "Final"]))
+        headline = scoreline(self.match, home_wins, away_wins)
 
         files: list[discord.File] = []
         if self.logo_url:

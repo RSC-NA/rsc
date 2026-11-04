@@ -183,6 +183,11 @@ class RSCMixIn(ABC):
     @abstractmethod
     async def _get_dates(self, guild: discord.Guild) -> str: ...
 
+    # Ballchasing
+
+    @abstractmethod
+    async def winning_logo_url(self, guild: discord.Guild, match: Match, home_wins: int, away_wins: int) -> str | None: ...
+
     # Combines
 
     @abstractmethod

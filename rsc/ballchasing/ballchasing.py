@@ -898,17 +898,6 @@ class BallchasingMixIn(RSCMixIn):
         if home.tier:
             colour = await utils.tier_color_by_name(guild, home.tier)
 
-        # The winning franchise's logo, else the server icon. A tie has no winner.
-        home_wins, away_wins = result.home_wins or 0, result.away_wins or 0
-        logo_url = None
-        winning_franchise = None if home_wins == away_wins else (home.franchise if home_wins > away_wins else away.franchise)
-        if winning_franchise:
-            fsearch = await self.franchises(guild, name=winning_franchise)
-            if fsearch and fsearch[0].id:
-                logo_url = await self.franchise_logo(guild=guild, id=fsearch[0].id)
-        if not logo_url and guild.icon:
-            logo_url = guild.icon.url
-
         gm_mentions = [
             member.mention for team in (home, away) if team.gm and team.gm.discord_id and (member := guild.get_member(team.gm.discord_id))
         ]
@@ -917,11 +906,21 @@ class BallchasingMixIn(RSCMixIn):
             match=match,
             result=result,
             colour=colour,
-            logo_url=logo_url,
+            logo_url=await self.winning_logo_url(guild, match, result.home_wins or 0, result.away_wins or 0),
             gm_mentions=gm_mentions,
             match_url=await self.match_page_link(guild, match),
             ballchasing_url=link,
         )
+
+    async def winning_logo_url(self, guild: discord.Guild, match: Match, home_wins: int, away_wins: int) -> str | None:
+        """The logo of the franchise ahead at this score, else the server icon. A tie has no winner."""
+        home, away = match.home_team, match.away_team
+        winning_franchise = None if home_wins == away_wins else (home.franchise if home_wins > away_wins else away.franchise)
+        if winning_franchise:
+            fsearch = await self.franchises(guild, name=winning_franchise)
+            if fsearch and fsearch[0].id and (logo_url := await self.franchise_logo(guild=guild, id=fsearch[0].id)):
+                return logo_url
+        return guild.icon.url if guild.icon else None
 
     async def match_page_link(self, guild: discord.Guild, match: Match) -> str | None:
         """The match's page on the league website, or None if it can't be built."""

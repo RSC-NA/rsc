@@ -1,7 +1,9 @@
 import logging
+from collections.abc import Sequence
+from typing import Any
 
 import discord
-from discord.ui import ActionRow, Container, Separator, TextDisplay, TextInput
+from discord.ui import ActionRow, Container, Item, Separator, TextDisplay, TextInput
 from redbot.core.bot import Red
 from rscapi.models.league import League
 
@@ -121,14 +123,17 @@ class ConfirmLayoutView(AuthorOnlyLayoutView):
         await view.wait()
         if view.result:
             ...  # then edit_original_response with the outcome
+
+    `body` replaces the title and description with prebuilt items, shown above the buttons as given.
     """
 
     def __init__(
         self,
         interaction: discord.Interaction,
         *,
-        title: str,
-        description: str,
+        title: str = "",
+        description: str = "",
+        body: Sequence[Item[Any]] = (),
         confirm_label: str = "Confirm",
         confirm_style: discord.ButtonStyle = discord.ButtonStyle.success,
         cancel_label: str = "Cancel",
@@ -143,11 +148,11 @@ class ConfirmLayoutView(AuthorOnlyLayoutView):
         self.result = False
         self.working = (working_title, working_description)
         self.cancelled = (cancelled_title, cancelled_description)
+        if not body:
+            body = (TextDisplay(f"## {title}"), TextDisplay(description), Separator(spacing=discord.SeparatorSpacing.small))
         self.add_item(
             Container(
-                TextDisplay(f"## {title}"),
-                TextDisplay(description),
-                Separator(spacing=discord.SeparatorSpacing.small),
+                *body,
                 ActionRow(
                     _ConfirmLayoutButton(confirm=True, label=confirm_label, style=confirm_style),
                     _ConfirmLayoutButton(confirm=False, label=cancel_label, style=discord.ButtonStyle.secondary),
