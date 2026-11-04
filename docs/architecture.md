@@ -81,7 +81,7 @@ The RSC website exposes a REST API, and [rsc-api-client](https://github.com/RSC-
 - Each guild has its own API URL and key, set with `/rsc url` and `/rsc key`. `prepare_api()` turns them into an `rscapi.Configuration` with an exponential retry policy (`API_RETRIES` attempts, retrying server errors and stale-socket errors; `POST` is never retried, so a transaction can't be applied twice).
 - `api_client(guild)` hands out one **long-lived** `ApiClient` per guild and deliberately doesn't close it, so calls reuse the HTTP session instead of paying a TLS handshake each time. Clients are closed by `close_api_clients()` on unload, or replaced when the URL or key changes.
 - The guild's league ID (`/rsc league`) is cached in `self._league[guild.id]` and passed to almost every list call.
-- Errors: the generated client raises `ApiException`. Mixins catch it and raise `RscException` (or a subclass from `translate_api_error()` in [rsc/exceptions.py](../rsc/exceptions.py)), which commands turn into an error embed.
+- Errors: the generated client raises `ApiException`. `api_client()` catches it as it leaves the `async with` block and raises `ApiError` from [rsc/exceptions.py](../rsc/exceptions.py), parsed from the API's `{"message", "type", "status_code", "extra"}` envelope. `ApiError.from_exception()` picks a subclass from the server's `type` (`SignupsClosedError`) or the status (`NotFoundError` 404, `ConflictError` 409, `ServerError` 5xx). Every `ApiError` is an `RscException`, which commands turn into an error embed with `ApiExceptionErrorEmbed`.
 - Pagination helpers for list endpoints are in [rsc/pagination.py](../rsc/pagination.py).
 
 The website also talks back: see [Web server](#web-server) and the [events poller](modules/events.md).
