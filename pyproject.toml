@@ -198,3 +198,19 @@ python-ballchasing = { git = "https://github.com/xentrick/python-ballchasing.git
 # The rsc-api-client repo publishes a distribution named "rscapi" (see its
 # pyproject `name`). Keying this on the repo name meant nothing ever resolved it.
 rscapi = { git = "https://github.com/RSC-NA/rsc-api-client.git" }
+
+# Red-DiscordBot pins these with `==` at versions with open advisories. Drop this
+# table once the bot no longer depends on Red (#10).
+[tool.uv]
+override-dependencies = [
+    "aiohttp>=3.14.4",
+    "brotli>=1.2.1",
+    "idna>=3.15",
+    "markdown>=3.8.1",
+    "orjson>=3.11.6",
+    "pygments>=2.20.0",
+    # Red also pins aiohttp's own dependencies, which aiohttp 3.14 needs newer.
+    "aiosignal>=1.4.0",
+    "propcache>=0.2.1",
+    "yarl>=1.25.1",
+]

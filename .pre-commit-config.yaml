@@ -29,9 +29,9 @@ repos:
     hooks:
       # Keep uv.lock in sync with pyproject.toml
       - id: uv-lock
-      # uv-audit is intentionally not run here: Red-DiscordBot pins aiohttp, click,
-      # idna, markdown, orjson and pygments with `==`, so the audit can never pass.
-      # Run `uv audit` by hand to re-check whether Red has relaxed those pins.
+      # uv-audit is not run here. Red-DiscordBot pins aiohttp, brotli, idna, markdown,
+      # orjson and pygments with `==` at vulnerable versions; the [tool.uv] overrides
+      # in pyproject.toml lift those pins so `uv audit` passes. Run it by hand.
       #
       # Re-sync the venv after checkout/pull/rebase. Every group, because the ty hook
       # type-checks scripts/, whose imports (pandas, requests) live in the scripts group:
