@@ -15,3 +15,6 @@ Tracker*.json
 
 # Other
 trackers.json
+
+# Claude Code worktrees: full checkouts that ty and git would otherwise scan
+.claude/worktrees/
