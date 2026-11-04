@@ -530,6 +530,16 @@ Chosen over four mockup rounds (P4 in the artifact https://claude.ai/artifact/YU
 - Capped at 40 components with `-# And N more on the team page` (about 9 players with one group, 8 with three).
 - Unknown team: ephemeral red `ResultView` "Team not found".
 
+### 12 — `/tiers` card (`TiersCard`, `rsc/tiers/views.py`) — **SHIPPED** (2026-11-04)
+
+Option A, Ladder, from five mockups (https://claude.ai/artifact/N3y6rhXogvKqHJowEzRPqx). Rejected: a code-block table, one Container per tier, a Pillow MMR-axis graphic, and A plus a tier-details select.
+
+- One blue Container. Header Section: `-# League · Season N`, `## Tiers`, `10 tiers · 204 teams`, server icon.
+- One TextDisplay lists every tier, highest first: the role mention, then `-# 1800–2040 MMR · 8 teams · 7385 team cap` from `current_season().season_tier_data`. A tier without a role shows its bold name.
+- Foot: `-# Match nights Monday and Wednesday at <t:…:t>`, only when every tier shares one schedule. The start time is read in the server timezone.
+- Sent with `AllowedMentions.none()`: the role mentions must never ping a tier.
+- Season fetch fails: the tier list alone, under the server name.
+
 ## 4. Action item: website match link on the report result (requested 2026-10-28)
 
 `build_match_result_embed` (`rsc/ballchasing/ballchasing.py:862`) already returns a link-only `View` with a "Ballchasing Group" button. Adding a second link button for the frontend match page is straightforward: link buttons need no handler, and they work in both legacy views and V2 `ActionRow`s.
