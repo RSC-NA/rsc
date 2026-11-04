@@ -19,8 +19,13 @@ _SUB_TAGS = {SubStatus.OUT: "(Subbed Out)", SubStatus.IN: "(Subbed In)"}
 _BACKTICK_RUN = re.compile(r"`{2,}")
 
 
+MATCH_ROSTER_STATUSES = frozenset({Status.ROSTERED, Status.RENEWED, Status.FREE_AGENT, Status.PERM_FA, Status.IR, Status.AGMIR})
+
+
 def player_line(name: str, player: TeamPlayer, *, is_gm: bool) -> str | None:
     """A roster line, `name (C) (Sub) (GM)`, or None for a status that doesn't belong on a match roster."""
+    if player.status not in MATCH_ROSTER_STATUSES:
+        return None
     tags: list[str] = []
     if player.captain:
         tags.append("(C)")
@@ -31,10 +36,6 @@ def player_line(name: str, player: TeamPlayer, *, is_gm: bool) -> str | None:
             tags.append("(IR)")
         case Status.AGMIR:
             tags.append("(AGM IR)")
-        case Status.ROSTERED | Status.RENEWED:
-            pass
-        case _:
-            return None
     if is_gm:
         tags.append("(GM)")
     return " ".join([name, *tags])

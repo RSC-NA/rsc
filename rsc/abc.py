@@ -494,6 +494,9 @@ class RSCMixIn(ABC):
     async def match_page_link(self, guild: discord.Guild, match: Match) -> str | None: ...
 
     @abstractmethod
+    async def bracket_link(self, guild: discord.Guild, tier: str | None, season_number: int | None = None) -> str | None: ...
+
+    @abstractmethod
     async def is_match_day(self, guild: discord.Guild) -> bool: ...
 
     @abstractmethod

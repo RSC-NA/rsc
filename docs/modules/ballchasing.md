@@ -7,7 +7,7 @@ Match reporting. After a series, a player or GM runs `/reportmatch`, enters each
 1. finds the scheduled match in the RSC API;
 2. uploads the replays to [ballchasing.com](https://ballchasing.com) into a group for that match, skipping replays that are already there;
 3. reports the score and the ballchasing group to the RSC API;
-4. posts a result card in the tier's score-reporting channel, pinging both GMs.
+4. posts a result card in the tier's score-reporting channel, pinging both GMs. When the result wins a tier's final, it posts the champions card instead: an animated confetti banner, then every champion by name, pinged.
 
 The `/ballchasing` group holds the server settings for all of this.
 
@@ -91,8 +91,8 @@ The form itself times out after `MODAL_TIMEOUT` (600 seconds, from `rsc/const.py
 
 - **Startup**: `prepare_ballchasing(guild)` runs from the cog's per-guild setup in [core.py](../../rsc/core.py), only for guilds that have RSC API configuration. It builds a `ballchasing.Api` from the saved key, pings it, and keeps the client in memory. Setup runs again on every `on_ready`, but the client is only rebuilt when the key has changed.
 - **Unload**: `close_ballchasing_sessions()` closes every client.
-- **Channel posts**, all triggered by `/reportmatch`: the result card in `<tier>-score-reporting`, which pings the two GMs (user mentions allowed, role and `@everyone` mentions blocked), and failure reports in the log channel.
-- There are no task loops, listeners, persistent views or DMs. The result card is a Components V2 `LayoutView` that holds only link buttons ("Match page" and "Ballchasing"), so nothing needs to listen for clicks.
+- **Channel posts**, all triggered by `/reportmatch`: the result card in `<tier>-score-reporting`, which pings the two GMs (user mentions allowed, role and `@everyone` mentions blocked), and failure reports in the log channel. A won final posts the champions card there instead, which also pings every champion.
+- There are no task loops, listeners, persistent views or DMs. Both cards are Components V2 `LayoutView`s that hold only link buttons ("Match page", "Ballchasing", and "Bracket" on the champions card), so nothing needs to listen for clicks.
 
 ## How it works
 
@@ -102,7 +102,7 @@ The form itself times out after `MODAL_TIMEOUT` (600 seconds, from `rsc/const.py
 - [groups.py](../../rsc/ballchasing/groups.py): finds or creates the group ladder for a match. Also holds `purge_ballchasing_group()`, a destructive helper that no command uses.
 - [process.py](../../rsc/ballchasing/process.py): reads and parses replays (`replay_parser`), builds fingerprints, detects duplicates, and holds the upload result types.
 - [modals.py](../../rsc/ballchasing/modals.py): `ReportMatchModal` (score inputs and a `FileUpload`) and `score_error()` for series validation.
-- [views.py](../../rsc/ballchasing/views.py): `MatchResultCard`, the V2 result card, and `match_label()`.
+- [views.py](../../rsc/ballchasing/views.py): `MatchResultCard`, the V2 result card; `ChampionsCard`, the card a won final gets instead; `ResultCard`, the union of the two; and `match_label()`.
 - [validation.py](../../rsc/ballchasing/validation.py): `is_replay_file()`, which only checks the `.replay` extension.
 
 ### `/reportmatch` flow
@@ -123,6 +123,18 @@ The form itself times out after `MODAL_TIMEOUT` (600 seconds, from `rsc/const.py
 8. `report_match()` (matches module) calls the RSC API score report endpoint with the group, the scores, the reporter's Discord id and `override`. An `RscException` with status 500 is treated as "already reported".
 9. `report_upload_failures()` posts to the log channel when any file failed.
 10. `match_result_card()` gathers the tier colour, the winning franchise's logo (else the server icon, else the bundled `rsc_logo.png`), the GM mentions, the website match page link and the ballchasing group link. The card is rendered twice: once for the score-reporting channel, and once (with the upload summary) to replace the reporter's message.
+
+### Champions card
+
+When the API result clinches a final (`final_win()` in [matches/series.py](../../rsc/matches/series.py): a `FINALS` match, or a postseason match on the finals day, that a team has won), `match_result_card()` returns a `ChampionsCard` instead of a `MatchResultCard`. It holds, in the tier colour:
+
+- the banner from [utils/champions_banner.py](../../rsc/utils/champions_banner.py), an animated WebP in a Media Gallery, with alt text giving the result;
+- "Congratulations to the Season N Tier champions";
+- every champion on their own line: each player on the winner's match roster whose status `/match` lists (`MATCH_ROSTER_STATUSES`: rostered, renewed, free-agent subs, IR and AGM IR). A player in the server is mentioned and pinged; anyone else is shown by name. A GM is listed only if they're on that roster;
+- a small "Runner-up" line with both GMs, the winner's first;
+- "Match page", "Ballchasing" and "Bracket" link buttons.
+
+The banner takes about two seconds of CPU to draw, so it doesn't add to the wait. When the submitted score clinches a final, `/reportmatch` starts `champions_banner()` as a task before uploading replays: it fetches the winner's logo (10 s timeout, 8 MiB cap) and renders the banner in a worker thread while ballchasing uploads. `match_result_card()` uses that banner only if the API recorded the same score; otherwise it renders one for the recorded score. Every early exit cancels the task. If the logo can't be fetched, the banner shows the RSC logo. If the banner can't be drawn, the card goes out without it and the error is logged.
 
 ### Services called
 

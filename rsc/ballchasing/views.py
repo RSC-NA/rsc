@@ -1,8 +1,8 @@
-"""The match result card posted after a match is reported (Components V2)."""
-
+import io
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TypeAlias
 
 import discord
 from discord import ui
@@ -10,6 +10,7 @@ from rscapi.models.match import Match
 from rscapi.models.match_results import MatchResults
 
 from rsc.enums import MatchType, PostSeasonType
+from rsc.utils.champions_banner import CHAMPIONS_BANNER_FILENAME
 
 # Shown when there's no winning franchise logo (e.g. a tied series) and no server icon
 FALLBACK_LOGO = Path(__file__).parent.parent / "resources" / "rsc_logo.png"
@@ -113,3 +114,62 @@ class MatchResultCard:
         view = ui.LayoutView(timeout=None)
         view.add_item(container)
         return view, files
+
+
+@dataclass(frozen=True)
+class ChampionsCard:
+    """The card a won final gets in place of the match result: a banner and every champion by name."""
+
+    season: int | None
+    tier: str | None
+    winner: str
+    runner_up: str
+    winner_wins: int
+    runner_up_wins: int
+    colour: discord.Colour
+    champions: Sequence[str]
+    gm_mentions: Sequence[str]
+    banner: bytes | None
+    match_url: str | None
+    ballchasing_url: str | None
+    bracket_url: str | None
+
+    def render(self, *, replays: str | None = None) -> tuple[ui.LayoutView, list[discord.File]]:
+        """The card, plus the banner file. A fresh File each call, since a send consumes it.
+
+        `replays` adds the upload summary for the reporter's private copy.
+        """
+        title = " ".join(filter(None, [f"Season {self.season}" if self.season is not None else None, self.tier, "champions"]))
+        container = ui.Container(accent_colour=self.colour)
+
+        files: list[discord.File] = []
+        if self.banner:
+            files.append(discord.File(io.BytesIO(self.banner), filename=CHAMPIONS_BANNER_FILENAME))
+            alt = f"{self.winner}, {title}, won the final {self.winner_wins}\N{EN DASH}{self.runner_up_wins} against {self.runner_up}"
+            container.add_item(ui.MediaGallery(discord.MediaGalleryItem(f"attachment://{CHAMPIONS_BANNER_FILENAME}", description=alt)))
+
+        container.add_item(ui.TextDisplay(f"### Congratulations to the {title}"))
+        if self.champions:
+            container.add_item(ui.TextDisplay("\n".join(self.champions)))
+        footer = f"-# Runner-up {discord.utils.escape_markdown(self.runner_up)}"
+        if self.gm_mentions:
+            footer += f" · GMs {' · '.join(self.gm_mentions)}"
+        container.add_item(ui.TextDisplay(footer))
+
+        links = ui.ActionRow()
+        for label, url in (("Match page", self.match_url), ("Ballchasing", self.ballchasing_url), ("Bracket", self.bracket_url)):
+            if url:
+                links.add_item(ui.Button(label=label, url=url))
+        if links.children:
+            container.add_item(ui.Separator())
+            container.add_item(links)
+
+        if replays:
+            container.add_item(ui.TextDisplay(f"-# Replays: {replays}"))
+
+        view = ui.LayoutView(timeout=None)
+        view.add_item(container)
+        return view, files
+
+
+ResultCard: TypeAlias = MatchResultCard | ChampionsCard

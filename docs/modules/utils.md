@@ -31,7 +31,7 @@ The rest of the package is code other modules call: the bot's single rate-limite
 | Split long text into messages | `Pagify` ([pagify.py](../../rsc/utils/pagify.py)), which also escapes `@everyone`/`@here` by default. |
 | Escape or sanitise user text | `utils.escape` (mass mentions, markdown) and [filters.py](../../rsc/utils/filters.py) (`filter_urls`, `filter_invites`, `filter_mass_mentions`, `filter_various_mentions`, `escape_spoilers`, `normalize_smartquotes`). |
 | Refresh an autocomplete name cache | `merge_name_cache(cached, names, full_refresh=...)` ([cache.py](../../rsc/utils/cache.py)): a full refresh replaces, a filtered one only adds, always de-duplicated. |
-| Draw an image | [images.py](../../rsc/utils/images.py): `getProgressBar` (used by admin sync) and `signup_banner_file` (the animated sign-up banner, rendered off the event loop). |
+| Draw an image | [images.py](../../rsc/utils/images.py): `getProgressBar` (used by admin sync) and `signup_banner_file` (the animated sign-up banner, rendered off the event loop). [champions_banner.py](../../rsc/utils/champions_banner.py): `champions_banner_bytes`, the animated confetti banner on the champions card `/reportmatch` posts for a won final. |
 | Resize an uploaded image | `resize_image`, `img_to_thumbnail`. |
 
 ## Commands
@@ -95,6 +95,7 @@ Roles looked up by name include `Admin` (the ceiling for role commands), `League
 - [cache.py](../../rsc/utils/cache.py): `merge_name_cache`, used by the tier, franchise and team autocomplete caches.
 - [filters.py](../../rsc/utils/filters.py) and [pagify.py](../../rsc/utils/pagify.py): text sanitising and paging.
 - [images.py](../../rsc/utils/images.py): Pillow drawing for the progress bar and the sign-up banner, using the Apotek fonts in `rsc/resources/fonts/`.
+- [champions_banner.py](../../rsc/utils/champions_banner.py): the champions banner, a 1200×600 animated WebP of 40 frames: spotlights on the winner's logo, then the season, tier, CHAMPIONS, the winner and the score, with confetti falling at three depths. It reuses the sign-up banner's helpers from `images.py`. Each confetti layer is drawn whole, but its blur, upscale and 2× downscale run only on crops around each piece, which gives the same pixels for a third of the time. The WebP encode (libwebp, one core) is most of the remaining cost. A logo keeps its proportions; a missing or unreadable one falls back to `rsc/resources/rsc_logo.png`. The confetti is seeded by season, tier and winner, so a re-render is identical.
 - [views/bulk_role.py](../../rsc/utils/views/bulk_role.py): `BulkRoleConfirmView`. [views/mass_trophy.py](../../rsc/utils/views/mass_trophy.py): `MassTrophyModal`, which resolves IDs from the cache first and then the API, collecting bad lines rather than failing the batch.
 
 Nothing in this package calls the RSC API except `/getreactlist` with `by_tier`, which fetches the league's tier list (`TiersApi.tiers_list` via `self.tiers`).

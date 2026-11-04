@@ -16,11 +16,12 @@ from ballchasing.exceptions import BackoffLimitExceeded, BallchasingFault, Dupli
 from redbot.core import app_commands
 from rscapi.models.match import Match
 from rscapi.models.match_results import MatchResults
+from rscapi.models.match_team import MatchTeam
 
 from rsc.abc import RSCMixIn
 from rsc.ballchasing import groups, process, validation
 from rsc.ballchasing.modals import ReportMatchModal, score_error
-from rsc.ballchasing.views import MatchResultCard
+from rsc.ballchasing.views import ChampionsCard, MatchResultCard, ResultCard
 from rsc.const import MODAL_TIMEOUT
 from rsc.embeds import (
     ApiExceptionErrorEmbed,
@@ -32,8 +33,11 @@ from rsc.embeds import (
 from rsc.enums import MatchType
 from rsc.exceptions import RscException
 from rsc.logs import GuildLogAdapter
+from rsc.matches.series import final_win
+from rsc.matches.views import MATCH_ROSTER_STATUSES
 from rsc.teams import TeamMixIn
 from rsc.utils import utils
+from rsc.utils.champions_banner import ChampionsBanner, champions_banner_bytes
 from rsc.utils.website import match_page_url, website_url
 
 logger = logging.getLogger("red.rsc.ballchasing")
@@ -62,6 +66,28 @@ BC_REPORT_TIMEOUT = 300
 # listing carries the stats we fingerprint from.
 BC_LEDGER_TTL = 3600.0
 BC_LEDGER_MAX_GROUPS = 512
+
+
+LOGO_FETCH_TIMEOUT = aiohttp.ClientTimeout(total=10)
+LOGO_MAX_BYTES = 8 * 1024 * 1024
+
+
+@dataclass(frozen=True)
+class PrerenderedBanner:
+    submitted_score: tuple[int, int]
+    task: asyncio.Task[bytes | None]
+
+
+async def fetch_logo(url: str) -> bytes:
+    """The logo at `url`. Raises when it can't be fetched in time or is larger than `LOGO_MAX_BYTES`."""
+    async with aiohttp.ClientSession(trust_env=True, timeout=LOGO_FETCH_TIMEOUT) as session, session.get(url) as resp:
+        resp.raise_for_status()
+        data = bytearray()
+        async for chunk in resp.content.iter_chunked(64 * 1024):
+            data += chunk
+            if len(data) > LOGO_MAX_BYTES:
+                raise ValueError(f"Logo at {url} is over {LOGO_MAX_BYTES} bytes")
+        return bytes(data)
 
 
 @dataclass(slots=True)
@@ -637,69 +663,78 @@ class BallchasingMixIn(RSCMixIn):
                 ephemeral=True,
             )
 
-        # Send "working" message
-        queued = self.bc_match_report_in_progress(guild, match.id)
-        embed = YellowEmbed(
-            title="Processing Match",
-            description=(
-                f"Another report for **{home}** vs **{away}** is in progress. Waiting for it to finish."
-                if queued
-                else f"Processing replays for match **{home}** vs **{away}**."
-            ),
-        )
-        await interaction.followup.send(embed=embed, ephemeral=True)
-
-        # One reporter at a time per match. Two teammates reporting the same match
-        # concurrently would otherwise both find an empty group and both upload.
+        prerendered = None
+        if final_win(match, home_wins, away_wins):
+            task = asyncio.create_task(self.champions_banner(guild, match, home_wins, away_wins))
+            prerendered = PrerenderedBanner(submitted_score=(home_wins, away_wins), task=task)
         try:
-            async with self.bc_match_guard(guild, match.id), asyncio.timeout(BC_REPORT_TIMEOUT):
-                try:
-                    upload = await self.process_match_replays(guild, match=match, candidates=candidates)
-                except Exception as exc:
-                    log.exception(f"Error processing match replays: {exc}", exc_info=exc, guild=guild, match=match)
-                    return await interaction.edit_original_response(embed=ExceptionErrorEmbed(exc_message=str(exc)))
-
-                try:
-                    match_result = await self.report_match(
-                        guild,
-                        match_id=match.id,
-                        ballchasing_group=upload.group,
-                        home_score=home_wins,
-                        away_score=away_wins,
-                        executor=member,
-                        override=override,
-                    )
-                    log.debug(f"Match Result: {match_result}", match=match)
-                except RscException as exc:
-                    await self.report_upload_failures(guild, match=match, upload=upload)
-                    if hasattr(exc, "status") and exc.status == 500:
-                        # Match already reported
-                        return await interaction.edit_original_response(
-                            embed=YellowEmbed(
-                                title="Match Reported",
-                                description="This match has already been reported but all additional replays have been uploaded.",
-                            )
-                        )
-                    else:
-                        return await interaction.edit_original_response(embed=ApiExceptionErrorEmbed(exc))
-        except TimeoutError:
-            log.error(f"Timed out reporting match {match.id}", guild=guild, match=match)
-            return await interaction.edit_original_response(
-                embed=ErrorEmbed(
-                    title="Report Timed Out",
-                    description="Ballchasing did not respond in time. Please try again in a few minutes.",
-                )
+            # Send "working" message
+            queued = self.bc_match_report_in_progress(guild, match.id)
+            embed = YellowEmbed(
+                title="Processing Match",
+                description=(
+                    f"Another report for **{home}** vs **{away}** is in progress. Waiting for it to finish."
+                    if queued
+                    else f"Processing replays for match **{home}** vs **{away}**."
+                ),
             )
+            await interaction.followup.send(embed=embed, ephemeral=True)
 
-        await self.report_upload_failures(guild, match=match, upload=upload)
+            # One reporter at a time per match. Two teammates reporting the same match
+            # concurrently would otherwise both find an empty group and both upload.
+            try:
+                async with self.bc_match_guard(guild, match.id), asyncio.timeout(BC_REPORT_TIMEOUT):
+                    try:
+                        upload = await self.process_match_replays(guild, match=match, candidates=candidates)
+                    except Exception as exc:
+                        log.exception(f"Error processing match replays: {exc}", exc_info=exc, guild=guild, match=match)
+                        return await interaction.edit_original_response(embed=ExceptionErrorEmbed(exc_message=str(exc)))
 
-        # Result card. Gathered once so the channel post and the reporter's copy match.
-        card = await self.match_result_card(
-            guild,
-            match=match,
-            result=match_result,
-            link=await self.bc_group_full_url(upload.group),
-        )
+                    try:
+                        match_result = await self.report_match(
+                            guild,
+                            match_id=match.id,
+                            ballchasing_group=upload.group,
+                            home_score=home_wins,
+                            away_score=away_wins,
+                            executor=member,
+                            override=override,
+                        )
+                        log.debug(f"Match Result: {match_result}", match=match)
+                    except RscException as exc:
+                        await self.report_upload_failures(guild, match=match, upload=upload)
+                        if hasattr(exc, "status") and exc.status == 500:
+                            # Match already reported
+                            return await interaction.edit_original_response(
+                                embed=YellowEmbed(
+                                    title="Match Reported",
+                                    description="This match has already been reported but all additional replays have been uploaded.",
+                                )
+                            )
+                        else:
+                            return await interaction.edit_original_response(embed=ApiExceptionErrorEmbed(exc))
+            except TimeoutError:
+                log.error(f"Timed out reporting match {match.id}", guild=guild, match=match)
+                return await interaction.edit_original_response(
+                    embed=ErrorEmbed(
+                        title="Report Timed Out",
+                        description="Ballchasing did not respond in time. Please try again in a few minutes.",
+                    )
+                )
+
+            await self.report_upload_failures(guild, match=match, upload=upload)
+
+            # Result card. Gathered once so the channel post and the reporter's copy match.
+            card = await self.match_result_card(
+                guild,
+                match=match,
+                result=match_result,
+                link=await self.bc_group_full_url(upload.group),
+                prerendered=prerendered,
+            )
+        finally:
+            if prerendered:
+                prerendered.task.cancel()
 
         # Announce to score reporting. The GM line in the card carries the pings,
         # and upload accounting is only useful to the person who submitted the files.
@@ -890,27 +925,88 @@ class BallchasingMixIn(RSCMixIn):
         match: Match,
         result: MatchResults,
         link: str | None = None,
-    ) -> MatchResultCard:
-        """Gather what the match result card shows. See `MatchResultCard.render`."""
+        prerendered: PrerenderedBanner | None = None,
+    ) -> ResultCard:
+        """Gather what the result card shows: the champions card when `result` wins a final, else the match result.
+
+        `prerendered` is used when it was rendered for this result's score. See `ChampionsCard.render` and `MatchResultCard.render`.
+        """
         home, away = match.home_team, match.away_team
+        home_wins, away_wins = result.home_wins or 0, result.away_wins or 0
 
         colour = discord.Colour.default()
         if home.tier:
             colour = await utils.tier_color_by_name(guild, home.tier)
 
-        gm_mentions = [
-            member.mention for team in (home, away) if team.gm and team.gm.discord_id and (member := guild.get_member(team.gm.discord_id))
-        ]
+        def gm_mentions(*teams: MatchTeam) -> list[str]:
+            return [member.mention for team in teams if team.gm and team.gm.discord_id and (member := guild.get_member(team.gm.discord_id))]
 
-        return MatchResultCard(
-            match=match,
-            result=result,
+        win = final_win(match, home_wins, away_wins)
+        if win is None:
+            return MatchResultCard(
+                match=match,
+                result=result,
+                colour=colour,
+                logo_url=await self.winning_logo_url(guild, match, home_wins, away_wins),
+                gm_mentions=gm_mentions(home, away),
+                match_url=await self.match_page_link(guild, match),
+                ballchasing_url=link,
+            )
+
+        if prerendered and prerendered.submitted_score == (home_wins, away_wins):
+            banner = await prerendered.task
+        else:
+            banner = await self.champions_banner(guild, match, home_wins, away_wins)
+
+        champions = [
+            member.mention if p.discord_id and (member := guild.get_member(p.discord_id)) else discord.utils.escape_markdown(p.name)
+            for p in win.winner.players or []
+            if p.status in MATCH_ROSTER_STATUSES
+        ]
+        return ChampionsCard(
+            season=match.season_number,
+            tier=home.tier,
+            winner=win.winner.name,
+            runner_up=win.runner_up.name,
+            winner_wins=win.winner_wins,
+            runner_up_wins=win.runner_up_wins,
             colour=colour,
-            logo_url=await self.winning_logo_url(guild, match, result.home_wins or 0, result.away_wins or 0),
-            gm_mentions=gm_mentions,
+            champions=champions,
+            gm_mentions=gm_mentions(win.winner, win.runner_up),
+            banner=banner,
             match_url=await self.match_page_link(guild, match),
             ballchasing_url=link,
+            bracket_url=await self.bracket_link(guild, home.tier, match.season_number),
         )
+
+    async def champions_banner(self, guild: discord.Guild, match: Match, home_wins: int, away_wins: int) -> bytes | None:
+        """The animated banner for the final this score wins. None when it isn't one or the banner couldn't be made."""
+        win = final_win(match, home_wins, away_wins)
+        if win is None:
+            return None
+        try:
+            tier = match.home_team.tier or ""
+            colour = await utils.tier_color_by_name(guild, tier) if tier else discord.Colour.default()
+            logo = None
+            if logo_url := await self.winning_logo_url(guild, match, home_wins, away_wins):
+                try:
+                    logo = await fetch_logo(logo_url)
+                except Exception as exc:
+                    log.warning(f"Unable to fetch the champions logo {logo_url}: {exc}", guild=guild, match=match)
+            spec = ChampionsBanner(
+                season=match.season_number,
+                tier=tier,
+                tier_colour=colour.to_rgb(),
+                winner=win.winner.name,
+                loser=win.runner_up.name,
+                winner_wins=win.winner_wins,
+                loser_wins=win.runner_up_wins,
+                logo=logo,
+            )
+            return await champions_banner_bytes(spec)
+        except Exception as exc:
+            log.exception(f"Unable to make the champions banner: {exc}", exc_info=exc, guild=guild, match=match)
+            return None
 
     async def winning_logo_url(self, guild: discord.Guild, match: Match, home_wins: int, away_wins: int) -> str | None:
         """The logo of the franchise ahead at this score, else the server icon. A tie has no winner."""

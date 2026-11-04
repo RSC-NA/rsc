@@ -51,7 +51,8 @@ None. No Config keys or environment variables. The check-in channel is found by 
 ### Files
 
 - [matches.py](../../rsc/matches/matches.py): `MatchMixIn`. It holds the two commands, the role checks, the code that gathers the `/match` cards, and the RSC API wrappers.
-- [views.py](../../rsc/matches/views.py): the Components V2 cards, `MatchCard` and `PendingSeriesCard`, each a frozen dataclass with a pure `render()`, plus `player_line` (the roster markers) and `MatchRefreshButton`.
+- [views.py](../../rsc/matches/views.py): the Components V2 cards, `MatchCard` and `PendingSeriesCard`, each a frozen dataclass with a pure `render()`, plus `player_line` (the roster markers), `MATCH_ROSTER_STATUSES` (the statuses a match roster lists, also used for the champions card) and `MatchRefreshButton`.
+- [series.py](../../rsc/matches/series.py): `is_final()`, `series_winner()` (who has clinched a series at a score, as the API decides it) and `final_win()`. Used by `/reportmatch`'s champions card and `/admin matches fix`.
 
 ### `/match` flow
 

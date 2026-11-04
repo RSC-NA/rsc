@@ -209,6 +209,7 @@ class TestMatchResultCard:
         mixin = _mixin(franchises=franchises)
         guild = _guild()
         card = await mixin.match_result_card(guild, _match(), _result(3, 1), link="https://ballchasing.com/group/abc")
+        assert isinstance(card, MatchResultCard)
         franchises.assert_awaited_once_with(guild, name="Hex Systems")
         assert card.logo_url == "https://cdn.example/logo.png"
         # GM 22 isn't in the server, so only GM 11 is mentioned
@@ -222,6 +223,7 @@ class TestMatchResultCard:
         franchises = AsyncMock()
         mixin = _mixin(franchises=franchises)
         card = await mixin.match_result_card(_guild(), _match(), _result(2, 2))
+        assert isinstance(card, MatchResultCard)
         franchises.assert_not_awaited()
         assert card.logo_url == "https://cdn.example/guild.png"
 

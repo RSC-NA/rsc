@@ -12,7 +12,8 @@ from rscapi.models.pending_series import PendingSeries
 
 from rsc.ballchasing.views import match_label, round_label, score, scoreline
 from rsc.const import DEFAULT_TIMEOUT
-from rsc.enums import MatchType, PostSeasonType
+from rsc.enums import MatchType
+from rsc.matches.series import is_final, series_winner
 from rsc.views import AuthorOnlyLayoutView
 
 Items: TypeAlias = list[ui.Item[Any]]
@@ -24,18 +25,6 @@ def _md(text: str) -> str:
 
 def _possessive(name: str) -> str:
     return f"{_md(name)}'" if name.endswith("s") else f"{_md(name)}'s"
-
-
-def series_winner(match: Match, home_wins: int, away_wins: int) -> MatchTeam | None:
-    """The team that has clinched the series at this score, decided as the API's `series_winner` does."""
-    if not match.num_games:
-        return None
-    needed = match.num_games // 2 + 1
-    if home_wins >= needed:
-        return match.home_team
-    if away_wins >= needed:
-        return match.away_team
-    return None
 
 
 @dataclass(frozen=True)
@@ -96,7 +85,7 @@ def fix_change(fix: Fix) -> Change:
                 return NoSeriesWinner()
             if new == old:
                 return SameWinner(new)
-            if match.match_type == MatchType.FINALS or match.day == PostSeasonType.FINALS:
+            if is_final(match):
                 return WonFinals(new)
             return NewWinner(new, old, round_label((match.day or 0) + 1))
         case _:

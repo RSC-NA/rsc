@@ -540,6 +540,16 @@ Option A, Ladder, from five mockups (https://claude.ai/artifact/N3y6rhXogvKqHJow
 - Sent with `AllowedMentions.none()`: the role mentions must never ping a tier.
 - Season fetch fails: the tier list alone, under the server name.
 
+### 13 — Champions card (`ChampionsCard`, `rsc/ballchasing/views.py`; issue #15) — **SHIPPED** (2026-11-04)
+
+Posted by `/reportmatch` in place of the match result card when the result clinches a final. Chosen over two mockup rounds (https://claude.ai/artifact/7VADAEJCJQZxgVWQU9qY7n, then https://claude.ai/artifact/4WpaVNGh8DM6Uh4mjfQKX6): banner **Confetti**, animated; text **Congratulations** with one champion per line; stripe in the **tier colour**. Built-output preview: https://claude.ai/artifact/K1Geuy599aPhw1AatoGsU1.
+
+- Container in the tier colour: Media Gallery with the banner (`champions.webp`, alt text "Quantum, Season 23 Elite champions, won the final 4–2 against Voltage"), `### Congratulations to the Season 23 Elite champions`, the champions one per line, `-# Runner-up Voltage · GMs @winner GM · @runner-up GM`, Separator, link buttons Match page, Ballchasing, Bracket. The reporter's copy adds `-# Replays: …`. 10 of 40 components.
+- **Champions** (decided 2026-11-04): every player on the winner's match roster with a status `/match` lists, so subs who played, subbed-out players and IR/AGM IR count. Only players: a GM is listed only if on that roster. In-server players are mentioned and pinged; others shown by escaped name.
+- **Banner** (`rsc/utils/champions_banner.py`): 1200×600 animated WebP, 40 frames at 70 ms, seamless confetti loop; spotlights on the winner's logo, kicker `SEASON 23 ELITE`, `CHAMPIONS`, the winner, `DEFEATED VOLTAGE 4-2`. Shares the sign-up banner's Apotek type, slanted headline and kicker, with its own layout and motion. Frame 0 is the finished design (autoplay-off viewers see it). Logos keep their proportions; missing or unreadable logos fall back to the RSC logo.
+- **Speed:** the render was optimized with pixel-identical output (all 40 frames of both test finals compared, 0 pixels differ): 3.62 s → 2.14 s on the dev box, median of 5, WebP method 3 (same size and quality as 4). The encoder is the limit. `/reportmatch` starts the banner while replays upload, so it normally adds no wait.
+- Failure: no logo → RSC logo; render error → the card without the banner, logged.
+
 ## 4. Action item: website match link on the report result (requested 2026-10-28)
 
 `build_match_result_embed` (`rsc/ballchasing/ballchasing.py:862`) already returns a link-only `View` with a "Ballchasing Group" button. Adding a second link button for the frontend match page is straightforward: link buttons need no handler, and they work in both legacy views and V2 `ActionRow`s.
