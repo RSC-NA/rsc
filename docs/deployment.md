@@ -105,9 +105,9 @@ This makes the Red data directory sensitive: protect it and its backups accordin
 
 ## Backups
 
-[scripts/bot_backup.sh](../scripts/bot_backup.sh) archives `~/.local/share/Red-DiscordBot` to `~/backup/rsc_bot_backup.tar.gz` and replaces the copy in the `gs://rsc-storage-bucket` Google Cloud Storage bucket. It needs `gcloud` authenticated on the host. Run it on a schedule (for example from cron). Only one copy is kept in the bucket, so each run overwrites the last.
+[scripts/bot_backup.sh](../scripts/bot_backup.sh) archives Red's data directory (`~/.local/share/Red-DiscordBot`) and its instance registry (`~/.config/Red-DiscordBot/config.json`, which maps each instance name to its data path) to `~/backup/rsc_bot_backup.tar.gz`, then overwrites the copy in the `gs://rsc-storage-bucket` Google Cloud Storage bucket. If `tar` fails, the bucket keeps the previous backup. It needs `gcloud` authenticated on the host. Run it on a schedule (for example from cron). Only one copy is kept in the bucket, so each run overwrites the last.
 
-To restore, stop the bot, extract the archive over the data directory, and start the bot again.
+To restore, stop the bot, run `tar -xzf rsc_bot_backup.tar.gz -C /` as the bot's user (the archive stores both directories by absolute path), and start the bot again.
 
 ## Future: Docker
 
