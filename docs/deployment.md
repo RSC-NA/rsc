@@ -5,7 +5,7 @@ How the production bot is installed and updated. Today it runs on a VPS from a P
 ## What production consists of
 
 - A Linux VPS.
-- A Python 3.12 virtual environment containing Red-DiscordBot 3.5.24 and this cog's dependencies.
+- A Python 3.11 virtual environment containing Red-DiscordBot 3.5.24 and this cog's dependencies. 3.11 is the newest Python Red 3.5.24 supports.
 - One Red instance (the bot account) that has joined every RSC server it serves. Each server is a guild with its own API URL, key and league configured.
 - The cog itself, installed from this GitHub repo through Red's Downloader.
 - Red's data directory (`~/.local/share/Red-DiscordBot` by default), which holds the instance config, every guild's `Config` values, and the installed cog code.
