@@ -555,7 +555,7 @@ class TeamMixIn(RSCMixIn):
         for p in players:
             member = guild.get_member(p.player.discord_id) if p.player.discord_id else None
             row = RosterRow(
-                name=member.display_name if member else p.player.name,
+                name=(utils.strip_trailing_accolades(member.display_name) if member else None) or p.player.name,
                 mmr=p.current_mmr,
                 tags=roster_tags(p, gm_id),
                 profile_url=page(player_page_url, rsc_id_number(p.player.rsc_id) if p.player.rsc_id else None),

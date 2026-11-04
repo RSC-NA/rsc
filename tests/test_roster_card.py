@@ -10,6 +10,7 @@ from rscapi.models.player_franchise import PlayerFranchise
 from rscapi.models.player_team import PlayerTeam
 from rscapi.models.tier import Tier
 
+from rsc import const
 from rsc.enums import Status, SubStatus
 from rsc.teams.teams import TeamMixIn
 from rsc.teams.views import RosterCard, RosterGroup, RosterRow
@@ -154,6 +155,14 @@ class TestRosterContent:
         view = await _build([VOLTAGE[0], _player("Not_here", 202, 1400)], mock_guild)
         assert "**Under\\_score\\***\n-# 1500 MMR" in _texts(view)
         assert "**Not\\_here**\n-# 1400 MMR" in _texts(view)
+
+    async def test_accolade_emoji_are_dropped_from_nicknames(self, mock_guild):
+        members = {201: f"RF | Abe {const.TROPHY_EMOJI}{const.TROPHY_EMOJI}", 202: const.TROPHY_EMOJI}
+        mock_guild.get_member.side_effect = lambda i: MagicMock(spec=discord.Member, display_name=members[i]) if i in members else None
+        view = await _build([VOLTAGE[0], _player("Bea", 202, 1400)], mock_guild)
+        assert "**RF \\| Abe**\n-# 1500 MMR" in _texts(view)
+        # A nickname that is nothing but accolades falls back to the RSC name
+        assert "**Bea**\n-# 1400 MMR" in _texts(view)
 
 
 class TestRosterHeader:
