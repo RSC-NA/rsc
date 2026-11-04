@@ -20,10 +20,10 @@ Follow the Red Discord Bot installation guide for [Windows](https://docs.discord
 The cog's Python dependencies are not installed by Red's Downloader. Install them into the bot's virtual environment first, and again whenever `requirements.txt` changes:
 
 ```sh
-uv pip install --python <bot venv>/bin/python -r requirements.txt
+<bot venv>/bin/python -m pip install --no-deps -r requirements.txt
 ```
 
-Use [uv](https://docs.astral.sh/uv/) rather than pip: `requirements.txt` carries hashes alongside git dependencies, and pip refuses that combination.
+`--no-deps` is required. The file already pins every package, and it overrides some of Red's exact pins that pip would otherwise refuse. See [Deployment](docs/deployment.md).
 
 Then install the cog itself:
 

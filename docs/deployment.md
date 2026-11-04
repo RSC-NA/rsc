@@ -13,11 +13,11 @@ How the production bot is installed and updated. Today it runs on a VPS from a P
 
 ## First install
 
-1. **Create the environment.** Install Python 3.12 and uv, then make a venv and install Red into it:
+1. **Create the environment.** Production runs Python 3.11. Make a venv and install Red into it:
 
    ```sh
-   uv venv ~/redenv --python 3.12
-   uv pip install --python ~/redenv/bin/python Red-DiscordBot==3.5.24
+   python3.11 -m venv ~/redenv
+   ~/redenv/bin/python -m pip install Red-DiscordBot==3.5.24
    ```
 
    The Red version must match the `red-discordbot` pin in [pyproject.toml](../pyproject.toml): it pins discord.py, aiohttp and others that the cog is tested against.
@@ -30,13 +30,15 @@ How the production bot is installed and updated. Today it runs on a VPS from a P
 
    Pick an instance name and data location. You need the bot token from the Discord developer portal. Enable the privileged gateway intents for the bot there, as Red's install guide describes; the cog reads member lists and roles.
 
-3. **Install the cog's Python dependencies.** Red's Downloader doesn't install them. Use uv, because `requirements.txt` mixes hashes with git dependencies and pip refuses that:
+3. **Install the cog's Python dependencies.** Red's Downloader doesn't install them.
 
    ```sh
-   uv pip install --python ~/redenv/bin/python -r requirements.txt
+   ~/redenv/bin/python -m pip install --no-deps -r requirements.txt
    ```
 
    Run this from a checkout of the repo at the commit you're deploying. Repeat it whenever `requirements.txt` changes.
+
+   `requirements.txt` is every package from `uv.lock`, pinned, so pip has nothing to resolve. `--no-deps` is required: `pyproject.toml` overrides some of Red's exact pins (aiohttp and others, for security fixes), and without it pip refuses Red's metadata. Afterwards `pip check` lists those Red pins as mismatches. That is expected.
 
 4. **Set the Sentry DSN** in the environment Red starts from, so errors go to the `rsc-discord-bot` Sentry project (see [External services](external-services.md#sentry)). For a systemd unit, add `Environment=SENTRY_DSN=<dsn>` to `[Service]`. Without it the bot runs normally and reports nothing.
 
@@ -111,7 +113,7 @@ To restore, stop the bot, extract the archive over the data directory, and start
 
 Moving to a container is planned but not done. Things the image and compose file will need to handle:
 
-- Python 3.12 with Red pinned to the version in `pyproject.toml`, and `requirements.txt` installed with uv.
+- Python 3.11 with Red pinned to the version in `pyproject.toml`, and `requirements.txt` installed with `pip install --no-deps`.
 - Red's data directory on a persistent volume, since it holds every guild's settings and the installed cog.
 - The bot token passed in at runtime, not baked into the image.
 - The webhook server: it binds to `localhost` inside the container, so the website can't reach it through a published port until the bind address is made configurable, or the website runs in the same network namespace.
