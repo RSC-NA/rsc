@@ -9,7 +9,7 @@ from rsc.ballchasing import ballchasing as bc
 from rsc.ballchasing.ballchasing import BallchasingMixIn, PrerenderedBanner
 from rsc.ballchasing.views import ChampionsCard, MatchResultCard
 from rsc.enums import MatchType, PostSeasonType, Status, SubStatus
-from rsc.exceptions import ApiError
+from rsc.exceptions import ApiError, ConflictError
 from rsc.matches.series import FinalWin, final_win, is_final
 from rsc.utils.champions_banner import ChampionsBanner
 from tests.utils import command_callback
@@ -352,8 +352,11 @@ class _Report:
         self.interaction.guild = _guild()
         self.interaction.user = MagicMock(spec=discord.Member)
         self.interaction.response.send_modal = AsyncMock()
-        self.interaction.followup.send = AsyncMock()
-        self.interaction.edit_original_response = AsyncMock()
+        self.processing = MagicMock(edit=AsyncMock())
+        self.interaction.followup.send = AsyncMock(return_value=self.processing)
+        # The command answers with a modal, so Discord has no original response to edit
+        unknown_message = discord.NotFound(MagicMock(status=404, reason="Not Found"), {"code": 10008, "message": "Unknown Message"})
+        self.interaction.edit_original_response = AsyncMock(side_effect=unknown_message)
         self.announce = AsyncMock()
         self.modal = MagicMock(wait=AsyncMock(return_value=False), valid=True, home_wins=submitted[0], away_wins=submitted[1])
         self.modal.replays = [MagicMock()]
@@ -428,11 +431,31 @@ class TestReportFlow:
         assert files == []
 
     async def test_already_reported_cancels_the_banner(self):
-        report = _Report(submitted=(4, 2), recorded=ApiError(500, "Match already reported"))
+        conflict = ConflictError(409, "This match is already reported 1-3. Send override to change it.")
+        report = _Report(submitted=(4, 2), recorded=conflict)
         await report.run()
         assert report.banner_calls == [(4, 2)]
         assert report.banner_cancelled
         report.announce.assert_not_awaited()
-        call = report.interaction.edit_original_response.await_args
+        call = report.processing.edit.await_args
         assert call is not None
-        assert call.kwargs["embed"].title == "Match Reported"
+        assert call.kwargs["embed"].title == "Match Already Reported"
+        assert "already reported 1-3" in call.kwargs["embed"].description
+
+    async def test_api_error_replaces_the_processing_message(self):
+        report = _Report(submitted=(3, 2), recorded=ApiError(500, "Match is locked"))
+        await report.run()
+        report.announce.assert_not_awaited()
+        call = report.processing.edit.await_args
+        assert call is not None
+        assert call.kwargs["embed"].title == "API Error"
+        assert call.kwargs["embed"].description == "Match is locked"
+
+    async def test_result_card_replaces_the_processing_message(self):
+        report = _Report(submitted=(3, 2), recorded=(3, 2))
+        await report.run()
+        assert report.interaction.followup.send.await_count == 1
+        call = report.processing.edit.await_args
+        assert call is not None
+        assert isinstance(call.kwargs["view"], ui.LayoutView)
+        assert call.kwargs["embed"] is None

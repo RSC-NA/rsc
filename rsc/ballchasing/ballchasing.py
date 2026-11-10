@@ -31,7 +31,7 @@ from rsc.embeds import (
     YellowEmbed,
 )
 from rsc.enums import MatchType
-from rsc.exceptions import RscException
+from rsc.exceptions import ConflictError, RscException
 from rsc.logs import GuildLogAdapter
 from rsc.matches.series import final_win
 from rsc.matches.views import MATCH_ROSTER_STATUSES
@@ -678,7 +678,7 @@ class BallchasingMixIn(RSCMixIn):
                     else f"Processing replays for match **{home}** vs **{away}**."
                 ),
             )
-            await interaction.followup.send(embed=embed, ephemeral=True)
+            processing = await interaction.followup.send(embed=embed, ephemeral=True, wait=True)
 
             # One reporter at a time per match. Two teammates reporting the same match
             # concurrently would otherwise both find an empty group and both upload.
@@ -688,7 +688,7 @@ class BallchasingMixIn(RSCMixIn):
                         upload = await self.process_match_replays(guild, match=match, candidates=candidates)
                     except Exception as exc:
                         log.exception(f"Error processing match replays: {exc}", exc_info=exc, guild=guild, match=match)
-                        return await interaction.edit_original_response(embed=ExceptionErrorEmbed(exc_message=str(exc)))
+                        return await processing.edit(embed=ExceptionErrorEmbed(exc_message=str(exc)))
 
                     try:
                         match_result = await self.report_match(
@@ -701,21 +701,20 @@ class BallchasingMixIn(RSCMixIn):
                             override=override,
                         )
                         log.debug(f"Match Result: {match_result}", match=match)
+                    except ConflictError as exc:
+                        await self.report_upload_failures(guild, match=match, upload=upload)
+                        return await processing.edit(
+                            embed=YellowEmbed(
+                                title="Match Already Reported",
+                                description=f"{exc.message}\n\nAny replays missing from the match's ballchasing group were still uploaded.",
+                            )
+                        )
                     except RscException as exc:
                         await self.report_upload_failures(guild, match=match, upload=upload)
-                        if hasattr(exc, "status") and exc.status == 500:
-                            # Match already reported
-                            return await interaction.edit_original_response(
-                                embed=YellowEmbed(
-                                    title="Match Reported",
-                                    description="This match has already been reported but all additional replays have been uploaded.",
-                                )
-                            )
-                        else:
-                            return await interaction.edit_original_response(embed=ApiExceptionErrorEmbed(exc))
+                        return await processing.edit(embed=ApiExceptionErrorEmbed(exc))
             except TimeoutError:
                 log.error(f"Timed out reporting match {match.id}", guild=guild, match=match)
-                return await interaction.edit_original_response(
+                return await processing.edit(
                     embed=ErrorEmbed(
                         title="Report Timed Out",
                         description="Ballchasing did not respond in time. Please try again in a few minutes.",
@@ -744,13 +743,7 @@ class BallchasingMixIn(RSCMixIn):
         # Replace the reporter's "Processing Match" embed with their copy of the card.
         # It was an embed, so the edit must clear it: a V2 message can't carry one.
         view, files = card.render(replays=upload_summary(upload))
-        try:
-            await interaction.edit_original_response(content=None, embed=None, attachments=files, view=view)
-        except discord.errors.NotFound:
-            # Original message not found, send a new one. Render again, since the
-            # failed edit may have consumed the files.
-            view, files = card.render(replays=upload_summary(upload))
-            await interaction.followup.send(view=view, files=files, ephemeral=True)
+        await processing.edit(content=None, embed=None, attachments=files, view=view)
 
     # Functions
 

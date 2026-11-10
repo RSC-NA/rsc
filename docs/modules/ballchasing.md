@@ -37,7 +37,7 @@ Rules the bot enforces:
 - Every file must end in `.replay` and parse as a Rocket League replay. If two attached files are the same game, the whole submission is rejected. That covers the same file twice, and two players' recordings of one game.
 - It does not matter which team you put first. Scores are matched to the API's real home and away teams before reporting.
 
-If two people report the same match at once, the second waits for the first to finish and is told so. Replays the first person already uploaded are skipped. If the match was already reported, the RSC API refuses the score. Any new replays are still added to the group, and the reporter sees "This match has already been reported but all additional replays have been uploaded."
+If two people report the same match at once, the second waits for the first to finish and is told so. Replays the first person already uploaded are skipped. If the match was already reported, the RSC API refuses the score with a 409. Any new replays are still added to the group, and the reporter sees "Match Already Reported" with the API's message, which gives the recorded score.
 
 **Stats committee:** watch the log channel. A "Replay Upload Failures" message lists each replay that did not make it into the group and why, with a link to the group.
 
@@ -120,7 +120,7 @@ The form itself times out after `MODAL_TIMEOUT` (600 seconds, from `rsc/const.py
    - **Group**: under the per-guild group lock, `groups.rsc_match_bc_group()` reuses `match.results.ballchasing_group` if the API already has one. Otherwise it finds or creates the ladder: top-level group → `Season <n>` → match type name → tier → `Match Day 07` (or the playoff round name) → `Home vs Away`. Each level is searched with a name filter first, then with an unfiltered listing, before a new group is created. New groups use player identification by ID and team identification by clusters. Resolved IDs are cached per guild.
    - **Duplicates against the group**: `replay_group_collisions()` fingerprints the replays already in the group, ignoring replays whose processing failed. It also uses the in-memory **upload ledger** of replays this bot uploaded in the last hour, which covers replays ballchasing has not finished processing. Matching candidates are skipped.
    - **Upload**: each remaining replay is uploaded as public under a random 64-character name into the group. If ballchasing says the replay already exists, the existing replay is moved into the group (`patch_replay`). Other ballchasing errors and network errors are recorded per file. If the rate-limit backoff runs out, the rest of the batch is marked as skipped.
-8. `report_match()` (matches module) calls the RSC API score report endpoint with the group, the scores, the reporter's Discord id and `override`. An `RscException` with status 500 is treated as "already reported".
+8. `report_match()` (matches module) calls the RSC API score report endpoint with the group, the scores, the reporter's Discord id and `override`. A `ConflictError` (HTTP 409) means "already reported". Any other `RscException` is shown to the reporter as an API error.
 9. `report_upload_failures()` posts to the log channel when any file failed.
 10. `match_result_card()` gathers the tier colour, the winning franchise's logo (else the server icon, else the bundled `rsc_logo.png`), the GM mentions, the website match page link and the ballchasing group link. The card is rendered twice: once for the score-reporting channel, and once (with the upload summary) to replace the reporter's message.
 
@@ -157,6 +157,5 @@ The banner takes about two seconds of CPU to draw, so it doesn't add to the wait
 - The per-tier channel must be named exactly `<tier name lowercased>-score-reporting` and must be in the configured category. Otherwise the public card is skipped with only a log warning.
 - The score check only looks at the total number of games. In a best of 5, 2–1 passes because 3 games falls within 3 to 5.
 - If one file in a submission fails to parse, nothing from that submission is uploaded.
-- "Already reported" is inferred from an HTTP 500 from the RSC API, not from a specific error code.
 - `/ballchasing scanmissing` is a stub.
 - The permission error for `override` sent before the form opens is not ephemeral, so the channel sees it.
