@@ -21,7 +21,7 @@ Scripts that change data (uploads, tests that run a draft) say so in their descr
 
 | Script | What it does |
 |---|---|
-| [combines_lobby.py](../scripts/combines_lobby.py) | Posts sample Combines lobbies (`start <guild_id>`, `-2` for the 2v2 sample) or a game-finished event (`teardown <guild_id> <lobby_id>`) to the bot on `localhost:8008`. Samples are in [data/combines/](../data/combines/) |
+| [combines_lobby.py](../scripts/combines_lobby.py) | Posts sample Combines lobbies (`start <guild_id>`, `-2` for the 2v2 sample, `--games N` for N lobbies in one webhook, `--presses N` to send it N times growing each time, as the website does when staff press the button again). Only the lobby maker gets a Discord ID (`--discord-id`, default the developer's), so testing never pings real players or a game-finished event (`teardown <guild_id> <lobby_id>`, or `teardown <guild_id> --all` for every lobby the bot still has open, read from `GET /combines_open`) to the bot on `localhost:8008`. Samples are in [data/combines/](../data/combines/) |
 | [devleague_lobby.py](../scripts/devleague_lobby.py) | Same for Dev League, with samples in [data/devleague/](../data/devleague/) |
 | [brute_test_combines_check_in.py](../scripts/brute_test_combines_check_in.py) | Load-tests Combines check-in with a file of Discord IDs. It calls the live `devleague.rscna.com` check-in endpoint, not the bot |
 

@@ -8,6 +8,7 @@ system does lives in test_combines_runner.py and test_devleague_runner.py.
 import asyncio
 import copy
 import json
+import logging
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import discord
@@ -156,7 +157,9 @@ class Rig:
             self.cog._get_devleague_announce_channel = AsyncMock(return_value=None)
 
     async def settle(self) -> None:
+        await asyncio.wait_for(self.runner.queue.join(), timeout=5)
         await asyncio.wait_for(asyncio.gather(*self.runner.background_tasks), timeout=5)
+        await self.runner.stop()
 
 
 @pytest.fixture(params=["combines", "devleague"])
@@ -215,6 +218,24 @@ class TestStartGame:
         await rig.settle()
 
         assert create.await_count == 2
+
+    async def test_stuck_lobby_is_given_up_and_the_rest_still_start(self, rig, monkeypatch):
+        monkeypatch.setattr("rsc.lobbies.runner.LOBBY_TIMEOUT", 0.05)
+        create = _stub_create(rig)
+
+        async def hang_on_the_first(lobby):
+            if lobby.id == 101:
+                await asyncio.sleep(10)
+            return [MagicMock(), MagicMock()]
+
+        create.side_effect = hang_on_the_first
+
+        await rig.runner.start_game(_request({"101": rig.payload(101), "102": rig.payload(102)}))
+        await rig.settle()
+
+        assert [c.args[0].id for c in create.await_args_list] == [101, 102]
+        # The stuck one can be tried again by the next webhook
+        assert rig.runner.active_lobbies == {(GUILD_ID, 102)}
 
 
 class TestDuplicateLobbies:
@@ -310,12 +331,35 @@ class TestCreateChannels:
         rig.category_getter.return_value = None
         assert await rig.runner.create_channels(rig.lobby()) == []
 
-    @pytest.mark.parametrize("side", ["home", "away"])
-    async def test_existing_lobby_creates_nothing(self, rig, side):
-        rig.guild.channels.append(rig.lobby_channel(101, side))
+    @pytest.mark.parametrize(("kept", "made"), [("home", "away"), ("away", "home")])
+    async def test_half_made_lobby_gets_its_missing_channel_and_card(self, rig, kept, made):
+        announce = self._stub_announce(rig)
+        kept_channel = rig.lobby_channel(101, kept)
+        rig.guild.channels.append(kept_channel)
 
-        assert await rig.runner.create_channels(rig.lobby()) == []
+        channels = await rig.runner.create_channels(rig.lobby())
+
+        assert [c.name for c in channels] == [rig.channel_name(101, "home"), rig.channel_name(101, "away")]
+        assert kept_channel in channels
+        assert [c.kwargs["name"] for c in rig.category.create_voice_channel.await_args_list] == [rig.channel_name(101, made)]
+        announce.assert_awaited_once()
+
+    async def test_lobby_already_up_is_left_alone(self, rig):
+        announce = self._stub_announce(rig)
+        rig.guild.channels.extend([rig.lobby_channel(101, "home"), rig.lobby_channel(101, "away")])
+        rig.cog.config.custom.return_value.LobbyMessages = AsyncMock(return_value={"101": {}})
+
+        assert len(await rig.runner.create_channels(rig.lobby())) == 2
         rig.category.create_voice_channel.assert_not_called()
+        announce.assert_not_called()
+
+    async def test_channels_up_without_a_card_get_one(self, rig):
+        announce = self._stub_announce(rig)
+        rig.guild.channels.extend([rig.lobby_channel(101, "home"), rig.lobby_channel(101, "away")])
+
+        assert len(await rig.runner.create_channels(rig.lobby())) == 2
+        rig.category.create_voice_channel.assert_not_called()
+        announce.assert_awaited_once()
 
     async def test_no_players_in_guild_creates_nothing(self, rig):
         rig.cog.combine_players_from_lobby.return_value = []
@@ -338,11 +382,15 @@ class TestCreateChannels:
         assert len(await rig.runner.create_channels(rig.lobby())) == 2
         announce.assert_not_called()
 
-    async def test_placement_failure_still_returns_the_channels(self, rig):
-        self._stub_announce(rig)
-        rig.league.place = AsyncMock(side_effect=_http_error())
+    async def test_failed_sort_still_starts_the_lobby(self, rig):
+        announce = self._stub_announce(rig)
+        rig.runner.place = AsyncMock(side_effect=_http_error())
 
-        assert len(await rig.runner.create_channels(rig.lobby())) == 2
+        await rig.runner.start_game(_request({"101": rig.payload()}))
+        await rig.settle()
+
+        announce.assert_awaited_once()
+        assert (GUILD_ID, 101) in rig.runner.active_lobbies
 
 
 class TestTargetCategory:
@@ -418,6 +466,29 @@ class TestTeardown:
             channel.delete.assert_awaited_once_with(reason=reason)
         for channel in keep:
             channel.delete.assert_not_called()
+
+    async def test_channel_already_gone_does_not_stop_the_rest(self, rig):
+        # A second teardown of the same match, or staff deleting it by hand, gets there first
+        home, away = rig.lobby_channel(101, "home"), rig.lobby_channel(101, "away")
+        home.delete.side_effect = discord.NotFound(MagicMock(status=404), "Unknown Channel")
+        rig.category.voice_channels = [home, away]
+
+        await rig.runner.teardown(rig.guild, lobby_id=101)
+
+        away.delete.assert_awaited_once()
+
+    async def test_failed_teardown_is_logged_with_its_lobby(self, rig, caplog):
+        rig.category.voice_channels = [rig.lobby_channel(101, "home")]
+        rig.category.voice_channels[0].delete.side_effect = discord.Forbidden(MagicMock(status=403), "Missing Permissions")
+
+        await rig.runner.handle_event(_request(_event()))
+        with caplog.at_level(logging.ERROR, logger="red.rsc.lobbies.runner"):
+            await asyncio.wait(rig.runner.background_tasks)
+            await asyncio.sleep(0)
+
+        (record,) = [r for r in caplog.records if r.name == "red.rsc.lobbies.runner"]
+        assert "101" in record.getMessage()
+        assert isinstance(record.exc_info[1], discord.Forbidden)
 
     async def test_saved_card_is_marked_final_with_the_systems_score(self, rig):
         entry = MagicMock()
@@ -508,8 +579,38 @@ class TestOpenLobbies:
 
         assert await rig.runner.open_lobbies(rig.guild) == {101, 102, 103}
 
+    async def test_queued_lobbies_count_as_open(self, rig):
+        # So ending everything also stops queued lobbies from being made afterwards
+        rig.runner.active_lobbies |= {(GUILD_ID, 104), (1, 999)}
+
+        assert await rig.runner.open_lobbies(rig.guild) == {104}
+
     async def test_no_category_uses_saved_cards_only(self, rig):
         rig.cog.config.custom.return_value.LobbyMessages = AsyncMock(return_value={"101": {}})
         rig.category_getter.return_value = None
 
         assert await rig.runner.open_lobbies(rig.guild) == {101}
+
+
+class TestListOpen:
+    def _get(self, query: dict) -> MagicMock:
+        request = MagicMock()
+        request.query = query
+        return request
+
+    async def test_lists_open_lobby_ids_in_order(self, rig):
+        rig.cog.config.custom.return_value.LobbyMessages = AsyncMock(return_value={"102": {}})
+        rig.category.voice_channels = [rig.lobby_channel(101, "home")]
+        rig.runner.active_lobbies.add((GUILD_ID, 103))
+
+        resp = await rig.runner.list_open(self._get({"guild_id": str(GUILD_ID)}))
+
+        assert resp.status == 200
+        assert json.loads(resp.text) == {"lobbies": [101, 102, 103]}
+
+    @pytest.mark.parametrize("query", [{}, {"guild_id": "abc"}])
+    async def test_missing_or_bad_guild_id_is_400(self, rig, query):
+        assert (await rig.runner.list_open(self._get(query))).status == 400
+
+    async def test_unknown_guild_is_503(self, rig):
+        assert (await rig.runner.list_open(self._get({"guild_id": "1"}))).status == 503

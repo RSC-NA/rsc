@@ -7,6 +7,7 @@ import discord
 from rsc.devleague.api import DEVLEAGUE_API_URL
 from rsc.devleague.models import DevLeagueLobby
 from rsc.devleague.runner import DevLeague
+from rsc.lobbies.runner import LobbyRunner
 
 GUILD_ID = 991044575567179856
 
@@ -56,6 +57,11 @@ def _league() -> DevLeague:
     return DevLeague(MagicMock())
 
 
+def _runner() -> LobbyRunner:
+    cog = MagicMock()
+    return LobbyRunner(cog, DevLeague(cog))
+
+
 class TestDevLeague:
     def test_channels_use_the_tier_slug(self):
         assert [_league().channel_name(_lobby(), side) for side in ("home", "away")] == ["splus-101-home", "splus-101-away"]
@@ -95,7 +101,7 @@ class TestPlaceByTier:
         ]
         home, away = _channel("a-3-home", 10, position=5), _channel("a-3-away", 11, position=6)
         # The cache may or may not already hold the new channels.
-        await _league().place(_category(guild, [*existing, home]), home, away)
+        await _runner().place(_category(guild, [*existing, home]), [home, away])
 
         assert guild._state.http.bulk_channel_update.await_args is not None
         payload = guild._state.http.bulk_channel_update.await_args.args[1]
@@ -107,7 +113,7 @@ class TestPlaceByTier:
         existing = [_channel("s-1-home", 1, 0), _channel("s-1-away", 2, 1)]
         home, away = _channel("f-3-home", 10), _channel("f-3-away", 11)
 
-        await _league().place(_category(guild, existing), home, away)
+        await _runner().place(_category(guild, existing), [home, away])
 
         assert guild._state.http.bulk_channel_update.await_args is not None
         payload = guild._state.http.bulk_channel_update.await_args.args[1]
