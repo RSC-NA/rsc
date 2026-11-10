@@ -300,18 +300,14 @@ class CombineMixIn(CombineManagerMixIn, RSCMixIn):
 
     async def combine_players_from_lobby(self, guild: discord.Guild, lobby: models.CombinesLobby) -> list[discord.Member]:
         players = []
-        for p in lobby.home:
-            m = guild.get_member(p.discord_id) if p.discord_id else None
+        for p in [*lobby.home, *lobby.away]:
+            if not p.discord_id:
+                # The site couldn't match them to a Discord account. The card still names them.
+                log.debug(f"Lobby {lobby.id} player {p.label} has no Discord ID")
+                continue
+            m = guild.get_member(p.discord_id)
             if not m:
-                log.warning(f"Unable to find combine player in guild: {p.discord_id}")
+                log.warning(f"Lobby {lobby.id} player {p.label} ({p.discord_id}) is not in the guild")
                 continue
             players.append(m)
-
-        for p in lobby.away:
-            m = guild.get_member(p.discord_id) if p.discord_id else None
-            if not m:
-                log.warning(f"Unable to find combine player in guild: {p.discord_id}")
-                continue
-            players.append(m)
-
         return players

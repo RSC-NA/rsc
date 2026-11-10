@@ -9,6 +9,7 @@ the test instead of stalling the suite.
 import asyncio
 import copy
 import itertools
+import logging
 import uuid
 import weakref
 from types import MethodType
@@ -33,6 +34,10 @@ from rsc.devleague.manager import DevLeagueManagerMixIn
 from rsc.devleague.runner import DevLeague
 from rsc.lobbies.runner import LobbyRunner
 from rsc.utils.dm import DMHelper
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
 
 GUILD_ID = 395806681994493964
 LOBBY_IDS = (101, 102, 103)
@@ -85,7 +90,9 @@ class FakeDiscord:
         )
         self.guild.default_role = MagicMock(spec=discord.Role)
         self.guild.roles = [self._role(const.LEAGUE_ROLE), self._role(const.MUTED_ROLE)]
-        self.guild._state.http.bulk_channel_update = AsyncMock()
+        self.guild._state.http.bulk_channel_update = AsyncMock(side_effect=self._move)
+        # Awaited with each voice channel's name before Discord makes it
+        self.before_create: Callable[[str], Awaitable[None]] | None = None
         self.members = {}
         self.guild.get_member.side_effect = self.members.get
         self.guild.get_channel.side_effect = lambda cid: next((c for c in self._channels if c.id == cid), None)
@@ -119,6 +126,8 @@ class FakeDiscord:
         type(cat).voice_channels = PropertyMock(side_effect=mine)
 
         async def create_voice_channel(name: str, **_kwargs):
+            if self.before_create:
+                await self.before_create(name)
             vc = MagicMock(spec=discord.VoiceChannel)
             vc.name = name
             vc.id = next(self.ids)
@@ -147,6 +156,14 @@ class FakeDiscord:
 
     def voice_channels(self) -> list[str]:
         return [c.name for c in self._channels if isinstance(c, discord.VoiceChannel)]
+
+    def shown(self, category) -> list[str]:
+        """A category's voice channels in the order Discord shows them."""
+        return [c.name for c in sorted(category.voice_channels, key=lambda c: (c.position, c.id))]
+
+    async def _move(self, _guild_id: int, payload: list, **_kwargs):
+        for update in payload:
+            next(c for c in self._channels if c.id == update["id"]).position = update["position"]
 
     def _message(self, channel_id: int) -> MagicMock:
         msg = MagicMock(spec=discord.Message)
@@ -221,9 +238,11 @@ def _request(data) -> MagicMock:
 
 
 async def _settle(runner: LobbyRunner) -> None:
-    """Wait for every background task the runner started, or fail on a hang."""
+    """Wait for the queue to empty and every background task to finish, or fail on a hang."""
+    await asyncio.wait_for(runner.queue.join(), timeout=WAIT)
     while runner.background_tasks:
         await asyncio.wait_for(asyncio.gather(*runner.background_tasks), timeout=WAIT)
+    await runner.stop()
 
 
 async def _drain(helper: DMHelper, sent: int) -> None:
@@ -380,6 +399,120 @@ class TestDevLeagueLifecycle:
         assert sorted(map(int, await config.custom("DevLeague", str(GUILD_ID)).LobbyMessages())) == [101, 102, 103, 104]
 
 
+SYSTEMS = {"combines": (_combines, "Combines"), "devleague": (_devleague, "Dev League")}
+# What staff send in one press. The website sends every game it has each time.
+NIGHT = {101: "B", 102: "S+", 103: "F", 104: "A", 105: "S+", 106: "B", 107: "C", 108: "A", 109: "D", 110: "S"}
+
+
+def _webhook(ids) -> MagicMock:
+    return _request({str(i): _lobby_payload(i, NIGHT[i]) for i in ids})
+
+
+@pytest.mark.parametrize("system", SYSTEMS)
+class TestStartingANight:
+    """Every game the website sends is started once, however often staff press the button."""
+
+    @staticmethod
+    async def _setup(fake: FakeDiscord, config: Config, helper: DMHelper, system: str):
+        setup, category_name = SYSTEMS[system]
+        runner = await setup(fake, config, helper)
+        for match_id in NIGHT:
+            fake.member(match_id * 10 + 1)
+        return runner, next(c for c in fake.guild.categories if c.name == category_name)
+
+    @staticmethod
+    def _names(runner: LobbyRunner, ids) -> list[str]:
+        return [runner.league.channel_name(CombinesLobby(**_lobby_payload(i, NIGHT[i])), side) for i in ids for side in ("home", "away")]
+
+    async def test_one_press_starts_every_game(self, config, dm_helper, system):
+        fake = FakeDiscord()
+        runner, category = await self._setup(fake, config, dm_helper, system)
+
+        await runner.start_game(_webhook(NIGHT))
+        await _settle(runner)
+
+        assert len(fake.posts) == len(NIGHT)
+        # Combines keep the order they were made in. Dev League sorts S+ down to F.
+        order = list(NIGHT) if system == "combines" else [102, 105, 110, 104, 108, 101, 106, 107, 109, 103]
+        assert fake.shown(category) == self._names(runner, order)
+        # Discord rate limits position updates hard: one for the whole night, not one per game
+        assert fake.guild._state.http.bulk_channel_update.await_count == (0 if system == "combines" else 1)
+
+    async def test_pressing_again_while_games_start_makes_nothing_twice(self, config, dm_helper, system, caplog):
+        caplog.set_level(logging.INFO, logger="red.rsc.lobbies.runner")
+        fake = FakeDiscord()
+        runner, category = await self._setup(fake, config, dm_helper, system)
+        release = asyncio.Event()
+
+        async def slow_discord(_name: str) -> None:
+            await release.wait()
+
+        fake.before_create = slow_discord
+
+        # Each press sends every game so far, including those already being made
+        for last in (103, 106, 110):
+            await runner.start_game(_webhook(range(101, last + 1)))
+            await asyncio.sleep(0)
+        release.set()
+        await _settle(runner)
+
+        assert sorted(fake.shown(category)) == sorted(self._names(runner, NIGHT))
+        assert len(fake.posts) == len(NIGHT)
+        # New channels can take a moment to reach Discord's cache, so a repeat press must
+        # not queue a game again and rely on the channel check to catch it
+        queued = [r.getMessage() for r in caplog.records if "queued" in r.getMessage()]
+        assert [q.split(": queued ")[1].split(" new")[0] for q in queued] == ["3", "3", "4"]
+
+    async def test_half_made_game_is_finished(self, config, dm_helper, system):
+        fake = FakeDiscord()
+        runner, category = await self._setup(fake, config, dm_helper, system)
+        home, away = self._names(runner, [102])
+        await category.create_voice_channel(name=home)
+
+        await runner.start_game(_webhook([101, 102, 103]))
+        await _settle(runner)
+
+        assert sorted(fake.voice_channels()) == sorted(self._names(runner, [101, 102, 103]))
+        assert fake.voice_channels().count(home) == 1
+        assert away in fake.voice_channels()
+        assert len(fake.posts) == 3
+
+    async def test_games_already_up_after_a_restart_are_left_alone(self, config, dm_helper, system):
+        fake = FakeDiscord()
+        runner, _category = await self._setup(fake, config, dm_helper, system)
+        await runner.start_game(_webhook([101, 102]))
+        await _settle(runner)
+
+        # A restart forgets which games are up. Discord and the saved cards still know.
+        restarted = LobbyRunner(runner.cog, runner.league)
+        await restarted.start_game(_webhook([101, 102, 103]))
+        await _settle(restarted)
+
+        assert sorted(fake.voice_channels()) == sorted(self._names(runner, [101, 102, 103]))
+        assert len(fake.posts) == 3
+        # And they stay claimed, so the next press skips them without looking
+        assert {(GUILD_ID, 101), (GUILD_ID, 102)} <= restarted.active_lobbies
+
+    async def test_game_finished_while_queued_is_never_made(self, config, dm_helper, system):
+        fake = FakeDiscord()
+        runner, _category = await self._setup(fake, config, dm_helper, system)
+        release = asyncio.Event()
+
+        async def slow_discord(_name: str) -> None:
+            await release.wait()
+
+        fake.before_create = slow_discord
+
+        await runner.start_game(_webhook([101, 102, 103]))
+        await asyncio.sleep(0)
+        await runner.handle_event(_request(_finished(103)))
+        release.set()
+        await _settle(runner)
+
+        assert sorted(fake.voice_channels()) == sorted(self._names(runner, [101, 102]))
+        assert len(fake.posts) == 2
+
+
 class TestSettingsLookups:
     """The getters each system reads its settings through, against real Config."""
 
@@ -445,3 +578,20 @@ class TestCombinePlayersFromLobby:
         players = await cog.combine_players_from_lobby(fake.guild, CombinesLobby(**_lobby_payload(101, "Elite")))
 
         assert players == present
+
+    async def test_only_players_with_an_id_who_left_are_warned_about(self, config, caplog):
+        fake = FakeDiscord()
+        present = fake.member(1011)
+        cog = _cog(fake, config, MagicMock())
+        payload = _lobby_payload(101, "Elite")
+        # The site sends no ID for players it can't match to a Discord account
+        for player in payload["home"][1:]:
+            player["discord_id"] = None
+
+        with caplog.at_level(logging.WARNING):
+            players = await cog.combine_players_from_lobby(fake.guild, CombinesLobby(**payload))
+
+        assert players == [present]
+        warned = [r.getMessage() for r in caplog.records if r.levelno >= logging.WARNING]
+        assert len(warned) == 3
+        assert all(f"({101 * 10 + i})" in w for w, i in zip(warned, (4, 5, 6), strict=True))

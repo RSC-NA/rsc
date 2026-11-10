@@ -429,6 +429,8 @@ def _unloadable_cog(**attrs):
         "retire_audit_loop": MagicMock(),
         "cancel_permfa_poll_timers": MagicMock(),
         "_dm_helper": AsyncMock(),
+        "_combines_runner": AsyncMock(),
+        "_devleague_runner": AsyncMock(),
         "_exception_recorder": ExceptionRecorder(),
         "close_ballchasing_sessions": AsyncMock(),
         "close_api_clients": AsyncMock(),
@@ -438,6 +440,15 @@ def _unloadable_cog(**attrs):
 
 
 class TestCogUnload:
+    async def test_stops_both_lobby_queues(self):
+        """A reloaded cog builds new runners, so the old workers must not keep creating lobbies."""
+        cog = _unloadable_cog()
+
+        await cog.cog_unload()
+
+        cog._combines_runner.stop.assert_awaited_once()
+        cog._devleague_runner.stop.assert_awaited_once()
+
     async def test_removes_dm_button_templates(self):
         """Templates live on the bot, so a reload would otherwise keep the old classes."""
         bot = MagicMock()

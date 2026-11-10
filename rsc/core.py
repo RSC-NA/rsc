@@ -203,6 +203,9 @@ class RSC(
         # Discard rather than drain. Draining sends one DM per `rate` seconds, so a
         # large queued batch would block the reload for many minutes.
         await self._dm_helper.stop(drain=False)
+        # Queued lobbies are dropped. The website sends every game again on the next press.
+        await self._combines_runner.stop()
+        await self._devleague_runner.stop()
         # The root logger outlives the cog, so a reload would otherwise stack a
         # second recorder beside the old one.
         logging.getLogger().removeHandler(self._exception_recorder)
@@ -417,10 +420,12 @@ class RSC(
         # Combines
         self._web_app.router.add_post("/combines_match", self._combines_runner.start_game)
         self._web_app.router.add_post("/combines_event", self._combines_runner.handle_event)
+        self._web_app.router.add_get("/combines_open", self._combines_runner.list_open)
 
         # Dev League
         self._web_app.router.add_post("/devleague_match", self._devleague_runner.start_game)
         self._web_app.router.add_post("/devleague_event", self._devleague_runner.handle_event)
+        self._web_app.router.add_get("/devleague_open", self._devleague_runner.list_open)
 
         self._web_app.router.add_post("/league_player_update", self.league_player_update_handler)
 
