@@ -334,17 +334,3 @@ class TestDispatcher:
 
         assert sync.await_args is not None
         assert sync.await_args.kwargs["agm_franchise"] is f
-
-    async def test_conflicting_status_is_logged_and_still_dispatched(self, mock_guild, member, monkeypatch, caplog):
-        """An AGM can only sign with the franchise they staff, so an AGM record
-        alongside a free agent status means the two API records disagree."""
-        sync = AsyncMock()
-        monkeypatch.setattr(roles, "update_free_agent_discord", sync)
-        lp = MagicMock()
-        lp.status = Status.FREE_AGENT
-
-        with caplog.at_level("WARNING"):
-            await roles.update_league_player_discord(guild=mock_guild, player=member, league_player=lp, agm_franchise=_franchise())
-
-        sync.assert_awaited_once()
-        assert "reconciled by hand" in caplog.text

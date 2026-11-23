@@ -5,11 +5,13 @@ import pytest
 
 from rsc import const
 from rsc.admin.agm import AdminAGMMixIn
+from rsc.admin.sync import AdminSyncMixIn
 from rsc.enums import Status
 from rsc.transactions import roles
 
 from .sync_fakes import (
     DESERT_ROLE,
+    MEMBER_ID,
     OCEAN_ROLE,
     ROLE_NAMES,
     TIERS,
@@ -29,13 +31,13 @@ OTHER_FRANCHISE = "The Desert"
 OTHER_FRANCHISE_ID = 9
 
 
-def _create_mixin(**attrs):
-    saved = AdminAGMMixIn.__abstractmethods__
-    AdminAGMMixIn.__abstractmethods__ = frozenset()
+def _create_mixin(cls=AdminAGMMixIn, **attrs):
+    saved = cls.__abstractmethods__
+    cls.__abstractmethods__ = frozenset()
     try:
-        m = object.__new__(AdminAGMMixIn)
+        m = object.__new__(cls)
     finally:
-        AdminAGMMixIn.__abstractmethods__ = saved
+        cls.__abstractmethods__ = saved
     for k, v in attrs.items():
         setattr(m, k, v)
     return m
@@ -487,6 +489,14 @@ class TestAgmWithoutARosterSpot:
         if status in STATUS_ROLE:
             assert STATUS_ROLE[status] in held
 
+    async def test_adds_each_role_once(self, status):
+        member = sync_member(sync_guild(), nick="nickm")
+
+        await _sync(member, status, agm_franchise())
+
+        added = [role.name for call in member.add_roles.await_args_list for role in call.args]
+        assert sorted(added) == sorted(set(added))
+
     @pytest.mark.parametrize("held", [(), ROLE_NAMES], ids=["no roles", "every role"])
     async def test_second_sync_sends_no_requests(self, status, held):
         member = sync_member(sync_guild(), held=held, nick="FA | nickm")
@@ -505,3 +515,46 @@ class TestAgmWithoutARosterSpot:
 
         assert member.display_name == f"{STATUS_TAG.get(status, 'FA')} | nickm"
         assert OCEAN_ROLE not in role_names(member)
+
+
+class TestStatusSyncCommandsKeepAnAgm:
+    """`/admin sync freeagent` and `drafteligible` sync one status at a time, AGMs included."""
+
+    async def _run(self, command, member, status):
+        async def rows(guild, status):
+            if status == row.status:
+                yield row
+
+        row = league_player(status)
+        member.guild.get_member = MagicMock(return_value=member)
+        mixin = _create_mixin(
+            AdminSyncMixIn,
+            total_players=AsyncMock(return_value=1),
+            tiers=AsyncMock(return_value=TIERS),
+            paged_players=rows,
+            agm_franchise_map=AsyncMock(return_value={MEMBER_ID: agm_franchise()}),
+        )
+        interaction = _mock_interaction(member.guild)
+        interaction.edit_original_response = AsyncMock()
+        with patch("rsc.admin.sync.ConfirmSyncView") as confirm, patch("rsc.admin.sync.CancelView") as progress:
+            confirm.return_value.prompt = AsyncMock()
+            confirm.return_value.wait = AsyncMock()
+            confirm.return_value.result = True
+            progress.return_value.cancelled = False
+            await command_callback(command)(mixin, interaction, False)
+
+    @pytest.mark.parametrize(
+        ("command", "status"),
+        [
+            (AdminSyncMixIn._sync_freeagent_cmd, Status.FREE_AGENT),
+            (AdminSyncMixIn._sync_freeagent_cmd, Status.PERM_FA),
+            (AdminSyncMixIn._sync_drafteligible_cmd, Status.DRAFT_ELIGIBLE),
+        ],
+    )
+    async def test_agm_keeps_the_franchise_tag_and_roles(self, command, status):
+        member = sync_member(sync_guild(), held=[const.LEAGUE_ROLE, const.AGM_ROLE, OCEAN_ROLE], nick="OCE | nickm")
+
+        await self._run(command, member, status)
+
+        assert member.display_name == "OCE | nickm"
+        assert {const.AGM_ROLE, OCEAN_ROLE, STATUS_ROLE[status]} <= role_names(member)
