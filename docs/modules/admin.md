@@ -144,9 +144,9 @@ Match types are `REG`, `PRE`, `PST`, `FNL` and `ANY`. Formats are `GMS`, `BO3`, 
 | `/admin sync tiers [chatcategory] [scorecategory]` | Manage Server | Creates or recolours each tier role and `<Tier>FA` role from the API. If categories are given, creates `<tier>-chat` and `<tier>-score-reporting` channels or resets their overwrites. |
 | `/admin sync transactionchannels category [delete_stale]` | Manage Server | After a confirmation, creates any missing `<franchise>-transactions` channels, giving access to the transactions role and the GM, and pings the GM. With `delete_stale`, deletes every text channel in the category that does not match a franchise. |
 | `/admin sync franchiseroles` | Manage Server | After a confirmation, creates missing `Franchise (GM name)` roles and renames roles whose GM part is out of date. |
-| `/admin sync players [dryrun]` | Manage Server | After a confirmation, re-applies roles and nickname from the API to every league player in the server. Slow. |
-| `/admin sync nonplaying [dryrun]` | Manage Server | After a confirmation, resets every API member who is not a league player (or is Dropped) to non-playing roles. Then removes the Assistant GM role from anyone the API has no AGM record for. Slow. |
-| `/admin sync member member` | Manage Server | Re-applies API roles and nickname to one member, including non-playing GMs and AGMs. |
+| `/admin sync players [dryrun]` | Manage Server | After a confirmation, re-applies roles and nickname from the API to every league player in the server. Each member is synced from their effective row (see *Season-aware reads* below). Slow. |
+| `/admin sync nonplaying [dryrun]` | Manage Server | After a confirmation, resets every API member who has no effective league player row, or whose row is Dropped, Former or Banned, to non-playing roles. Then removes the Assistant GM role from anyone the API has no AGM record for. Slow. |
+| `/admin sync member member` | Manage Server | Re-applies API roles and nickname to one member from their effective row, including non-playing GMs and AGMs. |
 | `/admin sync freeagent [dryrun]` | Manage Server | After a confirmation, re-syncs every FA and PermFA, with a progress bar and a cancel button. |
 | `/admin sync drafteligible [dryrun]` | Manage Server | After a confirmation, re-syncs every Draft Eligible player, with a progress bar and a cancel button. |
 
@@ -186,7 +186,7 @@ The module also reads settings owned by other modules:
 
 ## Background work
 
-- **Daily Discord role sync** (`sync_discord_roles`, [sync.py](../../rsc/admin/sync.py)). A `tasks.loop` at 07:00 UTC. For every league player in the API, it re-applies roles, nickname, Dev League role and AGM franchise state with `update_league_player_discord`. **It only runs for guild `395806681994493964`, which is hard-coded.** It restarts itself if it crashes.
+- **Daily Discord role sync** (`sync_discord_roles`, [sync.py](../../rsc/admin/sync.py)). A `tasks.loop` at 07:00 UTC. For every member with an effective league player row, it re-applies roles, nickname, Dev League role and AGM franchise state with `update_league_player_discord`. When Discord refuses the change for one member, the loop logs a warning that names the member and goes on to the next. **It only runs for guild `395806681994493964`, the `NIGHTLY_GUILD_ID` constant.** It restarts itself if it crashes.
 - **Daily departed-player audit** (`retire_audit_loop`, [retire.py](../../rsc/admin/retire.py)). A `tasks.loop` at 09:00 UTC. For every guild that has the audit on, the API configured and an events channel set, it posts a report of active league players who are no longer in the server. It only reports and never retires. It restarts itself if it crashes.
 - **PermFA poll close timers** ([permfa_poll.py](../../rsc/admin/permfa_poll.py)). These are one-off `asyncio` tasks rather than a loop: one per open poll, sleeping until the deadline. At expiry, or after `/admin permfa close`, a sweep edits every poll DM to show the final answer and remove the buttons, pausing 1 second between edits. `setup()` re-arms the timers on each start, and sweeps straight away any poll that expired while the bot was down. `cog_unload` cancels them.
 - **Persistent activity check view.** On startup, `setup_persistent_activity_check` re-attaches `InactiveCheckView` to the stored `ActivityCheckMsgId`, so the channel buttons keep working after a restart. If `#inactivity-check` no longer exists, it clears the stored ID instead.
@@ -255,12 +255,19 @@ All role and nickname changes go through `rsc.transactions.roles` (`update_leagu
 
   A player only counts as departed when `fetch_member` returns NotFound, with up to 250 lookups. Every status except Former, Dropped and Banned counts as active. This sweep catches leavers that the `on_raw_member_remove` listener in [transactions](./transactions.md) missed because the bot was offline.
 - *PermFA poll state.* Each change to a poll record is a read-modify-write of the whole record under a per-(guild, tier) `asyncio.Lock`. `PermFAPoll.is_open()` alone decides whether answers are accepted. Pressing the same answer again keeps the original answer time, so the player keeps their first-come position. The close sweep edits DMs outside the lock and clears message refs as it goes, so an interrupted sweep resumes where it stopped. A new poll is blocked until `DmsCleaned` is true.
+- *Season-aware reads.* The daily role sync and `/admin sync players`, `nonplaying` and `member` read league players through `effective_players` and `effective_player` in [leagues](./leagues.md). The API's default listing holds one season, and around a season change a member who has not answered the intent prompt has a row only in the season that just ended. The rule picks one row for each member:
+  1. A rostered row (Rostered, Renewed, IR, AGM IR, Unsigned GM) holds until its season's end date.
+  2. Otherwise the row in the newest season applies.
+  3. Otherwise the older row holds while sign-ups are open, unless the member declared "not returning".
+
+  A member with no row after these steps is non-playing. So a member with an active older row becomes non-playing only after a declared "not returning", or when sign-ups close.
 - *AGM add and remove* change the API before touching Discord, so a failure leaves Discord untouched and the command can simply be re-run. `add_agm` is idempotent.
 
 ## Gotchas
 
 - **`/admin franchise delete` only says it isn't implemented.** The website's franchise endpoint has no DELETE. When it does, set `FRANCHISE_DELETE_SUPPORTED = True` in [franchise.py](../../rsc/admin/franchise.py) and check `delete_franchise` in [franchises.py](../../rsc/franchises/franchises.py) calls the new endpoint.
-- **The daily role sync only covers one guild.** `sync_discord_roles` skips every guild except the hard-coded ID `395806681994493964`.
+- **The daily role sync only covers one guild.** `sync_discord_roles` skips every guild except `NIGHTLY_GUILD_ID` in [sync.py](../../rsc/admin/sync.py), which is `395806681994493964`.
+- **`/admin sync nonplaying` strips every member without a new-season row once sign-ups close.** While sign-ups are open, a member whose only row is in the season that just ended keeps their roles. The sign-up close date comes from the website, so check it before you run the command near that date.
 - **`/admin sync transactionchannels delete_stale:True` deletes every text channel in the category that is not named after a franchise.** Point it only at the dedicated transactions category.
 - **Franchise roles are found by prefix match.** `franchise_role_from_name` returns the first role whose name starts with the franchise name, case-insensitive. A franchise whose name is a prefix of another role's name can match the wrong role.
 - **`#inactivity-check` is found by name anywhere in the guild.** `stop`, `ping`, startup re-attach and the DM jump link all look it up by name, while `start` only checks the chosen category for duplicates.
