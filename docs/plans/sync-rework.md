@@ -1,6 +1,6 @@
 # Sync rework plan
 
-Status on 2026-11-23. In progress. A1 is PR 34 and A2 is PR 36. Both passed the root's checks and wait for the operator's test-server lanes. B is being built. Appendix G records what execution found.
+Status on 2026-11-23. In progress. A1 is PR 34 and A2 is PR 36. B is PR 37. All three passed the root's checks and wait for the operator's test-server lanes. C waits for two production summary lines from B. Appendix G records what execution found.
 
 The Discord sync commands and the nightly task get three changes for league staff and members.
 They read the right season's rows, so a member who has not declared intent yet is never stripped.
@@ -558,7 +558,7 @@ Three runs settled open questions on 2026-11-23. Their scripts are in `docs/plan
 
 **A failed nightly run waits a full day.** `loop_restart.py.txt` showed that a `time=` loop whose error handler calls `restart()` runs again at the next scheduled time. The per-member `except` in the nightly loop does not catch `discord.HTTPException`, so one refused role write ends that night's run.
 
-**Unproven.** No timing of a real sync exists. Discord publishes no number for the member routes' rate limit, and discord.py buckets them per route per server. B's two production summary lines are the first real measurement. The lab script's login without a gateway connection is untested. If it fails, lab lanes become operator lanes with `[p]eval`.
+**Unproven.** No timing of a real sync exists. Discord publishes no number for the member routes' rate limit, and discord.py buckets them per route per server. B's two production summary lines are the first real measurement. The lab script's login without a gateway connection passed against a local stand-in for the Discord HTTP API and has not run against Discord. If it fails there, lab lanes become operator lanes with `[p]eval`.
 
 ## Appendix B. Alternatives rejected
 
@@ -638,3 +638,7 @@ The operator answered these on 2026-11-23.
 - **`tests/sync_fakes.py` from A2 has a fake member whose roles and nickname change when written.** B, C, and D reuse it for the rule that a second sync sends no request.
 - **The Intent to Play DM buttons and `/admin intents set` record an answer without a sync.** A2 covers `/intent declare` only. The nightly run catches the rest.
 - **A free agent in a season still being played who declares "not returning" becomes non-playing at once.** Only a rostered row holds. This matters at the next overlap and waits for the operator's ruling.
+- **B's writer takes two calls per member, one for roles and one for the nickname.** Today a name that is too long raises after the roles are written, and callers rely on that. C merges the two calls and must keep that outcome.
+- **The summary line carries the guild tag first.** It reads `[RSC 3v3] Sync summary. kind=players ...`. `elapsed_s` leaves out the wait for the confirm button.
+- **C's "You see" line holds only when no request is retried and no nickname is refused.** With a refused nickname the count of `edit` requests exceeds `changed` by one for that member.
+- **Two defects on `master` showed up in B's call dump.** A captain update removes the Captain role from a captain who already holds it, filed as https://github.com/RSC-NA/rsc/issues/38. Cutting a GM who already holds an FA role raises `ValueError`, filed as https://github.com/RSC-NA/rsc/issues/39. Both are outside this plan's PRs.
