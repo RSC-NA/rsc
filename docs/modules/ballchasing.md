@@ -25,7 +25,7 @@ The `/ballchasing` group holds the server settings for all of this.
 **Players and GMs** report matches:
 
 1. Run `/reportmatch home:<team> away:<team>`. Team names autocomplete. Add `day:` if the same two teams meet more than once within a week.
-2. The bot looks up the match. It searches a window of 7 days either side of today. If it finds nothing, it says so before the form opens. When the lookup is quick, the form shows the tier, match day and series format, for example "Best of 5" or "4-game series".
+2. The bot looks up the match. It searches a window of 7 days either side of today. If it finds nothing, it says so before the form opens. If the RSC API refuses the lookup, for example because it has no team by that name in the league, the reporter sees the API's message instead of the form. When the lookup is quick, the form shows the tier, match day and series format, for example "Best of 5" or "4-game series".
 3. In the form, enter each team's games won and attach the `.replay` files: one per game, up to 10.
 4. You get a private "Processing Match" message. When it finishes, it is replaced by your own copy of the result card, with a line such as "Uploaded 3 · skipped 1 duplicate(s)". The public card goes to the tier's score-reporting channel.
 

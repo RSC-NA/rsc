@@ -4,12 +4,15 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import discord
 import pytest
 from discord.ui import FileUpload, Label, TextDisplay, TextInput
+from rscapi.models.error_code_enum import ErrorCodeEnum
 
 from rsc.ballchasing.ballchasing import BallchasingMixIn
 from rsc.ballchasing.modals import TITLE_MAX, ReportMatchModal, report_title, score_error
 from rsc.enums import MatchFormat, MatchType
 
-from .utils import command_callback
+from .utils import api_error, command_callback
+
+UNKNOWN_TEAM = 'No team named "Nightwalkers" in RSC 3v3.'
 
 
 def _match(*, fmt=MatchFormat.GAME_SERIES, games=4, home="Quantum", away="Voltage", tier="Elite") -> MagicMock:
@@ -122,6 +125,7 @@ def _interaction() -> MagicMock:
     interaction.user = MagicMock(spec=discord.Member)
     interaction.response.send_modal = AsyncMock()
     interaction.response.send_message = AsyncMock()
+    interaction.followup.send = AsyncMock()
     return interaction
 
 
@@ -164,3 +168,42 @@ class TestEarlyLookup:
         call = interaction.response.send_modal.await_args
         assert call is not None
         assert call.args[0].match is None
+
+    async def test_api_error_is_reported_before_the_modal(self):
+        interaction = _interaction()
+        lookup = AsyncMock(side_effect=api_error(404, UNKNOWN_TEAM, code=ErrorCodeEnum.NOT_FOUND))
+        await _run(_mixin(_find_report_match=lookup), interaction)
+
+        interaction.response.send_modal.assert_not_awaited()
+        reply = interaction.response.send_message.await_args
+        assert reply is not None
+        assert reply.kwargs["embed"].description == UNKNOWN_TEAM
+        assert reply.kwargs["ephemeral"] is True
+
+    async def test_api_error_after_a_slow_lookup_is_reported_after_the_modal(self):
+        lookups = 0
+
+        async def slow_then_unknown_team(*args, **kwargs):
+            nonlocal lookups
+            lookups += 1
+            if lookups == 1:
+                await asyncio.sleep(10)
+            raise api_error(404, UNKNOWN_TEAM, code=ErrorCodeEnum.NOT_FOUND)
+
+        interaction = _interaction()
+        modal = MagicMock(valid=True, home_wins=3, away_wins=1, replays=[MagicMock(filename="game1.replay")])
+        modal.wait = AsyncMock(return_value=False)
+        with (
+            patch("rsc.ballchasing.ballchasing.EARLY_MATCH_LOOKUP", 0.01),
+            patch("rsc.ballchasing.ballchasing.ReportMatchModal", return_value=modal),
+            patch("rsc.ballchasing.ballchasing.validation.is_replay_file", AsyncMock(return_value=True)),
+            patch("rsc.ballchasing.ballchasing.process.build_candidates", AsyncMock(return_value=[])),
+        ):
+            await command_callback(BallchasingMixIn._reportmatch_cmd)(
+                _mixin(_find_report_match=slow_then_unknown_team), interaction, "Quantum", "Voltage", None, False
+            )
+
+        reply = interaction.followup.send.await_args
+        assert reply is not None
+        assert reply.kwargs["embed"].description == UNKNOWN_TEAM
+        assert reply.kwargs["ephemeral"] is True

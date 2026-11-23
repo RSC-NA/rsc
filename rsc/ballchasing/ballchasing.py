@@ -530,6 +530,7 @@ class BallchasingMixIn(RSCMixIn):
             log.debug(f"Match lookup for {home} vs {away} was slow. Opening the modal without it.", guild=guild)
         except RscException as exc:
             log.warning(f"Early match lookup failed for {home} vs {away}: {exc}", guild=guild)
+            return await interaction.response.send_message(embed=ApiExceptionErrorEmbed(exc), ephemeral=True)
 
         if looked_up and not early:
             return await interaction.response.send_message(
@@ -607,7 +608,14 @@ class BallchasingMixIn(RSCMixIn):
                 ephemeral=True,
             )
 
-        match = early if looked_up else await self._find_report_match(guild, home=home, away=away, day=day)
+        if looked_up:
+            match = early
+        else:
+            try:
+                match = await self._find_report_match(guild, home=home, away=away, day=day)
+            except RscException as exc:
+                log.warning(f"Match lookup failed for {home} vs {away}: {exc}", guild=guild)
+                return await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc), ephemeral=True)
         if not match:
             return await interaction.followup.send(
                 embed=ErrorEmbed(description=f"No matches found for **{home}** vs **{away}**."),
