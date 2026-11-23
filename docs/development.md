@@ -109,6 +109,8 @@ uv run pytest -m integration      # live calls to the staging API
 | `OPENAI_API_KEY`, `OPENAI_API_ORG` | LLM tests that call OpenAI |
 | `BALLCHASING_KEY` | ballchasing scripts |
 
+[scripts/sync_lab.py](../scripts/sync_lab.py) is the exception. It reads `RSC_LAB_BOT_TOKEN`, `RSC_LAB_GUILD_ID` and `RSC_LAB_MEMBER_ID` from the shell and does not load `.env`.
+
 The running bot doesn't read `.env`. In Discord, its credentials live in Red's per-guild config, set with commands.
 
 ## Checks
