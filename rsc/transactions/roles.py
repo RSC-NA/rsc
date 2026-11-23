@@ -345,6 +345,21 @@ async def apply_agm_role_updates(
     return agm_frole
 
 
+async def keep_only_agm_franchise_role(
+    guild: discord.Guild,
+    member: discord.Member,
+    agm_franchise: Franchise | FranchiseList | None,
+    roles_to_add: list[discord.Role],
+    roles_to_remove: list[discord.Role],
+) -> None:
+    if agm_franchise:
+        await apply_agm_role_updates(
+            guild=guild, member=member, agm_franchise=agm_franchise, roles_to_add=roles_to_add, roles_to_remove=roles_to_remove
+        )
+    else:
+        roles_to_remove.extend(await utils.franchise_role_list_from_disord_member(member))
+
+
 async def update_nonplaying_discord(
     guild: discord.Guild,
     member: discord.Member,
@@ -852,13 +867,7 @@ async def update_free_agent_discord(
                 ):
                     roles_to_remove.append(r)
 
-    # An AGM is franchise staff whatever their player status, so they keep their franchise role.
-    if agm_franchise:
-        await apply_agm_role_updates(
-            guild=guild, member=player, agm_franchise=agm_franchise, roles_to_add=roles_to_add, roles_to_remove=roles_to_remove
-        )
-    else:
-        roles_to_remove.extend(await utils.franchise_role_list_from_disord_member(player))
+    await keep_only_agm_franchise_role(guild, player, agm_franchise, roles_to_add, roles_to_remove)
 
     # Remove Spectator
     spec_role = await utils.get_spectator_role(guild)
@@ -965,13 +974,7 @@ async def update_draft_eligible_discord(
                 if r.name.replace("FA", "").lower() == tier.name.lower():
                     roles_to_remove.append(r)  # noqa: PERF401
 
-    # An AGM is franchise staff whatever their player status, so they keep their franchise role.
-    if agm_franchise:
-        await apply_agm_role_updates(
-            guild=guild, member=player, agm_franchise=agm_franchise, roles_to_add=roles_to_add, roles_to_remove=roles_to_remove
-        )
-    else:
-        roles_to_remove.extend(await utils.franchise_role_list_from_disord_member(player))
+    await keep_only_agm_franchise_role(guild, player, agm_franchise, roles_to_add, roles_to_remove)
 
     # Remove Spectator
     spec_role = await utils.get_spectator_role(guild)
@@ -1014,7 +1017,6 @@ async def update_draft_eligible_discord(
     if fa_role in player.roles:
         roles_to_remove.append(fa_role)
 
-    # PermFA Waiting
     permfa_waiting_role = await utils.get_permfa_waiting_role(guild)
     if permfa_waiting_role in player.roles:
         roles_to_remove.append(permfa_waiting_role)
@@ -1068,13 +1070,7 @@ async def update_permfa_waiting_discord(
                 if r.name.replace("FA", "").lower() == tier.name.lower():
                     roles_to_remove.append(r)
 
-    # An AGM is franchise staff whatever their player status, so they keep their franchise role.
-    if agm_franchise:
-        await apply_agm_role_updates(
-            guild=guild, member=player, agm_franchise=agm_franchise, roles_to_add=roles_to_add, roles_to_remove=roles_to_remove
-        )
-    else:
-        roles_to_remove.extend(await utils.franchise_role_list_from_disord_member(player))
+    await keep_only_agm_franchise_role(guild, player, agm_franchise, roles_to_add, roles_to_remove)
 
     # Remove Spectator
     spec_role = await utils.get_spectator_role(guild)

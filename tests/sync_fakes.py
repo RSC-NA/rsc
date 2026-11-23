@@ -1,9 +1,3 @@
-"""A fake guild and member for running the role sync end to end.
-
-The member's roles and nickname change when the sync writes them, so a test can
-read the result back and run a second sync against it.
-"""
-
 from collections.abc import Iterable
 from unittest.mock import AsyncMock, MagicMock
 
@@ -98,7 +92,6 @@ def forget_writes(member: MagicMock) -> None:
 
 
 def league_player(status: Status, name: str = "nickm") -> LeaguePlayer:
-    """The member's row, on a team of The Ocean in Premier."""
     franchise = PlayerFranchise(name="The Ocean", prefix="OCE", gm=FranchiseGM(rsc_name="someone", discord_id=7))
     return LeaguePlayer.model_construct(
         status=LeaguePlayerStatusEnum(status.value),
@@ -110,7 +103,6 @@ def league_player(status: Status, name: str = "nickm") -> LeaguePlayer:
 
 
 def agm_franchise() -> FranchiseList:
-    """The Ocean, as the API lists it when the member is one of its AGMs."""
     return FranchiseList(
         name="The Ocean",
         prefix="OCE",

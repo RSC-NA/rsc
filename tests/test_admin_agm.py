@@ -467,8 +467,6 @@ async def _sync(member, status, franchise):
 
 @pytest.mark.parametrize("status", NOT_ROSTERED)
 class TestAgmWithoutARosterSpot:
-    """An AGM is franchise staff, so a sync keeps their franchise while they wait to re-sign."""
-
     async def test_keeps_the_franchise_tag_and_roles(self, status):
         member = sync_member(sync_guild(), held=[const.LEAGUE_ROLE, const.AGM_ROLE, OCEAN_ROLE], nick="OCE | nickm")
 
@@ -518,8 +516,6 @@ class TestAgmWithoutARosterSpot:
 
 
 class TestStatusSyncCommandsKeepAnAgm:
-    """`/admin sync freeagent` and `drafteligible` sync one status at a time, AGMs included."""
-
     async def _run(self, command, member, status):
         async def rows(guild, status):
             if status == row.status:

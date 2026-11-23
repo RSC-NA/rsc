@@ -773,7 +773,6 @@ class TestIntentToPlayFlowTimeout:
 
 
 def _intent_mixin(row, **attrs):
-    """A mixin for a member whose declaration the API accepts and whose row is then `row`."""
     defaults = {
         "declare_intent": AsyncMock(return_value=MagicMock()),
         "effective_player": AsyncMock(return_value=row),
@@ -787,7 +786,6 @@ def _intent_mixin(row, **attrs):
 
 
 async def _declare(mixin, member, returning: bool, on_reply=None) -> MagicMock:
-    """Run the flow with the member's answer already picked. Returns the interaction the reply went to."""
     interaction = MagicMock()
     interaction.edit_original_response = AsyncMock(side_effect=on_reply)
     with patch("rsc.members.members.IntentToPlayView") as view_cls:
@@ -809,8 +807,6 @@ ROSTERED_ROLES = [const.LEAGUE_ROLE, "Premier", OCEAN_ROLE]
 
 
 class TestIntentToPlayFlowSync:
-    """A declaration changes which row applies to the member, so the flow syncs them before it replies."""
-
     async def test_returning_player_gets_the_new_rows_roles_before_the_reply(self):
         member = sync_member(sync_guild(), held=ROSTERED_ROLES, nick="OCE | nickm")
         mixin = _intent_mixin(league_player(Status.DRAFT_ELIGIBLE))

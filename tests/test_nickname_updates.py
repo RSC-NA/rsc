@@ -77,9 +77,7 @@ async def test_accolades_count_against_the_limit(member):
 
 
 async def test_agm_tag_that_does_not_fit_is_reported_after_the_roles_are_written():
-    """A franchise tag is a character longer than `FA`, so a name that fit as a
-    free agent can overrun once the member is an AGM."""
-    name = "a" * 27
+    name = "a" * (NICKNAME_MAX_LENGTH - len("FA | "))
     synced = sync_member(sync_guild(), nick=f"FA | {name}")
 
     with pytest.raises(DiscordNameTooLong):

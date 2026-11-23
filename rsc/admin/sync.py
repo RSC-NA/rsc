@@ -1088,7 +1088,6 @@ class AdminSyncMixIn(AdminMixIn):
                 )
             )
 
-        # One request for the whole run, so an AGM in the list keeps their franchise.
         try:
             agm_map = await self.agm_franchise_map(guild)
         except RscException as exc:
@@ -1307,7 +1306,6 @@ class AdminSyncMixIn(AdminMixIn):
                 )
             )
 
-        # One request for the whole run, so an AGM in the list keeps their franchise.
         try:
             agm_map = await self.agm_franchise_map(guild)
         except RscException as exc:

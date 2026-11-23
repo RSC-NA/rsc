@@ -897,13 +897,7 @@ class MemberMixIn(RSCMixIn):
             )
             return
 
-        # The intent is recorded by now, so a sync that fails must not read as a declaration that failed.
-        try:
-            await self._sync_after_intent(guild, user)
-        except DiscordNameTooLong as exc:
-            log.warning(f"Unable to update nickname for {user.id}: {exc}", guild=guild)
-        except (RscException, ValueError, AttributeError, discord.HTTPException):
-            log.exception(f"Unable to sync {user.id} after their intent declaration", guild=guild)
+        await self._best_effort_sync_after_intent(guild, user)
 
         if intent_view.result:
             desc = (
@@ -926,25 +920,29 @@ class MemberMixIn(RSCMixIn):
             )
         )
 
-    async def _sync_after_intent(self, guild: discord.Guild, user: discord.Member) -> None:
-        """Give a member the roles and nickname of the row their declaration leaves them with."""
-        lp = await self.effective_player(guild, user.id)
-        tiers = await self.tiers(guild)
-        gm_of = await self.franchises(guild, gm_discord_id=user.id)
-        gm_franchise = gm_of[0] if gm_of else None
+    async def _best_effort_sync_after_intent(self, guild: discord.Guild, user: discord.Member) -> None:
+        try:
+            lp = await self.effective_player(guild, user.id)
+            tiers = await self.tiers(guild)
+            gm_of = await self.franchises(guild, gm_discord_id=user.id)
+            gm_franchise = gm_of[0] if gm_of else None
 
-        if not lp and gm_franchise:
-            return await update_nonplaying_gm_discord(guild=guild, player=user, franchise=gm_franchise, tiers=tiers)
+            if not lp and gm_franchise:
+                return await update_nonplaying_gm_discord(guild=guild, player=user, franchise=gm_franchise, tiers=tiers)
 
-        await update_league_player_discord(
-            guild=guild,
-            player=user,
-            league_player=lp,
-            tiers=tiers,
-            franchise=gm_franchise,
-            default_roles=await self._get_welcome_roles(guild),
-            agm_franchise=await self.agm_franchise_of(guild, user.id),
-        )
+            await update_league_player_discord(
+                guild=guild,
+                player=user,
+                league_player=lp,
+                tiers=tiers,
+                franchise=gm_franchise,
+                default_roles=await self._get_welcome_roles(guild),
+                agm_franchise=await self.agm_franchise_of(guild, user.id),
+            )
+        except DiscordNameTooLong as exc:
+            log.warning(f"Unable to update nickname for {user.id}: {exc}", guild=guild)
+        except (RscException, ValueError, AttributeError, discord.HTTPException):
+            log.exception(f"Unable to sync {user.id} after their intent declaration", guild=guild)
 
     async def league_player_from_member(self, guild: discord.Guild, member: Member) -> LeaguePlayer | None:
         """Return `LeaguePlayer` object for the guilds league from `Member`"""
