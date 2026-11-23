@@ -1,6 +1,7 @@
 import logging
+from collections import defaultdict
 from collections.abc import AsyncIterator
-from datetime import datetime
+from datetime import UTC, datetime
 
 from aiohttp import web
 import discord
@@ -16,6 +17,8 @@ from rscapi.models.season import Season
 from rsc.abc import RSCMixIn
 from rsc.embeds import BlueEmbed, ErrorEmbed, YellowEmbed
 from rsc.enums import Status
+from rsc.exceptions import NotFoundError, SignupsClosedError
+from rsc.leagues.effective import SyncSeasons, pick_effective_row
 from rsc.tiers import TierMixIn
 from rsc.utils import utils
 from rsc.pagination import API_MAX_PAGE_SIZE, check_page_limit, iter_pages
@@ -383,6 +386,58 @@ class LeagueMixIn(RSCMixIn):
 
             async for player in iter_pages(fetch, per_page=per_page):
                 yield player
+
+    async def _sync_seasons(self, guild: discord.Guild) -> SyncSeasons:
+        """The default season, plus the sign-up season and the one before it while sign-ups are open."""
+        default = await self.current_season(guild)
+        try:
+            signup = await self.next_signup_season(guild)
+        except (NotFoundError, SignupsClosedError):
+            signup = None
+
+        wanted = [default, signup]
+        not_returning: frozenset[int] = frozenset()
+        if signup and signup.id is not None and signup.number is not None:
+            if not default or default.number != signup.number - 1:
+                wanted += await self.seasons(guild, number=signup.number - 1)
+            # A row with `missing` set is a member who has not answered, and the
+            # API files it under `returning=False` with the real refusals.
+            intents = await self.player_intents(guild, signup.id, returning=False, missing=False)
+            not_returning = frozenset(
+                i.player.player.discord_id for i in intents if i.player and i.missing is False and i.returning is False
+            )
+
+        by_number = {s.number: s for s in wanted if s}
+        return SyncSeasons(list(by_number.values()), signup is not None, not_returning)
+
+    async def effective_players(self, guild: discord.Guild) -> AsyncIterator[LeaguePlayer]:
+        """One league player row per member, chosen across the seasons a sync has to read.
+
+        `paged_players` with no season returns the default season only, which
+        drops every member whose only row is in the season that just ended.
+        """
+        window = await self._sync_seasons(guild)
+        by_member: defaultdict[int, list[LeaguePlayer]] = defaultdict(list)
+        for season in window.seasons:
+            async for row in self.paged_players(guild, season=season.id):
+                if row.player.discord_id:
+                    by_member[row.player.discord_id].append(row)
+                else:
+                    yield row
+
+        now = datetime.now(UTC)
+        for discord_id, rows in by_member.items():
+            row = pick_effective_row(rows, window.seasons, now, window.signups_open, discord_id in window.not_returning)
+            if row:
+                yield row
+
+    async def effective_player(self, guild: discord.Guild, discord_id: int) -> LeaguePlayer | None:
+        """The row `effective_players` would yield for one member, or None when they are non-playing."""
+        window = await self._sync_seasons(guild)
+        rows: list[LeaguePlayer] = []
+        for season in window.seasons:
+            rows += await self.players(guild, discord_id=discord_id, season=season.id, limit=1)
+        return pick_effective_row(rows, window.seasons, datetime.now(UTC), window.signups_open, discord_id in window.not_returning)
 
     async def update_league_player(
         self,
