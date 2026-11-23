@@ -382,13 +382,6 @@ class TestPlayerSyncNicknameTooLong:
 
 
 class TestNonPlayingSyncAcrossSeasons:
-    """`/admin sync nonplaying` strips league roles from members who are not playing.
-
-    Around a season change the API's default season holds no row for a member
-    who has not answered the intent prompt yet. Their row is in the season that
-    just ended, and they are still a league player.
-    """
-
     @pytest.fixture
     def interaction(self, mock_guild):
         interaction = MagicMock(spec=discord.Interaction)
@@ -456,8 +449,6 @@ class TestNonPlayingSyncAcrossSeasons:
 
 
 class TestMemberSyncAcrossSeasons:
-    """`/admin sync member` applies the same row the full syncs pick for the member."""
-
     @pytest.fixture
     def interaction(self, mock_guild):
         interaction = MagicMock(spec=discord.Interaction)
@@ -500,9 +491,6 @@ class TestMemberSyncAcrossSeasons:
 
 
 class TestNightlySyncIsolatesMembers:
-    """The nightly loop runs once a day, so a run that stops early leaves the
-    rest of the league unsynced until the next night."""
-
     async def test_a_refused_role_write_does_not_end_the_run(self, mock_guild, caplog):
         refused = MagicMock(spec=discord.Member)
         refused.id = 111

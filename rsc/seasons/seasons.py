@@ -110,10 +110,12 @@ class SeasonsMixIn(RSCMixIn):
         player: discord.Member | None = None,
         returning: bool | None = None,
         missing: bool | None = None,
+        discord_id: int | None = None,
     ) -> list[IntentToPlay]:
         async with self.api_client(guild) as client:
             api = SeasonsApi(client)
-            discord_id = player.id if player else None
+            if player:
+                discord_id = player.id
             log.debug(f"Season Intent Data. Season: {season_id} Discord: {discord_id} Returning: {returning} Missing: {missing}")
             return await api.seasons_player_intents_list(
                 season_id,

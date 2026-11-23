@@ -5,8 +5,7 @@ It sends GET requests only, and never connects to Discord.
 
 The probe runs the checkout's own league player read against the live API, then
 checks the result against rows it fetched itself. On a checkout that predates
-`effective_players` it runs the default-season read, so the same command shows
-the bug on trunk and the fix on the branch.
+`effective_players` it runs the default-season read.
 
     RSC_API_KEY=... uv run python scripts/sync_season_probe.py
     RSC_API_KEY=... uv run python scripts/sync_season_probe.py --lane regression
@@ -50,8 +49,6 @@ GONE = {"DR", "FR", "BN"}
 
 
 class GetOnlyClient(ApiClient):
-    """Refuses every request that is not a GET, and records the ones it sends."""
-
     def __init__(self, configuration: Configuration):
         super().__init__(configuration)
         self.requests: list[str] = []
@@ -75,16 +72,12 @@ class GetOnlyClient(ApiClient):
 
 
 class ProbeCog(RSC):
-    """The cog's API readers on their own, with no Red and no Discord connection."""
-
     def __init__(self, client: GetOnlyClient):
         self._league = {GUILD_ID: LEAGUE}
         self._api_clients = {GUILD_ID: client}
 
 
 class ClosedSignupsCog(ProbeCog):
-    """Answers the sign-up season lookup the way the API does once sign-ups close."""
-
     async def next_signup_season(self, guild: discord.Guild) -> Season | None:
         raise NotFoundError(404, "Signups are closed. Set in memory by the probe.")
 
@@ -93,8 +86,11 @@ def status(row: LeaguePlayer) -> str:
     return str(getattr(row.status, "value", row.status))
 
 
+def trunk_is_playing(row: LeaguePlayer | None) -> bool:
+    return row is not None and status(row) != "DR"
+
+
 def load_rule() -> ModuleType | None:
-    """The branch's rule module, or None on a checkout that predates it."""
     try:
         return importlib.import_module("rsc.leagues.effective")
     except ImportError:
@@ -103,8 +99,6 @@ def load_rule() -> ModuleType | None:
 
 @dataclass
 class Facts:
-    """Rows the probe fetched itself, next to what the checkout's read returned."""
-
     client: GetOnlyClient
     cog: ProbeCog
     guild: discord.Guild
@@ -119,15 +113,11 @@ class Facts:
     synced: dict[int, LeaguePlayer]
 
     @property
-    def pending(self) -> set[int]:
-        """Members whose only row is an active one in the older season."""
+    def old_only_active(self) -> set[int]:
         return {d for d, row in self.by_old.items() if d not in self.by_new and status(row) not in GONE}
 
     def playing(self, row: LeaguePlayer | None) -> bool:
-        if self.rule is None:
-            # Trunk's /admin sync nonplaying skips a member whose default-season row is not Dropped.
-            return row is not None and status(row) != "DR"
-        return self.rule.is_playing(row)
+        return self.rule.is_playing(row) if self.rule else trunk_is_playing(row)
 
     def pick(self, discord_id: int, seasons: list[Season], signups_open: bool) -> LeaguePlayer | None:
         if self.rule is None:
@@ -153,12 +143,12 @@ async def season_rows(client: ApiClient, season: Season) -> dict[int, LeaguePlay
 
 
 async def lane_regression(f: Facts) -> bool:
-    stripped = {d for d in f.pending if not f.playing(f.synced.get(d))}
+    stripped = {d for d in f.old_only_active if not f.playing(f.synced.get(d))}
     wrongly = stripped - f.declared
-    # The default-season read has no row for any of them, so trunk strips every undeclared one.
-    expected = 0 if f.rule else len(f.pending - f.declared)
-    print(f"members with an active S{f.old.number} row and no S{f.new.number} row:", len(f.pending))
-    print('  of those, declared "not returning":', len(f.pending & f.declared))
+    undeclared = f.old_only_active - f.declared
+    expected = 0 if f.rule else len(undeclared)
+    print(f"members with an active S{f.old.number} row and no S{f.new.number} row:", len(f.old_only_active))
+    print('  of those, declared "not returning":', len(f.old_only_active & f.declared))
     print("  of those, treated as non-playing by this checkout:", len(stripped))
     print("stripped by nonplaying while sign-ups are open:", len(wrongly), f"(expected {expected} on this checkout)")
     return len(wrongly) == expected
@@ -209,9 +199,9 @@ async def lane_closed(f: Facts) -> bool:
 
 
 async def lane_not_returning(f: Facts) -> bool:
-    leaving = f.pending & f.declared
+    leaving = f.old_only_active & f.declared
     still_playing = [d for d in leaving if f.playing(f.synced.get(d))]
-    silent = f.pending & f.unanswered
+    silent = f.old_only_active & f.unanswered
     stripped = [d for d in silent if not f.playing(f.synced.get(d))]
     print(f'members with an S{f.old.number}-only active row and a declared "not returning":', len(leaving))
     print("  still counted as playing:", len(still_playing))
@@ -257,10 +247,13 @@ async def gather_facts(client: GetOnlyClient, cog: ProbeCog, guild: discord.Guil
     return Facts(client, cog, guild, rule, datetime.now(UTC), old, new, by_old, by_new, declared, unanswered, synced)
 
 
-async def timed_read(client: GetOnlyClient, cog: ProbeCog, guild: discord.Guild, rule: ModuleType | None) -> None:
-    # The bot keeps one connection open, so the TLS handshake is paid before the clock starts.
+async def open_connection(client: GetOnlyClient) -> None:
     await LeaguesApi(client).leagues_retrieve(LEAGUE)
     client.requests.clear()
+
+
+async def timed_read(client: GetOnlyClient, cog: ProbeCog, guild: discord.Guild, rule: ModuleType | None) -> None:
+    await open_connection(client)
     start = time.perf_counter()
     rows = [row async for row in read(cog, guild, rule)]
     wall = time.perf_counter() - start

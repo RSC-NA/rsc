@@ -19,12 +19,9 @@ NOT_PLAYING = frozenset({Status.DROPPED, Status.FORMER, Status.BANNED})
 
 
 class SyncSeasons(NamedTuple):
-    """The seasons one sync reads, and what the open sign-up season says about them."""
-
     seasons: list[Season]
     signups_open: bool
-    not_returning: frozenset[int]
-    """Discord ids of members who declared "not returning" for the sign-up season."""
+    not_returning_ids: frozenset[int]
 
 
 def pick_effective_row(
@@ -34,7 +31,7 @@ def pick_effective_row(
     signups_open: bool,
     not_returning: bool = False,
 ) -> LeaguePlayer | None:
-    """The one row a sync applies to a member, or None when the member is non-playing.
+    """The one row a sync applies to a member, or None when no row applies.
 
     `rows` are one member's rows, at most one per season in `seasons`. A row's
     `season` is the season number.

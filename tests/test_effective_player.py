@@ -79,7 +79,6 @@ class TestPickEffectiveRow:
 
         assert pick_effective_row([only], [S28], S27_ENDED, signups_open=False) is only
 
-    # Every S27 to S28 status pair that production held on 2026-11-23.
     @pytest.mark.parametrize(
         ("old_status", "new_status", "season_while_s27_is_played"),
         [
@@ -123,7 +122,6 @@ class TestIsPlaying:
 
 
 def _mixin(*, default: Season, signup: Season | Exception | None, rows: list[LeaguePlayer], intents: list[IntentToPlay] | None = None):
-    """A `LeagueMixIn` whose API reads answer from `rows`, the way the API filters them."""
     saved = LeagueMixIn.__abstractmethods__
     LeagueMixIn.__abstractmethods__ = frozenset()
     try:
@@ -147,8 +145,8 @@ def _mixin(*, default: Season, signup: Season | Exception | None, rows: list[Lea
     async def seasons(guild, number=None):
         return [s for s in SEASONS if s.number == number]
 
-    async def player_intents(guild, season_id, player=None, returning=None, missing=None):
-        return list(intents or [])
+    async def player_intents(guild, season_id, returning=None, missing=None, discord_id=None):
+        return [i for i in intents or [] if discord_id is None or (i.player and i.player.player.discord_id == discord_id)]
 
     mixin.current_season = AsyncMock(return_value=default)
     mixin.next_signup_season = AsyncMock(side_effect=signup) if isinstance(signup, Exception) else AsyncMock(return_value=signup)
@@ -164,8 +162,6 @@ async def _effective(mixin) -> dict[int, LeaguePlayer]:
 
 
 class TestEffectivePlayers:
-    """Production on 2026-11-23: S27 has ended, S28 is the default season and takes sign-ups."""
-
     async def test_a_member_with_only_an_older_row_is_kept_while_sign_ups_are_open(self):
         old = _row(S27, "RO")
         mixin = _mixin(default=S28, signup=S28, rows=[old])
@@ -185,7 +181,6 @@ class TestEffectivePlayers:
         assert await _effective(mixin) == {2: pending}
 
     async def test_an_intent_row_marked_missing_is_not_a_declaration(self):
-        """The API stores an unanswered prompt as `returning=False` with `missing=True`."""
         old = _row(S27, "RO")
         mixin = _mixin(default=S28, signup=S28, rows=[old], intents=[_intent(MEMBER, missing=True, returning=False)])
 
@@ -213,7 +208,6 @@ class TestEffectivePlayers:
             await _effective(mixin)
 
     async def test_both_seasons_are_read_while_the_older_one_is_still_the_default(self):
-        """Before the flip the default season is S27 and sign-ups are open for S28."""
         rostered, drafted = _row(S27, "RO", discord_id=1), _row(S28, "DE", discord_id=2)
         mixin = _mixin(default=S27, signup=S28, rows=[rostered, drafted])
 
@@ -230,17 +224,15 @@ class TestEffectivePlayer:
 
     async def test_a_declared_not_returning_member_has_no_row(self):
         mixin = _mixin(default=S28, signup=S28, rows=[_row(S27, "RO")], intents=[_intent(MEMBER, missing=False, returning=False)])
-        guild = MagicMock()
 
-        assert await mixin.effective_player(guild, MEMBER) is None
-        assert mixin.player_intents.await_args.kwargs["player"] is guild.get_member.return_value
+        assert await mixin.effective_player(MagicMock(), MEMBER) is None
 
-    async def test_a_declaration_still_counts_for_a_member_who_left_the_guild(self):
-        mixin = _mixin(default=S28, signup=S28, rows=[_row(S27, "RO")], intents=[_intent(MEMBER, missing=False, returning=False)])
-        guild = MagicMock()
-        guild.get_member.return_value = None
+    async def test_another_members_declaration_does_not_count(self):
+        pending = _row(S27, "RO")
+        mixin = _mixin(default=S28, signup=S28, rows=[pending], intents=[_intent(2, missing=False, returning=False)])
 
-        assert await mixin.effective_player(guild, MEMBER) is None
+        assert await mixin.effective_player(MagicMock(), MEMBER) is pending
+        assert mixin.player_intents.await_args.kwargs["discord_id"] == MEMBER
 
     async def test_a_member_with_no_row_in_any_season_has_no_row(self):
         mixin = _mixin(default=S28, signup=S28, rows=[])

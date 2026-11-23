@@ -730,6 +730,7 @@ class RSCMixIn(ABC):
         player: discord.Member | None = None,
         returning: bool | None = None,
         missing: bool | None = None,
+        discord_id: int | None = None,
     ) -> list[IntentToPlay]: ...
 
     @abstractmethod

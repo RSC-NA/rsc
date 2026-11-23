@@ -141,8 +141,6 @@ class AdminSyncMixIn(AdminMixIn):
                 except (ValueError, AttributeError) as exc:
                     log.exception("Error syncing player: %s (%d)", m.display_name, m.id, guild=guild, exc_info=exc)
                 except discord.HTTPException as exc:
-                    # The loop runs once a day, so one member Discord refuses
-                    # must not cost the rest of the league that night's sync.
                     log.warning("Discord refused the sync of %s (%d): %s", m.display_name, m.id, exc, guild=guild)
 
             log.debug("Total Players: %d", total, guild=guild)
