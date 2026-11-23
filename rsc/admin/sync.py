@@ -19,6 +19,7 @@ from rsc.embeds import (  # YellowEmbed,
 )
 from rsc.enums import Status
 from rsc.exceptions import DiscordNameTooLong, RscException
+from rsc.leagues.effective import is_playing
 from rsc.logs import GuildLogAdapter
 from rsc.transactions.roles import (
     update_draft_eligible_discord,
@@ -40,6 +41,7 @@ log = GuildLogAdapter(logger)
 
 
 SYNC_LOOP_TIME = time(hour=7)  # 7:00 AM UTC
+NIGHTLY_GUILD_ID = 395806681994493964
 
 
 class AdminSyncMixIn(AdminMixIn):
@@ -58,7 +60,7 @@ class AdminSyncMixIn(AdminMixIn):
         guilds: list[discord.Guild] = list(self.bot.guilds)
         for guild in guilds:
             log.info("Syncing discord roles", guild=guild)
-            if guild.id != 395806681994493964:
+            if guild.id != NIGHTLY_GUILD_ID:
                 continue
 
             # Get list of all tiers
@@ -86,7 +88,7 @@ class AdminSyncMixIn(AdminMixIn):
             api_player: LeaguePlayer
 
             # Rostered
-            async for api_player in self.paged_players(guild=guild):
+            async for api_player in self.effective_players(guild):
                 total += 1
                 if not api_player.player.discord_id:
                     continue
@@ -138,6 +140,10 @@ class AdminSyncMixIn(AdminMixIn):
                     )
                 except (ValueError, AttributeError) as exc:
                     log.exception("Error syncing player: %s (%d)", m.display_name, m.id, guild=guild, exc_info=exc)
+                except discord.HTTPException as exc:
+                    # The loop runs once a day, so one member Discord refuses
+                    # must not cost the rest of the league that night's sync.
+                    log.warning("Discord refused the sync of %s (%d): %s", m.display_name, m.id, exc, guild=guild)
 
             log.debug("Total Players: %d", total, guild=guild)
             log.debug("Total Synced: %d", synced, guild=guild)
@@ -760,6 +766,12 @@ class AdminSyncMixIn(AdminMixIn):
         except RuntimeError as exc:
             return await interaction.edit_original_response(embed=ExceptionErrorEmbed(exc_message=str(exc)))
 
+        try:
+            log.debug("Fetching league players", guild=guild)
+            playing = {row.player.discord_id async for row in self.effective_players(guild) if is_playing(row)}
+        except RscException as exc:
+            return await interaction.edit_original_response(embed=ApiExceptionErrorEmbed(exc))
+
         log.debug("Fetching all members", guild=guild)
         total = 0
         synced = 0
@@ -772,9 +784,7 @@ class AdminSyncMixIn(AdminMixIn):
             if not api_member.discord_id:
                 continue
 
-            # Check if member in league
-            lp = await self.league_player_from_member(guild, api_member)
-            if lp and lp.status != Status.DROPPED:
+            if api_member.discord_id in playing:
                 continue
 
             m = guild.get_member(api_member.discord_id)
@@ -878,7 +888,7 @@ class AdminSyncMixIn(AdminMixIn):
         api_player: LeaguePlayer
 
         # Rostered
-        async for api_player in self.paged_players(guild=guild):
+        async for api_player in self.effective_players(guild):
             total += 1
             if not api_player.player.discord_id:
                 log.warning("League player has no discord id: %d", api_player.id, guild=guild)
@@ -967,7 +977,7 @@ class AdminSyncMixIn(AdminMixIn):
         await interaction.response.defer()
         try:
             default_roles = await self._get_welcome_roles(guild=guild)
-            plist = await self.players(guild, discord_id=member.id, limit=1)
+            lp = await self.effective_player(guild, member.id)
             tiers = await self.tiers(guild)
             # One list answers both "are they a GM" and "are they an AGM".
             all_franchises = await self.franchises(guild=guild)
@@ -979,7 +989,7 @@ class AdminSyncMixIn(AdminMixIn):
             None,
         )
 
-        if not plist:
+        if not lp:
             # Check if player is a non-playing GM
             gm = False
             franchise = None
@@ -998,42 +1008,38 @@ class AdminSyncMixIn(AdminMixIn):
                     )
             except (ValueError, AttributeError) as exc:
                 return await interaction.followup.send(embed=ExceptionErrorEmbed(exc_message=str(exc)))
+        elif lp.status == Status.UNSIGNED_GM:
+            # Get Franchise information
+            flist = await self.franchises(guild=guild, gm_discord_id=member.id)
+            if not flist:
+                return await interaction.followup.send(
+                    embed=ErrorEmbed(description=f"{member.mention} is an un-signed GM but franchise could not be found in API."),
+                    ephemeral=False,
+                )
+            franchise = flist.pop(0)
+
+            # Devleague
+            add_devleague_role = await self.should_get_devleague_role(member)
+            log.debug(f"Add Dev League Role: {add_devleague_role}")
+
+            try:
+                await update_league_player_discord(
+                    guild=guild,
+                    player=member,
+                    league_player=lp,
+                    tiers=tiers,
+                    franchise=franchise,
+                    default_roles=default_roles,
+                    devleague=add_devleague_role,
+                    agm_franchise=agm_franchise,
+                )
+            except (ValueError, AttributeError) as exc:
+                return await interaction.followup.send(embed=ExceptionErrorEmbed(exc_message=str(exc)))
         else:
-            lp = plist.pop(0)
-            if lp.status == Status.UNSIGNED_GM:
-                # Get Franchise information
-                flist = await self.franchises(guild=guild, gm_discord_id=member.id)
-                if not flist:
-                    return await interaction.followup.send(
-                        embed=ErrorEmbed(description=f"{member.mention} is an un-signed GM but franchise could not be found in API."),
-                        ephemeral=False,
-                    )
-                franchise = flist.pop(0)
-
-                # Devleague
-                add_devleague_role = await self.should_get_devleague_role(member)
-                log.debug(f"Add Dev League Role: {add_devleague_role}")
-
-                try:
-                    await update_league_player_discord(
-                        guild=guild,
-                        player=member,
-                        league_player=lp,
-                        tiers=tiers,
-                        franchise=franchise,
-                        default_roles=default_roles,
-                        devleague=add_devleague_role,
-                        agm_franchise=agm_franchise,
-                    )
-                except (ValueError, AttributeError) as exc:
-                    return await interaction.followup.send(embed=ExceptionErrorEmbed(exc_message=str(exc)))
-            else:
-                try:
-                    await update_league_player_discord(
-                        guild=guild, player=member, league_player=lp, tiers=tiers, agm_franchise=agm_franchise
-                    )
-                except (ValueError, AttributeError) as exc:
-                    return await interaction.followup.send(embed=ExceptionErrorEmbed(exc_message=str(exc)))
+            try:
+                await update_league_player_discord(guild=guild, player=member, league_player=lp, tiers=tiers, agm_franchise=agm_franchise)
+            except (ValueError, AttributeError) as exc:
+                return await interaction.followup.send(embed=ExceptionErrorEmbed(exc_message=str(exc)))
 
         await interaction.followup.send(
             embed=SuccessEmbed(description=f"Successfully synced {member.mention} from the API. Discord roles and name have been updated."),
