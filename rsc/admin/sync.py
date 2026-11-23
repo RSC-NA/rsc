@@ -770,6 +770,12 @@ class AdminSyncMixIn(AdminMixIn):
         except RscException as exc:
             return await interaction.edit_original_response(embed=ApiExceptionErrorEmbed(exc))
 
+        # With no playing members, the loop below would strip everyone it visits.
+        if not playing:
+            return await interaction.edit_original_response(
+                embed=ErrorEmbed(description="No league players were read from the API. Nobody was changed.")
+            )
+
         log.debug("Fetching all members", guild=guild)
         total = 0
         synced = 0

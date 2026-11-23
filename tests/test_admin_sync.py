@@ -41,6 +41,10 @@ def _league_player(discord_id: int, status: Status, name: str = "someone"):
     return p
 
 
+def _another_playing_member():
+    return _league_player(999, Status.ROSTERED)
+
+
 async def _rows(*rows):
     for row in rows:
         yield row
@@ -187,7 +191,7 @@ class TestNonPlayingSyncAgmSweep:
         mixin._get_welcome_roles = AsyncMock(return_value=[])
         mixin.agm_franchise_map = AsyncMock(return_value=agm_franchise_map)
         mixin.paged_members = MagicMock(return_value=_rows())
-        mixin.effective_players = MagicMock(return_value=_rows())
+        mixin.effective_players = MagicMock(return_value=_rows(_another_playing_member()))
         return mixin
 
     @pytest.fixture
@@ -450,13 +454,13 @@ class TestNonPlayingSyncAcrossSeasons:
         strip.assert_not_awaited()
 
     async def test_strips_a_member_with_no_row(self, interaction):
-        strip = await self._run(interaction, _rows())
+        strip = await self._run(interaction, _rows(_another_playing_member()))
 
         strip.assert_awaited_once()
 
     @pytest.mark.parametrize("status", [Status.DROPPED, Status.FORMER, Status.BANNED])
     async def test_strips_a_member_whose_row_says_they_left(self, interaction, status):
-        strip = await self._run(interaction, _rows(_league_player(111, status)))
+        strip = await self._run(interaction, _rows(_league_player(111, status), _another_playing_member()))
 
         strip.assert_awaited_once()
 
