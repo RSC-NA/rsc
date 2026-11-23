@@ -147,7 +147,7 @@ def _mixin(*, default: Season, signup: Season | Exception | None, rows: list[Lea
     async def seasons(guild, number=None):
         return [s for s in SEASONS if s.number == number]
 
-    async def player_intents(guild, season_id, returning=None, missing=None):
+    async def player_intents(guild, season_id, player=None, returning=None, missing=None):
         return list(intents or [])
 
     mixin.current_season = AsyncMock(return_value=default)
@@ -230,8 +230,17 @@ class TestEffectivePlayer:
 
     async def test_a_declared_not_returning_member_has_no_row(self):
         mixin = _mixin(default=S28, signup=S28, rows=[_row(S27, "RO")], intents=[_intent(MEMBER, missing=False, returning=False)])
+        guild = MagicMock()
 
-        assert await mixin.effective_player(MagicMock(), MEMBER) is None
+        assert await mixin.effective_player(guild, MEMBER) is None
+        assert mixin.player_intents.await_args.kwargs["player"] is guild.get_member.return_value
+
+    async def test_a_declaration_still_counts_for_a_member_who_left_the_guild(self):
+        mixin = _mixin(default=S28, signup=S28, rows=[_row(S27, "RO")], intents=[_intent(MEMBER, missing=False, returning=False)])
+        guild = MagicMock()
+        guild.get_member.return_value = None
+
+        assert await mixin.effective_player(guild, MEMBER) is None
 
     async def test_a_member_with_no_row_in_any_season_has_no_row(self):
         mixin = _mixin(default=S28, signup=S28, rows=[])

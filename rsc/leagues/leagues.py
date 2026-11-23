@@ -387,8 +387,11 @@ class LeagueMixIn(RSCMixIn):
             async for player in iter_pages(fetch, per_page=per_page):
                 yield player
 
-    async def _sync_seasons(self, guild: discord.Guild) -> SyncSeasons:
-        """The default season, plus the sign-up season and the one before it while sign-ups are open."""
+    async def _sync_seasons(self, guild: discord.Guild, member: discord.Member | None = None) -> SyncSeasons:
+        """The default season, plus the sign-up season and the one before it while sign-ups are open.
+
+        `member` narrows the "not returning" lookup to one member.
+        """
         default = await self.current_season(guild)
         try:
             signup = await self.next_signup_season(guild)
@@ -402,7 +405,7 @@ class LeagueMixIn(RSCMixIn):
                 wanted += await self.seasons(guild, number=signup.number - 1)
             # A row with `missing` set is a member who has not answered, and the
             # API files it under `returning=False` with the real refusals.
-            intents = await self.player_intents(guild, signup.id, returning=False, missing=False)
+            intents = await self.player_intents(guild, signup.id, player=member, returning=False, missing=False)
             not_returning = frozenset(
                 i.player.player.discord_id for i in intents if i.player and i.missing is False and i.returning is False
             )
@@ -433,7 +436,9 @@ class LeagueMixIn(RSCMixIn):
 
     async def effective_player(self, guild: discord.Guild, discord_id: int) -> LeaguePlayer | None:
         """The row `effective_players` would yield for one member, or None when they are non-playing."""
-        window = await self._sync_seasons(guild)
+        # The API answers one member's declaration about 15 times faster than the
+        # full list. A member who is not in the guild costs the full list instead.
+        window = await self._sync_seasons(guild, guild.get_member(discord_id))
         rows: list[LeaguePlayer] = []
         for season in window.seasons:
             rows += await self.players(guild, discord_id=discord_id, season=season.id, limit=1)
