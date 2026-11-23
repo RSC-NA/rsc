@@ -21,7 +21,7 @@ Tracker links must be `rocketleague.tracker.network/rocket-league/profile/<platf
 
 **Returning players**
 
-- Players already in the league declare intent with `/intent declare`: pick "Returning next season" or "Not returning next season" and press Confirm. You have 30 seconds before the prompt times out.
+- Players already in the league declare intent with `/intent declare`: pick "Returning next season" or "Not returning next season" and press Confirm. You have 30 seconds before the prompt times out. Your roles and nickname update before the confirmation appears.
 - `/signup` routes current players to the intent prompt automatically. It does this if you already have a league player record for the signup season, or if you played last season and were not dropped. Dropped players go through the full sign-up again, with "played before" already answered.
 - Check where you stand with `/signupstatus` (sign-up or intent, depending on your status) or `/intent status`.
 
@@ -53,7 +53,7 @@ Tracker links must be `rocketleague.tracker.network/rocket-league/profile/<platf
 
 | Command | Who can run it | What it does |
 |---|---|---|
-| `/intent declare` | Anyone | Declare whether you are returning next season. |
+| `/intent declare` | Anyone | Declare whether you are returning next season. Syncs your roles and nickname from the row the answer leaves you with. |
 | `/intent status` | Anyone | Your intent to play status for next season (private). |
 | `/intent search [player] [missing] [returning] [franchise] [team]` | Anyone | Intent results matching the filters, up to 50 shown (private). At least one filter is required. |
 
@@ -78,6 +78,8 @@ The module sends no DMs.
 - [tracker_links.py](../../rsc/members/tracker_links.py): parses and validates the tracker links field.
 
 **Sign-up flow.** `/signup` and `/permfa` defer first (`safe_defer`), because their API lookups can take longer than the 3 seconds Discord waits for an answer. Everything they show after that is a followup on the deferred response. `/signup` then calls `next_signup_season` (the [seasons](./seasons.md) module). If the API answers `signups_closed` (`SignupsClosedError`), signups are closed. Otherwise it checks for a league player in the signup season, then in season number minus one, to decide between sign-up and intent. `_signup_flow` starts the view and, at the same time, starts `_signup_prefill` as a task. The prefill looks up the RSC member (creating one if missing) and their existing trackers. The form waits at most 1.5 seconds for it, because Discord needs a modal within 3 seconds; after that it opens empty. On submit the bot calls `members_signup_create` or `members_permfa_signup_create`, depending on the kind the player picked in step 2, not on which command they ran. A 409 shows the "already signed up" card, a 405 shows the API's reason, and anything else shows an API error. After a successful sign-up the bot runs `update_league_player_discord` (in `rsc/transactions/roles.py`) to sync roles and nickname. It also adds the Dev League interest role if `should_get_devleague_role` says the player has never had it. A nickname that is too long for Discord does not fail the sign-up; the success card asks the player to open a modmail ticket. The banner image comes from `rsc/utils/images.py`, and a render failure only drops the banner.
+
+**Intent flow.** After `members_intent_to_play_create` succeeds, `_intent_to_play_flow` looks the member up with `effective_player` (the [leagues](./leagues.md) module) and applies that row with `update_league_player_discord`. A returning player gets the roles of their new row. A player who answered "not returning" becomes non-playing, unless a rostered row in a season that has not ended still holds. A GM is synced as the GM of their franchise. The declaration is already recorded when the sync runs, so a nickname that is too long or a failed sync is logged and the reply is still the success card. The Intent to Play DM buttons and `/admin intents set` record the answer without this sync.
 
 **Status commands** fall back to the current season when signups are closed. `/signupstatus` treats a player whose status is PermFA, Free Agent, Rostered, Unsigned GM, IR, AGM IR or Renewed as a current player and reports their intent instead. A Draft Eligible player is reported as signed up.
 

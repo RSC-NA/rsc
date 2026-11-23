@@ -9,6 +9,7 @@ checks the result against rows it fetched itself. On a checkout that predates
 
     RSC_API_KEY=... uv run python scripts/sync_season_probe.py
     RSC_API_KEY=... uv run python scripts/sync_season_probe.py --lane regression
+    RSC_API_KEY=... uv run python scripts/sync_season_probe.py --lane agms
     RSC_API_KEY=... uv run python scripts/sync_season_probe.py --time
 """
 
@@ -28,6 +29,7 @@ from unittest.mock import MagicMock
 
 import discord
 from rscapi import ApiClient, Configuration
+from rscapi.api.franchises_api import FranchisesApi
 from rscapi.api.league_players_api import LeaguePlayersApi
 from rscapi.api.leagues_api import LeaguesApi
 from rscapi.api.seasons_api import SeasonsApi
@@ -48,6 +50,7 @@ GUILD_ID = 395806681994493964
 HOST = "https://api.rscna.com/api/v1"
 ROSTERED = {"RO", "RN", "IR", "AR", "UG"}
 GONE = {"DR", "FR", "BN"}
+WAITING = {"FA", "PF", "PW", "DE", "WV", "WC", "WR"}
 
 
 class GetOnlyClient(ApiClient):
@@ -229,6 +232,21 @@ async def lane_not_returning(f: Facts) -> bool:
     return bool(leaving) and not still_playing and not stripped
 
 
+async def lane_agms(f: Facts) -> bool:
+    franchises = await FranchisesApi(f.client).franchises_list(league=LEAGUE)
+    agm_of = {a.discord_id: fr for fr in franchises for a in (fr.agms or []) if a.discord_id}
+    by_status = Counter(status(f.synced[d]) if d in f.synced else "no row" for d in agm_of)
+    waiting = sorted((d for d in agm_of if d in f.synced and status(f.synced[d]) in WAITING), key=lambda d: agm_of[d].name or "")
+    no_prefix = [d for d in waiting if not agm_of[d].prefix]
+    print("AGMs:", len(agm_of), "by effective row status:", ", ".join(f"{st} {n}" for st, n in by_status.most_common()))
+    print("AGMs with a non-rostered effective row:", len(waiting))
+    for d in waiting:
+        row, fr = f.synced[d], agm_of[d]
+        print(f"  {status(row)} S{row.season} {row.player.name}: {fr.prefix} | {fr.name}")
+    print("  whose franchise has no prefix:", len(no_prefix))
+    return bool(waiting) and not no_prefix
+
+
 LANES: dict[str, Callable[[Facts], Awaitable[bool]]] = {
     "regression": lane_regression,
     "newest-wins": lane_newest_wins,
@@ -237,6 +255,7 @@ LANES: dict[str, Callable[[Facts], Awaitable[bool]]] = {
     "closed": lane_closed,
     "other-404": lane_other_404,
     "not-returning": lane_not_returning,
+    "agms": lane_agms,
 }
 
 

@@ -53,7 +53,7 @@ Scripts that change data (uploads, tests that run a draft) say so in their descr
 | [find_duplicate_trackers.py](../scripts/find_duplicate_trackers.py) | Finds tracker links registered more than once |
 | [duplicate_rsc_members.py](../scripts/duplicate_rsc_members.py) | Finds members with no RSC ID and RSC IDs used more than once |
 | [test_valid_franchise_draft_picks.py](../scripts/test_valid_franchise_draft_picks.py) | Validates each franchise's draft picks for a season |
-| [sync_season_probe.py](../scripts/sync_season_probe.py) | Read-only check of who a sync treats as a league player around a season change. It runs the checkout's own league player read against the production API with GET requests only, then checks the result against rows it fetched itself. `--lane NAME` runs one check, and `--time` times the read and counts its requests. Run it with `uv run python scripts/sync_season_probe.py`; it needs `RSC_API_KEY` |
+| [sync_season_probe.py](../scripts/sync_season_probe.py) | Read-only check of who a sync treats as a league player around a season change. It runs the checkout's own league player read against the production API with GET requests only, then checks the result against rows it fetched itself. `--lane NAME` runs one check, and `--time` times the read and counts its requests. The `agms` lane lists the AGMs whose row is not rostered, with the franchise prefix a sync writes for each. Run it with `uv run python scripts/sync_season_probe.py`; it needs `RSC_API_KEY` |
 
 ## Combines analysis
 
