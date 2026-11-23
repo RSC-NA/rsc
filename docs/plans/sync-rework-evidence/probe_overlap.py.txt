@@ -1,0 +1,81 @@
+"""Read-only probe of the live RSC API (GET only): season state and what each sync would see."""
+
+import asyncio
+import os
+from collections import Counter
+from datetime import UTC, datetime
+
+from rscapi import ApiClient, Configuration
+from rscapi.api.franchises_api import FranchisesApi
+from rscapi.api.league_players_api import LeaguePlayersApi
+from rscapi.api.leagues_api import LeaguesApi
+from rscapi.api.seasons_api import SeasonsApi
+
+LEAGUE = 1
+HOST = "https://api.rscna.com/api/v1"
+ROSTERED = {"RO", "RN", "IR", "AR", "UG"}
+GONE = {"DR", "FR", "BN"}
+
+
+def val(status):
+    return getattr(status, "value", status)
+
+
+async def rows(api, **kw):
+    out, offset = [], 0
+    while True:
+        page = await api.league_players_list(league=LEAGUE, limit=500, offset=offset, **kw)
+        out.extend(page.results or [])
+        offset += len(page.results or [])
+        if not page.next:
+            return out
+
+
+async def main():
+    conf = Configuration(host=HOST, api_key={"Api-Key": os.environ["RSC_API_KEY"]}, api_key_prefix={"Api-Key": "Api-Key"})
+    async with ApiClient(conf) as client:
+        print("now UTC", datetime.now(UTC).isoformat(timespec="seconds"))
+        seasons = sorted(await SeasonsApi(client).seasons_list(league=LEAGUE), key=lambda s: s.number or 0)
+        for s in seasons[-3:]:
+            print("season", s.id, "S%s" % s.number, "current", s.current, "start", s.start_date, "end", s.end_date,
+                  "signups", getattr(s, "signups_open", None), "->", getattr(s, "signup_close", None))
+        cur = await LeaguesApi(client).leagues_current_season_retrieve(LEAGUE)
+        print("leagues/current_season ->", "S%s" % cur.number, "id", cur.id)
+        try:
+            su = await SeasonsApi(client).seasons_signup_season_retrieve(league=LEAGUE)
+            print("seasons/signup_season ->", "S%s" % su.number, "id", su.id)
+        except Exception as exc:
+            print("seasons/signup_season ->", type(exc).__name__, getattr(exc, "status", ""))
+
+        api = LeaguePlayersApi(client)
+        default = await rows(api)
+        print("DEFAULT listing:", len(default), "rows, seasons", dict(Counter(getattr(r, "season", None) for r in default)))
+        new, old = seasons[-1], seasons[-2]
+        new_rows = await rows(api, season=new.id)
+        old_rows = await rows(api, season=old.id)
+        by_new = {r.player.discord_id: r for r in new_rows if r.player and r.player.discord_id}
+        by_old = {r.player.discord_id: r for r in old_rows if r.player and r.player.discord_id}
+        print(f"S{new.number}:", len(new_rows), dict(Counter(val(r.status) for r in new_rows).most_common()))
+        print(f"S{old.number}:", len(old_rows), dict(Counter(val(r.status) for r in old_rows).most_common()))
+        both = set(by_new) & set(by_old)
+        print("in both:", len(both), "new only:", len(set(by_new) - set(by_old)), "old only:", len(set(by_old) - set(by_new)))
+        cross = Counter((val(by_old[d].status), val(by_new[d].status)) for d in both)
+        print("cross-tab old->new:", {f"{a}->{b}": n for (a, b), n in cross.most_common()})
+        old_only = [by_old[d] for d in set(by_old) - set(by_new)]
+        print("old-only by status:", dict(Counter(val(r.status) for r in old_only).most_common()))
+        print("old-only and not DR/FR/BN (would be stripped by nonplaying today):", sum(val(r.status) not in GONE for r in old_only))
+        print("new-only whose old row is missing:", len(set(by_new) - set(by_old)),
+              "| new rows whose old row is DR:", sum(val(by_old[d].status) == "DR" for d in both))
+
+        franchises = await FranchisesApi(client).franchises_list(league=LEAGUE)
+        agms = {a.discord_id for f in franchises for a in (f.agms or []) if a.discord_id}
+        agm_status = Counter()
+        for d in agms:
+            r = by_new.get(d) or by_old.get(d)
+            src = "new" if d in by_new else ("old" if d in by_old else "none")
+            agm_status[(src, val(r.status) if r else None)] += 1
+        print("AGMs:", len(agms), "effective row (season, status):", {f"{a}:{b}": n for (a, b), n in agm_status.most_common()})
+        print("unsigned GMs in default listing:", sum(val(r.status) == "UG" for r in default))
+
+
+asyncio.run(main())

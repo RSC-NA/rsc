@@ -1,0 +1,44 @@
+import asyncio
+import logging
+import datetime
+from discord.ext import tasks
+logging.basicConfig(level=logging.CRITICAL)
+
+class Cog:
+    def __init__(self):
+        self.n = 0; self.err = 0
+    @tasks.loop(seconds=0.2)
+    async def body(self):
+        self.n += 1
+        if self.n == 2:
+            raise RuntimeError("boom on 2")
+    @body.error
+    async def on_err(self, exc):
+        self.err += 1
+        self.body.restart()
+
+class TimeCog:
+    def __init__(self):
+        self.n = 0; self.err = 0; self.stamps = []
+    # explicit-time loop: fire twice a second-ish via list of times is awkward; use time list of upcoming seconds
+    @tasks.loop(time=[(datetime.datetime.now(datetime.UTC) + datetime.timedelta(seconds=s)).time() for s in (1, 2, 3, 4, 5)])
+    async def body(self):
+        self.n += 1
+        self.stamps.append(datetime.datetime.now(datetime.UTC).strftime("%S.%f")[:6])
+        if self.n == 1:
+            raise RuntimeError("boom on 1")
+    @body.error
+    async def on_err(self, exc):
+        self.err += 1
+        self.body.restart()
+
+async def main():
+    c = Cog(); c.body.start()
+    await asyncio.sleep(1.5)
+    print(f"relative loop + error handler calling restart(): iterations={c.n} error_calls={c.err} is_running={c.body.is_running()}")
+    c.body.cancel()
+    t = TimeCog(); start = datetime.datetime.now(datetime.UTC).strftime("%S.%f")[:6]; t.body.start()
+    await asyncio.sleep(6.0)
+    print(f"time= loop + restart(): start={start} iterations={t.n} at={t.stamps} error_calls={t.err} running={t.body.is_running()}")
+    t.body.cancel()
+asyncio.run(main())
