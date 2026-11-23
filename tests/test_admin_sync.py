@@ -580,7 +580,7 @@ class TestSyncSummaryLine:
 
     @staticmethod
     def _mixin(kind, member):
-        row = league_player(Status.DRAFT_ELIGIBLE if kind == "drafteligible" else Status.ROSTERED)
+        row = league_player({"drafteligible": Status.DRAFT_ELIGIBLE, "freeagent": Status.FREE_AGENT}.get(kind, Status.ROSTERED))
 
         async def players_with(_guild, status):
             if status == row.status:
