@@ -1,6 +1,6 @@
 # Sync rework plan
 
-Status on 2026-11-23. Not started. The operator answered the open decisions, which Appendix F records. Execution waits for the operator's go.
+Status on 2026-11-23. In progress. A1 is PR 34 and A2 is PR 36. Both passed the root's checks and wait for the operator's test-server lanes. B is being built. Appendix G records what execution found.
 
 The Discord sync commands and the nightly task get three changes for league staff and members.
 They read the right season's rows, so a member who has not declared intent yet is never stripped.
@@ -177,7 +177,7 @@ Discord has no control skill, so each lane names its driver. The drivers are a r
 - [ ] Metric. Discord requests the role functions send per member, from `role_matrix.py`, at trunk and at head.
 - [ ] Probe. `PYTHONPATH=. uv run python docs/plans/sync-rework-evidence/role_matrix.py.txt`, with and without an AGM franchise, at trunk and at head.
 - [ ] Baseline. Record the trunk rows `requests, all roles` and `requests, no roles` first.
-- [ ] Rule. A second run on the member the first run produced sends 0 requests. The PR fails when any non-AGM column sends more requests than trunk.
+- [ ] Rule. A second run on the member the first run produced sends 0 requests. The PR fails when any non-AGM column sends more requests than trunk for a member who does not hold "PermFA in Waiting". A Draft Eligible sync of a member who holds that role sends one more request, which is the removal this PR adds.
 
 **Review gate.** None. A2 is not review-gated.
 
@@ -429,6 +429,7 @@ Discord has no control skill, so each lane names its driver. The drivers are a r
 
 - [ ] In the `nonplaying` job, build the candidates from `guild.members`. A candidate holds a managed league role or a nickname prefix and has no effective row, or has one with status DR, FR, or BN.
 - [ ] Delete the `paged_members` sweep and the stale AGM reverse sweep, which the candidate rule now covers.
+- [ ] Sync a candidate who is a franchise's GM with `update_nonplaying_gm_discord`, as `/admin sync member` does. Today `/admin sync nonplaying` has no GM check and strips a GM who has no row.
 - [ ] Apply welcome roles to candidates only.
 - [ ] Run the `nonplaying` job at the end of every nightly run, after the players job. The candidate rule uses `effective_players`, so while sign-ups are open it strips only members who declared "not returning" or whose row is DR, FR, or BN. On the first night after sign-ups close it strips every member with league roles and no new-season row. The pass reuses the player set the players job already read, so it adds no API request. It finds candidates by scanning the member cache, and it sends a Discord request only for a candidate. A stripped member holds no league role and no prefix, so the next night does not find them again.
 
@@ -546,6 +547,8 @@ Three runs settled open questions on 2026-11-23. Their scripts are in `docs/plan
 | Waivers (WV, WC, WR) | Free Agent, PermFA, Draft Eligible | Yes |
 | Unsigned GM, non-playing GM | PermFA in Waiting | Yes |
 | Non-playing GM | IR | Yes |
+| FA, DE, PermFA, PW, waivers for a member who is not an AGM | Assistant GM | Yes. Found while building A2 |
+| Rostered, for an AGM who lacks the League role | League is added twice, one wasted request | Yes. Found while building A2 |
 | Every playing status | Subbed Out | Yes. It is held only while the row's `sub_status` is Subbing Out |
 | FA, DE, PermFA, waivers for an AGM | Franchise role removed, tag set to the status prefix | Fixed in A2 |
 
@@ -625,3 +628,13 @@ The operator answered these on 2026-11-23.
 | Leftover roles in the matrix | Remove all of them, with "Subbed Out" tied to `sub_status` | D |
 | Sync on change | Website events. No interval job. The website work is an issue on `RSC-NA/web-rsc-website` | G |
 | F | Kept, before G | F |
+
+## Appendix G. Findings during execution
+
+- **`LeaguePlayer.season` and `IntentToPlay.season` hold the season number.** The plan's first draft called it an id. A1's rule is keyed by number.
+- **The counts move daily.** On 2026-11-23 at 22:00 UTC, 812 members held an active S27 row with no S28 row, down from 858. 12 had declared "not returning". 23 AGMs had an S28 FA row, up from 20.
+- **The API marks "no sign-up season" with its own code.** Production answers the lookup for a league with no open sign-ups with a 404 and the code `no_signup_season` (measured on league 2). A1 treats only that answer as closed sign-ups.
+- **Eleven other callers of `next_signup_season` catch the wrong exception for that 404.** They will show an API error once sign-ups close on 2026-12-30. Filed as https://github.com/RSC-NA/rsc/issues/35. It is outside this plan's PRs.
+- **`tests/sync_fakes.py` from A2 has a fake member whose roles and nickname change when written.** B, C, and D reuse it for the rule that a second sync sends no request.
+- **The Intent to Play DM buttons and `/admin intents set` record an answer without a sync.** A2 covers `/intent declare` only. The nightly run catches the rest.
+- **A free agent in a season still being played who declares "not returning" becomes non-playing at once.** Only a rostered row holds. This matters at the next overlap and waits for the operator's ruling.
