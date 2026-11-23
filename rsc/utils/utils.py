@@ -24,6 +24,7 @@ from rsc.embeds import (
 from rsc.enums import BulkRoleAction, DiscordPermType, DiscordPermValue, TransactionType
 from rsc.exceptions import DiscordNameTooLong
 from rsc.logs import GuildLogAdapter
+from rsc.transactions.writer import apply_member_changes
 from rsc.transformers import GreedyMemberTransformer
 from rsc.types import Accolades
 from rsc.utils import filters
@@ -94,9 +95,6 @@ async def update_discord_name(member: discord.Member, name: str, prefix: str | N
     if final == member.display_name:
         log.debug(f"Name is unchanged for {member.id}: {final}", guild=member.guild)
         return
-
-    # Imported here because `rsc.transactions` imports this module while it loads.
-    from rsc.transactions.writer import apply_member_changes  # noqa: PLC0415
 
     await apply_member_changes(member, nick=final)
 

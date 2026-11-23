@@ -1,5 +1,3 @@
-"""The role writer in `rsc.transactions.writer`, and what a sync run reports about it."""
-
 import asyncio
 import logging
 from collections.abc import AsyncIterator

@@ -1,5 +1,3 @@
-"""The one place a member's roles and nickname are written, and the count of what each sync run wrote."""
-
 import logging
 import time
 from collections import Counter
@@ -63,8 +61,6 @@ class SyncStats:
         )
 
 
-# A context variable, so two syncs running at once each count their own writes
-# and the role functions need no stats argument.
 _run: ContextVar[SyncStats | None] = ContextVar("sync_run", default=None)
 
 

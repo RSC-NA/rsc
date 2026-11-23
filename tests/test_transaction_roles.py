@@ -350,7 +350,6 @@ def _record_writes(member: MagicMock) -> MagicMock:
 
 
 def _awaited(writes: MagicMock) -> list[tuple[str, list[str] | str]]:
-    """Each Discord write in the order it was sent: the role names, or the nickname."""
     return [(name, kwargs["nick"] if name == "edit" else [role.name for role in args]) for name, args, kwargs in writes.mock_calls]
 
 
@@ -368,8 +367,6 @@ def _cut_from_the_ocean(gm_id: int) -> TransactionResponse:
 
 
 class TestTransactionWrites:
-    """The requests a sign, a cut and a captain change send, in the order they send them."""
-
     async def test_a_signed_free_agent_swaps_roles_then_takes_the_franchise_tag(self):
         guild = sync_guild()
         member = sync_member(guild, held=[const.LEAGUE_ROLE, const.FREE_AGENT_ROLE, "Premier", "PremierFA"], nick="FA | nickm")

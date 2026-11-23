@@ -53,8 +53,6 @@ SyncCommand = Callable[Concatenate[Cog, discord.Interaction, Options], Coroutine
 
 
 def logs_sync_summary(kind: SyncKind) -> Callable[[SyncCommand[Cog, Options, Reply]], SyncCommand[Cog, Options, Reply]]:
-    """Run a sync command as one sync run, so it logs a `Sync summary.` line when it ends."""
-
     def decorator(command: SyncCommand[Cog, Options, Reply]) -> SyncCommand[Cog, Options, Reply]:
         @functools.wraps(command)
         async def run(self: Cog, interaction: discord.Interaction, *args: Options.args, **kwargs: Options.kwargs) -> Reply:

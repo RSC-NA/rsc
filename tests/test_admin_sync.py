@@ -559,8 +559,6 @@ class TestNightlySyncIsolatesMembers:
 
 
 class TestSyncSummaryLine:
-    """Every sync logs one `Sync summary.` line that says what the run did."""
-
     COMMANDS: ClassVar = {
         "players": AdminSyncMixIn._sync_players_cmd,
         "nonplaying": AdminSyncMixIn._sync_nonplaying_cmd,
