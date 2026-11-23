@@ -14,6 +14,7 @@ from rscapi.models.transaction_response import TransactionResponse
 from rsc import const
 from rsc.enums import Status
 from rsc.logs import GuildLogAdapter
+from rsc.transactions.writer import apply_member_changes
 from rsc.utils import utils
 
 logger = logging.getLogger("red.rsc.transactions.roles")
@@ -118,13 +119,7 @@ async def update_signed_player_discord(
     else:
         raise ValueError(f"Tier role not found: {ptu.new_team.tier}")
 
-    # Update roles at same time to reduce API calls
-    if roles_to_remove:
-        log.debug(f"Removing roles: {roles_to_remove}", guild=guild)
-        await player.remove_roles(*roles_to_remove)
-    if roles_to_add:
-        log.debug(f"Adding roles: {roles_to_add}", guild=guild)
-        await player.add_roles(*roles_to_add)
+    await apply_member_changes(player, remove=roles_to_remove, add=roles_to_add)
 
     # Update player prefix
     try:
@@ -214,12 +209,7 @@ async def update_cut_player_discord(
         roles_to_add.remove(fa_role)
         roles_to_add.remove(tier_fa_role)
 
-    if roles_to_remove:
-        log.debug(f"Removing cut player roles: {roles_to_remove}", guild=guild)
-        await player.remove_roles(*roles_to_remove)
-    if roles_to_add:
-        log.debug(f"Adding cut player roles: {roles_to_add}", guild=guild)
-        await player.add_roles(*roles_to_add)
+    await apply_member_changes(player, remove=roles_to_remove, add=roles_to_add)
 
     log.debug("Updating cut player nickname", guild=guild)
     try:
@@ -244,11 +234,9 @@ async def update_team_captain_discord(
             continue
 
         if p.captain and cpt_role not in m.roles:
-            log.debug(f"Adding captain role: {m.display_name} ({m.id})", guild=guild)
-            await m.add_roles(cpt_role)
+            await apply_member_changes(m, add=[cpt_role])
         elif cpt_role in m.roles:
-            log.debug(f"Removing captain role: {m.display_name} ({m.id})", guild=guild)
-            await m.remove_roles(cpt_role)
+            await apply_member_changes(m, remove=[cpt_role])
 
 
 def agm_rsc_name(member: discord.Member, franchise: Franchise | FranchiseList) -> str:
@@ -439,10 +427,7 @@ async def update_nonplaying_discord(
             if r not in member.roles:
                 roles_to_add.append(r)  # noqa: PERF401
 
-    # Remove Roles
-    if roles_to_remove:
-        log.debug(f"Removing roles ({member.id}): {roles_to_remove}", guild=guild)
-        await member.remove_roles(*roles_to_remove)
+    await apply_member_changes(member, remove=roles_to_remove)
 
     # Determine Former Player by prefix. An AGM keeps a franchise prefix as
     # staff, not as a leftover from playing, so it says nothing about them.
@@ -474,21 +459,16 @@ async def update_nonplaying_discord(
 
         if new_nick != member.display_name:
             try:
-                log.debug(f"Updating nickname ({member.id}): {new_nick}", guild=guild)
-
                 if len(new_nick) > 32:
                     raise ValueError(f"Discord name is too long: {len(new_nick)} characters")
 
                 if not new_nick or len(new_nick) < 1:
                     raise ValueError(f"Error changing name. Empty or <1 characters: {member.mention}")
-                await member.edit(nick=new_nick)
+                await apply_member_changes(member, nick=new_nick)
             except discord.Forbidden as exc:
                 log.warning(f"Unable to update nickname {member.display_name} ({member.id}): {exc}")
 
-    # Add Roles
-    if roles_to_add:
-        log.debug(f"Adding Roles ({member.id}): {roles_to_add}", guild=guild)
-        await member.add_roles(*roles_to_add)
+    await apply_member_changes(member, add=roles_to_add)
 
 
 async def update_nonplaying_gm_discord(
@@ -572,13 +552,7 @@ async def update_nonplaying_gm_discord(
             old_froles.remove(frole)
         roles_to_remove.extend(old_froles)
 
-    # Update roles at same time to reduce API calls
-    if roles_to_remove:
-        log.debug(f"Removing roles: {roles_to_remove}", guild=guild)
-        await player.remove_roles(*roles_to_remove)
-    if roles_to_add:
-        log.debug(f"Adding roles: {roles_to_add}", guild=guild)
-        await player.add_roles(*roles_to_add)
+    await apply_member_changes(player, remove=roles_to_remove, add=roles_to_add)
 
     # Update player prefix
     try:
@@ -681,13 +655,7 @@ async def update_unsigned_gm_discord(
             old_froles.remove(frole)
         roles_to_remove.extend(old_froles)
 
-    # Update roles at same time to reduce API calls
-    if roles_to_remove:
-        log.debug(f"Removing roles: {roles_to_remove}", guild=guild)
-        await player.remove_roles(*roles_to_remove)
-    if roles_to_add:
-        log.debug(f"Adding roles: {roles_to_add}", guild=guild)
-        await player.add_roles(*roles_to_add)
+    await apply_member_changes(player, remove=roles_to_remove, add=roles_to_add)
 
     # Update player prefix
     try:
@@ -821,13 +789,7 @@ async def update_rostered_discord(
     if tier_role and tier_role not in player.roles:
         roles_to_add.append(tier_role)
 
-    # Update roles at same time to reduce API calls
-    if roles_to_remove:
-        log.debug(f"Removing roles: {roles_to_remove}", guild=guild)
-        await player.remove_roles(*roles_to_remove)
-    if roles_to_add:
-        log.debug(f"Adding roles: {roles_to_add}", guild=guild)
-        await player.add_roles(*roles_to_add)
+    await apply_member_changes(player, remove=roles_to_remove, add=roles_to_add)
 
     # Update player prefix
     try:
@@ -925,12 +887,7 @@ async def update_free_agent_discord(
     if permfa_waiting_role in player.roles:
         roles_to_remove.append(permfa_waiting_role)
 
-    if roles_to_remove:
-        log.debug(f"Removing roles: {roles_to_remove}", guild=guild)
-        await player.remove_roles(*roles_to_remove)
-    if roles_to_add:
-        log.debug(f"Adding roles: {roles_to_add}", guild=guild)
-        await player.add_roles(*roles_to_add)
+    await apply_member_changes(player, remove=roles_to_remove, add=roles_to_add)
 
     try:
         if agm_franchise:
@@ -1032,12 +989,7 @@ async def update_draft_eligible_discord(
         if dev_league_role and dev_league_role not in player.roles:
             roles_to_add.append(dev_league_role)
 
-    if roles_to_remove:
-        log.debug(f"Removing roles: {roles_to_remove}", guild=guild)
-        await player.remove_roles(*roles_to_remove)
-    if roles_to_add:
-        log.debug(f"Adding roles: {roles_to_add}", guild=guild)
-        await player.add_roles(*roles_to_add)
+    await apply_member_changes(player, remove=roles_to_remove, add=roles_to_add)
 
     try:
         prefix = agm_franchise.prefix if agm_franchise else "DE"
@@ -1117,12 +1069,7 @@ async def update_permfa_waiting_discord(
     if permfa_waiting_role not in player.roles:
         roles_to_add.append(permfa_waiting_role)
 
-    if roles_to_remove:
-        log.debug(f"Removing roles: {roles_to_remove}", guild=guild)
-        await player.remove_roles(*roles_to_remove)
-    if roles_to_add:
-        log.debug(f"Adding roles: {roles_to_add}", guild=guild)
-        await player.add_roles(*roles_to_add)
+    await apply_member_changes(player, remove=roles_to_remove, add=roles_to_add)
 
     try:
         prefix = agm_franchise.prefix if agm_franchise else "PFW"

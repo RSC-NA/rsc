@@ -95,8 +95,10 @@ async def update_discord_name(member: discord.Member, name: str, prefix: str | N
         log.debug(f"Name is unchanged for {member.id}: {final}", guild=member.guild)
         return
 
-    log.debug(f"Updating {member.id} nickname to {final}", guild=member.guild)
-    await member.edit(nick=final)
+    # Imported here because `rsc.transactions` imports this module while it loads.
+    from rsc.transactions.writer import apply_member_changes  # noqa: PLC0415
+
+    await apply_member_changes(member, nick=final)
 
 
 async def resize_image(img_data: bytes, height: int, width: int, imgtype: str):
