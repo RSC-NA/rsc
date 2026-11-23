@@ -17,7 +17,6 @@ from rsc.abc import RSCMixIn
 from rsc.embeds import (
     ErrorEmbed,
     BetterEmbed,
-    ExceptionErrorEmbed,
     NotImplementedEmbed,
     OrangeEmbed,
     SuccessEmbed,
@@ -1207,17 +1206,17 @@ class UtilsMixIn(RSCMixIn):
             if role.position >= admin_role.position and executor.id != const.NICKM_ID:
                 return await interaction.response.send_message(embed=ErrorEmbed(description="Yeah right nerd. nickm has been notified."))
 
+            if not await safe_defer(interaction, ephemeral=True):
+                return
+
             await member.add_roles(role)
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 embed=SuccessEmbed(description=f"Added {role.mention} role to {member.mention}"),
                 ephemeral=True,
             )
         except discord.Forbidden as exc:
-            await interaction.response.send_message(
-                embed=ExceptionErrorEmbed(
-                    description=f"Unable to add {role.mention} role to {member.mention}",
-                    exc_message=exc.text,
-                ),
+            await interaction.followup.send(
+                embed=ErrorEmbed(description=f"Unable to add {role.mention} role to {member.mention}: {exc.text}"),
                 ephemeral=True,
             )
 
@@ -1320,17 +1319,17 @@ class UtilsMixIn(RSCMixIn):
             if role.position >= admin_role.position and executor.id != const.NICKM_ID:
                 return await interaction.response.send_message(embed=ErrorEmbed(description="Yeah right nerd. nickm has been notified."))
 
+            if not await safe_defer(interaction, ephemeral=True):
+                return
+
             await member.remove_roles(role)
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 embed=SuccessEmbed(description=f"Removed {role.mention} role to {member.mention}"),
                 ephemeral=True,
             )
         except discord.Forbidden as exc:
-            await interaction.response.send_message(
-                embed=ExceptionErrorEmbed(
-                    description=f"Unable to remove {role.mention} role to {member.mention}",
-                    exc_message=exc.text,
-                ),
+            await interaction.followup.send(
+                embed=ErrorEmbed(description=f"Unable to remove {role.mention} role to {member.mention}: {exc.text}"),
                 ephemeral=True,
             )
 
