@@ -302,6 +302,29 @@ class TestNonPlayingSyncAgmSweep:
         stale.remove_roles.assert_not_awaited()
         assert not [f for f in embed.fields if f.name.startswith("Stale AGM Roles")]
 
+    @pytest.mark.parametrize("rows", [[], [_league_player(222, Status.DROPPED)]], ids=["no rows", "only a row that left"])
+    async def test_a_read_with_no_playing_members_stops_before_anyone_is_changed(self, mixin, interaction, agm_role, rows):
+        league_member, stale = self._member(111), self._member(333)
+        league_member.roles = [agm_role]
+        agm_role.members = [league_member, stale]
+
+        api_member = MagicMock()
+        api_member.discord_id = 111
+
+        mixin.paged_members = MagicMock(return_value=_rows(api_member))
+        mixin.effective_players = MagicMock(return_value=_rows(*rows))
+        interaction.guild.get_member = MagicMock(return_value=league_member)
+
+        embed = await self._run(mixin, interaction, agm_role)
+
+        for member in (league_member, stale):
+            member.remove_roles.assert_not_awaited()
+            member.add_roles.assert_not_awaited()
+            member.edit.assert_not_awaited()
+        assert embed.title == "Error"
+        assert "No league players were read" in embed.description
+        assert "Nobody was changed" in embed.description
+
 
 class TestPlayerSyncNicknameTooLong:
     """`/admin sync players` walks the whole league in one command.
