@@ -4,7 +4,7 @@ import discord
 from discord.ui import ActionRow, Container, Separator, TextDisplay
 
 from rsc.const import DEFAULT_TIMEOUT
-from rsc.views import AuthorOnlyLayoutView
+from rsc.views import AuthorOnlyLayoutView, send_view
 
 log = logging.getLogger("red.rsc.members.views.intent")
 
@@ -86,7 +86,7 @@ class IntentToPlayView(AuthorOnlyLayoutView):
 
     async def prompt(self):
         """Send the initial layout view message."""
-        await self.interaction.response.send_message(view=self, ephemeral=True)
+        await send_view(self.interaction, self)
 
     async def confirm(self, interaction: discord.Interaction):
         """User pressed Confirm button."""

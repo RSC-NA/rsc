@@ -45,6 +45,7 @@ def _interaction() -> MagicMock:
     interaction = MagicMock(spec=discord.Interaction)
     interaction.user = MagicMock(spec=discord.Member)
     interaction.response = MagicMock()
+    interaction.response.is_done.return_value = False
     interaction.response.send_modal = AsyncMock()
     interaction.response.send_message = AsyncMock()
     interaction.response.edit_message = AsyncMock()

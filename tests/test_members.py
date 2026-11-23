@@ -943,7 +943,9 @@ class TestPermFACommand:
         interaction.guild = mock_guild
         interaction.user = mock_member
         interaction.response = MagicMock()
-        interaction.response.send_message = AsyncMock()
+        interaction.response.defer = AsyncMock()
+        interaction.followup = MagicMock()
+        interaction.followup.send = AsyncMock()
         return interaction
 
     async def test_existing_permfa_sees_e3_before_step_one(self, mock_guild, mock_member):
@@ -952,16 +954,16 @@ class TestPermFACommand:
         await command_callback(MemberMixIn._member_permfa_signup)(mixin, interaction)
 
         mixin._signup_flow.assert_not_awaited()
-        view = interaction.response.send_message.await_args.kwargs["view"]
+        interaction.response.defer.assert_awaited_once_with(ephemeral=True)
+        view = interaction.followup.send.await_args.kwargs["view"]
         assert isinstance(view, AlreadySignedUpView)
         assert view.state is AlreadySignedUp.PERMFA
-        assert interaction.response.send_message.await_args.kwargs["ephemeral"] is True
 
     async def test_waiting_permfa_sees_e3w(self, mock_guild, mock_member):
         mixin = _signup_mixin(_permfa_precheck=AsyncMock(return_value=(AlreadySignedUp.PERMFA_WAITING, None)), _signup_flow=AsyncMock())
         interaction = self._interaction(mock_guild, mock_member)
         await command_callback(MemberMixIn._member_permfa_signup)(mixin, interaction)
-        assert interaction.response.send_message.await_args.kwargs["view"].state is AlreadySignedUp.PERMFA_WAITING
+        assert interaction.followup.send.await_args.kwargs["view"].state is AlreadySignedUp.PERMFA_WAITING
 
     async def test_anyone_else_starts_with_permfa_picked(self, mock_guild, mock_member):
         member = MagicMock(spec=Member)
@@ -969,7 +971,7 @@ class TestPermFACommand:
         interaction = self._interaction(mock_guild, mock_member)
         await command_callback(MemberMixIn._member_permfa_signup)(mixin, interaction)
 
-        interaction.response.send_message.assert_not_awaited()
+        interaction.followup.send.assert_not_awaited()
         args = mixin._signup_flow.await_args
         context = args.args[3]
         assert (context.command, context.kind) == ("permfa", SignupKind.PERMFA)

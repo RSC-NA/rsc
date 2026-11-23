@@ -36,6 +36,18 @@ async def ready_cog(interaction: discord.Interaction, guild: discord.Guild) -> R
 # Generic View structures for use in any module
 
 
+async def send_view(interaction: discord.Interaction, view: discord.ui.LayoutView, *, ephemeral: bool = True) -> None:
+    """Show `view` as the response, or as a followup if the interaction was already answered.
+
+    After a deferred command the followup replaces the "thinking" message, so
+    `edit_original_response` on that interaction still edits the view.
+    """
+    if interaction.response.is_done():
+        await interaction.followup.send(view=view, ephemeral=ephemeral)
+    else:
+        await interaction.response.send_message(view=view, ephemeral=ephemeral)
+
+
 class AuthorOnlyView(discord.ui.View):
     """View class designed to only interact with the interaction author. Can subclass"""
 
@@ -163,10 +175,7 @@ class ConfirmLayoutView(AuthorOnlyLayoutView):
 
     async def prompt(self, *, ephemeral: bool = True):
         """Show the prompt as the response, or as a followup if the interaction was already answered."""
-        if self.interaction.response.is_done():
-            await self.interaction.followup.send(view=self, ephemeral=ephemeral)
-        else:
-            await self.interaction.response.send_message(view=self, ephemeral=ephemeral)
+        await send_view(self.interaction, self, ephemeral=ephemeral)
 
     async def finish(self, interaction: discord.Interaction, *, confirmed: bool):
         """Record the choice and answer the click by replacing the prompt with its result."""

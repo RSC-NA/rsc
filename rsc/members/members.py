@@ -482,33 +482,35 @@ class MemberMixIn(RSCMixIn):
         if not guild or not isinstance(interaction.user, discord.Member):
             return
 
+        # Up to three API lookups run before the first message, and Discord drops
+        # a command that isn't acknowledged within 3 seconds
+        if not await utils.safe_defer(interaction, ephemeral=True):
+            return
+
         # Signups must target the season currently accepting them, not whatever
         # season the API considers current (it rolls over mid signup period)
         try:
             signup_season = await self.next_signup_season(guild)
         except LeagueNotConfigured:
-            return await interaction.response.send_message(
+            return await interaction.followup.send(
                 embed=YellowEmbed(
                     title="Not Configured",
                     description="League ID has not been configured for this guild.",
-                ),
-                ephemeral=True,
+                )
             )
         except SignupsClosedError:
-            return await interaction.response.send_message(
+            return await interaction.followup.send(
                 embed=YellowEmbed(
                     title="Signups Closed",
                     description="Signups are not currently open for RSC. Please try again when the next season is accepting signups.",
-                ),
-                ephemeral=True,
+                )
             )
         except RscException as exc:
-            return await interaction.response.send_message(embed=ApiExceptionErrorEmbed(exc), ephemeral=True)
+            return await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc))
 
         if not (signup_season and signup_season.id and signup_season.number):
-            return await interaction.response.send_message(
-                embed=ErrorEmbed(description="API returned a Season without an ID or number. Please open a modmail ticket."),
-                ephemeral=True,
+            return await interaction.followup.send(
+                embed=ErrorEmbed(description="API returned a Season without an ID or number. Please open a modmail ticket.")
             )
 
         # A current player must declare intent, use that instead
@@ -544,12 +546,15 @@ class MemberMixIn(RSCMixIn):
 
         log.debug(f"{interaction.user} is signing up as PermFA")
 
+        # The status check below is an API lookup, and Discord only waits 3 seconds
+        if not await utils.safe_defer(interaction, ephemeral=True):
+            return
+
         # Check first, so an existing PermFA isn't walked through the sign-up for nothing
         state, member = await self._permfa_precheck(guild, interaction.user)
         if state:
-            return await interaction.response.send_message(
-                view=AlreadySignedUpView(state, interaction=interaction, on_status=self._signup_status_flow),
-                ephemeral=True,
+            return await interaction.followup.send(
+                view=AlreadySignedUpView(state, interaction=interaction, on_status=self._signup_status_flow)
             )
 
         context = SignupContext.for_guild(guild, command="permfa", kind=SignupKind.PERMFA)

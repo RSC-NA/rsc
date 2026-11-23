@@ -22,7 +22,7 @@ from rsc.const import BEHAVIOR_RULES_URL, MODAL_TIMEOUT
 from rsc.enums import Platform, PlayerType, Referrer, RegionPreference
 from rsc.members.tracker_links import TRACKER_EXAMPLE, TrackerLine, TrackerProblem, parse_tracker_links
 from rsc.utils.images import SIGNUP_BANNER_FILENAME
-from rsc.views import AuthorOnlyLayoutView, ResultView
+from rsc.views import AuthorOnlyLayoutView, ResultView, send_view
 
 log = logging.getLogger("red.rsc.members.views.signup")
 
@@ -437,7 +437,7 @@ class SignupFlowView(AuthorOnlyLayoutView):
 
     async def start(self) -> None:
         self.render()
-        await self.interaction.response.send_message(view=self, ephemeral=True)
+        await send_view(self.interaction, self)
         self.message_interaction = self.interaction
 
     async def wait_for_outcome(self) -> SignupOutcome:

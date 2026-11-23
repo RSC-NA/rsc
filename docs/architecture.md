@@ -156,7 +156,7 @@ Buttons that must keep working after a restart (Intent to Play DMs, activity che
 ## Discord UI
 
 - Shared embed classes (`BlueEmbed`, `SuccessEmbed`, `ErrorEmbed`, `ApiExceptionErrorEmbed`, …) are in [rsc/embeds.py](../rsc/embeds.py).
-- Newer cards (transactions, lobby cards, player card, match results, sign-up) use **Components V2** `LayoutView`s. A V2 message can't carry `content` or `embeds`, and can never be edited back into an embed message. `ConfirmLayoutView` in [rsc/views.py](../rsc/views.py) is the V2 confirm/cancel prompt.
+- Newer cards (transactions, lobby cards, player card, match results, sign-up) use **Components V2** `LayoutView`s. A V2 message can't carry `content` or `embeds`, and can never be edited back into an embed message. `ConfirmLayoutView` in [rsc/views.py](../rsc/views.py) is the V2 confirm/cancel prompt. `send_view` in the same file shows a V2 view as the response, or as a followup when the command has already deferred.
 - Mentions only ping from message content or a V2 `TextDisplay`, never from inside an embed.
 - The ongoing redesign and its rules are tracked in [plans/discord-ui-refresh.md](plans/discord-ui-refresh.md).
 
