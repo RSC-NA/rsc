@@ -32,6 +32,7 @@ from rscapi.api.league_players_api import LeaguePlayersApi
 from rscapi.api.leagues_api import LeaguesApi
 from rscapi.api.seasons_api import SeasonsApi
 from rscapi.exceptions import NotFoundException
+from rscapi.models.error_code_enum import ErrorCodeEnum
 from rscapi.models.league_player import LeaguePlayer
 from rscapi.models.season import Season
 from rscapi.rest import RESTResponse
@@ -42,6 +43,7 @@ from rsc.core import RSC
 from rsc.exceptions import NotFoundError
 
 LEAGUE = 1
+UNKNOWN_LEAGUE = 999_999
 GUILD_ID = 395806681994493964
 HOST = "https://api.rscna.com/api/v1"
 ROSTERED = {"RO", "RN", "IR", "AR", "UG"}
@@ -80,6 +82,12 @@ class ProbeCog(RSC):
 class ClosedSignupsCog(ProbeCog):
     async def next_signup_season(self, guild: discord.Guild) -> Season | None:
         raise NotFoundError(404, "Signups are closed. Set in memory by the probe.")
+
+
+class UnknownLeagueSignupCog(ProbeCog):
+    async def next_signup_season(self, guild: discord.Guild) -> Season | None:
+        async with self.api_client(guild) as client:
+            return await SeasonsApi(client).seasons_signup_season_retrieve(league=UNKNOWN_LEAGUE)
 
 
 def status(row: LeaguePlayer) -> str:
@@ -198,6 +206,17 @@ async def lane_closed(f: Facts) -> bool:
     return bool(by_read) and not old_by_rule and not old_by_read
 
 
+async def lane_other_404(f: Facts) -> bool:
+    print(f"sign-up season lookup sent for league {UNKNOWN_LEAGUE}, which the API does not have.")
+    try:
+        rows = [row async for row in UnknownLeagueSignupCog(f.client).effective_players(f.guild)]
+    except NotFoundError as exc:
+        print(f"  the read stopped: {exc}")
+        return exc.code is not None and exc.code is not ErrorCodeEnum.NO_SIGNUP_SEASON
+    print(f"  the read went on as if sign-ups were closed, and returned {len(rows)} rows")
+    return False
+
+
 async def lane_not_returning(f: Facts) -> bool:
     leaving = f.old_only_active & f.declared
     still_playing = [d for d in leaving if f.playing(f.synced.get(d))]
@@ -216,6 +235,7 @@ LANES: dict[str, Callable[[Facts], Awaitable[bool]]] = {
     "gone": lane_gone,
     "preflip": lane_preflip,
     "closed": lane_closed,
+    "other-404": lane_other_404,
     "not-returning": lane_not_returning,
 }
 

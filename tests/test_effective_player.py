@@ -11,11 +11,11 @@ from rscapi.models.member_intent import MemberIntent
 from rscapi.models.member_intent_data import MemberIntentData
 from rscapi.models.season import Season
 
-from rsc.exceptions import ServerError
+from rsc.exceptions import ApiError, NotFoundError, ServerError
 from rsc.leagues.effective import is_playing, pick_effective_row
 from rsc.leagues.leagues import LeagueMixIn
 
-from .utils import api_error
+from .utils import api_error, raw_api_exception
 
 S27 = Season.model_construct(id=11, number=27, end_date=datetime(2026, 11, 22, tzinfo=UTC))
 S28 = Season.model_construct(id=12, number=28, end_date=datetime(2027, 4, 4, tzinfo=UTC))
@@ -207,6 +207,20 @@ class TestEffectivePlayers:
         with pytest.raises(ServerError):
             await _effective(mixin)
 
+    @pytest.mark.parametrize(
+        "other_404",
+        [
+            api_error(404, "League is not in database, you may have the wrong ID.", code=ErrorCodeEnum.NOT_FOUND),
+            ApiError.from_exception(raw_api_exception(404, "<html><body>404 Not Found</body></html>")),
+        ],
+        ids=["unknown league", "proxy page"],
+    )
+    async def test_any_other_404_is_not_read_as_closed_sign_ups(self, other_404):
+        mixin = _mixin(default=S28, signup=other_404, rows=[_row(S27, "RO")])
+
+        with pytest.raises(NotFoundError):
+            await _effective(mixin)
+
     async def test_both_seasons_are_read_while_the_older_one_is_still_the_default(self):
         rostered, drafted = _row(S27, "RO", discord_id=1), _row(S28, "DE", discord_id=2)
         mixin = _mixin(default=S27, signup=S28, rows=[rostered, drafted])
@@ -238,3 +252,10 @@ class TestEffectivePlayer:
         mixin = _mixin(default=S28, signup=S28, rows=[])
 
         assert await mixin.effective_player(MagicMock(), MEMBER) is None
+
+    async def test_a_404_for_an_unknown_league_is_not_read_as_closed_sign_ups(self):
+        unknown_league = api_error(404, "League is not in database, you may have the wrong ID.", code=ErrorCodeEnum.NOT_FOUND)
+        mixin = _mixin(default=S28, signup=unknown_league, rows=[_row(S27, "RO")])
+
+        with pytest.raises(NotFoundError):
+            await mixin.effective_player(MagicMock(), MEMBER)
