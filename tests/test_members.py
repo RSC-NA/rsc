@@ -4,6 +4,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import discord
 import pytest
+from rscapi.models.franchise_gm import FranchiseGM
+from rscapi.models.franchise_list import FranchiseList
 from rscapi.models.member import Member
 
 from rsc import const
@@ -24,7 +26,7 @@ from rsc.members.views.signup import (
     SignupSuccessView,
 )
 
-from .sync_fakes import OCEAN_ROLE, TIERS, league_player, role_names, sync_guild, sync_member
+from .sync_fakes import MEMBER_ID, OCEAN_ROLE, TIERS, league_player, role_names, sync_guild, sync_member
 from .utils import api_error, api_exception, command_callback
 
 GUILD_ID = 395806681994493964
@@ -846,6 +848,25 @@ class TestIntentToPlayFlowSync:
 
         assert const.DRAFT_ELIGIBLE in role_names(member)
         assert member.display_name == name
+        assert _reply_title(interaction) == "## Intent to Play Declared"
+
+    @pytest.mark.parametrize("row", [None, league_player(Status.UNSIGNED_GM, name="someone")], ids=["no row", "unsigned GM row"])
+    async def test_gm_is_synced_as_the_gm_of_their_franchise(self, row):
+        member = sync_member(sync_guild(), held=[const.GM_ROLE], nick="someone")
+        ocean = FranchiseList(name="The Ocean", prefix="OCE", gm=FranchiseGM(rsc_name="someone", discord_id=MEMBER_ID))
+
+        await _declare(_intent_mixin(row, franchises=AsyncMock(return_value=[ocean])), member, returning=row is not None)
+
+        assert {const.GM_ROLE, OCEAN_ROLE} <= role_names(member)
+        assert member.display_name == "OCE | someone"
+
+    async def test_failed_sync_still_reports_the_declaration(self):
+        member = sync_member(sync_guild(), held=ROSTERED_ROLES, nick="OCE | nickm")
+        mixin = _intent_mixin(None, effective_player=AsyncMock(side_effect=api_error(500)))
+
+        interaction = await _declare(mixin, member, returning=False)
+
+        assert role_names(member) == set(ROSTERED_ROLES)
         assert _reply_title(interaction) == "## Intent to Play Declared"
 
     async def test_refused_declaration_changes_no_roles(self):

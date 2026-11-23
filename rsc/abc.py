@@ -647,7 +647,7 @@ class RSCMixIn(ABC):
         returning: bool,
         executor: discord.Member | None = None,
         admin_overrride: bool = False,
-    ) -> Deleted: ...
+    ) -> LeaguePlayer | Deleted: ...
 
     @abstractmethod
     async def player_stats(
