@@ -10,12 +10,18 @@ from unittest.mock import AsyncMock, MagicMock
 
 import discord
 import pytest
+from rscapi.models.franchise_gm import FranchiseGM
+from rscapi.models.player_transaction_updates import PlayerTransactionUpdates
+from rscapi.models.team_player import TeamPlayer
+from rscapi.models.transaction_franchise import TransactionFranchise
+from rscapi.models.transaction_response import TransactionResponse
+from rscapi.models.transaction_team import TransactionTeam
 
 from rsc import const
 from rsc.enums import Status
 from rsc.transactions import roles
 
-from .sync_fakes import TIERS, league_player, role_names, sync_guild, sync_member
+from .sync_fakes import MEMBER_ID, OCEAN_ROLE, TIERS, league_player, role_names, sync_guild, sync_member
 
 AGM_ID = 138778232802508801
 
@@ -334,3 +340,98 @@ class TestDispatcher:
 
         assert sync.await_args is not None
         assert sync.await_args.kwargs["agm_franchise"] is f
+
+
+def _record_writes(member: MagicMock) -> MagicMock:
+    writes = MagicMock()
+    for name in ("remove_roles", "add_roles", "edit"):
+        writes.attach_mock(getattr(member, name), name)
+    return writes
+
+
+def _awaited(writes: MagicMock) -> list[tuple[str, list[str] | str]]:
+    """Each Discord write in the order it was sent: the role names, or the nickname."""
+    return [(name, kwargs["nick"] if name == "edit" else [role.name for role in args]) for name, args, kwargs in writes.mock_calls]
+
+
+def _transaction(status: Status, old_tier: str | None = None, new_tier: str | None = None) -> PlayerTransactionUpdates:
+    return PlayerTransactionUpdates.model_construct(
+        player=league_player(status),
+        old_team=TransactionTeam.model_construct(name="Waves", tier=old_tier) if old_tier else None,
+        new_team=TransactionTeam.model_construct(name="Waves", tier=new_tier) if new_tier else None,
+    )
+
+
+def _cut_from_the_ocean(gm_id: int) -> TransactionResponse:
+    franchise = TransactionFranchise.model_construct(name="The Ocean", prefix="OCE", gm=FranchiseGM(rsc_name="someone", discord_id=gm_id))
+    return TransactionResponse.model_construct(first_franchise=franchise)
+
+
+class TestTransactionWrites:
+    """The requests a sign, a cut and a captain change send, in the order they send them."""
+
+    async def test_a_signed_free_agent_swaps_roles_then_takes_the_franchise_tag(self):
+        guild = sync_guild()
+        member = sync_member(guild, held=[const.LEAGUE_ROLE, const.FREE_AGENT_ROLE, "Premier", "PremierFA"], nick="FA | nickm")
+        writes = _record_writes(member)
+
+        await roles.update_signed_player_discord(
+            guild=guild, player=member, ptu=_transaction(Status.ROSTERED, new_tier="Premier"), tiers=TIERS
+        )
+
+        assert _awaited(writes) == [
+            ("remove_roles", ["PremierFA", const.FREE_AGENT_ROLE]),
+            ("add_roles", [OCEAN_ROLE]),
+            ("edit", "OCE | nickm"),
+        ]
+
+    async def test_a_cut_player_swaps_roles_then_takes_the_free_agent_tag(self):
+        guild = sync_guild()
+        member = sync_member(guild, held=[const.LEAGUE_ROLE, const.CAPTAIN_ROLE, "Premier", OCEAN_ROLE], nick="OCE | nickm")
+        writes = _record_writes(member)
+
+        await roles.update_cut_player_discord(
+            guild=guild, player=member, response=_cut_from_the_ocean(gm_id=7), ptu=_transaction(Status.FREE_AGENT, old_tier="Premier")
+        )
+
+        assert _awaited(writes) == [
+            ("remove_roles", [const.CAPTAIN_ROLE, OCEAN_ROLE]),
+            ("add_roles", [const.FREE_AGENT_ROLE, "PremierFA"]),
+            ("edit", "FA | nickm"),
+        ]
+
+    async def test_a_cut_gm_keeps_the_franchise_role_and_tag(self):
+        guild = sync_guild()
+        member = sync_member(guild, held=[const.LEAGUE_ROLE, const.CAPTAIN_ROLE, "Premier", OCEAN_ROLE], nick="OCE | nickm")
+        writes = _record_writes(member)
+
+        await roles.update_cut_player_discord(
+            guild=guild,
+            player=member,
+            response=_cut_from_the_ocean(gm_id=MEMBER_ID),
+            ptu=_transaction(Status.FREE_AGENT, old_tier="Premier"),
+        )
+
+        assert _awaited(writes) == [("remove_roles", [const.CAPTAIN_ROLE])]
+
+    async def test_a_captain_change_moves_the_role_and_touches_nobody_else(self):
+        guild = sync_guild()
+        new_captain = sync_member(guild, held=[const.LEAGUE_ROLE])
+        old_captain = sync_member(guild, held=[const.LEAGUE_ROLE, const.CAPTAIN_ROLE])
+        teammate = sync_member(guild, held=[const.LEAGUE_ROLE])
+        members = {1: new_captain, 2: old_captain, 3: teammate}
+        guild.get_member = MagicMock(side_effect=members.get)
+        writes = {discord_id: _record_writes(member) for discord_id, member in members.items()}
+
+        await roles.update_team_captain_discord(
+            guild=guild,
+            players=[
+                TeamPlayer.model_construct(name="new", discord_id=1, captain=True),
+                TeamPlayer.model_construct(name="old", discord_id=2, captain=False),
+                TeamPlayer.model_construct(name="mate", discord_id=3, captain=False),
+            ],
+        )
+
+        assert _awaited(writes[1]) == [("add_roles", [const.CAPTAIN_ROLE])]
+        assert _awaited(writes[2]) == [("remove_roles", [const.CAPTAIN_ROLE])]
+        assert _awaited(writes[3]) == []
