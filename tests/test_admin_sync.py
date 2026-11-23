@@ -1,12 +1,18 @@
+import ast
+import re
+from typing import ClassVar
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import discord
 import pytest
 
+from rsc import const
 from rsc.admin.sync import AdminSyncMixIn
 from rsc.enums import Status
 from rsc.exceptions import DiscordNameTooLong
+from rsc.transactions import writer
 
+from .sync_fakes import TIERS, discord_requests, league_player, sync_guild, sync_member
 from .utils import api_error, command_callback
 
 
@@ -550,3 +556,173 @@ class TestNightlySyncIsolatesMembers:
         assert "above the bot" in warnings[0]
         assert "111" in warnings[0]
         assert any("Finished syncing league players" in r.getMessage() for r in caplog.records)
+
+
+class TestSyncSummaryLine:
+    """Every sync logs one `Sync summary.` line that says what the run did."""
+
+    COMMANDS: ClassVar = {
+        "players": AdminSyncMixIn._sync_players_cmd,
+        "nonplaying": AdminSyncMixIn._sync_nonplaying_cmd,
+        "freeagent": AdminSyncMixIn._sync_freeagent_cmd,
+        "drafteligible": AdminSyncMixIn._sync_drafteligible_cmd,
+    }
+
+    @pytest.fixture
+    def guild(self):
+        guild = sync_guild()
+        next(r for r in guild.roles if r.name == const.AGM_ROLE).members = []
+        return guild
+
+    @pytest.fixture
+    def member(self, guild):
+        return sync_member(guild, held=[const.LEAGUE_ROLE, const.FREE_AGENT_ROLE], nick="FA | nickm")
+
+    @staticmethod
+    def _mixin(kind, member):
+        row = league_player(Status.DRAFT_ELIGIBLE if kind == "drafteligible" else Status.ROSTERED)
+
+        async def players_with(_guild, status):
+            if status == row.status:
+                yield row
+
+        return _create_mixin(
+            bot=MagicMock(guilds=[member.guild]),
+            tiers=AsyncMock(return_value=TIERS),
+            agm_franchise_map=AsyncMock(return_value={}),
+            should_get_devleague_role=AsyncMock(return_value=False),
+            _get_welcome_roles=AsyncMock(return_value=[]),
+            franchises=AsyncMock(return_value=[]),
+            total_players=AsyncMock(return_value=1),
+            effective_player=AsyncMock(return_value=row),
+            effective_players=MagicMock(return_value=_rows(_another_playing_member() if kind == "nonplaying" else row)),
+            paged_players=players_with,
+            paged_members=MagicMock(return_value=_rows(MagicMock(discord_id=member.id))),
+        )
+
+    async def _sync(self, kind, member, mixin=None, *, dryrun=False, staff_wait=None):
+        guild = member.guild
+        guild.get_member = MagicMock(side_effect={member.id: member}.get)
+        mixin = mixin or self._mixin(kind, member)
+        interaction = MagicMock(spec=discord.Interaction)
+        interaction.guild = guild
+        interaction.response.defer = AsyncMock()
+        interaction.edit_original_response = AsyncMock()
+        interaction.followup.send = AsyncMock()
+
+        with patch("rsc.admin.sync.ConfirmSyncView") as confirm, patch("rsc.admin.sync.CancelView") as progress:
+            confirm.return_value.prompt = AsyncMock()
+            confirm.return_value.wait = staff_wait or AsyncMock()
+            confirm.return_value.result = True
+            progress.return_value.cancelled = False
+            if kind == "nightly":
+                await AdminSyncMixIn.sync_discord_roles.coro(mixin)
+            elif kind == "member":
+                await command_callback(AdminSyncMixIn._sync_member_cmd)(mixin, interaction, member)
+            else:
+                await command_callback(self.COMMANDS[kind])(mixin, interaction, dryrun)
+
+    @staticmethod
+    def _summaries(caplog):
+        return [r.getMessage() for r in caplog.records if "Sync summary." in r.getMessage()]
+
+    @staticmethod
+    def _requests(line):
+        found = re.search(r"requests=(\{.*?\})", line)
+        assert found is not None
+        return sum(ast.literal_eval(found.group(1)).values())
+
+    @pytest.mark.parametrize("kind", ["nightly", "players", "nonplaying", "member", "freeagent", "drafteligible"])
+    async def test_each_sync_logs_one_line_with_what_it_sent(self, kind, member, caplog):
+        with caplog.at_level("INFO", logger="red.rsc.transactions.writer"):
+            await self._sync(kind, member)
+
+        (line,) = self._summaries(caplog)
+        assert f"Sync summary. kind={kind} visited=1 changed=1 " in line
+        assert "failed=0" in line
+        assert discord_requests(member) > 0
+        assert self._requests(line) == discord_requests(member)
+
+    async def test_a_dry_run_visits_members_and_sends_nothing(self, member, caplog):
+        with caplog.at_level("INFO", logger="red.rsc.transactions.writer"):
+            await self._sync("players", member, dryrun=True)
+
+        (line,) = self._summaries(caplog)
+        assert "kind=players visited=1 changed=0 requests={} failed=0" in line
+
+    async def test_a_refused_member_is_counted_as_failed(self, member, caplog):
+        member.remove_roles.side_effect = discord.Forbidden(MagicMock(status=403, reason="Forbidden"), "Missing Permissions")
+
+        with caplog.at_level("INFO", logger="red.rsc.transactions.writer"):
+            await self._sync("nightly", member)
+
+        (line,) = self._summaries(caplog)
+        assert "kind=nightly visited=1 changed=1" in line
+        assert "failed=1" in line
+
+    async def test_the_line_is_logged_when_the_command_raises(self, member, caplog):
+        refused = AsyncMock(side_effect=discord.Forbidden(MagicMock(status=403, reason="Forbidden"), "Missing Permissions"))
+
+        with (
+            caplog.at_level("INFO", logger="red.rsc.transactions.writer"),
+            patch("rsc.admin.sync.update_league_player_discord", refused),
+            pytest.raises(discord.Forbidden),
+        ):
+            await self._sync("players", member)
+
+        (line,) = self._summaries(caplog)
+        assert "kind=players visited=1 changed=0" in line
+
+    async def test_the_stale_agm_sweep_is_counted(self, guild, member, caplog):
+        stale = sync_member(guild, held=[const.AGM_ROLE])
+        stale.id = member.id + 1
+        stale.remove_roles = AsyncMock()
+        next(r for r in guild.roles if r.name == const.AGM_ROLE).members = [stale]
+        mixin = self._mixin("nonplaying", member)
+        mixin.paged_members = MagicMock(return_value=_rows())
+
+        with caplog.at_level("INFO", logger="red.rsc.transactions.writer"):
+            await self._sync("nonplaying", member, mixin)
+
+        (line,) = self._summaries(caplog)
+        assert "kind=nonplaying visited=1 changed=1 requests={'remove_role': 1} failed=0" in line
+
+    async def test_api_reads_are_timed_and_the_wait_for_staff_is_not(self, member, caplog, monkeypatch):
+        now = 0.0
+        monkeypatch.setattr(writer.time, "perf_counter", lambda: now)
+
+        def takes(seconds, result=None):
+            async def read(*_args, **_kwargs):
+                nonlocal now
+                now += seconds
+                return result
+
+            return read
+
+        async def rows(_guild):
+            await takes(2.0)()
+            yield league_player(Status.ROSTERED)
+
+        mixin = self._mixin("players", member)
+        mixin.tiers = takes(1.0, TIERS)
+        mixin.agm_franchise_map = takes(0.5, {})
+        mixin.effective_players = rows
+
+        with caplog.at_level("INFO", logger="red.rsc.transactions.writer"):
+            await self._sync("players", member, mixin, staff_wait=takes(60.0))
+
+        (line,) = self._summaries(caplog)
+        assert line.endswith("api_s=3.500 discord_s=0.000 elapsed_s=3.500")
+
+    @pytest.mark.parametrize(
+        ("command", "options"),
+        [
+            (AdminSyncMixIn._sync_players_cmd, ["dryrun"]),
+            (AdminSyncMixIn._sync_nonplaying_cmd, ["dryrun"]),
+            (AdminSyncMixIn._sync_freeagent_cmd, ["dryrun"]),
+            (AdminSyncMixIn._sync_drafteligible_cmd, ["dryrun"]),
+            (AdminSyncMixIn._sync_member_cmd, ["member"]),
+        ],
+    )
+    def test_the_commands_keep_their_options(self, command, options):
+        assert [p.name for p in command.parameters] == options

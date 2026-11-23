@@ -9,7 +9,9 @@ import discord
 import pytest
 
 from rsc import const
+from rsc.enums import Status
 from rsc.transactions import writer
+from rsc.transactions.roles import update_league_player_discord
 from rsc.transactions.writer import (
     Request,
     SyncKind,
@@ -21,7 +23,7 @@ from rsc.transactions.writer import (
     waiting_for_staff,
 )
 
-from .sync_fakes import TIERS, discord_requests, role_names, sync_guild, sync_member
+from .sync_fakes import TIERS, discord_requests, forget_writes, league_player, role_names, sync_guild, sync_member
 
 
 class Clock:
@@ -287,3 +289,38 @@ class TestRunsStaySeparate:
 
         assert (nightly.changed, nightly.visited) == ({first.id}, 1)
         assert (players.changed, players.visited) == ({second.id}, 1)
+
+
+class TestRoleFunctionsReportThroughTheRun:
+    @pytest.mark.parametrize("status", [Status.DRAFT_ELIGIBLE, Status.FREE_AGENT, Status.ROSTERED, Status.PERMFA_W, None])
+    async def test_a_sync_counts_every_request_and_a_second_sync_sends_none(self, guild, status):
+        member = sync_member(guild, held=[const.SPECTATOR_ROLE, const.FREE_AGENT_ROLE, "EliteFA"], nick="FA | nickm")
+        row = league_player(status) if status else None
+
+        with sync_run(SyncKind.MEMBER, guild) as first:
+            await update_league_player_discord(guild=guild, player=member, league_player=row, tiers=TIERS, agm_franchise=None)
+
+        assert discord_requests(member) > 0
+        assert sum(first.requests.values()) == discord_requests(member)
+        assert first.changed == {member.id}
+
+        forget_writes(member)
+        with sync_run(SyncKind.MEMBER, guild) as second:
+            await update_league_player_discord(guild=guild, player=member, league_player=row, tiers=TIERS, agm_franchise=None)
+
+        assert discord_requests(member) == 0
+        assert second.requests == {}
+        assert second.changed == set()
+
+    async def test_a_refused_nickname_is_one_failure_and_the_roles_still_apply(self, guild):
+        member = sync_member(guild, nick="nickm")
+        member.edit.side_effect = forbidden()
+
+        with sync_run(SyncKind.MEMBER, guild) as stats:
+            await update_league_player_discord(
+                guild=guild, player=member, league_player=league_player(Status.DRAFT_ELIGIBLE), tiers=TIERS, agm_franchise=None
+            )
+
+        assert {const.LEAGUE_ROLE, const.DRAFT_ELIGIBLE, "Premier"} <= role_names(member)
+        assert stats.failed == {member.id}
+        assert stats.requests[Request.EDIT] == 1
