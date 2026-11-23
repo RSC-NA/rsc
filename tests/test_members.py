@@ -10,6 +10,7 @@ from rsc.enums import Platform, PlayerType, Referrer, RegionPreference, StaffPos
 from rsc.exceptions import RscException
 from rsc.members.members import MemberMixIn
 from rsc.members.tracker_links import TrackerLine
+from rsc.members.views.intent import IntentToPlayView
 from rsc.members.views.signup import (
     SignupFlowView,
     AlreadySignedUp,
@@ -976,3 +977,129 @@ class TestPermFACommand:
 
         flow = SignupFlowView(interaction, context)
         assert flow.answers.kind is SignupKind.PERMFA
+
+
+# --- /signup and /permfa answer inside Discord's 3 second window ---
+
+ACK_DEADLINE = 3.0
+
+
+class _Clock:
+    """Time as the member's Discord client sees it, moved forward by each RSC API call"""
+
+    def __init__(self, now: float = 0.0):
+        self.now = now
+
+    def api_call(self, seconds: float, result=None, error: Exception | None = None) -> AsyncMock:
+        async def call(*args, **kwargs):
+            self.now += seconds
+            if error:
+                raise error
+            return result
+
+        return AsyncMock(side_effect=call)
+
+
+def _discord_interaction(mock_guild, mock_member, clock: _Clock) -> MagicMock:
+    """An interaction that, like Discord, answers 10062 to a first response sent after the 3 second window"""
+    interaction = MagicMock(spec=discord.Interaction)
+    interaction.guild = mock_guild
+    interaction.user = mock_member
+    acknowledged = False
+
+    async def acknowledge(*args, **kwargs):
+        nonlocal acknowledged
+        if clock.now > ACK_DEADLINE:
+            raise discord.NotFound(MagicMock(status=404, reason="Not Found"), {"code": 10062, "message": "Unknown interaction"})
+        acknowledged = True
+
+    interaction.response = MagicMock()
+    interaction.response.is_done.side_effect = lambda: acknowledged
+    interaction.response.defer = AsyncMock(side_effect=acknowledge)
+    interaction.response.send_message = AsyncMock(side_effect=acknowledge)
+    interaction.followup = MagicMock()
+    interaction.followup.send = AsyncMock()
+    interaction.edit_original_response = AsyncMock()
+    return interaction
+
+
+def _shown(interaction: MagicMock) -> list:
+    """Every view or embed the member was sent, by whichever route"""
+    calls = [
+        *interaction.response.send_message.await_args_list,
+        *interaction.followup.send.await_args_list,
+        *interaction.edit_original_response.await_args_list,
+    ]
+    return [call.kwargs.get("view") or call.kwargs.get("embed") for call in calls]
+
+
+class TestSignupAnswersInTime:
+    """However long the RSC API takes, the member gets an answer instead of "The application did not respond\""""
+
+    SEASON = MagicMock(id=12, number=28)
+
+    async def test_new_player_gets_step_one(self, mock_guild, mock_member):
+        clock = _Clock()
+        mixin = _signup_mixin(next_signup_season=clock.api_call(1.2, self.SEASON), players=clock.api_call(1.2, []))
+        interaction = _discord_interaction(mock_guild, mock_member, clock)
+
+        with patch.object(SignupFlowView, "wait_for_outcome", AsyncMock(return_value=SignupOutcome.CANCELLED)):
+            await command_callback(MemberMixIn._member_signup)(mixin, interaction)
+
+        assert clock.now > ACK_DEADLINE, "the lookups must outlast the window for this to prove anything"
+        [view] = _shown(interaction)
+        assert isinstance(view, SignupFlowView)
+
+    async def test_current_player_gets_the_intent_prompt(self, mock_guild, mock_member):
+        clock = _Clock()
+        mixin = _signup_mixin(next_signup_season=clock.api_call(1.6, self.SEASON), players=clock.api_call(1.6, [MagicMock()]))
+        interaction = _discord_interaction(mock_guild, mock_member, clock)
+
+        with patch.object(IntentToPlayView, "wait", AsyncMock(return_value=True)):
+            await command_callback(MemberMixIn._member_signup)(mixin, interaction)
+
+        [view] = _shown(interaction)
+        assert isinstance(view, IntentToPlayView)
+
+    async def test_api_error_is_reported(self, mock_guild, mock_member):
+        clock = _Clock()
+        mixin = _signup_mixin(next_signup_season=clock.api_call(3.5, error=api_error(500, "Down")))
+        interaction = _discord_interaction(mock_guild, mock_member, clock)
+
+        await command_callback(MemberMixIn._member_signup)(mixin, interaction)
+
+        [embed] = _shown(interaction)
+        assert isinstance(embed, discord.Embed)
+
+    async def test_existing_permfa_is_told(self, mock_guild, mock_member):
+        clock = _Clock()
+        mixin = _signup_mixin(_permfa_precheck=clock.api_call(3.5, (AlreadySignedUp.PERMFA, None)), _signup_flow=AsyncMock())
+        interaction = _discord_interaction(mock_guild, mock_member, clock)
+
+        await command_callback(MemberMixIn._member_permfa_signup)(mixin, interaction)
+
+        [view] = _shown(interaction)
+        assert isinstance(view, AlreadySignedUpView)
+        assert view.state is AlreadySignedUp.PERMFA
+
+    async def test_new_permfa_gets_step_one(self, mock_guild, mock_member):
+        clock = _Clock()
+        mixin = _signup_mixin(_permfa_precheck=clock.api_call(3.5, (None, None)))
+        interaction = _discord_interaction(mock_guild, mock_member, clock)
+
+        with patch.object(SignupFlowView, "wait_for_outcome", AsyncMock(return_value=SignupOutcome.CANCELLED)):
+            await command_callback(MemberMixIn._member_permfa_signup)(mixin, interaction)
+
+        [view] = _shown(interaction)
+        assert isinstance(view, SignupFlowView)
+        assert view.answers.kind is SignupKind.PERMFA
+
+    async def test_an_interaction_discord_already_dropped_runs_no_lookups(self, mock_guild, mock_member):
+        clock = _Clock(now=ACK_DEADLINE + 1)
+        mixin = _signup_mixin(next_signup_season=clock.api_call(0.4, self.SEASON), players=clock.api_call(0.4, []))
+        interaction = _discord_interaction(mock_guild, mock_member, clock)
+
+        await command_callback(MemberMixIn._member_signup)(mixin, interaction)
+
+        mixin.next_signup_season.assert_not_awaited()
+        assert _shown(interaction) == []
