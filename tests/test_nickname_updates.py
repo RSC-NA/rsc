@@ -11,9 +11,14 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import discord
 import pytest
 
+from rsc import const
+from rsc.enums import Status
 from rsc.exceptions import DiscordNameTooLong
+from rsc.transactions.roles import update_league_player_discord
 from rsc.types import Accolades
 from rsc.utils.utils import NICKNAME_MAX_LENGTH, update_discord_name
+
+from .sync_fakes import OCEAN_ROLE, TIERS, agm_franchise, league_player, role_names, sync_guild, sync_member
 
 
 @pytest.fixture
@@ -69,3 +74,22 @@ async def test_accolades_count_against_the_limit(member):
         pytest.raises(DiscordNameTooLong),
     ):
         await update_discord_name(member, name="cosmo6430", prefix="COS")
+
+
+async def test_agm_tag_that_does_not_fit_is_reported_after_the_roles_are_written():
+    """A franchise tag is a character longer than `FA`, so a name that fit as a
+    free agent can overrun once the member is an AGM."""
+    name = "a" * 27
+    synced = sync_member(sync_guild(), nick=f"FA | {name}")
+
+    with pytest.raises(DiscordNameTooLong):
+        await update_league_player_discord(
+            guild=synced.guild,
+            player=synced,
+            league_player=league_player(Status.FREE_AGENT, name=name),
+            tiers=TIERS,
+            agm_franchise=agm_franchise(),
+        )
+
+    assert synced.display_name == f"FA | {name}"
+    assert {const.AGM_ROLE, OCEAN_ROLE} <= role_names(synced)

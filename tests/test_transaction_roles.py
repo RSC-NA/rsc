@@ -15,6 +15,8 @@ from rsc import const
 from rsc.enums import Status
 from rsc.transactions import roles
 
+from .sync_fakes import TIERS, league_player, role_names, sync_guild, sync_member
+
 AGM_ID = 138778232802508801
 
 # Every role getter in `utils` the sync helpers reach for, mapped to the
@@ -133,10 +135,10 @@ class TestNonPlayingAgmReconcile:
         assert guild_roles.agm not in _removed(member)
         assert guild_roles.league not in _removed(member)
 
-    async def test_strips_a_stale_franchise_role(self, mock_guild, member, guild_roles):
+    async def test_strips_a_stale_franchise_role(self, mock_guild, member, guild_roles, monkeypatch):
         """An AGM keeps exactly the one franchise the API gives them."""
         member.roles = [guild_roles.agm, guild_roles.other_franchise]
-        roles.utils.franchise_role_list_from_disord_member = AsyncMock(return_value=[guild_roles.other_franchise])
+        monkeypatch.setattr(roles.utils, "franchise_role_list_from_disord_member", AsyncMock(return_value=[guild_roles.other_franchise]))
 
         await roles.update_nonplaying_discord(guild=mock_guild, member=member, tiers=[], agm_franchise=_franchise())
 
@@ -165,12 +167,12 @@ class TestNonPlayingAgmReconcile:
         assert guild_roles.franchise in _added(member)
         assert guild_roles.agm in _added(member)
 
-    async def test_missing_franchise_role_leaves_existing_ones_alone(self, mock_guild, member, guild_roles):
+    async def test_missing_franchise_role_leaves_existing_ones_alone(self, mock_guild, member, guild_roles, monkeypatch):
         """Do not strip what cannot be replaced."""
         member.roles = [guild_roles.other_franchise]
         roles.utils.franchise_role_from_model = AsyncMock(side_effect=ValueError("no such role"))
         roles.utils.franchise_role_from_name = AsyncMock(return_value=None)
-        roles.utils.franchise_role_list_from_disord_member = AsyncMock(return_value=[guild_roles.other_franchise])
+        monkeypatch.setattr(roles.utils, "franchise_role_list_from_disord_member", AsyncMock(return_value=[guild_roles.other_franchise]))
 
         await roles.update_nonplaying_discord(guild=mock_guild, member=member, tiers=[], agm_franchise=_franchise())
 
@@ -197,12 +199,12 @@ class TestNonPlayingAgmReconcile:
 
 
 class TestNonPlayingNonAgm:
-    async def test_strips_agm_state_when_the_api_has_no_record(self, mock_guild, member, guild_roles):
+    async def test_strips_agm_state_when_the_api_has_no_record(self, mock_guild, member, guild_roles, monkeypatch):
         """The other direction of the same reconcile. Before this, a removed AGM
         kept the role, the franchise role and the prefix indefinitely."""
         member.display_name = "OCE | nickm"
         member.roles = [guild_roles.agm, guild_roles.league, guild_roles.franchise]
-        roles.utils.franchise_role_list_from_disord_member = AsyncMock(return_value=[guild_roles.franchise])
+        monkeypatch.setattr(roles.utils, "franchise_role_list_from_disord_member", AsyncMock(return_value=[guild_roles.franchise]))
 
         await roles.update_nonplaying_discord(guild=mock_guild, member=member, tiers=[], agm_franchise=None)
 
@@ -212,10 +214,10 @@ class TestNonPlayingNonAgm:
         assert guild_roles.franchise in removed
         member.edit.assert_awaited_once_with(nick="nickm")
 
-    async def test_former_player_still_inferred_from_a_prefix(self, mock_guild, member, guild_roles):
+    async def test_former_player_still_inferred_from_a_prefix(self, mock_guild, member, guild_roles, monkeypatch):
         member.display_name = "OCE | nickm"
         member.roles = []
-        roles.utils.franchise_role_list_from_disord_member = AsyncMock(return_value=[])
+        monkeypatch.setattr(roles.utils, "franchise_role_list_from_disord_member", AsyncMock(return_value=[]))
 
         await roles.update_nonplaying_discord(guild=mock_guild, member=member, tiers=[], agm_franchise=None)
 
@@ -294,6 +296,19 @@ class TestRosteredAgm:
         )
 
         assert guild_roles.ir in _removed(member)
+
+
+class TestDraftEligible:
+    async def test_drops_permfa_in_waiting(self):
+        member = sync_member(sync_guild(), held=[const.LEAGUE_ROLE, const.PERM_FA_WAITING_ROLE], nick="PFW | nickm")
+
+        await roles.update_league_player_discord(
+            guild=member.guild, player=member, league_player=league_player(Status.DRAFT_ELIGIBLE), tiers=TIERS, agm_franchise=None
+        )
+
+        held = role_names(member)
+        assert const.PERM_FA_WAITING_ROLE not in held
+        assert const.DRAFT_ELIGIBLE in held
 
 
 class TestDispatcher:
