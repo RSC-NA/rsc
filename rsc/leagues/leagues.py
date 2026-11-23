@@ -7,6 +7,7 @@ from aiohttp import web
 import discord
 from redbot.core import app_commands
 from rscapi import LeaguePlayersApi, LeaguesApi
+from rscapi.models.error_code_enum import ErrorCodeEnum
 from rscapi.models.league import League
 from rscapi.models.league_player import LeaguePlayer
 from rscapi.models.league_player_status_enum import LeaguePlayerStatusEnum
@@ -17,7 +18,7 @@ from rscapi.models.season import Season
 from rsc.abc import RSCMixIn
 from rsc.embeds import BlueEmbed, ErrorEmbed, YellowEmbed
 from rsc.enums import Status
-from rsc.exceptions import NotFoundError, SignupsClosedError
+from rsc.exceptions import NotFoundError
 from rsc.leagues.effective import SyncSeasons, pick_effective_row
 from rsc.tiers import TierMixIn
 from rsc.utils import utils
@@ -391,7 +392,11 @@ class LeagueMixIn(RSCMixIn):
         default = await self.current_season(guild)
         try:
             signup = await self.next_signup_season(guild)
-        except (NotFoundError, SignupsClosedError):
+        except NotFoundError as exc:
+            # The API also answers 404 for a league id it does not have, and a
+            # proxy can answer 404 during a deploy. Neither says sign-ups closed.
+            if exc.code is not ErrorCodeEnum.NO_SIGNUP_SEASON:
+                raise
             signup = None
 
         wanted = [default, signup]

@@ -81,7 +81,7 @@ class ProbeCog(RSC):
 
 class ClosedSignupsCog(ProbeCog):
     async def next_signup_season(self, guild: discord.Guild) -> Season | None:
-        raise NotFoundError(404, "Signups are closed. Set in memory by the probe.")
+        raise NotFoundError(404, "Signups are closed. Set in memory by the probe.", code=ErrorCodeEnum.NO_SIGNUP_SEASON)
 
 
 class UnknownLeagueSignupCog(ProbeCog):

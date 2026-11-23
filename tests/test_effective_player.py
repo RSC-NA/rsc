@@ -190,10 +190,9 @@ class TestEffectivePlayers:
         "closed",
         [
             api_error(404, "Signups are closed. No upcoming season is currently accepting signups.", code=ErrorCodeEnum.NO_SIGNUP_SEASON),
-            api_error(405, "Signups are closed", code=ErrorCodeEnum.SIGNUPS_CLOSED),
             None,
         ],
-        ids=["404", "405", "none"],
+        ids=["404", "none"],
     )
     async def test_only_the_default_season_counts_once_sign_ups_close(self, closed):
         old, new = _row(S27, "RO", discord_id=1), _row(S28, "RO", discord_id=2)
