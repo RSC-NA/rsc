@@ -89,35 +89,30 @@ NON_PLAYING_GM = Rule(
 )
 FREE_AGENT = Rule(
     holds=frozenset({const.LEAGUE_ROLE, const.FREE_AGENT_ROLE}),
-    leaves=frozenset({const.AGM_ROLE}),
     prefix="FA",
     tier=TierRoles.TIER_AND_FA,
     dev_league=True,
 )
 PERM_FA = Rule(
     holds=frozenset({const.LEAGUE_ROLE, const.PERM_FA_ROLE}),
-    leaves=frozenset({const.AGM_ROLE}),
     prefix="PFA",
     tier=TierRoles.TIER_AND_FA,
     dev_league=True,
 )
 WAIVERS = Rule(
     holds=frozenset({const.LEAGUE_ROLE}),
-    leaves=frozenset({const.AGM_ROLE}),
     prefix="FA",
     tier=TierRoles.TIER_AND_FA,
     dev_league=True,
 )
 DRAFT_ELIGIBLE = Rule(
     holds=frozenset({const.LEAGUE_ROLE, const.DRAFT_ELIGIBLE}),
-    leaves=frozenset({const.AGM_ROLE}),
     prefix="DE",
     tier=TierRoles.TIER,
     dev_league=True,
 )
 PERMFA_WAITING = Rule(
     holds=frozenset({const.LEAGUE_ROLE, const.PERM_FA_WAITING_ROLE}),
-    leaves=frozenset({const.AGM_ROLE}),
     prefix="PFW",
 )
 NON_PLAYING = Rule(leaves=frozenset({const.SPECTATOR_ROLE, const.FORMER_PLAYER_ROLE}), in_league=False)

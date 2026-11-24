@@ -40,8 +40,8 @@ STALE_AGM = const.AGM_ROLE
 
 # For each standing: the status roles it gives, the roles it leaves on a member who holds them, and the tag.
 ROSTERED: tuple[set[str], set[str], str | None] = ({LEAGUE, "Premier", OCEAN_ROLE}, set(), "OCE")
-FREE_AGENT = ({LEAGUE, const.FREE_AGENT_ROLE, "Premier", "PremierFA"}, {STALE_AGM}, "FA")
-WAIVERS = ({LEAGUE, "Premier", "PremierFA"}, {STALE_AGM}, "FA")
+FREE_AGENT = ({LEAGUE, const.FREE_AGENT_ROLE, "Premier", "PremierFA"}, set(), "FA")
+WAIVERS = ({LEAGUE, "Premier", "PremierFA"}, set(), "FA")
 NON_PLAYING: tuple[set[str], set[str], str | None] = (set(), {const.SPECTATOR_ROLE, const.FORMER_PLAYER_ROLE}, None)
 EXPECTED: dict[Status | NoRow, tuple[set[str], set[str], str | None]] = {
     Status.ROSTERED: ROSTERED,
@@ -51,12 +51,12 @@ EXPECTED: dict[Status | NoRow, tuple[set[str], set[str], str | None]] = {
     Status.UNSIGNED_GM: ({LEAGUE, "Premier", OCEAN_ROLE}, {STALE_AGM}, "OCE"),
     NoRow.NON_PLAYING_GM: ({LEAGUE, OCEAN_ROLE}, {SUBBED_OUT}, "OCE"),
     Status.FREE_AGENT: FREE_AGENT,
-    Status.PERM_FA: ({LEAGUE, const.PERM_FA_ROLE, "Premier", "PremierFA"}, {STALE_AGM}, "PFA"),
+    Status.PERM_FA: ({LEAGUE, const.PERM_FA_ROLE, "Premier", "PremierFA"}, set(), "PFA"),
     Status.WAIVERS: WAIVERS,
     Status.WAIVER_CLAIM: WAIVERS,
     Status.WAIVER_RELEASE: WAIVERS,
-    Status.DRAFT_ELIGIBLE: ({LEAGUE, const.DRAFT_ELIGIBLE, "Premier"}, {STALE_AGM}, "DE"),
-    Status.PERMFA_W: ({LEAGUE, const.PERM_FA_WAITING_ROLE}, {STALE_AGM}, "PFW"),
+    Status.DRAFT_ELIGIBLE: ({LEAGUE, const.DRAFT_ELIGIBLE, "Premier"}, set(), "DE"),
+    Status.PERMFA_W: ({LEAGUE, const.PERM_FA_WAITING_ROLE}, set(), "PFW"),
     Status.DROPPED: NON_PLAYING,
     Status.FORMER: NON_PLAYING,
     Status.BANNED: NON_PLAYING,
@@ -233,6 +233,14 @@ class TestAgmSeat:
         result = plan(NoRow.NON_PLAYING, MemberState(frozenset(), "FA | nickm"), agm=Seat(DESERT_ROLE, "DES"))
 
         assert result.nickname == Rename("nickm", "DES")
+
+    @pytest.mark.parametrize("standing", [s for s in STANDINGS if s not in ON_A_FRANCHISE and s not in OUT_OF_LEAGUE])
+    def test_a_member_who_is_not_an_agm_loses_a_stale_agm_role(self, standing):
+        assert const.AGM_ROLE not in plan(standing, MemberState(frozenset({const.AGM_ROLE}), "nickm")).roles
+
+    def test_an_unsigned_gm_sync_leaves_the_agm_role_as_it_finds_it(self):
+        assert const.AGM_ROLE in plan(Status.UNSIGNED_GM, MemberState(frozenset({const.AGM_ROLE}), "nickm")).roles
+        assert const.AGM_ROLE not in plan(Status.UNSIGNED_GM, NO_ROLE).roles
 
     def test_a_member_who_is_not_an_agm_off_a_roster_loses_every_franchise_role(self):
         assert plan(Status.DRAFT_ELIGIBLE, EVERY_ROLE).roles & {OCEAN_ROLE, DESERT_ROLE} == set()
