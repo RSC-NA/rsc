@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from rscapi.exceptions import ApiException
 from rscapi.models.error_code_enum import ErrorCodeEnum
-from tests.utils import api_error, api_exception, raw_api_exception
+from tests.utils import NO_SIGNUP_SEASON_BODY, api_error, api_exception, raw_api_exception
 
 from rsc.embeds import ApiExceptionErrorEmbed
 from rsc.exceptions import (
@@ -74,6 +74,35 @@ class TestFromException:
     )
     def test_picks_the_most_specific_class(self, status, code, expected):
         assert type(api_error(status, code=code)) is expected
+
+    def test_no_signup_season_is_both_signups_closed_and_not_found(self):
+        error = ApiError.from_exception(raw_api_exception(404, NO_SIGNUP_SEASON_BODY))
+
+        assert isinstance(error, SignupsClosedError)
+        assert isinstance(error, NotFoundError)
+        assert error.code is ErrorCodeEnum.NO_SIGNUP_SEASON
+        assert error.status == 404
+        assert error.message == "Signups are closed. No upcoming season is currently accepting signups."
+
+    @pytest.mark.parametrize(
+        "exc",
+        [
+            api_exception(404, "Not found.", code=ErrorCodeEnum.NOT_FOUND),
+            raw_api_exception(404, '{"message": "Not found.", "extra": {}, "type": "NotFound", "status_code": 404}'),
+        ],
+        ids=["not_found", "no code"],
+    )
+    def test_any_other_404_is_not_signups_closed(self, exc):
+        error = ApiError.from_exception(exc)
+
+        assert isinstance(error, NotFoundError)
+        assert not isinstance(error, SignupsClosedError)
+
+    def test_a_refused_signup_action_is_signups_closed_but_not_a_missing_record(self):
+        error = api_error(405, "Signups are closed", code=ErrorCodeEnum.SIGNUPS_CLOSED)
+
+        assert isinstance(error, SignupsClosedError)
+        assert not isinstance(error, NotFoundError)
 
     def test_keeps_the_envelope(self):
         exc = api_error(

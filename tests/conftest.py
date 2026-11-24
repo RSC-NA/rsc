@@ -3,8 +3,9 @@ import os
 import sys
 import urllib.error
 import urllib.request
+from collections import defaultdict
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 from dotenv import load_dotenv
 
 import aiohttp
@@ -13,10 +14,11 @@ import discord
 
 from rsc.core import RSC
 from rsc.exceptions import ServerError
+from rsc.seasons.seasons import SeasonsMixIn
 
 from rscapi import Configuration
 
-from .utils import random_string, generate_discord_id
+from .utils import NO_SIGNUP_SEASON_BODY, random_string, generate_discord_id, raw_api_exception
 
 # Add the project root to the path so we can import the modules
 project_root = Path(__file__).parent.parent
@@ -142,6 +144,28 @@ def mock_player_out():
     member.display_name = "PlayerOut"
     member.mention = "<@333333333>"
     return member
+
+
+@pytest.fixture
+def no_signup_season_lookup():
+    """The bot's own `next_signup_season`, against a website where no season is taking sign-ups.
+
+    Goes through the real API client boundary, so a caller under test gets
+    whatever the bot makes of that answer.
+    """
+    saved = SeasonsMixIn.__abstractmethods__
+    SeasonsMixIn.__abstractmethods__ = frozenset()
+    try:
+        seasons = object.__new__(SeasonsMixIn)
+    finally:
+        SeasonsMixIn.__abstractmethods__ = saved
+    seasons._api_conf = defaultdict(MagicMock)
+    seasons._league = defaultdict(lambda: LEAGUE_ID)
+
+    api = AsyncMock()
+    api.seasons_signup_season_retrieve.side_effect = raw_api_exception(404, NO_SIGNUP_SEASON_BODY)
+    with patch("rsc.abc.ApiClient"), patch("rsc.seasons.seasons.SeasonsApi", return_value=api):
+        yield seasons.next_signup_season
 
 
 @pytest.fixture
