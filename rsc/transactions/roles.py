@@ -206,8 +206,10 @@ async def update_cut_player_discord(
         # if dev_league_role and dev_league_role not in player.roles:
         #     roles_to_add.append(dev_league_role)
     else:
-        roles_to_add.remove(fa_role)
-        roles_to_add.remove(tier_fa_role)
+        # A cut GM is not a free agent, because no other franchise can roster a GM.
+        fa_roles = (fa_role, tier_fa_role)
+        roles_to_add = [r for r in roles_to_add if r not in fa_roles]
+        roles_to_remove.extend(r for r in fa_roles if r in player.roles)
 
     await apply_member_changes(player, remove=roles_to_remove, add=roles_to_add)
 
