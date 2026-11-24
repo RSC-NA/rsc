@@ -1,0 +1,174 @@
+"""Run every status role function against fake members and print what each does.
+
+Usage, from the rsc repo root:
+  PYTHONPATH=. uv run python docs/plans/sync-rework-evidence/role_matrix.py.txt [--agm]
+
+--agm runs every status for a member the API lists as an AGM of franchise Beta.
+
+Two starting states per status: a member holding every managed role, and a
+member holding none. Output is one row per role, one column per status.
+  R = removed from the all-roles member     K = kept on the all-roles member
+  A = added to the no-roles member          . = not added to the no-roles member
+Also prints the number of Discord requests each call would send today
+(one per role with atomic=True, plus one for a nickname change).
+"""
+
+import asyncio
+import sys
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock
+
+import discord
+
+from rsc.enums import Status
+from rsc.transactions import roles as R
+
+ROLE_NAMES = [
+    "League",
+    "Spectator",
+    "Former Player",
+    "Free Agent",
+    "PermFA",
+    "PermFA in Waiting",
+    "Draft Eligible",
+    "IR",
+    "Captain",
+    "Subbed Out",
+    "Assistant GM",
+    "General Manager",
+    "Dev League Interest",
+    "Premier",
+    "PremierFA",
+    "Elite",
+    "EliteFA",
+    "Alpha (GmA)",
+    "Beta (GmB)",
+    "Server Booster",
+    "Muted",
+]
+
+
+def make_guild():
+    guild = MagicMock(spec=discord.Guild)
+    guild.name = "test"
+    guild.id = 1
+    roles = []
+    for i, name in enumerate(ROLE_NAMES):
+        r = MagicMock(spec=discord.Role)
+        r.name = name
+        r.id = i + 100
+        r.__repr__ = lambda self: self.name
+        roles.append(r)
+    guild.roles = roles
+    return guild
+
+
+def make_member(guild, held, nick):
+    m = MagicMock(spec=discord.Member)
+    m.id = 42
+    m.guild = guild
+    m.display_name = nick
+    m.mention = "<@42>"
+    m.roles = list(held)
+    m.remove_roles = AsyncMock()
+    m.add_roles = AsyncMock()
+    m.edit = AsyncMock()
+    return m
+
+
+def league_player(status, captain=False):
+    gm = SimpleNamespace(rsc_name="GmA", discord_id=7)
+    franchise = SimpleNamespace(name="Alpha", prefix="ALP", gm=gm, agms=[], id=1)
+    return SimpleNamespace(
+        status=status,
+        captain=captain,
+        tier=SimpleNamespace(name="Premier"),
+        team=SimpleNamespace(franchise=franchise, name="Team"),
+        player=SimpleNamespace(name="Player", discord_id=42),
+        id=5,
+    )
+
+
+TIERS = [SimpleNamespace(name="Premier"), SimpleNamespace(name="Elite")]
+AGM_FRANCHISE = (
+    SimpleNamespace(
+        name="Beta",
+        prefix="BET",
+        gm=SimpleNamespace(rsc_name="GmB", discord_id=8),
+        agms=[SimpleNamespace(discord_id=42, rsc_name="Player")],
+        id=2,
+    )
+    if "--agm" in sys.argv
+    else None
+)
+FRANCHISE = SimpleNamespace(name="Alpha", prefix="ALP", gm=SimpleNamespace(rsc_name="GmA", discord_id=42), agms=[], id=1)
+
+
+async def run(case, guild, member):
+    kind, status = case
+    if kind == "status":
+        await R.update_league_player_discord(
+            guild=guild,
+            player=member,
+            league_player=league_player(status),
+            tiers=TIERS,
+            franchise=FRANCHISE,
+            agm_franchise=AGM_FRANCHISE,
+        )
+    elif kind == "none":
+        await R.update_league_player_discord(guild=guild, player=member, league_player=None, tiers=TIERS, agm_franchise=AGM_FRANCHISE)
+    elif kind == "npgm":
+        await R.update_nonplaying_gm_discord(guild=guild, player=member, franchise=FRANCHISE, tiers=TIERS)
+
+
+def outcome(member, start):
+    removed, added = [], []
+    for c in member.remove_roles.await_args_list:
+        removed.extend(c.args)
+    for c in member.add_roles.await_args_list:
+        added.extend(c.args)
+    final = [r for r in start if r not in removed]
+    final += [r for r in added if r not in final]
+    nick = member.edit.await_args.kwargs.get("nick") if member.edit.await_args else None
+    requests = len(removed) + len(added) + member.edit.await_count
+    return removed, added, final, nick, requests
+
+
+async def main():
+    cases = [("status", s) for s in Status] + [("none", None), ("npgm", None)]
+    labels = [s.value for s in Status] + ["no-LP", "npGM"]
+    guild = make_guild()
+    table = {name: [] for name in ROLE_NAMES}
+    nicks, reqs_all, reqs_none, errors = [], [], [], []
+    for case in cases:
+        full = make_member(guild, guild.roles, "OLD | Player")
+        empty = make_member(guild, [], "Player")
+        err = ""
+        try:
+            await run(case, guild, full)
+            await run(case, guild, empty)
+        except Exception as exc:
+            err = f"{type(exc).__name__}: {exc}"
+        errors.append(err)
+        rem, _add, _final, nick_full, rq_full = outcome(full, guild.roles)
+        _rem2, add2, _final2, nick_empty, rq_empty = outcome(empty, [])
+        for role in guild.roles:
+            cell = ("R" if role in rem else "K") + ("A" if role in add2 else ".")
+            table[role.name].append(cell)
+        nicks.append((nick_full, nick_empty))
+        reqs_all.append(rq_full)
+        reqs_none.append(rq_empty)
+
+    w = 6
+    print(f"{'role':22}" + "".join(f"{label:>{w}}" for label in labels))
+    for name in ROLE_NAMES:
+        print(f"{name:22}" + "".join(f"{c:>{w}}" for c in table[name]))
+    print(f"{'requests, all roles':22}" + "".join(f"{n:>{w}}" for n in reqs_all))
+    print(f"{'requests, no roles':22}" + "".join(f"{n:>{w}}" for n in reqs_none))
+    print()
+    for label, (nf, ne), err in zip(labels, nicks, errors, strict=True):
+        print(f"{label:6} nick from 'OLD | Player' -> {nf!r:22} from 'Player' -> {ne!r:22} {err}")
+
+
+if __name__ == "__main__":
+    sys.exit(asyncio.run(main()))

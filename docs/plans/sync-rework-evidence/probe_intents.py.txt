@@ -1,0 +1,33 @@
+"""Read-only: what the intents endpoint holds for the open sign-up season."""
+import asyncio, os
+from collections import Counter
+from rscapi import ApiClient, Configuration
+from rscapi.api.league_players_api import LeaguePlayersApi
+from rscapi.api.seasons_api import SeasonsApi
+
+async def main():
+    conf = Configuration(host="https://api.rscna.com/api/v1", api_key={"Api-Key": os.environ["RSC_API_KEY"]}, api_key_prefix={"Api-Key": "Api-Key"})
+    async with ApiClient(conf) as client:
+        api = SeasonsApi(client)
+        for sid in (12, 11):
+            allr = await api.seasons_player_intents_list(sid)
+            print("season", sid, "intent rows", len(allr), "returning", dict(Counter(i.returning for i in allr)), "missing", dict(Counter(getattr(i, "missing", None) for i in allr)))
+            if allr:
+                i = allr[0]
+                print("  fields", sorted(k for k, v in i.to_dict().items()))
+        no = await api.seasons_player_intents_list(12, returning=False)
+        ids = set()
+        for i in no:
+            d = i.to_dict()
+            p = d.get("player") or {}
+            ids.add(p.get("discord_id") if isinstance(p, dict) else None)
+        print("S28 returning=False rows", len(no), "with discord id", len(ids - {None}))
+        lp = LeaguePlayersApi(client)
+        s28 = set(); off = 0
+        while True:
+            page = await lp.league_players_list(league=1, season=12, limit=500, offset=off)
+            s28 |= {r.player.discord_id for r in page.results}
+            off += len(page.results)
+            if not page.next: break
+        print("not-returning members who still have an S28 row:", len((ids - {None}) & s28))
+asyncio.run(main())

@@ -1,0 +1,44 @@
+"""Time the non-playing candidate scan F proposes, on fake data sized like production or larger.
+
+A candidate holds a managed league role or a nickname prefix and has no effective row.
+The scan reads only the member cache and the player set the players job already fetched.
+Usage: uv run python docs/plans/sync-rework-evidence/candidate_scan_bench.py.txt [members]
+"""
+
+import random
+import statistics
+import sys
+import time
+from types import SimpleNamespace
+
+N = int(sys.argv[1]) if len(sys.argv) > 1 else 30000
+random.seed(1)
+managed = [SimpleNamespace(id=i, name=f"managed{i}") for i in range(120)]
+other = [SimpleNamespace(id=1000 + i, name=f"other{i}") for i in range(200)]
+managed_ids = {r.id for r in managed}
+members = []
+for i in range(N):
+    roles = random.sample(other, 3)
+    playing = i < 1600
+    lapsed = 1600 <= i < 1700
+    if playing or lapsed:
+        roles += random.sample(managed, 3)
+    nick = f"ABC | player{i}" if playing else f"player{i}"
+    members.append(SimpleNamespace(id=i, roles=roles, display_name=nick))
+effective = set(range(1600))
+
+
+def scan():
+    return [
+        m
+        for m in members
+        if m.id not in effective and (" | " in m.display_name or any(r.id in managed_ids for r in m.roles))
+    ]
+
+
+runs = []
+for _ in range(7):
+    t = time.perf_counter()
+    found = scan()
+    runs.append((time.perf_counter() - t) * 1000)
+print(f"members={N} candidates={len(found)} median_ms={statistics.median(runs):.1f} min_ms={min(runs):.1f} max_ms={max(runs):.1f} runs={len(runs)}")
