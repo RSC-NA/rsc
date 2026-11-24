@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 """Run every role function against fake members and report what each member ends up with.
 
-    uv run python scripts/role_matrix.py [--agm] [--json out.json]
+    uv run python scripts/role_matrix.py [--agm] [--sub-status N] [--random N] [--json out.json]
     uv run python scripts/role_matrix.py --compare before.json after.json
 
-Each column is one role function call: every league status, a member with no
-league player row, a non-playing GM, a sign, a cut, a cut of the franchise's GM,
-and a captain gained or lost. Each column runs for five members:
+Each column is one role function call: every league status, a rostered captain,
+a Draft Eligible row with no tier, a Free Agent and a Draft Eligible sync with
+the Dev League flag, a member with no league player row, the same with a welcome
+role, a non-playing GM, a sign, a cut, a cut of the franchise's GM, and a
+captain gained or lost. Each column runs for five members:
 
     all     holds every role in ROLE_NAMES, nickname "OLD | Player"
     none    holds no role, nickname "Player"
@@ -18,7 +20,10 @@ The fake member applies each write the way Discord would, whichever way the
 code sends it, and counts one request per role added or removed and one per
 member edit. A case is run twice, and the second run's request count is
 reported as the repeat. `--agm` runs every case for a member the API lists as
-an AGM of franchise Beta.
+an AGM of franchise Beta. `--sub-status` sets the sub status on every league
+player row: 0 not subbing, 1 subbing out, 2 subbing in. `--random N` adds N
+members who each start with a random half of the roles and one of four
+nicknames. The same N gives the same members on every run.
 
 The table prints R or K for a role the `all` member lost or kept, then A or .
 for a role the `none` member gained or did not.
@@ -37,6 +42,7 @@ The fake's refusals are a model of Discord's rules, not a recording of them.
 
 import argparse
 import asyncio
+import hashlib
 import json
 import logging
 import sys
@@ -55,6 +61,7 @@ from rscapi.models.league_player_status_enum import LeaguePlayerStatusEnum
 from rscapi.models.player_franchise import PlayerFranchise
 from rscapi.models.player_team import PlayerTeam
 from rscapi.models.player_transaction_updates import PlayerTransactionUpdates
+from rscapi.models.sub_status_enum import SubStatusEnum
 from rscapi.models.team_player import TeamPlayer
 from rscapi.models.tier import Tier
 from rscapi.models.transaction_franchise import TransactionFranchise
@@ -84,6 +91,7 @@ ROLE_NAMES = [
     "PremierFA",
     "Elite",
     "EliteFA",
+    "LegacyFA",
     "Alpha (GmA)",
     "Beta (GmB)",
     "Server Booster",
@@ -121,6 +129,26 @@ VARIANTS = {
     "higher": Variant((ADMIN_ROLE,), "Player"),
     "nonick": Variant((), "Player", manage_nicknames=False),
 }
+RANDOM_NICKS = ("Player", "OLD | Player", "FA | Player", "BET | Player")
+
+
+def coin(*key: object) -> int:
+    return hashlib.sha256(repr(key).encode()).digest()[0]
+
+
+def random_variants(count: int) -> dict[str, Variant]:
+    return {
+        f"r{number:03}": Variant(
+            tuple(name for name in ROLE_NAMES if coin(number, name) % 2), RANDOM_NICKS[coin(number) % len(RANDOM_NICKS)]
+        )
+        for number in range(count)
+    }
+
+
+@dataclass(frozen=True)
+class Setup:
+    agm_franchise: FranchiseList | None
+    sub_status: int
 
 
 def make_role(name: str, position: int) -> MagicMock:
@@ -200,49 +228,59 @@ def make_member(guild: MagicMock, variant: Variant) -> MagicMock:
     return member
 
 
-def league_player(status: Status) -> LeaguePlayer:
+def league_player(status: Status, *, sub_status: int = 0, captain: bool = False, tier: Tier | None = TIERS[0]) -> LeaguePlayer:
     franchise = PlayerFranchise(name="Alpha", prefix="ALP", gm=FranchiseGM(rsc_name="GmA", discord_id=OTHER_GM_ID))
     return LeaguePlayer.model_construct(
         status=LeaguePlayerStatusEnum(status.value),
-        captain=False,
-        tier=TIERS[0],
+        captain=captain,
+        tier=tier,
         team=PlayerTeam(name="Team", franchise=franchise),
         player=LeaguePlayerMember(name="Player", discord_id=MEMBER_ID),
+        sub_status=SubStatusEnum(sub_status),
     )
 
 
-Run = Callable[[MagicMock, MagicMock, FranchiseList | None], Awaitable[None]]
+Run = Callable[[MagicMock, MagicMock, Setup], Awaitable[None]]
 
 
-def status_sync(status: Status | None) -> Run:
-    async def run(guild: MagicMock, member: MagicMock, agm_franchise: FranchiseList | None) -> None:
+def status_sync(
+    status: Status | None, *, captain: bool = False, tier: Tier | None = TIERS[0], devleague: bool = False, welcome: bool = False
+) -> Run:
+    async def run(guild: MagicMock, member: MagicMock, setup: Setup) -> None:
+        row = league_player(status, sub_status=setup.sub_status, captain=captain, tier=tier) if status else None
         await roles.update_league_player_discord(
             guild=guild,
             player=member,
-            league_player=league_player(status) if status else None,
+            league_player=row,
             tiers=TIERS,
             franchise=ALPHA,
-            agm_franchise=agm_franchise,
+            default_roles=[role for role in guild.roles if role.name == "Spectator"] if welcome else None,
+            devleague=devleague,
+            agm_franchise=setup.agm_franchise,
         )
 
     return run
 
 
-async def nonplaying_gm(guild: MagicMock, member: MagicMock, _agm_franchise: FranchiseList | None) -> None:
+async def nonplaying_gm(guild: MagicMock, member: MagicMock, _setup: Setup) -> None:
     await roles.update_nonplaying_gm_discord(guild=guild, player=member, franchise=ALPHA, tiers=TIERS)
 
 
-async def sign(guild: MagicMock, member: MagicMock, _agm_franchise: FranchiseList | None) -> None:
+async def sign(guild: MagicMock, member: MagicMock, setup: Setup) -> None:
     ptu = PlayerTransactionUpdates.model_construct(
-        player=league_player(Status.ROSTERED), new_team=TransactionTeam.model_construct(name="Team", tier="Premier"), old_team=None
+        player=league_player(Status.ROSTERED, sub_status=setup.sub_status),
+        new_team=TransactionTeam.model_construct(name="Team", tier="Premier"),
+        old_team=None,
     )
     await roles.update_signed_player_discord(guild=guild, player=member, ptu=ptu, tiers=TIERS)
 
 
 def cut(gm_id: int) -> Run:
-    async def run(guild: MagicMock, member: MagicMock, _agm_franchise: FranchiseList | None) -> None:
+    async def run(guild: MagicMock, member: MagicMock, setup: Setup) -> None:
         ptu = PlayerTransactionUpdates.model_construct(
-            player=league_player(Status.FREE_AGENT), old_team=TransactionTeam.model_construct(name="Team", tier="Premier"), new_team=None
+            player=league_player(Status.FREE_AGENT, sub_status=setup.sub_status),
+            old_team=TransactionTeam.model_construct(name="Team", tier="Premier"),
+            new_team=None,
         )
         franchise = TransactionFranchise.model_construct(name="Alpha", prefix="ALP", gm=FranchiseGM(rsc_name="GmA", discord_id=gm_id))
         response = TransactionResponse.model_construct(first_franchise=franchise)
@@ -252,7 +290,7 @@ def cut(gm_id: int) -> Run:
 
 
 def captain(flag: bool) -> Run:
-    async def run(guild: MagicMock, _member: MagicMock, _agm_franchise: FranchiseList | None) -> None:
+    async def run(guild: MagicMock, _member: MagicMock, _setup: Setup) -> None:
         await roles.update_team_captain_discord(
             guild=guild, players=[TeamPlayer.model_construct(name="Player", discord_id=MEMBER_ID, captain=flag)]
         )
@@ -262,7 +300,12 @@ def captain(flag: bool) -> Run:
 
 CASES: dict[str, Run] = {
     **{status.value: status_sync(status) for status in Status},
+    "RO+c": status_sync(Status.ROSTERED, captain=True),
+    "DE-t": status_sync(Status.DRAFT_ELIGIBLE, tier=None),
+    "FA+dv": status_sync(Status.FREE_AGENT, devleague=True),
+    "DE+dv": status_sync(Status.DRAFT_ELIGIBLE, devleague=True),
     "no-LP": status_sync(None),
+    "no+w": status_sync(None, welcome=True),
     "npGM": nonplaying_gm,
     "sign": sign,
     "cut": cut(OTHER_GM_ID),
@@ -272,28 +315,29 @@ CASES: dict[str, Run] = {
 }
 
 
-async def requests_sent(run: Run, guild: MagicMock, member: MagicMock, agm_franchise: FranchiseList | None) -> tuple[int, str | None]:
+async def requests_sent(run: Run, guild: MagicMock, member: MagicMock, setup: Setup) -> tuple[int, str | None]:
     before = member.requests
     error = None
     try:
-        await run(guild, member, agm_franchise)
+        await run(guild, member, setup)
     except Exception as exc:
         error = f"{type(exc).__name__}: {exc}"
     return member.requests - before, error
 
 
-async def measure(agm: bool) -> dict:
-    agm_franchise = BETA if agm else None
+async def measure(agm: bool, sub_status: int, random_count: int) -> dict:
+    setup = Setup(BETA if agm else None, sub_status)
+    variants = VARIANTS | random_variants(random_count)
     results: dict[str, dict[str, dict]] = {}
     for label, run in CASES.items():
         results[label] = {}
-        for name, variant in VARIANTS.items():
+        for name, variant in variants.items():
             guild = make_guild(variant)
             member = make_member(guild, variant)
-            requests, error = await requests_sent(run, guild, member, agm_franchise)
+            requests, error = await requests_sent(run, guild, member, setup)
             final_roles = sorted(role.name for role in member.roles[1:])
             final_nick = member.display_name
-            repeat_requests, _repeat_error = await requests_sent(run, guild, member, agm_franchise)
+            repeat_requests, _repeat_error = await requests_sent(run, guild, member, setup)
             results[label][name] = {
                 "roles": final_roles,
                 "nick": final_nick,
@@ -301,7 +345,13 @@ async def measure(agm: bool) -> dict:
                 "requests": requests,
                 "repeat_requests": repeat_requests,
             }
-    return {"roles_py": roles.__file__, "agm": agm, "results": results}
+    return {
+        "roles_py": roles.__file__,
+        "agm": agm,
+        "sub_status": sub_status,
+        "variants": {name: {"held": list(variant.held), "nick": variant.nick} for name, variant in variants.items()},
+        "results": results,
+    }
 
 
 def print_matrix(matrix: dict) -> None:
@@ -310,6 +360,7 @@ def print_matrix(matrix: dict) -> None:
     width = 6
     print(f"rsc code      {matrix['roles_py']}")
     print(f"member        {'an AGM of Beta' if matrix['agm'] else 'not an AGM'}")
+    print(f"sub status    {matrix['sub_status']}")
     print()
     print(f"{'role':22}" + "".join(f"{label:>{width}}" for label in labels))
     for role in ROLE_NAMES:
@@ -333,11 +384,12 @@ def print_matrix(matrix: dict) -> None:
 
 
 def state_differences(before: dict, after: dict) -> list[str]:
-    if before["agm"] != after["agm"]:
-        return ["One file is an --agm run and the other is not."]
+    for key in ("agm", "sub_status", "variants"):
+        if before[key] != after[key]:
+            return [f"The two files were not run the same way. They differ in {key}."]
     differences = []
     for label in sorted(before["results"].keys() | after["results"].keys()):
-        for name in VARIANTS:
+        for name in after["variants"]:
             old = before["results"].get(label, {}).get(name)
             new = after["results"].get(label, {}).get(name)
             if old is None or new is None:
@@ -358,6 +410,7 @@ def print_comparison(before: dict, after: dict) -> bool:
     print(f"before        {before['roles_py']}")
     print(f"after         {after['roles_py']}")
     print(f"member        {'an AGM of Beta' if after['agm'] else 'not an AGM'}")
+    print(f"sub status    {after['sub_status']}")
     differences = state_differences(before, after)
     cases = sum(len(variants) for variants in after["results"].values())
     print()
@@ -383,6 +436,8 @@ def print_comparison(before: dict, after: dict) -> bool:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--agm", action="store_true", help="Run every case for a member the API lists as an AGM of franchise Beta.")
+    parser.add_argument("--sub-status", type=int, choices=(0, 1, 2), default=0, help="The sub status on every league player row.")
+    parser.add_argument("--random", type=int, default=0, metavar="N", help="Also run N members who start with random roles.")
     parser.add_argument("--json", type=Path, metavar="FILE", help="Also write the whole result to FILE.")
     parser.add_argument("--compare", type=Path, nargs=2, metavar=("BEFORE", "AFTER"), help="Compare two files written by --json.")
     args = parser.parse_args()
@@ -392,7 +447,7 @@ def main() -> int:
         return 0 if print_comparison(before, after) else 1
 
     logging.disable(logging.CRITICAL)
-    matrix = asyncio.run(measure(args.agm))
+    matrix = asyncio.run(measure(args.agm, args.sub_status, args.random))
     print_matrix(matrix)
     if args.json:
         args.json.write_text(json.dumps(matrix, indent=2) + "\n")
