@@ -12,7 +12,7 @@ from rsc import const
 from rsc.admin.sync import AdminSyncMixIn
 from rsc.enums import Status
 from rsc.exceptions import DiscordNameTooLong
-from rsc.franchises.franchises import FranchiseMixIn
+from rsc.franchises.franchises import FranchiseMixIn, FranchiseStaff
 from rsc.transactions import writer
 
 from .sync_fakes import (
@@ -216,7 +216,7 @@ class TestNonPlayingSyncAgmSweep:
         mixin = _create_mixin()
         mixin.tiers = AsyncMock(return_value=[])
         mixin._get_welcome_roles = AsyncMock(return_value=[])
-        mixin.agm_franchise_map = AsyncMock(return_value=agm_franchise_map)
+        mixin.franchise_staff = AsyncMock(return_value=FranchiseStaff(gms={}, agms=agm_franchise_map))
         mixin.paged_members = MagicMock(return_value=_rows())
         mixin.effective_players = MagicMock(return_value=_rows(_another_playing_member()))
         return mixin
@@ -251,7 +251,7 @@ class TestNonPlayingSyncAgmSweep:
     async def test_leaves_a_real_agm_alone(self, mixin, interaction, agm_role):
         real = self._member(111)
         agm_role.members = [real]
-        mixin.agm_franchise_map = AsyncMock(return_value={111: MagicMock()})
+        mixin.franchise_staff = AsyncMock(return_value=FranchiseStaff(gms={}, agms={111: MagicMock()}))
 
         embed = await self._run(mixin, interaction, agm_role)
 
@@ -300,11 +300,9 @@ class TestNonPlayingSyncAgmSweep:
         assert embed.title == "Non-Playing Sync"
 
     async def test_empty_franchise_list_aborts_before_touching_anyone(self, mixin, interaction, agm_role):
-        """`agm_franchise_map` raises rather than answering {}. Otherwise one bad
-        response would strip every AGM in the guild in a single run."""
         stale = self._member(111)
         agm_role.members = [stale]
-        mixin.agm_franchise_map = AsyncMock(side_effect=RuntimeError("Refusing to build an AGM map"))
+        mixin.franchise_staff = AsyncMock(side_effect=RuntimeError("Refusing to build an AGM map"))
 
         embed = await self._run(mixin, interaction, agm_role)
 
@@ -457,7 +455,7 @@ class TestNonPlayingSyncAcrossSeasons:
         mixin = _create_mixin()
         mixin.tiers = AsyncMock(return_value=[])
         mixin._get_welcome_roles = AsyncMock(return_value=[])
-        mixin.agm_franchise_map = AsyncMock(return_value={})
+        mixin.franchise_staff = AsyncMock(return_value=FranchiseStaff(gms={}, agms={}))
         mixin.paged_members = MagicMock(return_value=_rows(api_member))
         mixin.effective_players = MagicMock(return_value=effective_players)
 
@@ -718,6 +716,7 @@ class TestSyncSummaryLine:
             bot=MagicMock(guilds=[member.guild]),
             tiers=AsyncMock(return_value=TIERS),
             agm_franchise_map=AsyncMock(return_value={}),
+            franchise_staff=AsyncMock(return_value=FranchiseStaff(gms={}, agms={})),
             should_get_devleague_role=AsyncMock(return_value=False),
             _get_welcome_roles=AsyncMock(return_value=[]),
             franchises=AsyncMock(return_value=[]),

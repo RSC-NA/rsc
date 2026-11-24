@@ -39,8 +39,9 @@ AGM helpers:
 
 - `add_agm` / `remove_agm` send both the AGM and the executor by Discord ID. The API requires the executor to hold the Admin elevated role for the league, otherwise it answers 403. Adding an existing AGM is a no-op that still succeeds. Removing someone who is not an AGM of that franchise answers 404.
 - `franchises_agm_of`, `agm_franchise_of` and `agm_franchise_map` find AGMs from the `agms` list that `franchises_list` returns inline. The API has no reverse lookup. `agm_franchise_map` builds one map for the whole league from a single request, and bulk role syncs must use it instead of calling `agm_franchise_of` once per member.
-- `agm_franchise_map` raises `RuntimeError` if the API returns no franchises at all. Callers treat a missing key as "not an AGM", so an empty answer would otherwise strip every AGM in a bulk sync.
-- If one person is listed as AGM on two franchises, the first franchise in list order wins and a warning is logged.
+- `franchise_staff` returns that AGM map together with a GM map, both keyed by Discord ID and both built from the same single request. `/admin sync nonplaying` uses it to find the non-playing GMs and AGMs in one read. `agm_franchise_map` is its AGM half.
+- `franchise_staff` and `agm_franchise_map` raise `RuntimeError` if the API returns no franchises at all. Callers treat a missing key as "not a GM" or "not an AGM", so an empty answer would otherwise strip every one of them in a bulk sync.
+- If one person is listed as AGM on two franchises, the first franchise in list order wins and a warning is logged. If one person is the GM of two franchises, the first franchise in list order wins.
 
 RSC API calls (`FranchisesApi`):
 

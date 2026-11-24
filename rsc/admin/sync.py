@@ -777,16 +777,14 @@ class AdminSyncMixIn(AdminMixIn):
 
         default_roles = await self._get_welcome_roles(guild)
 
-        # Fetched once for the whole run. Non-playing AGMs are the population
-        # this command exists to get right, and they have no league player to
-        # read a franchise off.
         try:
-            log.debug("Fetching AGMs", guild=guild)
-            agm_map = await api_read(self.agm_franchise_map(guild))
+            log.debug("Fetching GMs and AGMs", guild=guild)
+            staff = await api_read(self.franchise_staff(guild))
         except RscException as exc:
             return await interaction.edit_original_response(embed=ApiExceptionErrorEmbed(exc))
         except RuntimeError as exc:
             return await interaction.edit_original_response(embed=ExceptionErrorEmbed(exc_message=str(exc)))
+        agm_map = staff.agms
 
         try:
             log.debug("Fetching league players", guild=guild)
@@ -824,9 +822,13 @@ class AdminSyncMixIn(AdminMixIn):
 
             if not dryrun:
                 try:
-                    await update_nonplaying_discord(
-                        guild=guild, member=m, tiers=tiers, default_roles=default_roles, agm_franchise=agm_map.get(m.id)
-                    )
+                    gm_franchise = staff.gms.get(m.id)
+                    if gm_franchise:
+                        await update_nonplaying_gm_discord(guild=guild, player=m, franchise=gm_franchise, tiers=tiers)
+                    else:
+                        await update_nonplaying_discord(
+                            guild=guild, member=m, tiers=tiers, default_roles=default_roles, agm_franchise=agm_map.get(m.id)
+                        )
                     reconciled.add(m.id)
                 except (ValueError, AttributeError) as exc:
                     await interaction.followup.send(content=str(exc), ephemeral=True)

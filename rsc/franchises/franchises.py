@@ -1,4 +1,5 @@
 import logging
+from dataclasses import dataclass
 from os import PathLike
 from urllib.parse import urljoin
 
@@ -21,6 +22,14 @@ from rsc.exceptions import NotFoundError, RscException
 from rsc.utils.cache import merge_name_cache
 
 log = logging.getLogger("red.rsc.franchises")
+
+
+@dataclass(frozen=True)
+class FranchiseStaff:
+    """A league's GMs and AGMs, each keyed by discord ID to their franchise."""
+
+    gms: dict[int, FranchiseList]
+    agms: dict[int, FranchiseList]
 
 
 class FranchiseMixIn(RSCMixIn):
@@ -338,36 +347,44 @@ class FranchiseMixIn(RSCMixIn):
         return memberships[0]
 
     async def agm_franchise_map(self, guild: discord.Guild) -> dict[int, FranchiseList]:
-        """Every AGM in the league, keyed by discord ID.
+        """Every AGM in the league, keyed by discord ID. See `franchise_staff`."""
+        return (await self.franchise_staff(guild)).agms
+
+    async def franchise_staff(self, guild: discord.Guild) -> FranchiseStaff:
+        """Every GM and AGM in the league, keyed by discord ID.
 
         One request answers the whole league because `FranchiseList` carries
-        `agms` inline. Bulk syncs must use this instead of calling
+        `gm` and `agms` inline. Bulk syncs must use this instead of calling
         `agm_franchise_of` per member: `_franchise_cache` only holds franchise
         *names*, so `franchises()` is a live request every time and a per-member
         lookup is one full franchise list per member.
 
         Raises `RuntimeError` if the API returns no franchises at all. Callers
-        read a missing key as "not an AGM", so an empty answer would strip every
-        AGM in the guild in a single bulk sync. A league always has franchises.
+        read a missing key as "not a GM" or "not an AGM", so an empty answer
+        would strip every one of them in a single bulk sync. A league always
+        has franchises.
         """
         flist = await self.franchises(guild)
         if not flist:
             raise RuntimeError(f"[{guild.name}] API returned no franchises. Refusing to build an AGM map.")
 
-        result: dict[int, FranchiseList] = {}
+        gms: dict[int, FranchiseList] = {}
+        agms: dict[int, FranchiseList] = {}
         for f in flist:
+            if f.gm and f.gm.discord_id:
+                gms.setdefault(f.gm.discord_id, f)
             for agm in f.agms or []:
                 if not agm.discord_id:
                     continue
-                existing = result.get(agm.discord_id)
+                existing = agms.get(agm.discord_id)
                 if existing is not None:
                     log.warning(
                         f"[{guild.name}] {agm.discord_id} is an AGM of multiple franchises: "
                         f"{existing.name}, {f.name}. Using {existing.name}."
                     )
                     continue
-                result[agm.discord_id] = f
-        return result
+                agms[agm.discord_id] = f
+        return FranchiseStaff(gms=gms, agms=agms)
 
     async def franchise_logo(self, guild: discord.Guild, id: int) -> str | None:
         host = await self._get_api_url(guild)
