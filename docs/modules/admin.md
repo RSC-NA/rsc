@@ -147,8 +147,8 @@ Match types are `REG`, `PRE`, `PST`, `FNL` and `ANY`. Formats are `GMS`, `BO3`, 
 | `/admin sync players [dryrun]` | Manage Server | After a confirmation, re-applies roles and nickname from the API to every league player in the server. Each member is synced from their effective row (see *Season-aware reads* below). Slow. |
 | `/admin sync nonplaying [dryrun]` | Manage Server | After a confirmation, resets every API member who has no effective league player row, or whose row is Dropped, Former or Banned, to non-playing roles. Then removes the Assistant GM role from anyone the API has no AGM record for. When the league player read holds no playing member, the command replies with an error and changes nobody. Slow. |
 | `/admin sync member member` | Manage Server | Re-applies API roles and nickname to one member from their effective row, including non-playing GMs and AGMs. |
-| `/admin sync freeagent [dryrun]` | Manage Server | After a confirmation, re-syncs every FA and PermFA, with a progress bar and a cancel button. |
-| `/admin sync drafteligible [dryrun]` | Manage Server | After a confirmation, re-syncs every Draft Eligible player, with a progress bar and a cancel button. |
+| `/admin sync freeagent [dryrun]` | Manage Server | After a confirmation, re-syncs every FA and PermFA, with a progress bar and a cancel button. An AGM in the list keeps their franchise role and prefix. |
+| `/admin sync drafteligible [dryrun]` | Manage Server | After a confirmation, re-syncs every Draft Eligible player, with a progress bar and a cancel button. An AGM in the list keeps their franchise role and prefix. |
 
 ### /admin audit
 

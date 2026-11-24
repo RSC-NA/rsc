@@ -3,9 +3,26 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import discord
 import pytest
 
+from rsc import const
 from rsc.admin.agm import AdminAGMMixIn
+from rsc.admin.sync import AdminSyncMixIn
 from rsc.enums import Status
+from rsc.transactions import roles
 
+from .sync_fakes import (
+    DESERT_ROLE,
+    MEMBER_ID,
+    OCEAN_ROLE,
+    ROLE_NAMES,
+    TIERS,
+    agm_franchise,
+    discord_requests,
+    forget_writes,
+    league_player,
+    role_names,
+    sync_guild,
+    sync_member,
+)
 from .utils import api_error, command_callback, subcommands
 
 FRANCHISE = "The Ocean"
@@ -14,13 +31,13 @@ OTHER_FRANCHISE = "The Desert"
 OTHER_FRANCHISE_ID = 9
 
 
-def _create_mixin(**attrs):
-    saved = AdminAGMMixIn.__abstractmethods__
-    AdminAGMMixIn.__abstractmethods__ = frozenset()
+def _create_mixin(cls=AdminAGMMixIn, **attrs):
+    saved = cls.__abstractmethods__
+    cls.__abstractmethods__ = frozenset()
     try:
-        m = object.__new__(AdminAGMMixIn)
+        m = object.__new__(cls)
     finally:
-        AdminAGMMixIn.__abstractmethods__ = saved
+        cls.__abstractmethods__ = saved
     for k, v in attrs.items():
         setattr(m, k, v)
     return m
@@ -422,3 +439,118 @@ class TestAgmRemoveCommand:
         mixin.remove_agm.assert_not_awaited()
         agm_sync.assert_not_awaited()
         assert _sent_embed(interaction).title == "API Error"
+
+
+NOT_ROSTERED = [
+    Status.FREE_AGENT,
+    Status.PERM_FA,
+    Status.PERMFA_W,
+    Status.DRAFT_ELIGIBLE,
+    Status.WAIVERS,
+    Status.WAIVER_CLAIM,
+    Status.WAIVER_RELEASE,
+]
+STATUS_ROLE = {
+    Status.FREE_AGENT: const.FREE_AGENT_ROLE,
+    Status.PERM_FA: const.PERM_FA_ROLE,
+    Status.PERMFA_W: const.PERM_FA_WAITING_ROLE,
+    Status.DRAFT_ELIGIBLE: const.DRAFT_ELIGIBLE,
+}
+STATUS_TAG = {Status.PERM_FA: "PFA", Status.PERMFA_W: "PFW", Status.DRAFT_ELIGIBLE: "DE"}
+
+
+async def _sync(member, status, franchise):
+    await roles.update_league_player_discord(
+        guild=member.guild, player=member, league_player=league_player(status), tiers=TIERS, agm_franchise=franchise
+    )
+
+
+@pytest.mark.parametrize("status", NOT_ROSTERED)
+class TestAgmWithoutARosterSpot:
+    async def test_keeps_the_franchise_tag_and_roles(self, status):
+        member = sync_member(sync_guild(), held=[const.LEAGUE_ROLE, const.AGM_ROLE, OCEAN_ROLE], nick="OCE | nickm")
+
+        await _sync(member, status, agm_franchise())
+
+        assert member.display_name == "OCE | nickm"
+        assert {const.AGM_ROLE, OCEAN_ROLE} <= role_names(member)
+
+    async def test_gets_back_what_an_earlier_sync_took(self, status):
+        member = sync_member(sync_guild(), held=[const.LEAGUE_ROLE, DESERT_ROLE], nick="FA | nickm")
+
+        await _sync(member, status, agm_franchise())
+
+        assert member.display_name == "OCE | nickm"
+        held = role_names(member)
+        assert {const.LEAGUE_ROLE, const.AGM_ROLE, OCEAN_ROLE} <= held
+        assert DESERT_ROLE not in held
+        if status in STATUS_ROLE:
+            assert STATUS_ROLE[status] in held
+
+    async def test_adds_each_role_once(self, status):
+        member = sync_member(sync_guild(), nick="nickm")
+
+        await _sync(member, status, agm_franchise())
+
+        added = [role.name for call in member.add_roles.await_args_list for role in call.args]
+        assert sorted(added) == sorted(set(added))
+
+    @pytest.mark.parametrize("held", [(), ROLE_NAMES], ids=["no roles", "every role"])
+    async def test_second_sync_sends_no_requests(self, status, held):
+        member = sync_member(sync_guild(), held=held, nick="FA | nickm")
+
+        await _sync(member, status, agm_franchise())
+        assert discord_requests(member) > 0
+        forget_writes(member)
+        await _sync(member, status, agm_franchise())
+
+        assert discord_requests(member) == 0
+
+    async def test_member_who_is_not_an_agm_gets_the_status_tag_and_no_franchise_role(self, status):
+        member = sync_member(sync_guild(), held=[const.LEAGUE_ROLE, OCEAN_ROLE], nick="OCE | nickm")
+
+        await _sync(member, status, None)
+
+        assert member.display_name == f"{STATUS_TAG.get(status, 'FA')} | nickm"
+        assert OCEAN_ROLE not in role_names(member)
+
+
+class TestStatusSyncCommandsKeepAnAgm:
+    async def _run(self, command, member, status):
+        async def rows(guild, status):
+            if status == row.status:
+                yield row
+
+        row = league_player(status)
+        member.guild.get_member = MagicMock(return_value=member)
+        mixin = _create_mixin(
+            AdminSyncMixIn,
+            total_players=AsyncMock(return_value=1),
+            tiers=AsyncMock(return_value=TIERS),
+            paged_players=rows,
+            agm_franchise_map=AsyncMock(return_value={MEMBER_ID: agm_franchise()}),
+        )
+        interaction = _mock_interaction(member.guild)
+        interaction.edit_original_response = AsyncMock()
+        with patch("rsc.admin.sync.ConfirmSyncView") as confirm, patch("rsc.admin.sync.CancelView") as progress:
+            confirm.return_value.prompt = AsyncMock()
+            confirm.return_value.wait = AsyncMock()
+            confirm.return_value.result = True
+            progress.return_value.cancelled = False
+            await command_callback(command)(mixin, interaction, False)
+
+    @pytest.mark.parametrize(
+        ("command", "status"),
+        [
+            (AdminSyncMixIn._sync_freeagent_cmd, Status.FREE_AGENT),
+            (AdminSyncMixIn._sync_freeagent_cmd, Status.PERM_FA),
+            (AdminSyncMixIn._sync_drafteligible_cmd, Status.DRAFT_ELIGIBLE),
+        ],
+    )
+    async def test_agm_keeps_the_franchise_tag_and_roles(self, command, status):
+        member = sync_member(sync_guild(), held=[const.LEAGUE_ROLE, const.AGM_ROLE, OCEAN_ROLE], nick="OCE | nickm")
+
+        await self._run(command, member, status)
+
+        assert member.display_name == "OCE | nickm"
+        assert {const.AGM_ROLE, OCEAN_ROLE, STATUS_ROLE[status]} <= role_names(member)

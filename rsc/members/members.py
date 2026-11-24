@@ -60,7 +60,7 @@ from rsc.members.views.signup import (
 )
 from rsc.teams import TeamMixIn
 from rsc.tiers import TierMixIn
-from rsc.transactions.roles import update_league_player_discord
+from rsc.transactions.roles import update_league_player_discord, update_nonplaying_gm_discord
 from rsc.utils import utils
 from rsc.utils.images import signup_banner_file
 from rsc.pagination import API_MAX_PAGE_SIZE, check_page_limit, iter_pages
@@ -897,6 +897,8 @@ class MemberMixIn(RSCMixIn):
             )
             return
 
+        await self._best_effort_sync_after_intent(guild, user)
+
         if intent_view.result:
             desc = (
                 "You have successfully declared your intent."
@@ -917,6 +919,31 @@ class MemberMixIn(RSCMixIn):
                 colour=discord.Colour.green(),
             )
         )
+
+    async def _best_effort_sync_after_intent(self, guild: discord.Guild, user: discord.Member) -> None:
+        try:
+            lp = await self.effective_player(guild, user.id)
+            tiers = await self.tiers(guild)
+            gm_of = await self.franchises(guild, gm_discord_id=user.id)
+            gm_franchise = gm_of[0] if gm_of else None
+
+            if not lp and gm_franchise:
+                return await update_nonplaying_gm_discord(guild=guild, player=user, franchise=gm_franchise, tiers=tiers)
+
+            await update_league_player_discord(
+                guild=guild,
+                player=user,
+                league_player=lp,
+                tiers=tiers,
+                franchise=gm_franchise,
+                default_roles=await self._get_welcome_roles(guild),
+                agm_franchise=await self.agm_franchise_of(guild, user.id),
+            )
+        except DiscordNameTooLong as exc:
+            log.warning(f"Unable to update nickname for {user.id}: {exc}", guild=guild)
+        except Exception:
+            # The intent is already recorded, so a failed sync must not cost the member their reply.
+            log.exception(f"Unable to sync {user.id} after their intent declaration", guild=guild)
 
     async def league_player_from_member(self, guild: discord.Guild, member: Member) -> LeaguePlayer | None:
         """Return `LeaguePlayer` object for the guilds league from `Member`"""
@@ -1221,7 +1248,8 @@ class MemberMixIn(RSCMixIn):
         returning: bool,
         executor: discord.Member | None = None,
         admin_overrride: bool = False,
-    ) -> Deleted:
+    ) -> LeaguePlayer | Deleted:
+        """Record a member's intent. A 201 from the API carries their league player row, a 200 carries `Deleted`."""
         async with self.api_client(guild) as client:
             api = MembersApi(client)
             data = IntentToPlayRequest(

@@ -1088,6 +1088,13 @@ class AdminSyncMixIn(AdminMixIn):
                 )
             )
 
+        try:
+            agm_map = await self.agm_franchise_map(guild)
+        except RscException as exc:
+            return await interaction.edit_original_response(embed=ApiExceptionErrorEmbed(exc))
+        except RuntimeError as exc:
+            return await interaction.edit_original_response(embed=ExceptionErrorEmbed(exc_message=str(exc)))
+
         loading_embed = BlueEmbed(
             title="Syncing Free Agents",
             description="Free Agent player synchronziation in progress",
@@ -1142,7 +1149,9 @@ class AdminSyncMixIn(AdminMixIn):
             # Check if dry run
             if not dryrun:
                 try:
-                    await update_free_agent_discord(guild=guild, player=m, league_player=player, tiers=tiers)
+                    await update_free_agent_discord(
+                        guild=guild, player=m, league_player=player, tiers=tiers, agm_franchise=agm_map.get(m.id)
+                    )
                 except (ValueError, AttributeError) as exc:
                     await interaction.followup.send(content=str(exc), ephemeral=True)
 
@@ -1215,7 +1224,9 @@ class AdminSyncMixIn(AdminMixIn):
             # Check if dry run
             if not dryrun:
                 try:
-                    await update_free_agent_discord(guild=guild, player=m, league_player=player, tiers=tiers)
+                    await update_free_agent_discord(
+                        guild=guild, player=m, league_player=player, tiers=tiers, agm_franchise=agm_map.get(m.id)
+                    )
                 except (ValueError, AttributeError) as exc:
                     await interaction.followup.send(content=str(exc), ephemeral=True)
 
@@ -1295,6 +1306,13 @@ class AdminSyncMixIn(AdminMixIn):
                 )
             )
 
+        try:
+            agm_map = await self.agm_franchise_map(guild)
+        except RscException as exc:
+            return await interaction.edit_original_response(embed=ApiExceptionErrorEmbed(exc))
+        except RuntimeError as exc:
+            return await interaction.edit_original_response(embed=ExceptionErrorEmbed(exc_message=str(exc)))
+
         loading_embed = BlueEmbed(
             title="Syncing Draft Eligible",
             description="Draft eligible player synchronziation in progress",
@@ -1340,7 +1358,9 @@ class AdminSyncMixIn(AdminMixIn):
 
             if not dryrun:
                 try:
-                    await update_draft_eligible_discord(guild=guild, player=m, league_player=player, tiers=tiers)
+                    await update_draft_eligible_discord(
+                        guild=guild, player=m, league_player=player, tiers=tiers, agm_franchise=agm_map.get(m.id)
+                    )
                 except (ValueError, AttributeError) as exc:
                     await interaction.followup.send(content=str(exc), ephemeral=True)
 

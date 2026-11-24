@@ -1,16 +1,20 @@
 import asyncio
 import io
+import logging
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import discord
 import pytest
+from rscapi.models.franchise_gm import FranchiseGM
+from rscapi.models.franchise_list import FranchiseList
 from rscapi.models.member import Member
 
+from rsc import const
 from rsc.enums import Platform, PlayerType, Referrer, RegionPreference, StaffPositions, Status
 from rsc.exceptions import RscException
 from rsc.members.members import MemberMixIn
 from rsc.members.tracker_links import TrackerLine
-from rsc.members.views.intent import IntentToPlayView
+from rsc.members.views.intent import IntentState, IntentToPlayView
 from rsc.members.views.signup import (
     SignupFlowView,
     AlreadySignedUp,
@@ -23,6 +27,7 @@ from rsc.members.views.signup import (
     SignupSuccessView,
 )
 
+from .sync_fakes import MEMBER_ID, OCEAN_ROLE, TIERS, league_player, role_names, sync_guild, sync_member
 from .utils import api_error, api_exception, command_callback
 
 GUILD_ID = 395806681994493964
@@ -766,6 +771,125 @@ class TestIntentToPlayFlowTimeout:
 
         interaction.edit_original_response.assert_not_awaited()
         mixin.declare_intent.assert_not_awaited()
+
+
+def _intent_mixin(row, **attrs):
+    defaults = {
+        "declare_intent": AsyncMock(return_value=MagicMock()),
+        "effective_player": AsyncMock(return_value=row),
+        "tiers": AsyncMock(return_value=TIERS),
+        "agm_franchise_of": AsyncMock(return_value=None),
+        "franchises": AsyncMock(return_value=[]),
+        "_get_welcome_roles": AsyncMock(return_value=[]),
+    }
+    defaults.update(attrs)
+    return _create_mixin(**defaults)
+
+
+async def _declare(mixin, member, returning: bool, on_reply=None) -> MagicMock:
+    interaction = MagicMock()
+    interaction.edit_original_response = AsyncMock(side_effect=on_reply)
+    with patch("rsc.members.members.IntentToPlayView") as view_cls:
+        view = view_cls.return_value
+        view.prompt = AsyncMock()
+        view.wait = AsyncMock(return_value=False)
+        view.state = IntentState.FINISHED
+        view.result = returning
+        await mixin._intent_to_play_flow(interaction, member.guild, member)
+    return interaction
+
+
+def _reply_title(interaction) -> str:
+    view = interaction.edit_original_response.await_args.kwargs["view"]
+    return next(item.content for item in view.walk_children() if isinstance(item, discord.ui.TextDisplay))
+
+
+ROSTERED_ROLES = [const.LEAGUE_ROLE, "Premier", OCEAN_ROLE]
+
+
+class TestIntentToPlayFlowSync:
+    async def test_returning_player_gets_the_new_rows_roles_before_the_reply(self):
+        member = sync_member(sync_guild(), held=ROSTERED_ROLES, nick="OCE | nickm")
+        mixin = _intent_mixin(league_player(Status.DRAFT_ELIGIBLE))
+        held_at_reply: list[set[str]] = []
+
+        interaction = await _declare(mixin, member, returning=True, on_reply=lambda **_: held_at_reply.append(role_names(member)))
+
+        assert held_at_reply == [{const.LEAGUE_ROLE, "Premier", const.DRAFT_ELIGIBLE}]
+        assert member.display_name == "DE | nickm"
+        assert _reply_title(interaction) == "## Intent to Play Declared"
+
+    async def test_not_returning_player_becomes_non_playing(self):
+        member = sync_member(sync_guild(), held=ROSTERED_ROLES, nick="OCE | nickm")
+
+        interaction = await _declare(_intent_mixin(None), member, returning=False)
+
+        assert role_names(member) == {const.FORMER_PLAYER_ROLE}
+        assert member.display_name == "nickm"
+        assert _reply_title(interaction) == "## Intent to Play Declared"
+
+    async def test_not_returning_player_keeps_a_roster_spot_that_still_holds(self):
+        member = sync_member(sync_guild(), held=ROSTERED_ROLES, nick="OCE | nickm")
+
+        interaction = await _declare(_intent_mixin(league_player(Status.ROSTERED)), member, returning=False)
+
+        assert role_names(member) == set(ROSTERED_ROLES)
+        assert member.display_name == "OCE | nickm"
+        assert _reply_title(interaction) == "## Intent to Play Declared"
+
+    async def test_nickname_that_does_not_fit_still_gets_the_roles_and_the_success_reply(self, caplog):
+        name = "a" * 30
+        member = sync_member(sync_guild(), held=ROSTERED_ROLES, nick=name)
+
+        with caplog.at_level(logging.WARNING, logger="red.rsc.members"):
+            interaction = await _declare(_intent_mixin(league_player(Status.DRAFT_ELIGIBLE, name=name)), member, returning=True)
+
+        assert const.DRAFT_ELIGIBLE in role_names(member)
+        assert member.display_name == name
+        assert _reply_title(interaction) == "## Intent to Play Declared"
+        assert [(r.levelname, r.exc_info) for r in caplog.records] == [("WARNING", None)]
+
+    @pytest.mark.parametrize("row", [None, league_player(Status.UNSIGNED_GM, name="someone")], ids=["no row", "unsigned GM row"])
+    async def test_gm_is_synced_as_the_gm_of_their_franchise(self, row):
+        member = sync_member(sync_guild(), held=[const.GM_ROLE], nick="someone")
+        ocean = FranchiseList(name="The Ocean", prefix="OCE", gm=FranchiseGM(rsc_name="someone", discord_id=MEMBER_ID))
+
+        await _declare(_intent_mixin(row, franchises=AsyncMock(return_value=[ocean])), member, returning=row is not None)
+
+        assert {const.GM_ROLE, OCEAN_ROLE} <= role_names(member)
+        assert member.display_name == "OCE | someone"
+
+    async def test_failed_sync_still_reports_the_declaration(self):
+        member = sync_member(sync_guild(), held=ROSTERED_ROLES, nick="OCE | nickm")
+        mixin = _intent_mixin(None, effective_player=AsyncMock(side_effect=api_error(500)))
+
+        interaction = await _declare(mixin, member, returning=False)
+
+        assert role_names(member) == set(ROSTERED_ROLES)
+        assert _reply_title(interaction) == "## Intent to Play Declared"
+
+    async def test_a_network_error_in_the_sync_still_reports_the_declaration_and_is_logged(self, caplog):
+        member = sync_member(sync_guild(), held=ROSTERED_ROLES, nick="OCE | nickm")
+        mixin = _intent_mixin(None, effective_player=AsyncMock(side_effect=ConnectionResetError("Connection reset by peer")))
+
+        with caplog.at_level(logging.WARNING, logger="red.rsc.members"):
+            interaction = await _declare(mixin, member, returning=False)
+
+        assert _reply_title(interaction) == "## Intent to Play Declared"
+        [record] = caplog.records
+        assert record.levelname == "ERROR"
+        assert str(MEMBER_ID) in record.getMessage()
+        assert record.exc_info is not None
+        assert record.exc_info[0] is ConnectionResetError
+
+    async def test_refused_declaration_changes_no_roles(self):
+        member = sync_member(sync_guild(), held=ROSTERED_ROLES, nick="OCE | nickm")
+        mixin = _intent_mixin(None, declare_intent=AsyncMock(side_effect=api_error(400, "Sign-ups are closed.")))
+
+        interaction = await _declare(mixin, member, returning=False)
+
+        assert role_names(member) == set(ROSTERED_ROLES)
+        assert _reply_title(interaction) == "## API Error"
 
 
 # --- /signup and /permfa ---
