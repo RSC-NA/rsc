@@ -180,10 +180,11 @@ def make_guild(variant: Variant) -> MagicMock:
     guild.owner_id = MEMBER_ID if variant.owner else OTHER_GM_ID
     guild.me = MagicMock(spec=discord.Member)
     guild.me.top_role = next(role for role in guild.roles if role.name == BOT_ROLE)
+    guild.get_member = MagicMock(return_value=None)
     return guild
 
 
-def make_member(guild: MagicMock, variant: Variant) -> MagicMock:
+def make_member(guild: MagicMock, variant: Variant, *, cached: bool = True) -> MagicMock:
     member = MagicMock(spec=discord.Member)
     member.id = MEMBER_ID
     member.guild = guild
@@ -232,7 +233,8 @@ def make_member(guild: MagicMock, variant: Variant) -> MagicMock:
     member.remove_roles = AsyncMock(side_effect=remove_roles)
     member.add_roles = AsyncMock(side_effect=add_roles)
     member.edit = AsyncMock(side_effect=edit)
-    guild.get_member = MagicMock(side_effect={MEMBER_ID: member}.get)
+    if cached:
+        guild.get_member = MagicMock(side_effect={MEMBER_ID: member}.get)
     return member
 
 
@@ -373,12 +375,9 @@ async def bench(count: int, runs: int, agm: bool, sub_status: int) -> dict:
     for number in range(count):
         run = STATUS_SYNCS[labels[number % len(labels)]]
         name = "all" if number // len(labels) % 2 else "none"
-        member = make_member(guilds[name], VARIANTS[name])
+        member = make_member(guilds[name], VARIANTS[name], cached=False)
         await requests_sent(run, guilds[name], member, setup)
         members.append((run, guilds[name], member))
-    # Each guild served one member id to many members. With no cached member the writer reads the member's own roles.
-    for guild in guilds.values():
-        guild.get_member = MagicMock(return_value=None)
 
     cpu_s, requests, errors = [], 0, 0
     for _ in range(runs):

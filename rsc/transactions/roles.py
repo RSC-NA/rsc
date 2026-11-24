@@ -290,7 +290,6 @@ async def agm_franchise_role(guild: discord.Guild, franchise: Franchise | Franch
 
 
 async def status_role(guild: discord.Guild, name: str) -> discord.Role:
-    """The guild's role for a name the planner gives. A name that is not a status role is a tier role or a tier FA role."""
     match name:
         case const.LEAGUE_ROLE:
             return await utils.get_league_role(guild)
@@ -334,8 +333,7 @@ def league_player_row(league_player: LeaguePlayer, team: planner.Seat | None = N
 
 async def agm_seat(
     guild: discord.Guild, member: discord.Member, franchise: Franchise | FranchiseList | None
-) -> tuple[planner.Seat | None, list[discord.Role]]:
-    """An AGM's seat on their franchise, and the franchise role when the guild has one."""
+) -> tuple[planner.Seat | planner.SeatWithoutRole | None, list[discord.Role]]:
     if not franchise:
         return None, []
 
@@ -346,22 +344,17 @@ async def agm_seat(
             "Leaving their existing franchise roles in place.",
             guild=guild,
         )
-    return planner.Seat(role.name if role else None, franchise.prefix, agm_rsc_name(member, franchise)), [role] if role else []
+        return planner.SeatWithoutRole(franchise.prefix, agm_rsc_name(member, franchise)), []
+    return planner.Seat(role.name, franchise.prefix, agm_rsc_name(member, franchise)), [role]
 
 
 async def role_changes(
     guild: discord.Guild, member: discord.Member, plan: planner.Plan, resolved: Iterable[discord.Role] = ()
 ) -> tuple[list[discord.Role], list[discord.Role]]:
-    """The roles to remove and to add so the member holds exactly the plan's roles.
-
-    `resolved` holds roles the caller already has. A role to add that is not
-    among them is looked up in the guild, which raises `ValueError` when the
-    guild does not have it.
-    """
     held = {role.name for role in member.roles}
     known = {role.name: role for role in resolved}
-    remove = [role for role in member.roles if role.name not in plan.roles]
-    add = [known.get(name) or await status_role(guild, name) for name in sorted(plan.roles - held)]
+    remove = [role for role in member.roles if role.name not in plan.final_roles]
+    add = [known.get(name) or await status_role(guild, name) for name in sorted(plan.final_roles - held)]
     return remove, add
 
 
@@ -422,7 +415,7 @@ async def update_nonplaying_discord(
         member_state(member),
         agm=agm,
         tiers=[tier.name for tier in tiers],
-        welcome=[role.name for role in welcome],
+        welcome_roles=[role.name for role in welcome],
     )
     if not agm_franchise:
         return await sync_to_plan(guild, member, plan, welcome)
@@ -515,8 +508,7 @@ async def update_rostered_discord(
         Status(league_player.status),
         member_state(player),
         row=league_player_row(league_player, planner.Seat(frole.name, league_player.team.franchise.prefix)),
-        # The roster owns the franchise role and the tag here, so an AGM's seat only brings the AGM role.
-        agm=planner.Seat(None, agm_franchise.prefix) if agm_franchise else None,
+        agm=planner.SeatWithoutRole(agm_franchise.prefix) if agm_franchise else None,
         tiers=[tier.name for tier in tiers],
     )
     await sync_to_plan(guild, player, plan, [frole])

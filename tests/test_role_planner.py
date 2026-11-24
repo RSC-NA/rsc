@@ -1,4 +1,5 @@
 from dataclasses import replace
+from typing import NamedTuple
 
 import pytest
 from rscapi.models.franchise_gm import FranchiseGM
@@ -7,7 +8,7 @@ from rscapi.models.franchise_list import FranchiseList
 from rsc import const
 from rsc.enums import Status, SubStatus
 from rsc.transactions import roles
-from rsc.transactions.planner import MemberState, NoRow, Plan, Rename, Row, Seat, StripPrefix, plan_member
+from rsc.transactions.planner import MemberState, NoRow, Plan, Rename, Row, Seat, SeatWithoutRole, StripPrefix, plan_member
 
 from .sync_fakes import (
     DESERT_ROLE,
@@ -36,28 +37,32 @@ ROW = Row(name="nickm", tier="Premier", team=ROSTER)
 
 LEAGUE = const.LEAGUE_ROLE
 SUBBED_OUT = const.SUBBED_OUT_ROLE
-STALE_AGM = const.AGM_ROLE
 
-# For each standing: the status roles it gives, the roles it leaves on a member who holds them, and the tag.
-ROSTERED: tuple[set[str], set[str], str | None] = ({LEAGUE, "Premier", OCEAN_ROLE}, set(), "OCE")
-INACTIVE_RESERVE: tuple[set[str], set[str], str | None] = ({LEAGUE, const.IR_ROLE, "Premier", OCEAN_ROLE}, set(), "OCE")
-FREE_AGENT = ({LEAGUE, const.FREE_AGENT_ROLE, "Premier", "PremierFA"}, set(), "FA")
-WAIVERS = ({LEAGUE, "Premier", "PremierFA"}, set(), "FA")
-NON_PLAYING: tuple[set[str], set[str], str | None] = (set(), {const.SPECTATOR_ROLE, const.FORMER_PLAYER_ROLE}, None)
-EXPECTED: dict[Status | NoRow, tuple[set[str], set[str], str | None]] = {
+
+class Expected(NamedTuple):
+    gives: set[str]
+    tag: str | None
+    untouched: frozenset[str] = frozenset()
+
+
+ROSTERED = Expected({LEAGUE, "Premier", OCEAN_ROLE}, "OCE")
+INACTIVE_RESERVE = Expected({LEAGUE, const.IR_ROLE, "Premier", OCEAN_ROLE}, "OCE")
+WAIVERS = Expected({LEAGUE, "Premier", "PremierFA"}, "FA")
+NON_PLAYING = Expected(set(), None, untouched=frozenset({const.SPECTATOR_ROLE, const.FORMER_PLAYER_ROLE}))
+EXPECTED: dict[Status | NoRow, Expected] = {
     Status.ROSTERED: ROSTERED,
     Status.RENEWED: ROSTERED,
     Status.IR: INACTIVE_RESERVE,
     Status.AGMIR: INACTIVE_RESERVE,
-    Status.UNSIGNED_GM: ({LEAGUE, "Premier", OCEAN_ROLE}, {STALE_AGM}, "OCE"),
-    NoRow.NON_PLAYING_GM: ({LEAGUE, OCEAN_ROLE}, {SUBBED_OUT}, "OCE"),
-    Status.FREE_AGENT: FREE_AGENT,
-    Status.PERM_FA: ({LEAGUE, const.PERM_FA_ROLE, "Premier", "PremierFA"}, set(), "PFA"),
+    Status.UNSIGNED_GM: Expected({LEAGUE, "Premier", OCEAN_ROLE}, "OCE", untouched=frozenset({const.AGM_ROLE})),
+    NoRow.NON_PLAYING_GM: Expected({LEAGUE, OCEAN_ROLE}, "OCE", untouched=frozenset({SUBBED_OUT})),
+    Status.FREE_AGENT: Expected({LEAGUE, const.FREE_AGENT_ROLE, "Premier", "PremierFA"}, "FA"),
+    Status.PERM_FA: Expected({LEAGUE, const.PERM_FA_ROLE, "Premier", "PremierFA"}, "PFA"),
     Status.WAIVERS: WAIVERS,
     Status.WAIVER_CLAIM: WAIVERS,
     Status.WAIVER_RELEASE: WAIVERS,
-    Status.DRAFT_ELIGIBLE: ({LEAGUE, const.DRAFT_ELIGIBLE, "Premier"}, set(), "DE"),
-    Status.PERMFA_W: ({LEAGUE, const.PERM_FA_WAITING_ROLE}, set(), "PFW"),
+    Status.DRAFT_ELIGIBLE: Expected({LEAGUE, const.DRAFT_ELIGIBLE, "Premier"}, "DE"),
+    Status.PERMFA_W: Expected({LEAGUE, const.PERM_FA_WAITING_ROLE}, "PFW"),
     Status.DROPPED: NON_PLAYING,
     Status.FORMER: NON_PLAYING,
     Status.BANNED: NON_PLAYING,
@@ -76,58 +81,53 @@ def plan(standing: Status | NoRow, member: MemberState, **facts) -> Plan:
 
 
 def written(member: MemberState, result: Plan) -> MemberState:
-    """The member as Discord holds them once the plan is written."""
     match result.nickname:
         case Rename(name, prefix):
             nick = f"{prefix} | {name}" if prefix else name
         case StripPrefix():
             nick = member.nick.split(" | ", maxsplit=1)[-1]
-    return MemberState(result.roles, nick)
+    return MemberState(result.final_roles, nick)
 
 
 class TestEveryStanding:
     @pytest.mark.parametrize("standing", STANDINGS)
     def test_a_member_with_no_role_gets_the_roles_the_standing_gives(self, standing):
-        given, _left, _prefix = EXPECTED[standing]
-
-        assert plan(standing, NO_ROLE).roles == given
+        assert plan(standing, NO_ROLE).final_roles == EXPECTED[standing].gives
 
     @pytest.mark.parametrize("standing", STANDINGS)
     def test_a_member_with_every_role_keeps_what_the_standing_gives_or_leaves_and_every_unmanaged_role(self, standing):
-        given, left, _prefix = EXPECTED[standing]
+        expected = EXPECTED[standing]
 
-        assert plan(standing, EVERY_ROLE).roles == given | left | UNMANAGED
+        assert plan(standing, EVERY_ROLE).final_roles == expected.gives | expected.untouched | UNMANAGED
 
     @pytest.mark.parametrize("standing", STANDINGS)
     def test_the_nickname(self, standing):
-        _given, _left, prefix = EXPECTED[standing]
         name = "someone" if standing is NoRow.NON_PLAYING_GM else "nickm"
+        renamed = Rename(name, EXPECTED[standing].tag)
 
-        assert plan(standing, EVERY_ROLE).nickname == (StripPrefix() if standing in OUT_OF_LEAGUE else Rename(name, prefix))
+        assert plan(standing, EVERY_ROLE).nickname == (StripPrefix() if standing in OUT_OF_LEAGUE else renamed)
 
     @pytest.mark.parametrize("standing", [s for s in STANDINGS if s not in ON_A_FRANCHISE])
     def test_an_agm_off_a_roster_holds_the_agm_role_the_league_role_and_their_franchise_role_and_tag(self, standing):
-        given, _left, _prefix = EXPECTED[standing]
-
         result = plan(standing, NO_ROLE, agm=AGM)
 
-        assert result.roles == given | {const.AGM_ROLE, LEAGUE, DESERT_ROLE}
+        assert result.final_roles == EXPECTED[standing].gives | {const.AGM_ROLE, LEAGUE, DESERT_ROLE}
         assert result.nickname == Rename("nickm", "DES")
 
     @pytest.mark.parametrize("standing", [s for s in STANDINGS if s not in ON_A_FRANCHISE])
     def test_an_agm_off_a_roster_loses_every_other_franchise_role(self, standing):
         result = plan(standing, EVERY_ROLE, agm=AGM)
 
-        assert DESERT_ROLE in result.roles
-        assert OCEAN_ROLE not in result.roles
+        assert DESERT_ROLE in result.final_roles
+        assert OCEAN_ROLE not in result.final_roles
 
     @pytest.mark.parametrize("standing", [Status.ROSTERED, Status.RENEWED, Status.IR, Status.AGMIR])
     def test_a_rostered_agm_holds_the_agm_role_and_the_roster_s_franchise_role_and_tag(self, standing):
-        result = plan(standing, EVERY_ROLE, agm=Seat(None, "DES"))
+        result = plan(standing, EVERY_ROLE, agm=SeatWithoutRole("DES"))
 
-        assert const.AGM_ROLE in result.roles
-        assert OCEAN_ROLE in result.roles
-        assert DESERT_ROLE not in result.roles
+        assert const.AGM_ROLE in result.final_roles
+        assert OCEAN_ROLE in result.final_roles
+        assert DESERT_ROLE not in result.final_roles
         assert result.nickname == Rename("nickm", "OCE")
 
     @pytest.mark.parametrize("agm", [None, AGM], ids=["not an AGM", "an AGM"])
@@ -143,25 +143,25 @@ class TestEveryStanding:
 class TestRowFacts:
     @pytest.mark.parametrize("standing", [Status.IR, Status.AGMIR])
     def test_an_ir_member_who_already_holds_ir_keeps_it(self, standing):
-        assert const.IR_ROLE in plan(standing, MemberState(frozenset({const.IR_ROLE}), "nickm")).roles
+        assert const.IR_ROLE in plan(standing, MemberState(frozenset({const.IR_ROLE}), "nickm")).final_roles
 
     @pytest.mark.parametrize("standing", [s for s in STANDINGS if s not in (Status.IR, Status.AGMIR)])
     def test_a_member_who_is_not_on_ir_loses_it(self, standing):
-        assert const.IR_ROLE not in plan(standing, MemberState(frozenset({const.IR_ROLE}), "nickm")).roles
+        assert const.IR_ROLE not in plan(standing, MemberState(frozenset({const.IR_ROLE}), "nickm")).final_roles
 
     def test_a_rostered_captain_holds_captain(self):
-        assert const.CAPTAIN_ROLE in plan(Status.ROSTERED, NO_ROLE, row=Row("nickm", "Premier", captain=True, team=ROSTER)).roles
+        assert const.CAPTAIN_ROLE in plan(Status.ROSTERED, NO_ROLE, row=Row("nickm", "Premier", captain=True, team=ROSTER)).final_roles
 
     def test_a_captain_flag_on_a_free_agent_row_gives_no_captain_role(self):
-        assert const.CAPTAIN_ROLE not in plan(Status.FREE_AGENT, EVERY_ROLE, row=Row("nickm", "Premier", captain=True)).roles
+        assert const.CAPTAIN_ROLE not in plan(Status.FREE_AGENT, EVERY_ROLE, row=Row("nickm", "Premier", captain=True)).final_roles
 
     def test_a_draft_eligible_row_with_no_tier_holds_no_tier_role(self):
-        assert plan(Status.DRAFT_ELIGIBLE, EVERY_ROLE, row=Row("nickm")).roles & {"Premier", "PremierFA", "Elite", "EliteFA"} == set()
+        assert plan(Status.DRAFT_ELIGIBLE, EVERY_ROLE, row=Row("nickm")).final_roles & {"Premier", "PremierFA", "Elite", "EliteFA"} == set()
 
     def test_a_row_in_another_tier_swaps_the_tier_roles(self):
         result = plan(Status.FREE_AGENT, EVERY_ROLE, row=Row("nickm", "Elite"))
 
-        assert result.roles & {"Premier", "PremierFA", "Elite", "EliteFA"} == {"Elite", "EliteFA"}
+        assert result.final_roles & {"Premier", "PremierFA", "Elite", "EliteFA"} == {"Elite", "EliteFA"}
 
     def test_a_dropped_row_is_read_as_no_row(self):
         assert plan(Status.DROPPED, EVERY_ROLE, row=Row("renamed", "Premier", captain=True, team=ROSTER)) == plan(
@@ -176,60 +176,60 @@ class TestRowFacts:
 class TestTierRoles:
     @pytest.mark.parametrize("standing", ON_A_FRANCHISE)
     def test_a_roster_or_gm_sync_takes_a_role_ending_in_fa_that_belongs_to_no_tier(self, standing):
-        assert "LegacyFA" not in plan(standing, MemberState(frozenset({"LegacyFA"}), "nickm")).roles
+        assert "LegacyFA" not in plan(standing, MemberState(frozenset({"LegacyFA"}), "nickm")).final_roles
 
     @pytest.mark.parametrize("standing", [s for s in STANDINGS if s not in ON_A_FRANCHISE])
     def test_any_other_sync_leaves_it(self, standing):
-        assert "LegacyFA" in plan(standing, MemberState(frozenset({"LegacyFA"}), "nickm")).roles
+        assert "LegacyFA" in plan(standing, MemberState(frozenset({"LegacyFA"}), "nickm")).final_roles
 
     @pytest.mark.parametrize("standing", STANDINGS)
     def test_no_tier_list_means_no_tier_role_is_taken(self, standing):
         held = frozenset({"Elite", "EliteFA", "LegacyFA"})
 
-        assert held <= plan(standing, MemberState(held, "nickm"), tiers=[]).roles
+        assert held <= plan(standing, MemberState(held, "nickm"), tiers=[]).final_roles
 
 
 class TestOnlyEverAdded:
     @pytest.mark.parametrize("standing", [Status.FREE_AGENT, Status.PERM_FA, Status.WAIVERS, Status.DRAFT_ELIGIBLE])
     def test_dev_league_is_added_when_asked_for(self, standing):
-        assert const.DEV_LEAGUE_ROLE in plan(standing, NO_ROLE, devleague=True).roles
-        assert const.DEV_LEAGUE_ROLE not in plan(standing, NO_ROLE).roles
+        assert const.DEV_LEAGUE_ROLE in plan(standing, NO_ROLE, devleague=True).final_roles
+        assert const.DEV_LEAGUE_ROLE not in plan(standing, NO_ROLE).final_roles
 
     @pytest.mark.parametrize("standing", [Status.ROSTERED, Status.PERMFA_W, Status.UNSIGNED_GM, NoRow.NON_PLAYING])
     def test_dev_league_is_not_added_for_a_standing_that_does_not_offer_it(self, standing):
-        assert const.DEV_LEAGUE_ROLE not in plan(standing, NO_ROLE, devleague=True).roles
+        assert const.DEV_LEAGUE_ROLE not in plan(standing, NO_ROLE, devleague=True).final_roles
 
     @pytest.mark.parametrize("standing", STANDINGS)
     def test_dev_league_is_never_taken(self, standing):
-        assert const.DEV_LEAGUE_ROLE in plan(standing, MemberState(frozenset({const.DEV_LEAGUE_ROLE}), "nickm")).roles
+        assert const.DEV_LEAGUE_ROLE in plan(standing, MemberState(frozenset({const.DEV_LEAGUE_ROLE}), "nickm")).final_roles
 
     @pytest.mark.parametrize("agm", [None, AGM], ids=["not an AGM", "an AGM"])
     def test_a_member_out_of_the_league_gets_the_welcome_roles(self, agm):
-        assert "Welcome" in plan(NoRow.NON_PLAYING, NO_ROLE, agm=agm, welcome=["Welcome"]).roles
+        assert "Welcome" in plan(NoRow.NON_PLAYING, NO_ROLE, agm=agm, welcome_roles=["Welcome"]).final_roles
 
     def test_a_member_in_the_league_does_not(self):
-        assert "Welcome" not in plan(Status.FREE_AGENT, NO_ROLE, welcome=["Welcome"]).roles
+        assert "Welcome" not in plan(Status.FREE_AGENT, NO_ROLE, welcome_roles=["Welcome"]).final_roles
 
     def test_a_welcome_role_does_not_keep_a_role_the_standing_takes(self):
-        assert LEAGUE not in plan(NoRow.NON_PLAYING, MemberState(frozenset({LEAGUE}), "nickm"), welcome=[LEAGUE]).roles
+        assert LEAGUE not in plan(NoRow.NON_PLAYING, MemberState(frozenset({LEAGUE}), "nickm"), welcome_roles=[LEAGUE]).final_roles
 
 
 class TestOutOfTheLeague:
     def test_a_tagged_member_becomes_a_former_player(self):
-        assert const.FORMER_PLAYER_ROLE in plan(NoRow.NON_PLAYING, MemberState(frozenset(), "OCE | nickm")).roles
+        assert const.FORMER_PLAYER_ROLE in plan(NoRow.NON_PLAYING, MemberState(frozenset(), "OCE | nickm")).final_roles
 
     def test_an_untagged_member_does_not(self):
-        assert const.FORMER_PLAYER_ROLE not in plan(NoRow.NON_PLAYING, NO_ROLE).roles
+        assert const.FORMER_PLAYER_ROLE not in plan(NoRow.NON_PLAYING, NO_ROLE).final_roles
 
     def test_an_agm_s_tag_does_not_make_them_a_former_player(self):
-        assert const.FORMER_PLAYER_ROLE not in plan(NoRow.NON_PLAYING, MemberState(frozenset(), "DES | nickm"), agm=AGM).roles
+        assert const.FORMER_PLAYER_ROLE not in plan(NoRow.NON_PLAYING, MemberState(frozenset(), "DES | nickm"), agm=AGM).final_roles
 
 
 class TestAgmSeat:
     def test_a_franchise_with_no_role_in_the_guild_leaves_the_member_s_franchise_roles_alone(self):
-        result = plan(Status.FREE_AGENT, EVERY_ROLE, agm=Seat(None, "DES", "nickm"))
+        result = plan(Status.FREE_AGENT, EVERY_ROLE, agm=SeatWithoutRole("DES", "nickm"))
 
-        assert {OCEAN_ROLE, DESERT_ROLE, const.AGM_ROLE} <= result.roles
+        assert {OCEAN_ROLE, DESERT_ROLE, const.AGM_ROLE} <= result.final_roles
         assert result.nickname == Rename("nickm", "DES")
 
     def test_an_agm_with_no_name_on_the_staff_list_keeps_the_name_in_their_nickname(self):
@@ -239,14 +239,14 @@ class TestAgmSeat:
 
     @pytest.mark.parametrize("standing", [s for s in STANDINGS if s not in ON_A_FRANCHISE and s not in OUT_OF_LEAGUE])
     def test_a_member_who_is_not_an_agm_loses_a_stale_agm_role(self, standing):
-        assert const.AGM_ROLE not in plan(standing, MemberState(frozenset({const.AGM_ROLE}), "nickm")).roles
+        assert const.AGM_ROLE not in plan(standing, MemberState(frozenset({const.AGM_ROLE}), "nickm")).final_roles
 
     def test_an_unsigned_gm_sync_leaves_the_agm_role_as_it_finds_it(self):
-        assert const.AGM_ROLE in plan(Status.UNSIGNED_GM, MemberState(frozenset({const.AGM_ROLE}), "nickm")).roles
-        assert const.AGM_ROLE not in plan(Status.UNSIGNED_GM, NO_ROLE).roles
+        assert const.AGM_ROLE in plan(Status.UNSIGNED_GM, MemberState(frozenset({const.AGM_ROLE}), "nickm")).final_roles
+        assert const.AGM_ROLE not in plan(Status.UNSIGNED_GM, NO_ROLE).final_roles
 
     def test_a_member_who_is_not_an_agm_off_a_roster_loses_every_franchise_role(self):
-        assert plan(Status.DRAFT_ELIGIBLE, EVERY_ROLE).roles & {OCEAN_ROLE, DESERT_ROLE} == set()
+        assert plan(Status.DRAFT_ELIGIBLE, EVERY_ROLE).final_roles & {OCEAN_ROLE, DESERT_ROLE} == set()
 
 
 WITH_A_ROW = [s for s in STANDINGS if isinstance(s, Status) and s not in OUT_OF_LEAGUE]
@@ -255,19 +255,19 @@ WITH_A_ROW = [s for s in STANDINGS if isinstance(s, Status) and s not in OUT_OF_
 class TestSubbedOut:
     @pytest.mark.parametrize("standing", WITH_A_ROW)
     def test_a_member_whose_row_is_subbing_out_holds_it(self, standing):
-        assert SUBBED_OUT in plan(standing, NO_ROLE, row=replace(ROW, subbed_out=True)).roles
+        assert SUBBED_OUT in plan(standing, NO_ROLE, row=replace(ROW, subbed_out=True)).final_roles
 
     @pytest.mark.parametrize("standing", WITH_A_ROW)
     def test_a_member_whose_row_is_not_subbing_out_loses_it(self, standing):
-        assert SUBBED_OUT not in plan(standing, EVERY_ROLE).roles
+        assert SUBBED_OUT not in plan(standing, EVERY_ROLE).final_roles
 
     @pytest.mark.parametrize("standing", [Status.DROPPED, Status.FORMER, Status.BANNED])
     def test_a_member_out_of_the_league_loses_it_whatever_the_row_says(self, standing):
-        assert SUBBED_OUT not in plan(standing, EVERY_ROLE, row=replace(ROW, subbed_out=True)).roles
+        assert SUBBED_OUT not in plan(standing, EVERY_ROLE, row=replace(ROW, subbed_out=True)).final_roles
 
     def test_a_non_playing_gm_has_no_row_and_keeps_it(self):
-        assert SUBBED_OUT in plan(NoRow.NON_PLAYING_GM, EVERY_ROLE).roles
-        assert SUBBED_OUT not in plan(NoRow.NON_PLAYING_GM, NO_ROLE).roles
+        assert SUBBED_OUT in plan(NoRow.NON_PLAYING_GM, EVERY_ROLE).final_roles
+        assert SUBBED_OUT not in plan(NoRow.NON_PLAYING_GM, NO_ROLE).final_roles
 
 
 def gm_franchise() -> FranchiseList:

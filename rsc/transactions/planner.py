@@ -1,11 +1,3 @@
-"""The roles and nickname a member should have for their league status.
-
-`RULES` maps every status to the roles it gives and the tag it writes.
-`plan_member` applies one rule to one member and adds the rules that hold for
-every status. It reads plain data and returns plain data, so it can be run
-without Discord.
-"""
-
 from collections.abc import Collection
 from dataclasses import dataclass, replace
 from enum import Enum, auto
@@ -32,15 +24,11 @@ STATUS_ROLES = frozenset(
 
 
 class NoRow(Enum):
-    """Where a member with no league player row stands."""
-
     NON_PLAYING = auto()
     NON_PLAYING_GM = auto()
 
 
 class SeatSource(Enum):
-    """Whose franchise role and tag a status carries."""
-
     ROSTER = auto()
     GM = auto()
     AGM = auto()
@@ -54,68 +42,65 @@ class TierRoles(Enum):
 
 @dataclass(frozen=True)
 class Rule:
-    """What one status decides.
-
-    A status gives the roles in `holds`, leaves the roles in `leaves` as it
-    finds them, and takes every other role in `STATUS_ROLES`. `prefix` is the
-    tag for a member with no franchise. A member out of the league has no tag.
-    """
-
-    holds: frozenset[str] = frozenset()
-    leaves: frozenset[str] = frozenset()
+    gives: frozenset[str] = frozenset()
+    untouched: frozenset[str] = frozenset()
     prefix: str | None = None
     seat: SeatSource = SeatSource.AGM
     tier: TierRoles = TierRoles.NONE
+    takes_every_fa_role: bool = False
     dev_league: bool = False
     in_league: bool = True
 
 
 ROSTERED = Rule(
-    holds=frozenset({const.LEAGUE_ROLE}),
+    gives=frozenset({const.LEAGUE_ROLE}),
     seat=SeatSource.ROSTER,
     tier=TierRoles.TIER,
+    takes_every_fa_role=True,
 )
-INACTIVE_RESERVE = replace(ROSTERED, holds=frozenset({const.LEAGUE_ROLE, const.IR_ROLE}))
+INACTIVE_RESERVE = replace(ROSTERED, gives=frozenset({const.LEAGUE_ROLE, const.IR_ROLE}))
 UNSIGNED_GM = Rule(
-    holds=frozenset({const.LEAGUE_ROLE}),
-    leaves=frozenset({const.AGM_ROLE}),
+    gives=frozenset({const.LEAGUE_ROLE}),
+    untouched=frozenset({const.AGM_ROLE}),
     seat=SeatSource.GM,
     tier=TierRoles.TIER,
+    takes_every_fa_role=True,
 )
 NON_PLAYING_GM = Rule(
-    holds=frozenset({const.LEAGUE_ROLE}),
-    leaves=frozenset({const.SUBBED_OUT_ROLE}),
+    gives=frozenset({const.LEAGUE_ROLE}),
+    untouched=frozenset({const.SUBBED_OUT_ROLE}),
     seat=SeatSource.GM,
+    takes_every_fa_role=True,
 )
 FREE_AGENT = Rule(
-    holds=frozenset({const.LEAGUE_ROLE, const.FREE_AGENT_ROLE}),
+    gives=frozenset({const.LEAGUE_ROLE, const.FREE_AGENT_ROLE}),
     prefix="FA",
     tier=TierRoles.TIER_AND_FA,
     dev_league=True,
 )
 PERM_FA = Rule(
-    holds=frozenset({const.LEAGUE_ROLE, const.PERM_FA_ROLE}),
+    gives=frozenset({const.LEAGUE_ROLE, const.PERM_FA_ROLE}),
     prefix="PFA",
     tier=TierRoles.TIER_AND_FA,
     dev_league=True,
 )
 WAIVERS = Rule(
-    holds=frozenset({const.LEAGUE_ROLE}),
+    gives=frozenset({const.LEAGUE_ROLE}),
     prefix="FA",
     tier=TierRoles.TIER_AND_FA,
     dev_league=True,
 )
 DRAFT_ELIGIBLE = Rule(
-    holds=frozenset({const.LEAGUE_ROLE, const.DRAFT_ELIGIBLE}),
+    gives=frozenset({const.LEAGUE_ROLE, const.DRAFT_ELIGIBLE}),
     prefix="DE",
     tier=TierRoles.TIER,
     dev_league=True,
 )
 PERMFA_WAITING = Rule(
-    holds=frozenset({const.LEAGUE_ROLE, const.PERM_FA_WAITING_ROLE}),
+    gives=frozenset({const.LEAGUE_ROLE, const.PERM_FA_WAITING_ROLE}),
     prefix="PFW",
 )
-NON_PLAYING = Rule(leaves=frozenset({const.SPECTATOR_ROLE, const.FORMER_PLAYER_ROLE}), in_league=False)
+NON_PLAYING = Rule(untouched=frozenset({const.SPECTATOR_ROLE, const.FORMER_PLAYER_ROLE}), in_league=False)
 
 RULES: dict[Status | NoRow, Rule] = {
     Status.ROSTERED: ROSTERED,
@@ -140,21 +125,19 @@ RULES: dict[Status | NoRow, Rule] = {
 
 @dataclass(frozen=True)
 class Seat:
-    """A member's place on a franchise, as a player, its GM or an AGM.
+    role: str
+    prefix: str | None
+    name: str | None = None
 
-    `role` is `None` when the guild has no role for the franchise. `name` is
-    the RSC name the franchise's staff list has for the member.
-    """
 
-    role: str | None
+@dataclass(frozen=True)
+class SeatWithoutRole:
     prefix: str | None
     name: str | None = None
 
 
 @dataclass(frozen=True)
 class Row:
-    """What a sync reads from a league player row."""
-
     name: str
     tier: str | None = None
     captain: bool = False
@@ -181,12 +164,7 @@ class StripPrefix:
 
 @dataclass(frozen=True)
 class Plan:
-    """Every role the member should hold, and what to do with the nickname.
-
-    A role the status rules do not cover is in `roles` when the member holds it.
-    """
-
-    roles: frozenset[str]
+    final_roles: frozenset[str]
     nickname: Rename | StripPrefix
 
 
@@ -195,24 +173,18 @@ def plan_member(
     member: MemberState,
     *,
     row: Row | None = None,
-    agm: Seat | None = None,
+    agm: Seat | SeatWithoutRole | None = None,
     gm: Seat | None = None,
     tiers: Collection[str] = (),
-    welcome: Collection[str] = (),
+    welcome_roles: Collection[str] = (),
     devleague: bool = False,
 ) -> Plan:
-    """Decide a member's roles and nickname.
-
-    `agm` is the member's seat as an AGM and `gm` their seat as a GM. `tiers`
-    names every tier, `welcome` the roles a member out of the league is given,
-    and `devleague` asks for the Dev League role.
-    """
     rule = RULES[standing]
     if not rule.in_league:
         row = None
     seat = _seat(rule, row, agm, gm)
 
-    roles = (set(member.roles) - (STATUS_ROLES - rule.leaves)) | rule.holds
+    roles = (set(member.roles) - (STATUS_ROLES - rule.untouched)) | rule.gives
 
     if agm:
         roles |= {const.AGM_ROLE, const.LEAGUE_ROLE}
@@ -224,9 +196,8 @@ def plan_member(
         roles.add(const.DEV_LEAGUE_ROLE)
 
     if not rule.in_league:
-        roles |= set(welcome) - member.roles
-        # An AGM's tag says staff. Anyone else's says they used to play.
-        if seat is None and _has_prefix(member.nick):
+        roles |= set(welcome_roles) - member.roles
+        if _tag_is_from_playing(member, seat):
             roles.add(const.FORMER_PLAYER_ROLE)
 
     tier_roles = _tier_roles(rule, row)
@@ -235,16 +206,15 @@ def plan_member(
     roles -= {name for name in member.roles if _is_tier_role(rule, name, tier_names) and name.lower() not in kept}
     roles |= tier_roles
 
-    # A seat with no role in the guild leaves the member's franchise roles as they are.
-    if seat is None or seat.role:
+    if not isinstance(seat, SeatWithoutRole):
         roles -= {name for name in member.roles if FRANCHISE_ROLE_REGEX.match(name)}
-    if seat and seat.role:
+    if isinstance(seat, Seat):
         roles.add(seat.role)
 
     return Plan(frozenset(roles), _nickname(rule, member, row, seat))
 
 
-def _seat(rule: Rule, row: Row | None, agm: Seat | None, gm: Seat | None) -> Seat | None:
+def _seat(rule: Rule, row: Row | None, agm: Seat | SeatWithoutRole | None, gm: Seat | None) -> Seat | SeatWithoutRole | None:
     match rule.seat:
         case SeatSource.ROSTER:
             if row is None or row.team is None:
@@ -269,13 +239,12 @@ def _tier_roles(rule: Rule, row: Row | None) -> set[str]:
 def _is_tier_role(rule: Rule, name: str, tier_names: set[str]) -> bool:
     if not tier_names:
         return False
-    # The roster and GM syncs have always taken every role ending in FA, which also clears the FA role of a tier that is gone.
-    if rule.seat is not SeatSource.AGM and name.endswith("FA"):
+    if rule.takes_every_fa_role and name.endswith("FA"):
         return True
     return name.removesuffix("FA").lower() in tier_names
 
 
-def _nickname(rule: Rule, member: MemberState, row: Row | None, seat: Seat | None) -> Rename | StripPrefix:
+def _nickname(rule: Rule, member: MemberState, row: Row | None, seat: Seat | SeatWithoutRole | None) -> Rename | StripPrefix:
     if row:
         return Rename(row.name, seat.prefix if seat else rule.prefix)
     if seat:
@@ -283,6 +252,6 @@ def _nickname(rule: Rule, member: MemberState, row: Row | None, seat: Seat | Non
     return StripPrefix()
 
 
-def _has_prefix(nick: str) -> bool:
-    prefix, separator, _name = nick.partition(" | ")
-    return bool(separator and prefix.strip())
+def _tag_is_from_playing(member: MemberState, seat: Seat | SeatWithoutRole | None) -> bool:
+    tag, separator, _name = member.nick.partition(" | ")
+    return seat is None and bool(separator and tag.strip())
