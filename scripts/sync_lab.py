@@ -47,6 +47,7 @@ from rscapi.models.league_player_member import LeaguePlayerMember
 from rscapi.models.league_player_status_enum import LeaguePlayerStatusEnum
 from rscapi.models.player_franchise import PlayerFranchise
 from rscapi.models.player_team import PlayerTeam
+from rscapi.models.sub_status_enum import SubStatusEnum
 from rscapi.models.tier import Tier
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -138,6 +139,7 @@ class Lab:
                 name="Lab", franchise=PlayerFranchise(name=franchise, prefix=LAB_PREFIX, gm=FranchiseGM(rsc_name=gm, discord_id=0))
             ),
             player=LeaguePlayerMember(name=self.name, discord_id=member.id),
+            sub_status=SubStatusEnum.NUMBER_0,
         )
 
     def managed(self, member: discord.Member) -> frozenset[str]:
