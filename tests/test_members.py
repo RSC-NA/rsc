@@ -1,5 +1,6 @@
 import asyncio
 import io
+import logging
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import discord
@@ -836,15 +837,17 @@ class TestIntentToPlayFlowSync:
         assert member.display_name == "OCE | nickm"
         assert _reply_title(interaction) == "## Intent to Play Declared"
 
-    async def test_nickname_that_does_not_fit_still_gets_the_roles_and_the_success_reply(self):
+    async def test_nickname_that_does_not_fit_still_gets_the_roles_and_the_success_reply(self, caplog):
         name = "a" * 30
         member = sync_member(sync_guild(), held=ROSTERED_ROLES, nick=name)
 
-        interaction = await _declare(_intent_mixin(league_player(Status.DRAFT_ELIGIBLE, name=name)), member, returning=True)
+        with caplog.at_level(logging.WARNING, logger="red.rsc.members"):
+            interaction = await _declare(_intent_mixin(league_player(Status.DRAFT_ELIGIBLE, name=name)), member, returning=True)
 
         assert const.DRAFT_ELIGIBLE in role_names(member)
         assert member.display_name == name
         assert _reply_title(interaction) == "## Intent to Play Declared"
+        assert [(r.levelname, r.exc_info) for r in caplog.records] == [("WARNING", None)]
 
     @pytest.mark.parametrize("row", [None, league_player(Status.UNSIGNED_GM, name="someone")], ids=["no row", "unsigned GM row"])
     async def test_gm_is_synced_as_the_gm_of_their_franchise(self, row):
@@ -864,6 +867,20 @@ class TestIntentToPlayFlowSync:
 
         assert role_names(member) == set(ROSTERED_ROLES)
         assert _reply_title(interaction) == "## Intent to Play Declared"
+
+    async def test_a_network_error_in_the_sync_still_reports_the_declaration_and_is_logged(self, caplog):
+        member = sync_member(sync_guild(), held=ROSTERED_ROLES, nick="OCE | nickm")
+        mixin = _intent_mixin(None, effective_player=AsyncMock(side_effect=ConnectionResetError("Connection reset by peer")))
+
+        with caplog.at_level(logging.WARNING, logger="red.rsc.members"):
+            interaction = await _declare(mixin, member, returning=False)
+
+        assert _reply_title(interaction) == "## Intent to Play Declared"
+        [record] = caplog.records
+        assert record.levelname == "ERROR"
+        assert str(MEMBER_ID) in record.getMessage()
+        assert record.exc_info is not None
+        assert record.exc_info[0] is ConnectionResetError
 
     async def test_refused_declaration_changes_no_roles(self):
         member = sync_member(sync_guild(), held=ROSTERED_ROLES, nick="OCE | nickm")

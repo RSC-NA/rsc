@@ -258,9 +258,10 @@ All role and nickname changes go through `rsc.transactions.roles` (`update_leagu
 - *Season-aware reads.* The daily role sync and `/admin sync players`, `nonplaying` and `member` read league players through `effective_players` and `effective_player` in [leagues](./leagues.md). The API's default listing holds one season, and around a season change a member who has not answered the intent prompt has a row only in the season that just ended. The rule picks one row for each member:
   1. A rostered row (Rostered, Renewed, IR, AGM IR, Unsigned GM) holds until its season's end date.
   2. Otherwise the row in the newest season applies.
-  3. Otherwise the older row holds while sign-ups are open, unless the member declared "not returning".
+  3. Otherwise the older row holds until its season's end date, whatever the member declared for the next season.
+  4. After that end date the older row holds only while sign-ups are open, and not after the member declared "not returning".
 
-  A member with no row after these steps is non-playing. So a member with an active older row becomes non-playing only after a declared "not returning", or when sign-ups close.
+  A member with no row after these steps is non-playing. So a member with an active older row becomes non-playing only after that row's season has ended, and then only after a declared "not returning" or when sign-ups close.
 - *Sync summary line.* The daily role sync and `/admin sync players`, `nonplaying`, `member`, `freeagent` and `drafteligible` each log one INFO line when they end, also when they end with an error. An example:
 
   ```

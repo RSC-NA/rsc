@@ -941,7 +941,8 @@ class MemberMixIn(RSCMixIn):
             )
         except DiscordNameTooLong as exc:
             log.warning(f"Unable to update nickname for {user.id}: {exc}", guild=guild)
-        except (RscException, ValueError, AttributeError, discord.HTTPException):
+        except Exception:
+            # The intent is already recorded, so a failed sync must not cost the member their reply.
             log.exception(f"Unable to sync {user.id} after their intent declaration", guild=guild)
 
     async def league_player_from_member(self, guild: discord.Guild, member: Member) -> LeaguePlayer | None:

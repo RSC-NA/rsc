@@ -39,8 +39,10 @@ def pick_effective_row(
     1. A rostered row in a season that has not ended wins. The older one wins
        when two qualify, because its season is still being played.
     2. Otherwise the row in the newest season wins.
-    3. Otherwise the member's older row holds while sign-ups are open, unless the
-       member declared "not returning".
+    3. Otherwise the member's older row holds until its season ends, whatever
+       the member declared for the next season.
+    4. Once that season has ended, the older row holds only while sign-ups are
+       open, and not after the member declared "not returning".
     """
     by_age = sorted(rows, key=lambda row: row.season)
     if not by_age:
@@ -53,6 +55,8 @@ def pick_effective_row(
 
     latest = by_age[-1]
     if latest.season == max((s.number or 0 for s in seasons), default=0):
+        return latest
+    if latest.season not in ended:
         return latest
     if signups_open and not not_returning:
         return latest
