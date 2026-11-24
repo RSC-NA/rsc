@@ -738,15 +738,23 @@ class ConfirmSyncView(AuthorOnlyView):
         self.add_item(DeclineButton())
         self.result = False
 
-    async def prompt(self):
-        """Note: The prompt does not all wait()"""
+    async def prompt(self, embed: discord.Embed | None = None):
+        """Note: The prompt does not call wait()
+
+        `embed` goes above the prompt, for a command that previews what it
+        would change. Such a command has already deferred to build the preview.
+        """
         prompt = OrangeEmbed(
             title="API Sync",
             description=(
                 "You are about to sync data from the API directly into the discord server.\n\n**Are you sure you want to do this?**"
             ),
         )
-        await self.interaction.response.send_message(embed=prompt, view=self, ephemeral=True)
+        embeds = [embed, prompt] if embed else [prompt]
+        if self.interaction.response.is_done():
+            await self.interaction.edit_original_response(embeds=embeds, view=self)
+        else:
+            await self.interaction.response.send_message(embeds=embeds, view=self, ephemeral=True)
 
     async def confirm(self, interaction: discord.Interaction):
         self.result = True

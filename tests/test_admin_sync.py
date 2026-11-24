@@ -4,8 +4,9 @@ import discord
 import pytest
 
 from rsc.admin.sync import AdminSyncMixIn
+from rsc.admin.views import ConfirmSyncView
 from rsc.enums import Status
-from rsc.exceptions import DiscordNameTooLong
+from rsc.exceptions import DiscordNameTooLong, RscException
 
 from .utils import command_callback
 
@@ -143,6 +144,8 @@ class TestNonPlayingSyncAgmSweep:
     def interaction(self, mock_guild):
         interaction = MagicMock(spec=discord.Interaction)
         interaction.guild = mock_guild
+        interaction.response = MagicMock()
+        interaction.response.defer = AsyncMock()
         interaction.edit_original_response = AsyncMock()
         interaction.followup = MagicMock()
         interaction.followup.send = AsyncMock()
@@ -185,7 +188,7 @@ class TestNonPlayingSyncAgmSweep:
     def agm_franchise_map(self):
         return {}
 
-    async def _run(self, mixin, interaction, agm_role, dryrun=False):
+    async def _run(self, mixin, interaction, agm_role, dryrun=False, confirmed=True):
         with (
             patch("rsc.admin.sync.ConfirmSyncView") as view_cls,
             patch("rsc.admin.sync.utils.get_agm_role", AsyncMock(return_value=agm_role)),
@@ -193,11 +196,82 @@ class TestNonPlayingSyncAgmSweep:
             view = MagicMock()
             view.prompt = AsyncMock()
             view.wait = AsyncMock()
-            view.result = True
+            view.result = confirmed
             view_cls.return_value = view
+            self.view_cls = view_cls
+            self.view = view
 
             await command_callback(AdminSyncMixIn._sync_nonplaying_cmd)(mixin, interaction, dryrun)
+        if not interaction.edit_original_response.await_args:
+            return None
         return interaction.edit_original_response.await_args.kwargs["embed"]
+
+    def _api_members(self, mixin, interaction, members):
+        """`paged_members` yields one API member per discord member, none of them playing."""
+
+        async def _yield():
+            for m in members:
+                api_member = MagicMock()
+                api_member.discord_id = m.id
+                yield api_member
+
+        by_id = {m.id: m for m in members}
+        mixin.paged_members = MagicMock(return_value=_yield())
+        interaction.guild.get_member = MagicMock(side_effect=by_id.get)
+
+    async def test_preview_lists_who_would_lose_a_prefix(self, mixin, interaction, agm_role):
+        """After a season rolls over, everyone yet to declare intent has no league
+        player. Staff must see how many prefixes a run strips before confirming."""
+        player = self._member(1, "ABC | alice")
+        unprefixed = self._member(2, "bob")
+        agm = self._member(3, "XYZ | carol")
+        self._api_members(mixin, interaction, [player, unprefixed, agm])
+        mixin.agm_franchise_map = AsyncMock(return_value={3: MagicMock()})
+
+        with patch("rsc.admin.sync.update_nonplaying_discord", AsyncMock()):
+            await self._run(mixin, interaction, agm_role)
+
+        preview = self.view.prompt.await_args.kwargs["embed"]
+        field = next(f for f in preview.fields if f.name.startswith("Losing a Prefix"))
+        assert field.name == "Losing a Prefix (1)"
+        assert player.mention in field.value
+        assert agm.mention not in field.value
+        assert "**3** of 3" in preview.description
+
+    async def test_dryrun_changes_nobody_and_skips_the_prompt(self, mixin, interaction, agm_role):
+        player = self._member(1, "ABC | alice")
+        self._api_members(mixin, interaction, [player])
+
+        with patch("rsc.admin.sync.update_nonplaying_discord", AsyncMock()) as sync:
+            embed = await self._run(mixin, interaction, agm_role, dryrun=True)
+
+        sync.assert_not_awaited()
+        self.view_cls.assert_not_called()
+        assert embed.footer.text == "Dry run. Nothing was changed."
+        assert "Losing a Prefix (1)" in [f.name for f in embed.fields]
+
+    async def test_declining_changes_nobody(self, mixin, interaction, agm_role):
+        player = self._member(1, "ABC | alice")
+        stale = self._member(111)
+        agm_role.members = [stale]
+        self._api_members(mixin, interaction, [player])
+
+        with patch("rsc.admin.sync.update_nonplaying_discord", AsyncMock()) as sync:
+            await self._run(mixin, interaction, agm_role, confirmed=False)
+
+        sync.assert_not_awaited()
+        stale.remove_roles.assert_not_awaited()
+
+    async def test_api_failure_while_planning_is_reported(self, mixin, interaction, agm_role):
+        """The command has deferred, so an unhandled error would leave it thinking forever."""
+        mixin.paged_members = MagicMock(side_effect=RscException("API down"))
+
+        with patch("rsc.admin.sync.update_nonplaying_discord", AsyncMock()) as sync:
+            await self._run(mixin, interaction, agm_role)
+
+        sync.assert_not_awaited()
+        self.view_cls.assert_not_called()
+        interaction.edit_original_response.assert_awaited_once()
 
     async def test_strips_the_role_from_a_member_the_api_does_not_list(self, mixin, interaction, agm_role):
         stale = self._member(111)
@@ -295,6 +369,38 @@ class TestNonPlayingSyncAgmSweep:
         assert sync.await_args.kwargs["agm_franchise"] is None
         stale.remove_roles.assert_not_awaited()
         assert not [f for f in embed.fields if f.name.startswith("Stale AGM Roles")]
+
+
+class TestConfirmSyncViewPrompt:
+    """A command that deferred to build a preview can only edit its original response."""
+
+    @staticmethod
+    def _interaction(*, deferred):
+        interaction = MagicMock(spec=discord.Interaction)
+        interaction.response = MagicMock()
+        interaction.response.is_done = MagicMock(return_value=deferred)
+        interaction.response.send_message = AsyncMock()
+        interaction.edit_original_response = AsyncMock()
+        return interaction
+
+    async def test_deferred_command_gets_the_preview_above_the_prompt(self):
+        interaction = self._interaction(deferred=True)
+        preview = discord.Embed(title="Preview")
+
+        await ConfirmSyncView(interaction).prompt(embed=preview)
+
+        interaction.response.send_message.assert_not_awaited()
+        embeds = interaction.edit_original_response.await_args.kwargs["embeds"]
+        assert [e.title for e in embeds] == ["Preview", "API Sync"]
+
+    async def test_fresh_command_answers_with_the_prompt(self):
+        interaction = self._interaction(deferred=False)
+
+        await ConfirmSyncView(interaction).prompt()
+
+        interaction.edit_original_response.assert_not_awaited()
+        embeds = interaction.response.send_message.await_args.kwargs["embeds"]
+        assert [e.title for e in embeds] == ["API Sync"]
 
 
 class TestPlayerSyncNicknameTooLong:
