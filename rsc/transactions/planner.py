@@ -104,7 +104,7 @@ PERM_FA = Rule(
 )
 WAIVERS = Rule(
     holds=frozenset({const.LEAGUE_ROLE}),
-    leaves=frozenset({const.FREE_AGENT_ROLE, const.PERM_FA_ROLE, const.DRAFT_ELIGIBLE, const.SUBBED_OUT_ROLE, const.AGM_ROLE}),
+    leaves=frozenset({const.SUBBED_OUT_ROLE, const.AGM_ROLE}),
     prefix="FA",
     tier=TierRoles.TIER_AND_FA,
     dev_league=True,

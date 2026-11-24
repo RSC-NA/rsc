@@ -39,11 +39,7 @@ STALE_AGM = const.AGM_ROLE
 # For each standing: the status roles it gives, the roles it leaves on a member who holds them, and the tag.
 ROSTERED = ({LEAGUE, "Premier", OCEAN_ROLE}, {SUBBED_OUT}, "OCE")
 FREE_AGENT = ({LEAGUE, const.FREE_AGENT_ROLE, "Premier", "PremierFA"}, {SUBBED_OUT, STALE_AGM}, "FA")
-WAIVERS = (
-    {LEAGUE, "Premier", "PremierFA"},
-    {const.FREE_AGENT_ROLE, const.PERM_FA_ROLE, const.DRAFT_ELIGIBLE, SUBBED_OUT, STALE_AGM},
-    "FA",
-)
+WAIVERS = ({LEAGUE, "Premier", "PremierFA"}, {SUBBED_OUT, STALE_AGM}, "FA")
 NON_PLAYING: tuple[set[str], set[str], str | None] = (set(), {const.SPECTATOR_ROLE, const.FORMER_PLAYER_ROLE}, None)
 EXPECTED: dict[Status | NoRow, tuple[set[str], set[str], str | None]] = {
     Status.ROSTERED: ROSTERED,
