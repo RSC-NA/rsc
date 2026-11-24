@@ -5,14 +5,28 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import discord
 import pytest
+from rscapi.models.franchise_gm import FranchiseGM
+from rscapi.models.franchise_list import FranchiseList
 
 from rsc import const
 from rsc.admin.sync import AdminSyncMixIn
 from rsc.enums import Status
 from rsc.exceptions import DiscordNameTooLong
+from rsc.franchises.franchises import FranchiseMixIn
 from rsc.transactions import writer
 
-from .sync_fakes import TIERS, discord_requests, league_player, sync_guild, sync_member
+from .sync_fakes import (
+    DESERT_ROLE,
+    MEMBER_ID,
+    OCEAN_ROLE,
+    TIERS,
+    agm_franchise,
+    discord_requests,
+    league_player,
+    role_names,
+    sync_guild,
+    sync_member,
+)
 from .utils import api_error, command_callback
 
 
@@ -54,6 +68,13 @@ def _another_playing_member():
 async def _rows(*rows):
     for row in rows:
         yield row
+
+
+class _SyncOverTheFranchiseList(AdminSyncMixIn, FranchiseMixIn):
+    """Runs the real franchise lookups, so a test fakes only the franchise list the API returns."""
+
+
+_SyncOverTheFranchiseList.__abstractmethods__ = frozenset()
 
 
 class TestTransactionChannelSync:
@@ -479,6 +500,115 @@ class TestNonPlayingSyncAcrossSeasons:
 
         strip.assert_not_awaited()
         assert "Down" in interaction.edit_original_response.await_args.kwargs["embed"].description
+
+
+class TestNonPlayingSyncGeneralManager:
+    @pytest.fixture
+    def guild(self):
+        guild = sync_guild()
+        next(r for r in guild.roles if r.name == const.AGM_ROLE).members = []
+        return guild
+
+    @staticmethod
+    def _ocean(gm_id):
+        return FranchiseList(name="The Ocean", prefix="OCE", gm=FranchiseGM(rsc_name="someone", discord_id=gm_id))
+
+    async def _run(self, guild, members, franchise, rows=(), *, dryrun=False):
+        guild.get_member = MagicMock(side_effect={m.id: m for m in members}.get)
+        mixin = object.__new__(_SyncOverTheFranchiseList)
+        mixin.tiers = AsyncMock(return_value=TIERS)
+        mixin._get_welcome_roles = AsyncMock(return_value=[])
+        mixin.franchises = AsyncMock(return_value=[franchise])
+        mixin.paged_members = MagicMock(return_value=_rows(*(MagicMock(discord_id=m.id) for m in members)))
+        mixin.effective_players = MagicMock(return_value=_rows(*rows, _another_playing_member()))
+        interaction = MagicMock(spec=discord.Interaction)
+        interaction.guild = guild
+        interaction.edit_original_response = AsyncMock()
+        interaction.followup.send = AsyncMock()
+
+        with patch("rsc.admin.sync.ConfirmSyncView") as confirm:
+            confirm.return_value.prompt = AsyncMock()
+            confirm.return_value.wait = AsyncMock()
+            confirm.return_value.result = True
+            await command_callback(AdminSyncMixIn._sync_nonplaying_cmd)(mixin, interaction, dryrun)
+        return interaction, mixin
+
+    @pytest.mark.parametrize(
+        "rows",
+        [[], *([_league_player(MEMBER_ID, status)] for status in (Status.DROPPED, Status.FORMER, Status.BANNED))],
+        ids=["no row", "dropped", "former", "banned"],
+    )
+    async def test_a_general_manager_who_is_not_playing_keeps_the_franchise_role_and_prefix(self, guild, rows):
+        gm = sync_member(guild, held=[const.LEAGUE_ROLE, const.GM_ROLE, OCEAN_ROLE], nick="OCE | someone")
+
+        await self._run(guild, [gm], self._ocean(gm.id), rows)
+
+        assert role_names(gm) == {const.LEAGUE_ROLE, const.GM_ROLE, OCEAN_ROLE}
+        assert gm.display_name == "OCE | someone"
+
+    async def test_a_general_manager_who_lost_the_franchise_role_and_prefix_gets_them_back(self, guild):
+        gm = sync_member(guild, held=[const.GM_ROLE, const.FORMER_PLAYER_ROLE], nick="someone")
+
+        await self._run(guild, [gm], self._ocean(gm.id))
+
+        assert role_names(gm) == {const.LEAGUE_ROLE, const.GM_ROLE, OCEAN_ROLE}
+        assert gm.display_name == "OCE | someone"
+
+    async def test_a_franchise_without_its_role_is_reported_and_the_run_goes_on(self, guild):
+        gm = sync_member(guild, held=[const.LEAGUE_ROLE, const.GM_ROLE, OCEAN_ROLE], nick="OCE | someone")
+        other = sync_member(guild, held=[const.LEAGUE_ROLE, DESERT_ROLE], nick="DES | other")
+        other.id = MEMBER_ID + 1
+        tundra = FranchiseList(name="The Tundra", prefix="TUN", gm=FranchiseGM(rsc_name="someone", discord_id=gm.id))
+
+        interaction, _ = await self._run(guild, [gm, other], tundra)
+
+        assert role_names(gm) == {const.LEAGUE_ROLE, const.GM_ROLE, OCEAN_ROLE}
+        assert gm.display_name == "OCE | someone"
+        interaction.followup.send.assert_awaited_once()
+        assert "The Tundra (someone)" in interaction.followup.send.await_args.kwargs["content"]
+        assert role_names(other) == {const.FORMER_PLAYER_ROLE}
+        assert other.display_name == "other"
+        assert interaction.edit_original_response.await_args.kwargs["embed"].title == "Non-Playing Sync"
+
+    async def test_a_dry_run_counts_a_general_manager_and_writes_nothing(self, guild):
+        gm = sync_member(guild, held=[const.GM_ROLE, const.FORMER_PLAYER_ROLE], nick="someone")
+
+        interaction, _ = await self._run(guild, [gm], self._ocean(gm.id), dryrun=True)
+
+        assert discord_requests(gm) == 0
+        assert interaction.edit_original_response.await_args.kwargs["embed"].footer.text == "Synced 1/1 RSC member(s)."
+
+    async def test_a_general_manager_who_is_playing_is_not_touched(self, guild):
+        gm = sync_member(guild, held=[const.LEAGUE_ROLE, const.GM_ROLE, OCEAN_ROLE, "Premier"], nick="OCE | someone")
+
+        await self._run(guild, [gm], self._ocean(gm.id), [_league_player(MEMBER_ID, Status.ROSTERED)])
+
+        assert discord_requests(gm) == 0
+
+    async def test_an_assistant_gm_who_is_not_playing_keeps_the_franchise_role_and_prefix(self, guild):
+        agm = sync_member(guild, held=[const.LEAGUE_ROLE, const.AGM_ROLE, OCEAN_ROLE, "Premier"], nick="OCE | nickm")
+
+        await self._run(guild, [agm], agm_franchise())
+
+        assert role_names(agm) == {const.LEAGUE_ROLE, const.AGM_ROLE, OCEAN_ROLE}
+        assert agm.display_name == "OCE | nickm"
+
+    async def test_a_member_who_is_not_playing_and_holds_no_franchise_post_is_stripped(self, guild):
+        member = sync_member(guild, held=[const.LEAGUE_ROLE, OCEAN_ROLE, "Premier"], nick="OCE | nickm")
+
+        await self._run(guild, [member], self._ocean(gm_id=7))
+
+        assert role_names(member) == {const.FORMER_PLAYER_ROLE}
+        assert member.display_name == "nickm"
+
+    async def test_the_run_reads_the_franchise_list_once(self, guild):
+        gm = sync_member(guild, held=[const.LEAGUE_ROLE, const.GM_ROLE, OCEAN_ROLE], nick="OCE | someone")
+        other = sync_member(guild, held=[const.LEAGUE_ROLE, DESERT_ROLE], nick="DES | other")
+        other.id = MEMBER_ID + 1
+
+        _, mixin = await self._run(guild, [gm, other], self._ocean(gm.id))
+
+        assert mixin.franchises.await_count == 1
 
 
 class TestMemberSyncAcrossSeasons:
