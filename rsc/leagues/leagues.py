@@ -1,11 +1,13 @@
 import logging
+from collections import defaultdict
 from collections.abc import AsyncIterator
-from datetime import datetime
+from datetime import UTC, datetime
 
 from aiohttp import web
 import discord
 from redbot.core import app_commands
 from rscapi import LeaguePlayersApi, LeaguesApi
+from rscapi.models.error_code_enum import ErrorCodeEnum
 from rscapi.models.league import League
 from rscapi.models.league_player import LeaguePlayer
 from rscapi.models.league_player_status_enum import LeaguePlayerStatusEnum
@@ -16,6 +18,8 @@ from rscapi.models.season import Season
 from rsc.abc import RSCMixIn
 from rsc.embeds import BlueEmbed, ErrorEmbed, YellowEmbed
 from rsc.enums import Status
+from rsc.exceptions import NotFoundError
+from rsc.leagues.effective import SyncSeasons, pick_effective_row
 from rsc.tiers import TierMixIn
 from rsc.utils import utils
 from rsc.pagination import API_MAX_PAGE_SIZE, check_page_limit, iter_pages
@@ -383,6 +387,60 @@ class LeagueMixIn(RSCMixIn):
 
             async for player in iter_pages(fetch, per_page=per_page):
                 yield player
+
+    async def _sync_seasons(self, guild: discord.Guild, discord_id: int | None = None) -> SyncSeasons:
+        default = await self.current_season(guild)
+        try:
+            signup = await self.next_signup_season(guild)
+        except NotFoundError as exc:
+            # The API also answers 404 for a league id it does not have, and a
+            # proxy can answer 404 during a deploy. Neither says sign-ups closed.
+            if exc.code is not ErrorCodeEnum.NO_SIGNUP_SEASON:
+                raise
+            signup = None
+
+        wanted = [default, signup]
+        not_returning_ids: frozenset[int] = frozenset()
+        if signup and signup.id is not None and signup.number is not None:
+            if not default or default.number != signup.number - 1:
+                wanted += await self.seasons(guild, number=signup.number - 1)
+            # A row with `missing` set is a member who has not answered, and the
+            # API files it under `returning=False` with the real refusals.
+            intents = await self.player_intents(guild, signup.id, discord_id=discord_id, returning=False, missing=False)
+            not_returning_ids = frozenset(
+                i.player.player.discord_id for i in intents if i.player and i.missing is False and i.returning is False
+            )
+
+        by_number = {s.number: s for s in wanted if s}
+        return SyncSeasons(list(by_number.values()), signup is not None, not_returning_ids)
+
+    async def effective_players(self, guild: discord.Guild) -> AsyncIterator[LeaguePlayer]:
+        """One league player row per member, chosen across the seasons a sync has to read.
+
+        Rows with no discord id are yielded as they are.
+        """
+        window = await self._sync_seasons(guild)
+        by_member: defaultdict[int, list[LeaguePlayer]] = defaultdict(list)
+        for season in window.seasons:
+            async for row in self.paged_players(guild, season=season.id):
+                if row.player.discord_id:
+                    by_member[row.player.discord_id].append(row)
+                else:
+                    yield row
+
+        now = datetime.now(UTC)
+        for discord_id, rows in by_member.items():
+            row = pick_effective_row(rows, window.seasons, now, window.signups_open, discord_id in window.not_returning_ids)
+            if row:
+                yield row
+
+    async def effective_player(self, guild: discord.Guild, discord_id: int) -> LeaguePlayer | None:
+        """The row `effective_players` would yield for one member, or None when no row applies."""
+        window = await self._sync_seasons(guild, discord_id)
+        rows: list[LeaguePlayer] = []
+        for season in window.seasons:
+            rows += await self.players(guild, discord_id=discord_id, season=season.id, limit=1)
+        return pick_effective_row(rows, window.seasons, datetime.now(UTC), window.signups_open, discord_id in window.not_returning_ids)
 
     async def update_league_player(
         self,

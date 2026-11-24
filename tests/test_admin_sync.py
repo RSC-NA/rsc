@@ -7,7 +7,7 @@ from rsc.admin.sync import AdminSyncMixIn
 from rsc.enums import Status
 from rsc.exceptions import DiscordNameTooLong
 
-from .utils import command_callback
+from .utils import api_error, command_callback
 
 
 def _create_mixin(**attrs):
@@ -29,6 +29,25 @@ def _make_franchise(name: str, gm_discord_id: int | None = None):
     franchise.gm = MagicMock()
     franchise.gm.discord_id = gm_discord_id
     return franchise
+
+
+def _league_player(discord_id: int, status: Status, name: str = "someone"):
+    p = MagicMock()
+    p.id = discord_id
+    p.status = status
+    p.player = MagicMock()
+    p.player.discord_id = discord_id
+    p.player.name = name
+    return p
+
+
+def _another_playing_member():
+    return _league_player(999, Status.ROSTERED)
+
+
+async def _rows(*rows):
+    for row in rows:
+        yield row
 
 
 class TestTransactionChannelSync:
@@ -158,12 +177,6 @@ class TestNonPlayingSyncAgmSweep:
         m.remove_roles = AsyncMock()
         return m
 
-    @staticmethod
-    async def _no_members():
-        """`paged_members` yields nothing: this suite is about the sweep."""
-        return
-        yield  # pragma: no cover - makes this an async generator
-
     @pytest.fixture
     def agm_role(self):
         role = MagicMock(spec=discord.Role)
@@ -177,8 +190,8 @@ class TestNonPlayingSyncAgmSweep:
         mixin.tiers = AsyncMock(return_value=[])
         mixin._get_welcome_roles = AsyncMock(return_value=[])
         mixin.agm_franchise_map = AsyncMock(return_value=agm_franchise_map)
-        mixin.paged_members = MagicMock(return_value=self._no_members())
-        mixin.league_player_from_member = AsyncMock(return_value=None)
+        mixin.paged_members = MagicMock(return_value=_rows())
+        mixin.effective_players = MagicMock(return_value=_rows(_another_playing_member()))
         return mixin
 
     @pytest.fixture
@@ -281,10 +294,7 @@ class TestNonPlayingSyncAgmSweep:
         api_member = MagicMock()
         api_member.discord_id = 111
 
-        async def _one_member():
-            yield api_member
-
-        mixin.paged_members = MagicMock(return_value=_one_member())
+        mixin.paged_members = MagicMock(return_value=_rows(api_member))
         interaction.guild.get_member = MagicMock(return_value=stale)
 
         with patch("rsc.admin.sync.update_nonplaying_discord", AsyncMock()) as sync:
@@ -295,6 +305,29 @@ class TestNonPlayingSyncAgmSweep:
         assert sync.await_args.kwargs["agm_franchise"] is None
         stale.remove_roles.assert_not_awaited()
         assert not [f for f in embed.fields if f.name.startswith("Stale AGM Roles")]
+
+    @pytest.mark.parametrize("rows", [[], [_league_player(222, Status.DROPPED)]], ids=["no rows", "only a row that left"])
+    async def test_a_read_with_no_playing_members_stops_before_anyone_is_changed(self, mixin, interaction, agm_role, rows):
+        league_member, stale = self._member(111), self._member(333)
+        league_member.roles = [agm_role]
+        agm_role.members = [league_member, stale]
+
+        api_member = MagicMock()
+        api_member.discord_id = 111
+
+        mixin.paged_members = MagicMock(return_value=_rows(api_member))
+        mixin.effective_players = MagicMock(return_value=_rows(*rows))
+        interaction.guild.get_member = MagicMock(return_value=league_member)
+
+        embed = await self._run(mixin, interaction, agm_role)
+
+        for member in (league_member, stale):
+            member.remove_roles.assert_not_awaited()
+            member.add_roles.assert_not_awaited()
+            member.edit.assert_not_awaited()
+        assert embed.title == "Error"
+        assert "No league players were read" in embed.description
+        assert "Nobody was changed" in embed.description
 
 
 class TestPlayerSyncNicknameTooLong:
@@ -323,16 +356,6 @@ class TestPlayerSyncNicknameTooLong:
         m.mention = f"<@{discord_id}>"
         return m
 
-    @staticmethod
-    def _api_player(discord_id, name):
-        p = MagicMock()
-        p.id = discord_id
-        p.status = Status.ROSTERED
-        p.player = MagicMock()
-        p.player.discord_id = discord_id
-        p.player.name = name
-        return p
-
     @pytest.fixture
     def members(self, mock_guild):
         by_id = {
@@ -344,14 +367,14 @@ class TestPlayerSyncNicknameTooLong:
 
     @pytest.fixture
     def mixin(self, members):
-        async def _players():
-            yield self._api_player(111, "cosmo6430 - INACTIVE USER - TRANSFER")
-            yield self._api_player(222, "someone")
-
+        rows = _rows(
+            _league_player(111, Status.ROSTERED, "cosmo6430 - INACTIVE USER - TRANSFER"),
+            _league_player(222, Status.ROSTERED),
+        )
         mixin = _create_mixin()
         mixin.tiers = AsyncMock(return_value=[])
         mixin.agm_franchise_map = AsyncMock(return_value={})
-        mixin.paged_players = MagicMock(return_value=_players())
+        mixin.effective_players = MagicMock(return_value=rows)
         return mixin
 
     async def _run(self, mixin, interaction, sync_mock):
@@ -383,3 +406,147 @@ class TestPlayerSyncNicknameTooLong:
 
         # And the command reported success for the run as a whole.
         assert interaction.edit_original_response.await_args.kwargs["embed"].title == "League Player Sync"
+
+
+class TestNonPlayingSyncAcrossSeasons:
+    @pytest.fixture
+    def interaction(self, mock_guild):
+        interaction = MagicMock(spec=discord.Interaction)
+        interaction.guild = mock_guild
+        interaction.edit_original_response = AsyncMock()
+        interaction.followup = MagicMock()
+        interaction.followup.send = AsyncMock()
+        return interaction
+
+    async def _run(self, interaction, effective_players):
+        member = MagicMock(spec=discord.Member)
+        member.id = 111
+        member.display_name = "someone"
+        interaction.guild.get_member = MagicMock(return_value=member)
+
+        api_member = MagicMock()
+        api_member.discord_id = 111
+
+        mixin = _create_mixin()
+        mixin.tiers = AsyncMock(return_value=[])
+        mixin._get_welcome_roles = AsyncMock(return_value=[])
+        mixin.agm_franchise_map = AsyncMock(return_value={})
+        mixin.paged_members = MagicMock(return_value=_rows(api_member))
+        mixin.effective_players = MagicMock(return_value=effective_players)
+
+        with (
+            patch("rsc.admin.sync.ConfirmSyncView") as view_cls,
+            patch("rsc.admin.sync.utils.get_agm_role", AsyncMock(side_effect=ValueError("no role"))),
+            patch("rsc.admin.sync.update_nonplaying_discord", AsyncMock()) as strip,
+        ):
+            view = MagicMock()
+            view.prompt = AsyncMock()
+            view.wait = AsyncMock()
+            view.result = True
+            view_cls.return_value = view
+
+            await command_callback(AdminSyncMixIn._sync_nonplaying_cmd)(mixin, interaction, False)
+        return strip
+
+    async def test_leaves_a_member_whose_only_row_is_in_the_older_season(self, interaction):
+        strip = await self._run(interaction, _rows(_league_player(111, Status.ROSTERED)))
+
+        strip.assert_not_awaited()
+
+    async def test_strips_a_member_with_no_row(self, interaction):
+        strip = await self._run(interaction, _rows(_another_playing_member()))
+
+        strip.assert_awaited_once()
+
+    @pytest.mark.parametrize("status", [Status.DROPPED, Status.FORMER, Status.BANNED])
+    async def test_strips_a_member_whose_row_says_they_left(self, interaction, status):
+        strip = await self._run(interaction, _rows(_league_player(111, status), _another_playing_member()))
+
+        strip.assert_awaited_once()
+
+    async def test_reports_an_api_failure_without_touching_anyone(self, interaction):
+        async def failing():
+            raise api_error(500, "Down")
+            yield
+
+        strip = await self._run(interaction, failing())
+
+        strip.assert_not_awaited()
+        assert "Down" in interaction.edit_original_response.await_args.kwargs["embed"].description
+
+
+class TestMemberSyncAcrossSeasons:
+    @pytest.fixture
+    def interaction(self, mock_guild):
+        interaction = MagicMock(spec=discord.Interaction)
+        interaction.guild = mock_guild
+        interaction.response = MagicMock()
+        interaction.response.defer = AsyncMock()
+        interaction.followup = MagicMock()
+        interaction.followup.send = AsyncMock()
+        return interaction
+
+    async def _run(self, interaction, mock_member, effective_row):
+        mixin = _create_mixin()
+        mixin.tiers = AsyncMock(return_value=[])
+        mixin._get_welcome_roles = AsyncMock(return_value=[])
+        mixin.franchises = AsyncMock(return_value=[])
+        mixin.effective_player = AsyncMock(return_value=effective_row)
+
+        with (
+            patch("rsc.admin.sync.update_league_player_discord", AsyncMock()) as sync,
+            patch("rsc.admin.sync.update_nonplaying_discord", AsyncMock()) as strip,
+        ):
+            await command_callback(AdminSyncMixIn._sync_member_cmd)(mixin, interaction, mock_member)
+        return sync, strip
+
+    async def test_syncs_from_the_older_season_row_when_the_default_season_has_none(self, interaction, mock_member):
+        row = _league_player(mock_member.id, Status.ROSTERED)
+
+        sync, strip = await self._run(interaction, mock_member, row)
+
+        sync.assert_awaited_once()
+        assert sync.await_args is not None
+        assert sync.await_args.kwargs["league_player"] is row
+        strip.assert_not_awaited()
+
+    async def test_a_member_with_no_row_becomes_non_playing(self, interaction, mock_member):
+        sync, strip = await self._run(interaction, mock_member, None)
+
+        sync.assert_not_awaited()
+        strip.assert_awaited_once()
+
+
+class TestNightlySyncIsolatesMembers:
+    async def test_a_refused_role_write_does_not_end_the_run(self, mock_guild, caplog):
+        refused = MagicMock(spec=discord.Member)
+        refused.id = 111
+        refused.display_name = "above the bot"
+        other = MagicMock(spec=discord.Member)
+        other.id = 222
+        other.display_name = "someone"
+        mock_guild.get_member = MagicMock(side_effect={111: refused, 222: other}.get)
+
+        rows = [_league_player(111, Status.ROSTERED), _league_player(222, Status.ROSTERED)]
+        mixin = _create_mixin()
+        mixin.bot = MagicMock()
+        mixin.bot.guilds = [mock_guild]
+        mixin.tiers = AsyncMock(return_value=[])
+        mixin.agm_franchise_map = AsyncMock(return_value={})
+        mixin.should_get_devleague_role = AsyncMock(return_value=False)
+        mixin.effective_players = MagicMock(return_value=_rows(*rows))
+
+        forbidden = discord.Forbidden(MagicMock(status=403, reason="Forbidden"), "Missing Permissions")
+        sync = AsyncMock(side_effect=[forbidden, None])
+
+        with patch("rsc.admin.sync.update_league_player_discord", sync), caplog.at_level("INFO", logger="red.rsc.admin.sync"):
+            await AdminSyncMixIn.sync_discord_roles.coro(mixin)
+
+        assert sync.await_count == 2
+        assert sync.await_args_list[1].kwargs["player"] is other
+
+        warnings = [r.getMessage() for r in caplog.records if r.levelname == "WARNING"]
+        assert len(warnings) == 1
+        assert "above the bot" in warnings[0]
+        assert "111" in warnings[0]
+        assert any("Finished syncing league players" in r.getMessage() for r in caplog.records)

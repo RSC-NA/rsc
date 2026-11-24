@@ -254,6 +254,24 @@ class TestPlayerIntentsApi:
             missing=False,
         )
 
+    async def test_passes_a_bare_discord_id(self, mock_guild):
+        mixin = _create_mixin(_api_conf={mock_guild.id: MagicMock()})
+
+        with patch("rsc.abc.ApiClient") as mock_client:
+            mock_api = AsyncMock()
+            mock_api.seasons_player_intents_list.return_value = []
+            mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
+            mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
+            with patch("rsc.seasons.seasons.SeasonsApi", return_value=mock_api):
+                await mixin.player_intents(mock_guild, season_id=1, discord_id=111, returning=False, missing=False)
+
+        mock_api.seasons_player_intents_list.assert_awaited_once_with(
+            1,
+            discord_id=111,
+            returning=False,
+            missing=False,
+        )
+
     async def test_passes_none_when_no_player(self, mock_guild):
         mixin = _create_mixin(_api_conf={mock_guild.id: MagicMock()})
 

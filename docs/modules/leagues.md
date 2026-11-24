@@ -30,6 +30,7 @@ No Config keys of its own. `/dates` reads the `Dates` key in the admin module's 
 ## How it works
 
 - [leagues.py](../../rsc/leagues/leagues.py): `LeagueMixIn`, the commands, the web handler, and the API wrappers.
+- [effective.py](../../rsc/leagues/effective.py): `pick_effective_row`, the rule that picks one league player row for a member while two seasons overlap. It makes no API call.
 
 | Helper | API call | Notes |
 |---|---|---|
@@ -39,10 +40,14 @@ No Config keys of its own. `/dates` reads the `Dates` key in the admin module's 
 | `league_seasons(guild)` | `leagues_seasons_list` | |
 | `players(guild, ...)` | `LeaguePlayersApi.league_players_list` | One page. `limit=0` means the API default of 100 rows, and the API caps a page at 500. |
 | `paged_players(guild, ...)` | `league_players_list` | Every page, as an async iterator. Use this when you need the full set. |
+| `effective_players(guild)` | `league_players_list` for each season read, `seasons_player_intents_list` | One row per member, as an async iterator. The syncs in [admin](./admin.md) use it. |
+| `effective_player(guild, discord_id)` | The same calls, filtered to one member | The row `effective_players` yields for that member, or `None` for a non-playing member. |
 | `player_count(...)`, `total_players(...)` | `league_players_list` with `limit=1` | Both return the result `count`; they are duplicates. |
 | `update_league_player(guild, player_id, executor, ...)` | `league_players_partial_update` | Patch MMR, tier, status, team, contract length (0 to 2) or waiver period. |
 
 All filters are scoped to the guild's league. `update_league_player` sets a waiver period with no timezone to noon in the guild's timezone.
+
+`effective_players` and `effective_player` read the default season. While `next_signup_season` returns a season, they also read that season and the season numbered one below it, and the "not returning" declarations for the sign-up season. A 404 from the sign-up season lookup means no season is taking sign-ups only when its error code is `no_signup_season`. Any other 404, such as the one for an unknown league id, stops the read with an API error. `pick_effective_row` then picks one row for each member. A rostered row holds until its season's end date. Otherwise the row in the newest season applies. Otherwise the older row holds until its season's end date, whatever the member declared for the next season. After that end date it holds only while sign-ups are open, and not after the member declared "not returning".
 
 `/drafteligible` capitalises the tier name, asks for players with status Draft Eligible, and shows member mentions in an embed colored by the tier. If the list would pass Discord's 1024-character field limit, it sends display names in code-block pages instead.
 
@@ -51,4 +56,7 @@ All filters are scoped to the guild's league. `update_league_player` sets a waiv
 - `/drafteligible`'s `season` option is sent to the API as the `season` filter, which is a season ID, not the season number players know. With no value, no season filter is sent.
 - `/leagueinfo` sends its "not implemented" reply and then still calls the API. If the league has no current season it tries to reply a second time and errors.
 - `players()` silently truncates large result sets. Raising `limit` does not help; use `paged_players()`.
+- `players()` and `paged_players()` with no season return the API's default season only. Around a season change that leaves out every member whose only row is in the season that just ended. A sync must use `effective_players()`.
+- A league player's `season` field is the season number, while the `season` filter takes a season ID.
+- An intent row with `missing` true is an unanswered prompt. The API stores it with `returning` false, so a declared "not returning" is a row with `missing` false and `returning` false.
 - `update_league_player` skips any value that is falsy, so it cannot set MMR or tier to `0`, or clear the team.

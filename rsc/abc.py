@@ -429,6 +429,12 @@ class RSCMixIn(ABC):
     ) -> AsyncIterator[LeaguePlayer]: ...
 
     @abstractmethod
+    def effective_players(self, guild: discord.Guild) -> AsyncIterator[LeaguePlayer]: ...
+
+    @abstractmethod
+    async def effective_player(self, guild: discord.Guild, discord_id: int) -> LeaguePlayer | None: ...
+
+    @abstractmethod
     async def league_seasons(self, guild: discord.Guild) -> list[Season]: ...
 
     # Free Agents
@@ -724,6 +730,7 @@ class RSCMixIn(ABC):
         player: discord.Member | None = None,
         returning: bool | None = None,
         missing: bool | None = None,
+        discord_id: int | None = None,
     ) -> list[IntentToPlay]: ...
 
     @abstractmethod
