@@ -21,7 +21,7 @@ from rsc import const
 from rsc.enums import Status
 from rsc.transactions import roles
 
-from .sync_fakes import MEMBER_ID, OCEAN_ROLE, TIERS, league_player, role_names, sync_guild, sync_member
+from .sync_fakes import MEMBER_ID, OCEAN_ROLE, TIERS, discord_requests, league_player, role_names, sync_guild, sync_member
 
 AGM_ID = 138778232802508801
 
@@ -432,3 +432,26 @@ class TestTransactionWrites:
         assert _awaited(writes[1]) == [("add_roles", [const.CAPTAIN_ROLE])]
         assert _awaited(writes[2]) == [("remove_roles", [const.CAPTAIN_ROLE])]
         assert _awaited(writes[3]) == []
+
+
+class TestCaptainUpdate:
+    @pytest.mark.parametrize(
+        ("captain", "held", "requests"),
+        [
+            pytest.param(True, True, 0, id="a captain who holds the role keeps it"),
+            pytest.param(True, False, 1, id="a captain without the role gains it"),
+            pytest.param(False, True, 1, id="a non-captain who holds the role loses it"),
+            pytest.param(False, False, 0, id="a non-captain without the role is untouched"),
+        ],
+    )
+    async def test_a_member_holds_the_captain_role_only_while_captain(self, captain: bool, held: bool, requests: int):
+        guild = sync_guild()
+        member = sync_member(guild, held=[const.LEAGUE_ROLE, const.CAPTAIN_ROLE] if held else [const.LEAGUE_ROLE])
+        guild.get_member = MagicMock(return_value=member)
+
+        await roles.update_team_captain_discord(
+            guild=guild, players=[TeamPlayer.model_construct(name="nickm", discord_id=MEMBER_ID, captain=captain)]
+        )
+
+        assert role_names(member) == ({const.LEAGUE_ROLE, const.CAPTAIN_ROLE} if captain else {const.LEAGUE_ROLE})
+        assert discord_requests(member) == requests

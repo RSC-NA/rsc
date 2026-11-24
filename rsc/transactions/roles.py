@@ -235,7 +235,7 @@ async def update_team_captain_discord(
 
         if p.captain and cpt_role not in m.roles:
             await apply_member_changes(m, add=[cpt_role])
-        elif cpt_role in m.roles:
+        elif not p.captain and cpt_role in m.roles:
             await apply_member_changes(m, remove=[cpt_role])
 
 
