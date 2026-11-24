@@ -167,6 +167,17 @@ class TestScenarios:
         assert not outcome.matches
         assert (outcome.start_other_roles, outcome.final_other_roles) == ({const.GM_ROLE}, set())
 
+    async def test_a_member_the_bot_does_not_outrank_keeps_their_nickname_and_role_and_gets_the_roles(self, guild):
+        member = sync_member(guild, nick="nickm", nickname_refused=True)
+        member.roles = [sync_role("Admin", 1000)]
+
+        outcome = await self._play(guild, member, lab.SCENARIOS["nick-outranked"])
+
+        assert outcome.matches
+        assert member.display_name == "nickm"
+        assert role_names(member) == {"Admin", const.LEAGUE_ROLE, const.DRAFT_ELIGIBLE, "Elite"}
+        assert outcome.summary_requests == {"edit": 1}
+
     async def test_nick_forbidden_is_refused_for_anyone_but_the_owner(self, guild):
         member = sync_member(guild)
 

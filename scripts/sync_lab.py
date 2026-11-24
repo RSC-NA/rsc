@@ -12,7 +12,8 @@ and never calls the RSC API. Stop the dev bot first.
 Each scenario sets the lab member's starting roles and nickname, runs the
 checkout's own `update_league_player_discord`, then fetches the member again
 and prints what changed. `reset` only sets the starting state of a new member.
-`nick-forbidden` needs the lab member to be the server owner.
+`nick-forbidden` needs the lab member to be the server owner. `nick-outranked`
+needs the lab member to hold a role that is not below the bot's top role.
 
 A sync sends the member's whole role list, so the lab also prints the roles
 it does not manage, such as a booster role or a role above the bot's, and
@@ -183,6 +184,7 @@ class Scenario:
     status: Status | None
     end: Callable[[Lab], State]
     nickname_refused: bool = False
+    needs_owner: bool = False
 
 
 SCENARIOS = {
@@ -191,7 +193,8 @@ SCENARIOS = {
     "de-to-rostered": Scenario(draft_eligible, Status.ROSTERED, rostered),
     "rostered-to-fa": Scenario(rostered, Status.FREE_AGENT, free_agent),
     "no-change": Scenario(draft_eligible, Status.DRAFT_ELIGIBLE, draft_eligible),
-    "nick-forbidden": Scenario(fresh, Status.DRAFT_ELIGIBLE, draft_eligible, nickname_refused=True),
+    "nick-forbidden": Scenario(fresh, Status.DRAFT_ELIGIBLE, draft_eligible, nickname_refused=True, needs_owner=True),
+    "nick-outranked": Scenario(fresh, Status.DRAFT_ELIGIBLE, draft_eligible, nickname_refused=True),
 }
 
 
@@ -230,7 +233,7 @@ def load_writer() -> ModuleType | None:
 async def prepare(guild: discord.Guild, fetch_member: Callable[[], Awaitable[discord.Member]], scenario: Scenario) -> Lab:
     member = await fetch_member()
     lab = Lab.of(guild, member)
-    if scenario.nickname_refused and guild.owner_id != member.id:
+    if scenario.needs_owner and guild.owner_id != member.id:
         raise LabError("nick-forbidden needs RSC_LAB_MEMBER_ID to be the server owner, whose nickname no bot can change.")
 
     state = scenario.start(lab)
