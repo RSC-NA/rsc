@@ -5,7 +5,7 @@ Working records for larger pieces of work: what was found, what was decided, and
 | Document | What it is | Status |
 |---|---|---|
 | [AUDIT.md](AUDIT.md) | Senior engineering audit of the whole codebase (signup, security, architecture, reliability), with a remediation table | A few Criticals resolved or mitigated; most findings still open |
-| [sync-rework.md](sync-rework.md) | Plan to make the Discord sync commands season-aware, cheaper per member, and able to react to website change events, in eight PRs. [sync-rework-test-checklist.md](sync-rework-test-checklist.md) lists the checks to run by hand | In progress; A1, A2, and B are open PRs, C and D are being built |
+| [sync-rework.md](sync-rework.md) | Plan to make the Discord sync commands season-aware, cheaper per member, and able to react to website change events. [sync-rework-handoff.md](sync-rework-handoff.md) says where the work stopped. [sync-rework-test-checklist.md](sync-rework-test-checklist.md) lists the checks to run by hand | In progress; A1, A2, B, C, and four fix PRs are open, D is being built |
 | [discord-ui-refresh.md](discord-ui-refresh.md) | Research and phased plan for moving the bot's messages to Discord Components V2 | Phases 1–3 done; 4–6 deferred (issue #11) |
 
 When you start a new multi-step piece of work, add its plan here and keep its status table current as phases land.
