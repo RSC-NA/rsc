@@ -60,7 +60,7 @@ If two people report the same match at once, the second waits for the first to f
 
 | Command | Who can run it | What it does |
 |---|---|---|
-| `/reportmatch home away [day] [override]` | Anyone may run it. Only players on either team or either team's GM may report. `override` needs Manage Server or the ballchasing manager role. | Opens the report form, uploads the replays, reports the score to the RSC API and posts the result card. |
+| `/reportmatch home away [day] [override]` | Anyone (server only). Only players on either team or either team's GM may report. `override` needs Manage Server or the ballchasing manager role. | Opens the report form, uploads the replays, reports the score to the RSC API and posts the result card. |
 
 ## Configuration
 

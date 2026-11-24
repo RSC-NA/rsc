@@ -497,6 +497,7 @@ class BallchasingMixIn(RSCMixIn):
         day="Match day (Optional)",
         override="Admin or stats only override",
     )
+    @app_commands.guild_only
     async def _reportmatch_cmd(
         self,
         interaction: discord.Interaction,

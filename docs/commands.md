@@ -1673,8 +1673,6 @@ Report the results of your RSC match
 
 **Who can run it:** Anyone
 
-Also works in direct messages with the bot.
-
 | Option | Type | Required | Description |
 |---|---|---|---|
 | `home` | Text | Yes | Home team name. Suggestions as you type |
