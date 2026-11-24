@@ -440,13 +440,6 @@ class TestRunsStaySeparate:
         assert (players.changed, players.visited) == ({second.id}, 1)
 
 
-IR_ROLE_FLIPS = "A rostered sync takes the IR role from an IR player who already holds it, so every second sync writes."
-STATUSES = [
-    pytest.param(status, marks=pytest.mark.xfail(strict=True, reason=IR_ROLE_FLIPS)) if status in (Status.IR, Status.AGMIR) else status
-    for status in Status
-]
-
-
 async def sync(member: MagicMock, status: Status | None, *, agm: bool = False, name: str = "nickm") -> None:
     await update_league_player_discord(
         guild=member.guild,
@@ -461,7 +454,7 @@ async def sync(member: MagicMock, status: Status | None, *, agm: bool = False, n
 class TestRoleFunctionsSendOneRequest:
     @pytest.mark.parametrize("agm", [False, True], ids=["not an AGM", "an AGM"])
     @pytest.mark.parametrize("held", [(), ROLE_NAMES], ids=["no role", "every role"])
-    @pytest.mark.parametrize("status", [*STATUSES, None])
+    @pytest.mark.parametrize("status", [*Status, None])
     async def test_a_sync_sends_one_request_and_a_second_sync_sends_none(self, guild, status, held, agm):
         member = sync_member(guild, held=held, nick="FA | nickm")
 

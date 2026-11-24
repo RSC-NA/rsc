@@ -40,14 +40,15 @@ STALE_AGM = const.AGM_ROLE
 
 # For each standing: the status roles it gives, the roles it leaves on a member who holds them, and the tag.
 ROSTERED: tuple[set[str], set[str], str | None] = ({LEAGUE, "Premier", OCEAN_ROLE}, set(), "OCE")
+INACTIVE_RESERVE: tuple[set[str], set[str], str | None] = ({LEAGUE, const.IR_ROLE, "Premier", OCEAN_ROLE}, set(), "OCE")
 FREE_AGENT = ({LEAGUE, const.FREE_AGENT_ROLE, "Premier", "PremierFA"}, set(), "FA")
 WAIVERS = ({LEAGUE, "Premier", "PremierFA"}, set(), "FA")
 NON_PLAYING: tuple[set[str], set[str], str | None] = (set(), {const.SPECTATOR_ROLE, const.FORMER_PLAYER_ROLE}, None)
 EXPECTED: dict[Status | NoRow, tuple[set[str], set[str], str | None]] = {
     Status.ROSTERED: ROSTERED,
     Status.RENEWED: ROSTERED,
-    Status.IR: ROSTERED,
-    Status.AGMIR: ROSTERED,
+    Status.IR: INACTIVE_RESERVE,
+    Status.AGMIR: INACTIVE_RESERVE,
     Status.UNSIGNED_GM: ({LEAGUE, "Premier", OCEAN_ROLE}, {STALE_AGM}, "OCE"),
     NoRow.NON_PLAYING_GM: ({LEAGUE, OCEAN_ROLE}, {SUBBED_OUT}, "OCE"),
     Status.FREE_AGENT: FREE_AGENT,
@@ -65,8 +66,6 @@ EXPECTED: dict[Status | NoRow, tuple[set[str], set[str], str | None]] = {
 STANDINGS = list(EXPECTED)
 OUT_OF_LEAGUE = (Status.DROPPED, Status.FORMER, Status.BANNED, NoRow.NON_PLAYING)
 ON_A_FRANCHISE = (Status.ROSTERED, Status.RENEWED, Status.IR, Status.AGMIR, Status.UNSIGNED_GM, NoRow.NON_PLAYING_GM)
-IR_ROLE_FLIPS = "A rostered sync takes the IR role from an IR player who already holds it, so every second sync writes."
-INACTIVE_RESERVE = (Status.IR, Status.AGMIR)
 
 
 def plan(standing: Status | NoRow, member: MemberState, **facts) -> Plan:
@@ -90,9 +89,8 @@ class TestEveryStanding:
     @pytest.mark.parametrize("standing", STANDINGS)
     def test_a_member_with_no_role_gets_the_roles_the_standing_gives(self, standing):
         given, _left, _prefix = EXPECTED[standing]
-        ir = {const.IR_ROLE} if standing in INACTIVE_RESERVE else set()
 
-        assert plan(standing, NO_ROLE).roles == given | ir
+        assert plan(standing, NO_ROLE).roles == given
 
     @pytest.mark.parametrize("standing", STANDINGS)
     def test_a_member_with_every_role_keeps_what_the_standing_gives_or_leaves_and_every_unmanaged_role(self, standing):
@@ -134,10 +132,7 @@ class TestEveryStanding:
 
     @pytest.mark.parametrize("agm", [None, AGM], ids=["not an AGM", "an AGM"])
     @pytest.mark.parametrize("member", [NO_ROLE, EVERY_ROLE], ids=["no role", "every role"])
-    @pytest.mark.parametrize(
-        "standing",
-        [pytest.param(s, marks=pytest.mark.xfail(strict=True, reason=IR_ROLE_FLIPS)) if s in INACTIVE_RESERVE else s for s in STANDINGS],
-    )
+    @pytest.mark.parametrize("standing", STANDINGS)
     def test_planning_the_member_a_plan_produced_changes_nothing(self, standing, member, agm):
         first = plan(standing, member, agm=agm)
         after = written(member, first)
@@ -146,6 +141,14 @@ class TestEveryStanding:
 
 
 class TestRowFacts:
+    @pytest.mark.parametrize("standing", [Status.IR, Status.AGMIR])
+    def test_an_ir_member_who_already_holds_ir_keeps_it(self, standing):
+        assert const.IR_ROLE in plan(standing, MemberState(frozenset({const.IR_ROLE}), "nickm")).roles
+
+    @pytest.mark.parametrize("standing", [s for s in STANDINGS if s not in (Status.IR, Status.AGMIR)])
+    def test_a_member_who_is_not_on_ir_loses_it(self, standing):
+        assert const.IR_ROLE not in plan(standing, MemberState(frozenset({const.IR_ROLE}), "nickm")).roles
+
     def test_a_rostered_captain_holds_captain(self):
         assert const.CAPTAIN_ROLE in plan(Status.ROSTERED, NO_ROLE, row=Row("nickm", "Premier", captain=True, team=ROSTER)).roles
 
@@ -289,10 +292,7 @@ class TestTheSyncFunctions:
     @pytest.mark.parametrize("sub_status", [SubStatus.NOT, SubStatus.OUT], ids=["not subbing", "subbing out"])
     @pytest.mark.parametrize("agm", [False, True], ids=["not an AGM", "an AGM"])
     @pytest.mark.parametrize("held", [(), ROLE_NAMES], ids=["no role", "every role"])
-    @pytest.mark.parametrize(
-        "standing",
-        [pytest.param(s, marks=pytest.mark.xfail(strict=True, reason=IR_ROLE_FLIPS)) if s in INACTIVE_RESERVE else s for s in STANDINGS],
-    )
+    @pytest.mark.parametrize("standing", STANDINGS)
     async def test_a_second_sync_of_the_member_the_first_sync_produced_sends_no_request(self, standing, held, agm, sub_status):
         member = sync_member(sync_guild(), held=held, nick="FA | nickm")
         await sync(member, standing, agm=agm, sub_status=sub_status)

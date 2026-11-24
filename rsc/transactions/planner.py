@@ -214,10 +214,6 @@ def plan_member(
 
     roles = (set(member.roles) - (STATUS_ROLES - rule.leaves)) | rule.holds
 
-    # Issue 50. The rostered sync has always taken the IR role from a member who already held it.
-    if rule is INACTIVE_RESERVE and const.IR_ROLE in member.roles:
-        roles.discard(const.IR_ROLE)
-
     if agm:
         roles |= {const.AGM_ROLE, const.LEAGUE_ROLE}
     if row and row.captain and rule.seat is SeatSource.ROSTER:
