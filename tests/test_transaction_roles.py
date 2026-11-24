@@ -21,7 +21,7 @@ from rsc import const
 from rsc.enums import Status
 from rsc.transactions import roles
 
-from .sync_fakes import MEMBER_ID, OCEAN_ROLE, TIERS, discord_requests, league_player, role_names, sync_guild, sync_member
+from .sync_fakes import MEMBER_ID, OCEAN_ROLE, TIERS, discord_requests, league_player, role_names, sync_guild, sync_member, sync_role
 
 AGM_ID = 138778232802508801
 
@@ -45,11 +45,7 @@ ROLE_GETTERS = {
 
 
 def _role(name):
-    """`name` cannot go through the MagicMock constructor -- it configures the
-    mock rather than setting the attribute."""
-    r = MagicMock(spec=discord.Role)
-    r.name = name
-    return r
+    return sync_role(name, position=1)
 
 
 class Roles:
@@ -71,21 +67,16 @@ def guild_roles(monkeypatch):
 
     monkeypatch.setattr(roles.utils, "franchise_role_from_model", AsyncMock(return_value=r.franchise))
     monkeypatch.setattr(roles.utils, "franchise_role_from_name", AsyncMock(return_value=r.franchise))
-    monkeypatch.setattr(roles.utils, "update_discord_name", AsyncMock())
     return r
 
 
 @pytest.fixture
-def member():
-    m = MagicMock(spec=discord.Member)
-    m.id = AGM_ID
-    m.display_name = "nickm"
-    m.mention = f"<@{AGM_ID}>"
-    m.roles = []
-    m.add_roles = AsyncMock()
-    m.remove_roles = AsyncMock()
-    m.edit = AsyncMock()
-    return m
+def member(mock_guild):
+    mock_guild.owner_id = 1
+    mock_guild.default_role = sync_role("@everyone", position=0)
+    mock_guild.me = MagicMock(spec=discord.Member)
+    mock_guild.me.top_role = sync_role("RSC", position=2)
+    return sync_member(mock_guild)
 
 
 def _franchise(name="The Ocean", prefix="OCE", agm_ids=(AGM_ID,), rsc_name="nickm", gm="someone"):
@@ -102,14 +93,6 @@ def _franchise(name="The Ocean", prefix="OCE", agm_ids=(AGM_ID,), rsc_name="nick
     return f
 
 
-def _added(member):
-    return set(member.add_roles.await_args.args) if member.add_roles.await_args else set()
-
-
-def _removed(member):
-    return set(member.remove_roles.await_args.args) if member.remove_roles.await_args else set()
-
-
 class TestNonPlayingAgmReconcile:
     async def test_restores_everything_an_agm_lost(self, mock_guild, member, guild_roles):
         """The whole point of the change: an AGM stripped bare in discord is
@@ -119,27 +102,16 @@ class TestNonPlayingAgmReconcile:
 
         await roles.update_nonplaying_discord(guild=mock_guild, member=member, tiers=[], agm_franchise=_franchise())
 
-        added = _added(member)
-        assert guild_roles.agm in added
-        assert guild_roles.league in added
-        assert guild_roles.franchise in added
-
-        update_name = roles.utils.update_discord_name
-        assert isinstance(update_name, AsyncMock)
-        update_name.assert_awaited_once()
-        assert update_name.await_args is not None
-        kwargs = update_name.await_args.kwargs
-        assert kwargs["prefix"] == "OCE"
-        assert kwargs["name"] == "nickm"
+        assert set(member.roles) == {guild_roles.agm, guild_roles.league, guild_roles.franchise}
+        assert member.display_name == "OCE | nickm"
+        assert discord_requests(member) == 1
 
     async def test_keeps_state_an_agm_already_has(self, mock_guild, member, guild_roles):
         member.roles = [guild_roles.agm, guild_roles.league, guild_roles.franchise]
 
         await roles.update_nonplaying_discord(guild=mock_guild, member=member, tiers=[], agm_franchise=_franchise())
 
-        assert guild_roles.franchise not in _removed(member)
-        assert guild_roles.agm not in _removed(member)
-        assert guild_roles.league not in _removed(member)
+        assert set(member.roles) == {guild_roles.agm, guild_roles.league, guild_roles.franchise}
 
     async def test_strips_a_stale_franchise_role(self, mock_guild, member, guild_roles, monkeypatch):
         """An AGM keeps exactly the one franchise the API gives them."""
@@ -148,8 +120,8 @@ class TestNonPlayingAgmReconcile:
 
         await roles.update_nonplaying_discord(guild=mock_guild, member=member, tiers=[], agm_franchise=_franchise())
 
-        assert guild_roles.other_franchise in _removed(member)
-        assert guild_roles.franchise in _added(member)
+        assert guild_roles.other_franchise not in member.roles
+        assert guild_roles.franchise in member.roles
 
     async def test_no_former_player_role_for_an_agm(self, mock_guild, member, guild_roles):
         """A franchise prefix on an AGM means "staff", not "used to play"."""
@@ -158,7 +130,7 @@ class TestNonPlayingAgmReconcile:
 
         await roles.update_nonplaying_discord(guild=mock_guild, member=member, tiers=[], agm_franchise=_franchise())
 
-        assert guild_roles.former_player not in _added(member)
+        assert guild_roles.former_player not in member.roles
 
     async def test_falls_back_to_name_lookup_when_franchise_has_no_gm(self, mock_guild, member, guild_roles):
         """Franchise roles embed the GM name, so a franchise between GMs has no
@@ -170,8 +142,9 @@ class TestNonPlayingAgmReconcile:
         role_from_name = roles.utils.franchise_role_from_name
         assert isinstance(role_from_name, AsyncMock)
         role_from_name.assert_awaited_once()
-        assert guild_roles.franchise in _added(member)
-        assert guild_roles.agm in _added(member)
+        assert guild_roles.franchise in member.roles
+        assert guild_roles.agm in member.roles
+        assert member.display_name == "OCE | nickm"
 
     async def test_missing_franchise_role_leaves_existing_ones_alone(self, mock_guild, member, guild_roles, monkeypatch):
         """Do not strip what cannot be replaced."""
@@ -182,26 +155,24 @@ class TestNonPlayingAgmReconcile:
 
         await roles.update_nonplaying_discord(guild=mock_guild, member=member, tiers=[], agm_franchise=_franchise())
 
-        assert guild_roles.other_franchise not in _removed(member)
+        assert guild_roles.other_franchise in member.roles
 
     async def test_long_nickname_does_not_abort_the_sync(self, mock_guild, member, guild_roles):
         """`/transactions retire` does not wrap this call, so raising here would
         report the retire as failed after the API mutation already landed."""
-        roles.utils.update_discord_name = AsyncMock(side_effect=ValueError("Discord name is too long"))
+        too_long = _franchise(rsc_name="a name far too long for discord to take")
 
-        await roles.update_nonplaying_discord(guild=mock_guild, member=member, tiers=[], agm_franchise=_franchise())
+        await roles.update_nonplaying_discord(guild=mock_guild, member=member, tiers=[], agm_franchise=too_long)
 
-        member.add_roles.assert_awaited_once()
+        assert set(member.roles) == {guild_roles.agm, guild_roles.league, guild_roles.franchise}
+        assert member.display_name == "nickm"
 
     async def test_falls_back_to_display_name_when_api_has_no_rsc_name(self, mock_guild, member, guild_roles):
-        member.display_name = "OCE | nickm"
+        member.display_name = "FA | nickm"
 
         await roles.update_nonplaying_discord(guild=mock_guild, member=member, tiers=[], agm_franchise=_franchise(rsc_name=None))
 
-        update_name = roles.utils.update_discord_name
-        assert isinstance(update_name, AsyncMock)
-        assert update_name.await_args is not None
-        assert update_name.await_args.kwargs["name"] == "nickm"
+        assert member.display_name == "OCE | nickm"
 
 
 class TestNonPlayingNonAgm:
@@ -214,11 +185,9 @@ class TestNonPlayingNonAgm:
 
         await roles.update_nonplaying_discord(guild=mock_guild, member=member, tiers=[], agm_franchise=None)
 
-        removed = _removed(member)
-        assert guild_roles.agm in removed
-        assert guild_roles.league in removed
-        assert guild_roles.franchise in removed
-        member.edit.assert_awaited_once_with(nick="nickm")
+        assert member.roles == [guild_roles.former_player]
+        assert member.display_name == "nickm"
+        assert discord_requests(member) == 1
 
     async def test_former_player_still_inferred_from_a_prefix(self, mock_guild, member, guild_roles, monkeypatch):
         member.display_name = "OCE | nickm"
@@ -227,7 +196,17 @@ class TestNonPlayingNonAgm:
 
         await roles.update_nonplaying_discord(guild=mock_guild, member=member, tiers=[], agm_franchise=None)
 
-        assert guild_roles.former_player in _added(member)
+        assert guild_roles.former_player in member.roles
+
+    async def test_a_nickname_that_is_only_a_prefix_gets_the_roles_then_the_error(self):
+        member = sync_member(sync_guild(), held=[const.LEAGUE_ROLE], nick="FA | ")
+
+        with pytest.raises(ValueError, match="Empty"):
+            await roles.update_nonplaying_discord(guild=member.guild, member=member, tiers=TIERS, agm_franchise=None)
+
+        assert role_names(member) == {const.FORMER_PLAYER_ROLE}
+        assert member.display_name == "FA | "
+        assert discord_requests(member) == 1
 
 
 class TestRosteredAgm:
@@ -263,7 +242,7 @@ class TestRosteredAgm:
             agm_franchise=_franchise(),
         )
 
-        assert guild_roles.agm in _added(member)
+        assert guild_roles.agm in member.roles
 
     async def test_removes_a_stale_agm_role(self, mock_guild, member, guild_roles):
         member.roles = [guild_roles.agm]
@@ -272,7 +251,7 @@ class TestRosteredAgm:
             guild=mock_guild, player=member, league_player=self._league_player(), tiers=[], agm_franchise=None
         )
 
-        assert guild_roles.agm in _removed(member)
+        assert guild_roles.agm not in member.roles
 
     @pytest.mark.parametrize("status", [Status.IR, Status.AGMIR])
     async def test_ir_role_is_applied(self, mock_guild, member, guild_roles, status):
@@ -287,8 +266,7 @@ class TestRosteredAgm:
             agm_franchise=None,
         )
 
-        assert guild_roles.ir in _added(member)
-        assert guild_roles.ir not in _removed(member)
+        assert guild_roles.ir in member.roles
 
     async def test_ir_role_removed_when_rostered(self, mock_guild, member, guild_roles):
         member.roles = [guild_roles.ir]
@@ -301,7 +279,7 @@ class TestRosteredAgm:
             agm_franchise=None,
         )
 
-        assert guild_roles.ir in _removed(member)
+        assert guild_roles.ir not in member.roles
 
 
 class TestDraftEligible:
@@ -342,17 +320,6 @@ class TestDispatcher:
         assert sync.await_args.kwargs["agm_franchise"] is f
 
 
-def _record_writes(member: MagicMock) -> MagicMock:
-    writes = MagicMock()
-    for name in ("remove_roles", "add_roles", "edit"):
-        writes.attach_mock(getattr(member, name), name)
-    return writes
-
-
-def _awaited(writes: MagicMock) -> list[tuple[str, list[str] | str]]:
-    return [(name, kwargs["nick"] if name == "edit" else [role.name for role in args]) for name, args, kwargs in writes.mock_calls]
-
-
 def _transaction(status: Status, old_tier: str | None = None, new_tier: str | None = None) -> PlayerTransactionUpdates:
     return PlayerTransactionUpdates.model_construct(
         player=league_player(status),
@@ -367,40 +334,33 @@ def _cut_from_the_ocean(gm_id: int) -> TransactionResponse:
 
 
 class TestTransactionWrites:
-    async def test_a_signed_free_agent_swaps_roles_then_takes_the_franchise_tag(self):
+    async def test_a_signed_free_agent_swaps_roles_and_takes_the_franchise_tag_in_one_request(self):
         guild = sync_guild()
         member = sync_member(guild, held=[const.LEAGUE_ROLE, const.FREE_AGENT_ROLE, "Premier", "PremierFA"], nick="FA | nickm")
-        writes = _record_writes(member)
 
         await roles.update_signed_player_discord(
             guild=guild, player=member, ptu=_transaction(Status.ROSTERED, new_tier="Premier"), tiers=TIERS
         )
 
-        assert _awaited(writes) == [
-            ("remove_roles", ["PremierFA", const.FREE_AGENT_ROLE]),
-            ("add_roles", [OCEAN_ROLE]),
-            ("edit", "OCE | nickm"),
-        ]
+        assert role_names(member) == {const.LEAGUE_ROLE, "Premier", OCEAN_ROLE}
+        assert member.display_name == "OCE | nickm"
+        assert discord_requests(member) == 1
 
-    async def test_a_cut_player_swaps_roles_then_takes_the_free_agent_tag(self):
+    async def test_a_cut_player_swaps_roles_and_takes_the_free_agent_tag_in_one_request(self):
         guild = sync_guild()
         member = sync_member(guild, held=[const.LEAGUE_ROLE, const.CAPTAIN_ROLE, "Premier", OCEAN_ROLE], nick="OCE | nickm")
-        writes = _record_writes(member)
 
         await roles.update_cut_player_discord(
             guild=guild, player=member, response=_cut_from_the_ocean(gm_id=7), ptu=_transaction(Status.FREE_AGENT, old_tier="Premier")
         )
 
-        assert _awaited(writes) == [
-            ("remove_roles", [const.CAPTAIN_ROLE, OCEAN_ROLE]),
-            ("add_roles", [const.FREE_AGENT_ROLE, "PremierFA"]),
-            ("edit", "FA | nickm"),
-        ]
+        assert role_names(member) == {const.LEAGUE_ROLE, "Premier", const.FREE_AGENT_ROLE, "PremierFA"}
+        assert member.display_name == "FA | nickm"
+        assert discord_requests(member) == 1
 
-    async def test_a_cut_gm_keeps_the_franchise_role_and_tag(self):
+    async def test_a_cut_gm_keeps_the_franchise_role_and_tag_and_loses_the_captain_role_in_one_request(self):
         guild = sync_guild()
         member = sync_member(guild, held=[const.LEAGUE_ROLE, const.CAPTAIN_ROLE, "Premier", OCEAN_ROLE], nick="OCE | nickm")
-        writes = _record_writes(member)
 
         await roles.update_cut_player_discord(
             guild=guild,
@@ -409,7 +369,19 @@ class TestTransactionWrites:
             ptu=_transaction(Status.FREE_AGENT, old_tier="Premier"),
         )
 
-        assert _awaited(writes) == [("remove_roles", [const.CAPTAIN_ROLE])]
+        assert role_names(member) == {const.LEAGUE_ROLE, "Premier", OCEAN_ROLE}
+        assert member.display_name == "OCE | nickm"
+        assert discord_requests(member) == 1
+
+    async def test_a_cut_repeated_on_the_member_it_produced_sends_nothing(self):
+        guild = sync_guild()
+        member = sync_member(guild, held=[const.LEAGUE_ROLE, "Premier", const.FREE_AGENT_ROLE, "PremierFA"], nick="FA | nickm")
+
+        await roles.update_cut_player_discord(
+            guild=guild, player=member, response=_cut_from_the_ocean(gm_id=7), ptu=_transaction(Status.FREE_AGENT, old_tier="Premier")
+        )
+
+        assert discord_requests(member) == 0
 
     async def test_a_captain_change_moves_the_role_and_touches_nobody_else(self):
         guild = sync_guild()
@@ -418,7 +390,6 @@ class TestTransactionWrites:
         teammate = sync_member(guild, held=[const.LEAGUE_ROLE])
         members = {1: new_captain, 2: old_captain, 3: teammate}
         guild.get_member = MagicMock(side_effect=members.get)
-        writes = {discord_id: _record_writes(member) for discord_id, member in members.items()}
 
         await roles.update_team_captain_discord(
             guild=guild,
@@ -429,9 +400,11 @@ class TestTransactionWrites:
             ],
         )
 
-        assert _awaited(writes[1]) == [("add_roles", [const.CAPTAIN_ROLE])]
-        assert _awaited(writes[2]) == [("remove_roles", [const.CAPTAIN_ROLE])]
-        assert _awaited(writes[3]) == []
+        assert role_names(new_captain) == {const.LEAGUE_ROLE, const.CAPTAIN_ROLE}
+        assert role_names(old_captain) == {const.LEAGUE_ROLE}
+        assert role_names(teammate) == {const.LEAGUE_ROLE}
+        assert [discord_requests(member) for member in (new_captain, old_captain, teammate)] == [1, 1, 0]
+        assert [member.display_name for member in (new_captain, old_captain, teammate)] == ["nickm", "nickm", "nickm"]
 
 
 class TestCaptainUpdate:

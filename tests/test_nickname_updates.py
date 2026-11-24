@@ -44,6 +44,24 @@ async def test_prefix_and_name_are_written_when_they_fit(member):
     member.edit.assert_awaited_once_with(nick="COS | cosmo6430")
 
 
+async def test_a_name_the_member_already_shows_is_not_written(member):
+    member.display_name = "COS | cosmo6430"
+
+    await update_discord_name(member, name="cosmo6430", prefix="COS")
+
+    member.edit.assert_not_awaited()
+
+
+async def test_a_refusal_from_discord_reaches_the_caller_even_for_the_owner(member):
+    member.guild.owner_id = member.id
+    member.edit.side_effect = discord.Forbidden(MagicMock(status=403, reason="Forbidden"), "Missing Permissions")
+
+    with pytest.raises(discord.Forbidden):
+        await update_discord_name(member, name="cosmo6430", prefix="COS")
+
+    member.edit.assert_awaited_once_with(nick="COS | cosmo6430")
+
+
 async def test_too_long_name_raises_without_touching_the_member(member):
     """The existing nickname is left alone rather than truncated to fit. Half an
     RSC name is not an improvement over a stale prefix, and discord would reject

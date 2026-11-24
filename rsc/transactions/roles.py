@@ -14,7 +14,7 @@ from rscapi.models.transaction_response import TransactionResponse
 from rsc import const
 from rsc.enums import Status
 from rsc.logs import GuildLogAdapter
-from rsc.transactions.writer import apply_member_changes
+from rsc.transactions.writer import NicknameRefusedError, apply_member_changes
 from rsc.utils import utils
 
 logger = logging.getLogger("red.rsc.transactions.roles")
@@ -34,6 +34,28 @@ CAPTAIN_ROLES = (const.CAPTAIN_ROLE,)
 def missing_roles(guild: discord.Guild, names: Iterable[str]) -> list[str]:
     """The roles in `names` that don't exist in the guild, in the order given."""
     return [name for name in names if not discord.utils.get(guild.roles, name=name)]
+
+
+async def apply_roles_and_name(
+    member: discord.Member,
+    *,
+    remove: list[discord.Role],
+    add: list[discord.Role],
+    name: str,
+    prefix: str | None,
+) -> None:
+    """Send a member's role changes and nickname through `apply_member_changes`.
+
+    A name that cannot be a nickname, such as one too long for Discord, still
+    gets its roles written. The error is raised afterwards, as is
+    `NicknameRefusedError` when Discord will not let the bot write the nickname.
+    """
+    try:
+        nick = await utils.discord_name_change(member, name, prefix)
+    except ValueError:
+        await apply_member_changes(member, remove=remove, add=add)
+        raise
+    await apply_member_changes(member, remove=remove, add=add, nick=nick)
 
 
 async def update_signed_player_discord(
@@ -119,13 +141,11 @@ async def update_signed_player_discord(
     else:
         raise ValueError(f"Tier role not found: {ptu.new_team.tier}")
 
-    await apply_member_changes(player, remove=roles_to_remove, add=roles_to_add)
-
-    # Update player prefix
     try:
-        log.debug(f"Changing {player.id} signed player nick", guild=guild)
-        await utils.update_discord_name(member=player, name=ptu.player.player.name, prefix=ptu.player.team.franchise.prefix)
-    except discord.Forbidden as exc:
+        await apply_roles_and_name(
+            player, remove=roles_to_remove, add=roles_to_add, name=ptu.player.player.name, prefix=ptu.player.team.franchise.prefix
+        )
+    except NicknameRefusedError as exc:
         log.warning(f"Unable to update nickname {player.display_name} ({player.id}): {exc}")
 
 
@@ -211,15 +231,10 @@ async def update_cut_player_discord(
         roles_to_add = [r for r in roles_to_add if r not in fa_roles]
         roles_to_remove.extend(r for r in fa_roles if r in player.roles)
 
-    await apply_member_changes(player, remove=roles_to_remove, add=roles_to_add)
-
-    log.debug("Updating cut player nickname", guild=guild)
+    prefix = response.first_franchise.prefix if is_gm else "FA"
     try:
-        if is_gm:
-            await utils.update_discord_name(member=player, name=ptu.player.player.name, prefix=response.first_franchise.prefix)
-        else:
-            await utils.update_discord_name(member=player, name=ptu.player.player.name, prefix="FA")
-    except discord.Forbidden as exc:
+        await apply_roles_and_name(player, remove=roles_to_remove, add=roles_to_add, name=ptu.player.player.name, prefix=prefix)
+    except NicknameRefusedError as exc:
         log.warning(f"Unable to update nickname {player.display_name} ({player.id}): {exc}")
 
 
@@ -429,8 +444,6 @@ async def update_nonplaying_discord(
             if r not in member.roles:
                 roles_to_add.append(r)  # noqa: PERF401
 
-    await apply_member_changes(member, remove=roles_to_remove)
-
     # Determine Former Player by prefix. An AGM keeps a franchise prefix as
     # staff, not as a leftover from playing, so it says nothing about them.
     if not is_agm and await utils.get_prefix(member):
@@ -443,34 +456,38 @@ async def update_nonplaying_discord(
         # Restore the franchise prefix rather than merely leaving it alone: an
         # AGM whose prefix was stripped has no other path back to it.
         #
-        # ValueError is swallowed alongside Forbidden because the roles above are
-        # already written. `/transactions retire` does not wrap this call, so
-        # letting a 32 character nickname raise would report the whole retire as
-        # failed after the API mutation had gone through.
+        # ValueError is swallowed alongside a refused nickname because the roles
+        # are already written when either is raised. `/transactions retire` does
+        # not wrap this call, so letting a 32 character nickname raise would
+        # report the whole retire as failed after the API mutation had gone through.
         try:
             log.debug(f"Restoring AGM prefix ({member.id}): {agm_franchise.prefix}", guild=guild)
-            await utils.update_discord_name(
-                member=member,
+            await apply_roles_and_name(
+                member,
+                remove=roles_to_remove,
+                add=roles_to_add,
                 name=agm_rsc_name(member, agm_franchise),
                 prefix=agm_franchise.prefix,
             )
-        except (discord.Forbidden, ValueError) as exc:
+        except (NicknameRefusedError, ValueError) as exc:
             log.error(f"Unable to restore AGM nickname {member.display_name} ({member.id}): {exc}", guild=guild)
-    else:
-        new_nick = await utils.remove_prefix(member)
+        return
 
-        if new_nick != member.display_name:
-            try:
-                if len(new_nick) > 32:
-                    raise ValueError(f"Discord name is too long: {len(new_nick)} characters")
+    new_nick = await utils.remove_prefix(member)
+    if new_nick == member.display_name:
+        await apply_member_changes(member, remove=roles_to_remove, add=roles_to_add)
+        return
 
-                if not new_nick or len(new_nick) < 1:
-                    raise ValueError(f"Error changing name. Empty or <1 characters: {member.mention}")
-                await apply_member_changes(member, nick=new_nick)
-            except discord.Forbidden as exc:
-                log.warning(f"Unable to update nickname {member.display_name} ({member.id}): {exc}")
+    if len(new_nick) > 32 or not new_nick:
+        await apply_member_changes(member, remove=roles_to_remove, add=roles_to_add)
+        if new_nick:
+            raise ValueError(f"Discord name is too long: {len(new_nick)} characters")
+        raise ValueError(f"Error changing name. Empty or <1 characters: {member.mention}")
 
-    await apply_member_changes(member, add=roles_to_add)
+    try:
+        await apply_member_changes(member, remove=roles_to_remove, add=roles_to_add, nick=new_nick)
+    except NicknameRefusedError as exc:
+        log.warning(f"Unable to update nickname {member.display_name} ({member.id}): {exc}")
 
 
 async def update_nonplaying_gm_discord(
@@ -554,15 +571,13 @@ async def update_nonplaying_gm_discord(
             old_froles.remove(frole)
         roles_to_remove.extend(old_froles)
 
-    await apply_member_changes(player, remove=roles_to_remove, add=roles_to_add)
+    if not franchise.gm.rsc_name:
+        await apply_member_changes(player, remove=roles_to_remove, add=roles_to_add)
+        raise ValueError("Franchise GM has no name in API...")
 
-    # Update player prefix
     try:
-        log.debug(f"Changing {player.id} non-playing GM nick", guild=guild)
-        if not franchise.gm.rsc_name:
-            raise ValueError("Franchise GM has no name in API...")
-        await utils.update_discord_name(member=player, name=franchise.gm.rsc_name, prefix=franchise.prefix)
-    except discord.Forbidden as exc:
+        await apply_roles_and_name(player, remove=roles_to_remove, add=roles_to_add, name=franchise.gm.rsc_name, prefix=franchise.prefix)
+    except NicknameRefusedError as exc:
         log.warning(f"Unable to update nickname {player.display_name} ({player.id}): {exc}")
 
 
@@ -657,12 +672,11 @@ async def update_unsigned_gm_discord(
             old_froles.remove(frole)
         roles_to_remove.extend(old_froles)
 
-    await apply_member_changes(player, remove=roles_to_remove, add=roles_to_add)
-
-    # Update player prefix
     try:
-        await utils.update_discord_name(member=player, name=league_player.player.name, prefix=franchise.prefix)
-    except discord.Forbidden as exc:
+        await apply_roles_and_name(
+            player, remove=roles_to_remove, add=roles_to_add, name=league_player.player.name, prefix=franchise.prefix
+        )
+    except NicknameRefusedError as exc:
         log.warning(f"Unable to update nickname {player.display_name} ({player.id}): {exc}")
 
 
@@ -791,12 +805,11 @@ async def update_rostered_discord(
     if tier_role and tier_role not in player.roles:
         roles_to_add.append(tier_role)
 
-    await apply_member_changes(player, remove=roles_to_remove, add=roles_to_add)
-
-    # Update player prefix
     try:
-        await utils.update_discord_name(member=player, name=league_player.player.name, prefix=league_player.team.franchise.prefix)
-    except discord.Forbidden as exc:
+        await apply_roles_and_name(
+            player, remove=roles_to_remove, add=roles_to_add, name=league_player.player.name, prefix=league_player.team.franchise.prefix
+        )
+    except NicknameRefusedError as exc:
         log.warning(f"Unable to update nickname {player.display_name} ({player.id}): {exc}")
 
 
@@ -889,16 +902,16 @@ async def update_free_agent_discord(
     if permfa_waiting_role in player.roles:
         roles_to_remove.append(permfa_waiting_role)
 
-    await apply_member_changes(player, remove=roles_to_remove, add=roles_to_add)
+    if agm_franchise:
+        prefix = agm_franchise.prefix
+    elif league_player.status == Status.PERM_FA:
+        prefix = "PFA"
+    else:
+        prefix = "FA"
 
     try:
-        if agm_franchise:
-            await utils.update_discord_name(member=player, name=league_player.player.name, prefix=agm_franchise.prefix)
-        elif league_player.status in [Status.FREE_AGENT, Status.WAIVERS, Status.WAIVER_RELEASE, Status.WAIVER_CLAIM]:
-            await utils.update_discord_name(member=player, name=league_player.player.name, prefix="FA")
-        elif league_player.status == Status.PERM_FA:
-            await utils.update_discord_name(member=player, name=league_player.player.name, prefix="PFA")
-    except discord.Forbidden as exc:
+        await apply_roles_and_name(player, remove=roles_to_remove, add=roles_to_add, name=league_player.player.name, prefix=prefix)
+    except NicknameRefusedError as exc:
         log.warning(f"Unable to update nickname {player.display_name} ({player.id}): {exc}")
 
 
@@ -991,12 +1004,10 @@ async def update_draft_eligible_discord(
         if dev_league_role and dev_league_role not in player.roles:
             roles_to_add.append(dev_league_role)
 
-    await apply_member_changes(player, remove=roles_to_remove, add=roles_to_add)
-
+    prefix = agm_franchise.prefix if agm_franchise else "DE"
     try:
-        prefix = agm_franchise.prefix if agm_franchise else "DE"
-        await utils.update_discord_name(member=player, name=league_player.player.name, prefix=prefix)
-    except discord.Forbidden as exc:
+        await apply_roles_and_name(player, remove=roles_to_remove, add=roles_to_add, name=league_player.player.name, prefix=prefix)
+    except NicknameRefusedError as exc:
         log.warning(f"Unable to update nickname {player.display_name} ({player.id}): {exc}")
 
 
@@ -1071,12 +1082,10 @@ async def update_permfa_waiting_discord(
     if permfa_waiting_role not in player.roles:
         roles_to_add.append(permfa_waiting_role)
 
-    await apply_member_changes(player, remove=roles_to_remove, add=roles_to_add)
-
+    prefix = agm_franchise.prefix if agm_franchise else "PFW"
     try:
-        prefix = agm_franchise.prefix if agm_franchise else "PFW"
-        await utils.update_discord_name(member=player, name=league_player.player.name, prefix=prefix)
-    except discord.Forbidden as exc:
+        await apply_roles_and_name(player, remove=roles_to_remove, add=roles_to_add, name=league_player.player.name, prefix=prefix)
+    except NicknameRefusedError as exc:
         log.warning(f"Unable to update nickname {player.display_name} ({player.id}): {exc}")
 
 

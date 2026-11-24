@@ -14,6 +14,11 @@ checkout's own `update_league_player_discord`, then fetches the member again
 and prints what changed. `reset` only sets the starting state of a new member.
 `nick-forbidden` needs the lab member to be the server owner.
 
+A sync sends the member's whole role list, so the lab also prints the roles
+it does not manage, such as a booster role or a role above the bot's, and
+fails when the sync changed any of them. Give the lab member such a role by
+hand before a run to check that it survives.
+
 On a checkout that predates `rsc/transactions/writer.py` the lab still runs,
 without the summary line, so the two can be compared.
 """
@@ -142,6 +147,10 @@ class Lab:
             if role.name in STATUS_ROLES or role.name in tier_roles or utils.FRANCHISE_ROLE_REGEX.match(role.name)
         )
 
+    def unmanaged(self, member: discord.Member) -> frozenset[str]:
+        held = frozenset(role.name for role in member.roles if role != member.guild.default_role)
+        return held - self.managed(member)
+
 
 @dataclass(frozen=True)
 class State:
@@ -190,8 +199,10 @@ SCENARIOS = {
 class Outcome:
     start_roles: frozenset[str]
     start_nick: str
+    start_other_roles: frozenset[str]
     final_roles: frozenset[str]
     final_nick: str
+    final_other_roles: frozenset[str]
     expected_roles: frozenset[str]
     expected_nick: str
     wall_s: float
@@ -201,7 +212,12 @@ class Outcome:
 
     @property
     def matches(self) -> bool:
-        return self.error is None and self.final_roles == self.expected_roles and self.final_nick == self.expected_nick
+        return (
+            self.error is None
+            and self.final_roles == self.expected_roles
+            and self.final_nick == self.expected_nick
+            and self.final_other_roles == self.start_other_roles
+        )
 
 
 def load_writer() -> ModuleType | None:
@@ -235,7 +251,7 @@ async def prepare(guild: discord.Guild, fetch_member: Callable[[], Awaitable[dis
 
 async def sync(guild: discord.Guild, fetch_member: Callable[[], Awaitable[discord.Member]], scenario: Scenario, lab: Lab) -> Outcome:
     member = await fetch_member()
-    start_roles, start_nick = lab.managed(member), member.display_name
+    start_roles, start_nick, start_other_roles = lab.managed(member), member.display_name, lab.unmanaged(member)
     expected = scenario.end(lab)
 
     writer = load_writer()
@@ -263,8 +279,10 @@ async def sync(guild: discord.Guild, fetch_member: Callable[[], Awaitable[discor
     return Outcome(
         start_roles=start_roles,
         start_nick=start_nick,
+        start_other_roles=start_other_roles,
         final_roles=lab.managed(member),
         final_nick=member.display_name,
+        final_other_roles=lab.unmanaged(member),
         expected_roles=expected.roles,
         expected_nick=start_nick if scenario.nickname_refused else expected.nick(lab),
         wall_s=wall_s,
@@ -311,6 +329,8 @@ def report(name: str, outcome: Outcome, sent: list[str], kinds: Counter[str]) ->
     print(f"start nick    {outcome.start_nick}")
     print(f"final roles   {', '.join(sorted(outcome.final_roles)) or '(none)'}")
     print(f"final nick    {outcome.final_nick}")
+    print(f"other roles   {', '.join(sorted(outcome.start_other_roles)) or '(none)'}")
+    print(f"other after   {', '.join(sorted(outcome.final_other_roles)) or '(none)'}")
     print(f"requests      {len(sent)}")
     for line in sent:
         print(f"  {line}")

@@ -12,7 +12,7 @@ from rsc.enums import Status
 from rsc.exceptions import DiscordNameTooLong
 from rsc.transactions import writer
 
-from .sync_fakes import TIERS, discord_requests, league_player, sync_guild, sync_member
+from .sync_fakes import TIERS, discord_requests, league_player, role_names, sync_guild, sync_member
 from .utils import api_error, command_callback
 
 
@@ -174,13 +174,14 @@ class TestNonPlayingSyncAgmSweep:
         return interaction
 
     @staticmethod
-    def _member(discord_id, name="someone"):
+    def _member(discord_id, name="someone", held=()):
         m = MagicMock(spec=discord.Member)
         m.id = discord_id
         m.display_name = name
         m.mention = f"<@{discord_id}>"
-        m.roles = []
-        m.remove_roles = AsyncMock()
+        m.roles = list(held)
+        m.guild.get_member.return_value = None
+        m.edit = AsyncMock()
         return m
 
     @pytest.fixture
@@ -219,33 +220,34 @@ class TestNonPlayingSyncAgmSweep:
         return interaction.edit_original_response.await_args.kwargs["embed"]
 
     async def test_strips_the_role_from_a_member_the_api_does_not_list(self, mixin, interaction, agm_role):
-        stale = self._member(111)
+        other_role = MagicMock(spec=discord.Role)
+        stale = self._member(111, held=[other_role, agm_role])
         agm_role.members = [stale]
 
         embed = await self._run(mixin, interaction, agm_role)
 
-        stale.remove_roles.assert_awaited_once_with(agm_role, reason="API has no AGM record for this member")
+        stale.edit.assert_awaited_once_with(roles=[other_role], reason="API has no AGM record for this member")
         assert "Stale AGM Roles (1)" in [f.name for f in embed.fields]
 
     async def test_leaves_a_real_agm_alone(self, mixin, interaction, agm_role):
-        real = self._member(111)
+        real = self._member(111, held=[agm_role])
         agm_role.members = [real]
         mixin.agm_franchise_map = AsyncMock(return_value={111: MagicMock()})
 
         embed = await self._run(mixin, interaction, agm_role)
 
-        real.remove_roles.assert_not_awaited()
+        real.edit.assert_not_awaited()
         assert not [f for f in embed.fields if f.name.startswith("Stale AGM Roles")]
 
     async def test_dryrun_reports_without_removing(self, mixin, interaction, agm_role):
         """This is the first sync that can remove the role at scale, so the
         rehearsal has to show exactly what a live run would do."""
-        stale = self._member(111)
+        stale = self._member(111, held=[agm_role])
         agm_role.members = [stale]
 
         embed = await self._run(mixin, interaction, agm_role, dryrun=True)
 
-        stale.remove_roles.assert_not_awaited()
+        stale.edit.assert_not_awaited()
         field = next(f for f in embed.fields if f.name.startswith("Stale AGM Roles"))
         assert "Would remove" in field.value
         assert stale.mention in field.value
@@ -281,20 +283,20 @@ class TestNonPlayingSyncAgmSweep:
     async def test_empty_franchise_list_aborts_before_touching_anyone(self, mixin, interaction, agm_role):
         """`agm_franchise_map` raises rather than answering {}. Otherwise one bad
         response would strip every AGM in the guild in a single run."""
-        stale = self._member(111)
+        stale = self._member(111, held=[agm_role])
         agm_role.members = [stale]
         mixin.agm_franchise_map = AsyncMock(side_effect=RuntimeError("Refusing to build an AGM map"))
 
         embed = await self._run(mixin, interaction, agm_role)
 
-        stale.remove_roles.assert_not_awaited()
+        stale.edit.assert_not_awaited()
         assert "Refusing to build an AGM map" in embed.description
 
     async def test_does_not_double_remove_a_member_the_loop_handled(self, mixin, interaction, agm_role):
         """`update_nonplaying_discord` already strips the role for members the
         API returns. Discord's role cache lags a removal, so without this the
         sweep would spend a second call on the same member."""
-        stale = self._member(111)
+        stale = self._member(111, held=[agm_role])
         agm_role.members = [stale]
 
         api_member = MagicMock()
@@ -309,13 +311,12 @@ class TestNonPlayingSyncAgmSweep:
         sync.assert_awaited_once()
         assert sync.await_args is not None
         assert sync.await_args.kwargs["agm_franchise"] is None
-        stale.remove_roles.assert_not_awaited()
+        stale.edit.assert_not_awaited()
         assert not [f for f in embed.fields if f.name.startswith("Stale AGM Roles")]
 
     @pytest.mark.parametrize("rows", [[], [_league_player(222, Status.DROPPED)]], ids=["no rows", "only a row that left"])
     async def test_a_read_with_no_playing_members_stops_before_anyone_is_changed(self, mixin, interaction, agm_role, rows):
-        league_member, stale = self._member(111), self._member(333)
-        league_member.roles = [agm_role]
+        league_member, stale = self._member(111, held=[agm_role]), self._member(333, held=[agm_role])
         agm_role.members = [league_member, stale]
 
         api_member = MagicMock()
@@ -328,8 +329,6 @@ class TestNonPlayingSyncAgmSweep:
         embed = await self._run(mixin, interaction, agm_role)
 
         for member in (league_member, stale):
-            member.remove_roles.assert_not_awaited()
-            member.add_roles.assert_not_awaited()
             member.edit.assert_not_awaited()
         assert embed.title == "Error"
         assert "No league players were read" in embed.description
@@ -649,7 +648,7 @@ class TestSyncSummaryLine:
         assert "kind=players visited=1 changed=0 requests={} failed=0" in line
 
     async def test_a_refused_member_is_counted_as_failed(self, member, caplog):
-        member.remove_roles.side_effect = discord.Forbidden(MagicMock(status=403, reason="Forbidden"), "Missing Permissions")
+        member.edit.side_effect = discord.Forbidden(MagicMock(status=403, reason="Forbidden"), "Missing Permissions")
 
         with caplog.at_level("INFO", logger="red.rsc.transactions.writer"):
             await self._sync("nightly", member)
@@ -674,7 +673,6 @@ class TestSyncSummaryLine:
     async def test_the_stale_agm_sweep_is_counted(self, guild, member, caplog):
         stale = sync_member(guild, held=[const.AGM_ROLE])
         stale.id = member.id + 1
-        stale.remove_roles = AsyncMock()
         next(r for r in guild.roles if r.name == const.AGM_ROLE).members = [stale]
         mixin = self._mixin("nonplaying", member)
         mixin.paged_members = MagicMock(return_value=_rows())
@@ -683,7 +681,8 @@ class TestSyncSummaryLine:
             await self._sync("nonplaying", member, mixin)
 
         (line,) = self._summaries(caplog)
-        assert "kind=nonplaying visited=1 changed=1 requests={'remove_role': 1} failed=0" in line
+        assert "kind=nonplaying visited=1 changed=1 requests={'edit': 1} failed=0" in line
+        assert role_names(stale) == set()
 
     async def test_api_reads_are_timed_and_the_wait_for_staff_is_not(self, member, caplog, monkeypatch):
         now = 0.0
