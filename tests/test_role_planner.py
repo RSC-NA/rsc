@@ -1,9 +1,11 @@
+from dataclasses import replace
+
 import pytest
 from rscapi.models.franchise_gm import FranchiseGM
 from rscapi.models.franchise_list import FranchiseList
 
 from rsc import const
-from rsc.enums import Status
+from rsc.enums import Status, SubStatus
 from rsc.transactions import roles
 from rsc.transactions.planner import MemberState, NoRow, Plan, Rename, Row, Seat, StripPrefix, plan_member
 
@@ -37,24 +39,24 @@ SUBBED_OUT = const.SUBBED_OUT_ROLE
 STALE_AGM = const.AGM_ROLE
 
 # For each standing: the status roles it gives, the roles it leaves on a member who holds them, and the tag.
-ROSTERED = ({LEAGUE, "Premier", OCEAN_ROLE}, {SUBBED_OUT}, "OCE")
-FREE_AGENT = ({LEAGUE, const.FREE_AGENT_ROLE, "Premier", "PremierFA"}, {SUBBED_OUT, STALE_AGM}, "FA")
-WAIVERS = ({LEAGUE, "Premier", "PremierFA"}, {SUBBED_OUT, STALE_AGM}, "FA")
+ROSTERED: tuple[set[str], set[str], str | None] = ({LEAGUE, "Premier", OCEAN_ROLE}, set(), "OCE")
+FREE_AGENT = ({LEAGUE, const.FREE_AGENT_ROLE, "Premier", "PremierFA"}, {STALE_AGM}, "FA")
+WAIVERS = ({LEAGUE, "Premier", "PremierFA"}, {STALE_AGM}, "FA")
 NON_PLAYING: tuple[set[str], set[str], str | None] = (set(), {const.SPECTATOR_ROLE, const.FORMER_PLAYER_ROLE}, None)
 EXPECTED: dict[Status | NoRow, tuple[set[str], set[str], str | None]] = {
     Status.ROSTERED: ROSTERED,
     Status.RENEWED: ROSTERED,
     Status.IR: ROSTERED,
     Status.AGMIR: ROSTERED,
-    Status.UNSIGNED_GM: ({LEAGUE, "Premier", OCEAN_ROLE}, {STALE_AGM, SUBBED_OUT}, "OCE"),
+    Status.UNSIGNED_GM: ({LEAGUE, "Premier", OCEAN_ROLE}, {STALE_AGM}, "OCE"),
     NoRow.NON_PLAYING_GM: ({LEAGUE, OCEAN_ROLE}, {SUBBED_OUT}, "OCE"),
     Status.FREE_AGENT: FREE_AGENT,
-    Status.PERM_FA: ({LEAGUE, const.PERM_FA_ROLE, "Premier", "PremierFA"}, {SUBBED_OUT, STALE_AGM}, "PFA"),
+    Status.PERM_FA: ({LEAGUE, const.PERM_FA_ROLE, "Premier", "PremierFA"}, {STALE_AGM}, "PFA"),
     Status.WAIVERS: WAIVERS,
     Status.WAIVER_CLAIM: WAIVERS,
     Status.WAIVER_RELEASE: WAIVERS,
-    Status.DRAFT_ELIGIBLE: ({LEAGUE, const.DRAFT_ELIGIBLE, "Premier"}, {SUBBED_OUT, STALE_AGM}, "DE"),
-    Status.PERMFA_W: ({LEAGUE, const.PERM_FA_WAITING_ROLE}, {SUBBED_OUT, STALE_AGM}, "PFW"),
+    Status.DRAFT_ELIGIBLE: ({LEAGUE, const.DRAFT_ELIGIBLE, "Premier"}, {STALE_AGM}, "DE"),
+    Status.PERMFA_W: ({LEAGUE, const.PERM_FA_WAITING_ROLE}, {STALE_AGM}, "PFW"),
     Status.DROPPED: NON_PLAYING,
     Status.FORMER: NON_PLAYING,
     Status.BANNED: NON_PLAYING,
@@ -236,18 +238,39 @@ class TestAgmSeat:
         assert plan(Status.DRAFT_ELIGIBLE, EVERY_ROLE).roles & {OCEAN_ROLE, DESERT_ROLE} == set()
 
 
+WITH_A_ROW = [s for s in STANDINGS if isinstance(s, Status) and s not in OUT_OF_LEAGUE]
+
+
+class TestSubbedOut:
+    @pytest.mark.parametrize("standing", WITH_A_ROW)
+    def test_a_member_whose_row_is_subbing_out_holds_it(self, standing):
+        assert SUBBED_OUT in plan(standing, NO_ROLE, row=replace(ROW, subbed_out=True)).roles
+
+    @pytest.mark.parametrize("standing", WITH_A_ROW)
+    def test_a_member_whose_row_is_not_subbing_out_loses_it(self, standing):
+        assert SUBBED_OUT not in plan(standing, EVERY_ROLE).roles
+
+    @pytest.mark.parametrize("standing", [Status.DROPPED, Status.FORMER, Status.BANNED])
+    def test_a_member_out_of_the_league_loses_it_whatever_the_row_says(self, standing):
+        assert SUBBED_OUT not in plan(standing, EVERY_ROLE, row=replace(ROW, subbed_out=True)).roles
+
+    def test_a_non_playing_gm_has_no_row_and_keeps_it(self):
+        assert SUBBED_OUT in plan(NoRow.NON_PLAYING_GM, EVERY_ROLE).roles
+        assert SUBBED_OUT not in plan(NoRow.NON_PLAYING_GM, NO_ROLE).roles
+
+
 def gm_franchise() -> FranchiseList:
     return FranchiseList(name="The Ocean", prefix="OCE", gm=FranchiseGM(rsc_name="someone", discord_id=MEMBER_ID), agms=[])
 
 
-async def sync(member, standing: Status | NoRow, *, agm: bool = False) -> None:
+async def sync(member, standing: Status | NoRow, *, agm: bool = False, sub_status: SubStatus = SubStatus.NOT) -> None:
     if standing is NoRow.NON_PLAYING_GM:
         await roles.update_nonplaying_gm_discord(guild=member.guild, player=member, franchise=gm_franchise(), tiers=TIERS)
         return
     await roles.update_league_player_discord(
         guild=member.guild,
         player=member,
-        league_player=league_player(standing) if isinstance(standing, Status) else None,
+        league_player=league_player(standing, sub_status=sub_status) if isinstance(standing, Status) else None,
         tiers=TIERS,
         franchise=agm_franchise(),
         agm_franchise=agm_franchise() if agm else None,
@@ -255,20 +278,38 @@ async def sync(member, standing: Status | NoRow, *, agm: bool = False) -> None:
 
 
 class TestTheSyncFunctions:
+    @pytest.mark.parametrize("sub_status", [SubStatus.NOT, SubStatus.OUT], ids=["not subbing", "subbing out"])
     @pytest.mark.parametrize("agm", [False, True], ids=["not an AGM", "an AGM"])
     @pytest.mark.parametrize("held", [(), ROLE_NAMES], ids=["no role", "every role"])
     @pytest.mark.parametrize(
         "standing",
         [pytest.param(s, marks=pytest.mark.xfail(strict=True, reason=IR_ROLE_FLIPS)) if s in INACTIVE_RESERVE else s for s in STANDINGS],
     )
-    async def test_a_second_sync_of_the_member_the_first_sync_produced_sends_no_request(self, standing, held, agm):
+    async def test_a_second_sync_of_the_member_the_first_sync_produced_sends_no_request(self, standing, held, agm, sub_status):
         member = sync_member(sync_guild(), held=held, nick="FA | nickm")
-        await sync(member, standing, agm=agm)
+        await sync(member, standing, agm=agm, sub_status=sub_status)
         forget_writes(member)
 
-        await sync(member, standing, agm=agm)
+        await sync(member, standing, agm=agm, sub_status=sub_status)
 
         assert discord_requests(member) == 0
+
+    @pytest.mark.parametrize("standing", WITH_A_ROW)
+    async def test_subbed_out_follows_the_row_s_sub_status(self, standing):
+        member = sync_member(sync_guild(), nick="nickm")
+
+        await sync(member, standing, sub_status=SubStatus.OUT)
+        assert SUBBED_OUT in role_names(member)
+
+        await sync(member, standing, sub_status=SubStatus.IN)
+        assert SUBBED_OUT not in role_names(member)
+
+    async def test_a_sync_with_no_row_takes_subbed_out(self):
+        member = sync_member(sync_guild(), held=[SUBBED_OUT], nick="nickm")
+
+        await sync(member, NoRow.NON_PLAYING)
+
+        assert SUBBED_OUT not in role_names(member)
 
     async def test_a_guild_without_a_role_the_sync_only_takes_still_syncs(self):
         guild = sync_guild()

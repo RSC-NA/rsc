@@ -10,10 +10,11 @@ from rscapi.models.league_player_member import LeaguePlayerMember
 from rscapi.models.league_player_status_enum import LeaguePlayerStatusEnum
 from rscapi.models.player_franchise import PlayerFranchise
 from rscapi.models.player_team import PlayerTeam
+from rscapi.models.sub_status_enum import SubStatusEnum
 from rscapi.models.tier import Tier
 
 from rsc import const
-from rsc.enums import Status
+from rsc.enums import Status, SubStatus
 
 MEMBER_ID = 138778232802508801
 OCEAN_ROLE = "The Ocean (someone)"
@@ -115,7 +116,7 @@ def forget_writes(member: MagicMock) -> None:
         write.reset_mock()
 
 
-def league_player(status: Status, name: str = "nickm") -> LeaguePlayer:
+def league_player(status: Status, name: str = "nickm", sub_status: SubStatus = SubStatus.NOT) -> LeaguePlayer:
     franchise = PlayerFranchise(name="The Ocean", prefix="OCE", gm=FranchiseGM(rsc_name="someone", discord_id=7))
     return LeaguePlayer.model_construct(
         status=LeaguePlayerStatusEnum(status.value),
@@ -123,6 +124,7 @@ def league_player(status: Status, name: str = "nickm") -> LeaguePlayer:
         tier=TIERS[0],
         team=PlayerTeam(name="Waves", franchise=franchise),
         player=LeaguePlayerMember(name=name, discord_id=MEMBER_ID),
+        sub_status=SubStatusEnum(sub_status),
     )
 
 

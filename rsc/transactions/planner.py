@@ -72,14 +72,13 @@ class Rule:
 
 ROSTERED = Rule(
     holds=frozenset({const.LEAGUE_ROLE}),
-    leaves=frozenset({const.SUBBED_OUT_ROLE}),
     seat=SeatSource.ROSTER,
     tier=TierRoles.TIER,
 )
 INACTIVE_RESERVE = replace(ROSTERED, holds=frozenset({const.LEAGUE_ROLE, const.IR_ROLE}))
 UNSIGNED_GM = Rule(
     holds=frozenset({const.LEAGUE_ROLE}),
-    leaves=frozenset({const.AGM_ROLE, const.SUBBED_OUT_ROLE}),
+    leaves=frozenset({const.AGM_ROLE}),
     seat=SeatSource.GM,
     tier=TierRoles.TIER,
 )
@@ -90,35 +89,35 @@ NON_PLAYING_GM = Rule(
 )
 FREE_AGENT = Rule(
     holds=frozenset({const.LEAGUE_ROLE, const.FREE_AGENT_ROLE}),
-    leaves=frozenset({const.SUBBED_OUT_ROLE, const.AGM_ROLE}),
+    leaves=frozenset({const.AGM_ROLE}),
     prefix="FA",
     tier=TierRoles.TIER_AND_FA,
     dev_league=True,
 )
 PERM_FA = Rule(
     holds=frozenset({const.LEAGUE_ROLE, const.PERM_FA_ROLE}),
-    leaves=frozenset({const.SUBBED_OUT_ROLE, const.AGM_ROLE}),
+    leaves=frozenset({const.AGM_ROLE}),
     prefix="PFA",
     tier=TierRoles.TIER_AND_FA,
     dev_league=True,
 )
 WAIVERS = Rule(
     holds=frozenset({const.LEAGUE_ROLE}),
-    leaves=frozenset({const.SUBBED_OUT_ROLE, const.AGM_ROLE}),
+    leaves=frozenset({const.AGM_ROLE}),
     prefix="FA",
     tier=TierRoles.TIER_AND_FA,
     dev_league=True,
 )
 DRAFT_ELIGIBLE = Rule(
     holds=frozenset({const.LEAGUE_ROLE, const.DRAFT_ELIGIBLE}),
-    leaves=frozenset({const.SUBBED_OUT_ROLE, const.AGM_ROLE}),
+    leaves=frozenset({const.AGM_ROLE}),
     prefix="DE",
     tier=TierRoles.TIER,
     dev_league=True,
 )
 PERMFA_WAITING = Rule(
     holds=frozenset({const.LEAGUE_ROLE, const.PERM_FA_WAITING_ROLE}),
-    leaves=frozenset({const.SUBBED_OUT_ROLE, const.AGM_ROLE}),
+    leaves=frozenset({const.AGM_ROLE}),
     prefix="PFW",
 )
 NON_PLAYING = Rule(leaves=frozenset({const.SPECTATOR_ROLE, const.FORMER_PLAYER_ROLE}), in_league=False)
@@ -164,6 +163,7 @@ class Row:
     name: str
     tier: str | None = None
     captain: bool = False
+    subbed_out: bool = False
     team: Seat | None = None
 
 
@@ -227,6 +227,8 @@ def plan_member(
         roles |= {const.AGM_ROLE, const.LEAGUE_ROLE}
     if row and row.captain and rule.seat is SeatSource.ROSTER:
         roles.add(const.CAPTAIN_ROLE)
+    if row and row.subbed_out:
+        roles.add(const.SUBBED_OUT_ROLE)
     if devleague and rule.dev_league:
         roles.add(const.DEV_LEAGUE_ROLE)
 

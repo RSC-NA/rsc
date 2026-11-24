@@ -12,7 +12,7 @@ from rscapi.models.tier import Tier
 from rscapi.models.transaction_response import TransactionResponse
 
 from rsc import const
-from rsc.enums import Status
+from rsc.enums import Status, SubStatus
 from rsc.logs import GuildLogAdapter
 from rsc.transactions import planner
 from rsc.transactions.writer import NicknameRefusedError, apply_member_changes
@@ -310,6 +310,8 @@ async def status_role(guild: discord.Guild, name: str) -> discord.Role:
             return await utils.get_captain_role(guild)
         case const.AGM_ROLE:
             return await utils.get_agm_role(guild)
+        case const.SUBBED_OUT_ROLE:
+            return await utils.get_subbed_out_role(guild)
         case _ if name.endswith("FA"):
             return await utils.get_tier_fa_role(guild, name.removesuffix("FA"))
         case _:
@@ -325,6 +327,7 @@ def league_player_row(league_player: LeaguePlayer, team: planner.Seat | None = N
         name=league_player.player.name,
         tier=(league_player.tier.name or None) if league_player.tier else None,
         captain=bool(league_player.captain),
+        subbed_out=league_player.sub_status == SubStatus.OUT,
         team=team,
     )
 
