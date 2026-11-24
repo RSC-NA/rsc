@@ -73,6 +73,18 @@ Run these after sign-ups close on 2026-12-30 21:59 ET, or on the test server aga
 - [ ] **Test server.** Remove that GM's franchise role and tag by hand, then run the command again. Both come back.
 - [ ] **Test server.** Run it with a plain member who has no row. They lose league roles, as before.
 
+## PR 49, one request per changed member
+
+- [ ] **Production.** After the first nightly run with PR 49, read the `Sync summary. kind=nightly` line. `requests` holds only `edit`, and its count is close to `changed`.
+- [ ] **Production.** Open the server audit log for one member the run changed. It shows one member update entry, not one per role.
+- [ ] **Production.** Check one member who holds a booster role or a role above the bot and was changed by the run. They still hold that role.
+- [ ] **Test server.** Run `/admin sync member` on a member who needs several role changes and a new nickname. The audit log shows one entry, and the roles and nickname are right.
+- [ ] **Test server.** Run `/admin sync member` on the server owner with a stale nickname. Their roles update, their nickname does not, and the reply is still the success card.
+- [ ] **Test server.** Sync a member whose API name is too long for a nickname. Their roles update and staff see the "Nickname Too Long" notice.
+- [ ] **Test server, optional.** With the three `RSC_LAB_*` variables set, run `uv run python scripts/sync_lab.py fresh-to-de`. It prints 1 request.
+
+A `failed` count above 0 on a quiet night is expected after PR 49. The owner and members ranked above the bot count as failed while their nickname is out of date, and no request is sent for them.
+
 ## Later PRs
 
-The checks for C and D are added to this file as each one is built.
+The checks for D are added to this file when it is built.
