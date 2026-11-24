@@ -219,14 +219,17 @@ async def lane_other_404(f: Facts) -> bool:
 
 async def lane_not_returning(f: Facts) -> bool:
     leaving = f.old_only_active & f.declared
+    season_over = bool(f.old.end_date and f.old.end_date < f.now)
     still_playing = [d for d in leaving if f.playing(f.synced.get(d))]
+    want_playing = 0 if season_over else len(leaving)
     silent = f.old_only_active & f.unanswered
     stripped = [d for d in silent if not f.playing(f.synced.get(d))]
     print(f'members with an S{f.old.number}-only active row and a declared "not returning":', len(leaving))
+    print(f"  S{f.old.number} {'has ended' if season_over else 'is still being played'}, so {want_playing} should count as playing")
     print("  still counted as playing:", len(still_playing))
     print(f"members with an S{f.old.number}-only active row and an unanswered intent (missing true):", len(silent))
     print("  counted as non-playing:", len(stripped))
-    return bool(leaving) and not still_playing and not stripped
+    return bool(leaving) and len(still_playing) == want_playing and not stripped
 
 
 LANES: dict[str, Callable[[Facts], Awaitable[bool]]] = {
