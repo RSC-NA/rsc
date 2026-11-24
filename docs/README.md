@@ -17,6 +17,7 @@ The RSC bot runs league operations for the [Rocket Soccar Confederation](https:/
 **Using the bot**
 
 - [Staff guide](staff-guide.md): what each role does with the bot, the server setup order, and the season calendar.
+- [Command reference](commands.md): every slash command with its options and who can run it, generated from the code.
 - [Configuration](configuration.md): every per-server setting, the roles and channels the bot expects, and the state it keeps.
 
 **Running the bot**

@@ -37,7 +37,14 @@ from rsc.developer import DeveloperMixIn
 from rsc.devleague import DevLeagueMixIn
 from rsc.devleague.runner import DevLeague
 from rsc.checks import bot_owner_required
-from rsc.const import API_RETRIES, API_RETRY_EXCEPTIONS, DEFAULT_MODMAIL_BOT_ID, LIVE_EMOJI_NAME, MODAL_TIMEOUT
+from rsc.const import (
+    API_RETRIES,
+    API_RETRY_EXCEPTIONS,
+    DEFAULT_MODMAIL_BOT_ID,
+    HIDDEN_COMMANDS,
+    LIVE_EMOJI_NAME,
+    MODAL_TIMEOUT,
+)
 from rsc.embeds import BlueEmbed, ErrorEmbed, SuccessEmbed
 from rsc.enums import LogLevel
 from rsc.events import EventMixIn
@@ -72,8 +79,6 @@ logger = logging.getLogger("red.rsc.core")
 log = GuildLogAdapter(logger)
 
 LIVE_EMOJI_PATH = Path(__file__).parent / "resources" / "emoji" / "live.gif"
-
-HIDDEN_COMMANDS = ["feet"]
 
 defaults_guild = {
     "ApiKey": None,

@@ -141,3 +141,4 @@ These are the house rules visible across the codebase. Follow the surrounding co
 - **Preview/test commands** take a free-text option and dispatch on its value, so adding a case doesn't change the command signature and force a re-sync.
 - **Tests.** Every behaviour change gets a unit test in `tests/test_<module>_*.py`. API contract changes get an integration test in the matching `*_api.py`.
 - **Module READMEs.** Each feature package can carry a `README.md` with its command list. Update it in the same change as the commands.
+- **Command reference.** [commands.md](commands.md) is generated from the command tree. After changing any command's name, description, options or checks, run `uv run python -m rsc.command_reference`. `tests/test_command_reference.py` fails while the page is stale.

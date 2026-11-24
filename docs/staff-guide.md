@@ -2,7 +2,7 @@
 
 What the bot does for each role in an RSC server, and which commands they use. This page is the quick version; each section links to the module page with the full command table, permissions and edge cases.
 
-Run `/help` in Discord to see the commands available to you, or `/help <command>` for one command's options.
+Run `/help` in Discord to see the commands available to you, or `/help <command>` for one command's options. The [command reference](commands.md) lists every command on one page.
 
 ## Who can run what
 
