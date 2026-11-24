@@ -455,3 +455,39 @@ class TestCaptainUpdate:
 
         assert role_names(member) == ({const.LEAGUE_ROLE, const.CAPTAIN_ROLE} if captain else {const.LEAGUE_ROLE})
         assert discord_requests(member) == requests
+
+
+class TestCutPlayer:
+    @pytest.mark.parametrize(
+        "fa_roles_held",
+        [
+            pytest.param([const.FREE_AGENT_ROLE, "PremierFA"], id="holds both FA roles"),
+            pytest.param([const.FREE_AGENT_ROLE], id="holds only Free Agent"),
+            pytest.param(["PremierFA"], id="holds only the tier FA role"),
+            pytest.param([], id="holds neither FA role"),
+        ],
+    )
+    async def test_a_cut_gm_keeps_the_franchise_and_holds_no_free_agent_role(self, fa_roles_held: list[str]):
+        guild = sync_guild()
+        member = sync_member(guild, held=[const.LEAGUE_ROLE, const.CAPTAIN_ROLE, "Premier", OCEAN_ROLE, *fa_roles_held], nick="OCE | nickm")
+
+        await roles.update_cut_player_discord(
+            guild=guild,
+            player=member,
+            response=_cut_from_the_ocean(gm_id=MEMBER_ID),
+            ptu=_transaction(Status.FREE_AGENT, old_tier="Premier"),
+        )
+
+        assert role_names(member) == {const.LEAGUE_ROLE, "Premier", OCEAN_ROLE}
+        assert member.display_name == "OCE | nickm"
+
+    async def test_a_cut_player_who_is_not_the_gm_becomes_a_free_agent(self):
+        guild = sync_guild()
+        member = sync_member(guild, held=[const.LEAGUE_ROLE, const.CAPTAIN_ROLE, "Premier", OCEAN_ROLE], nick="OCE | nickm")
+
+        await roles.update_cut_player_discord(
+            guild=guild, player=member, response=_cut_from_the_ocean(gm_id=7), ptu=_transaction(Status.FREE_AGENT, old_tier="Premier")
+        )
+
+        assert role_names(member) == {const.LEAGUE_ROLE, "Premier", const.FREE_AGENT_ROLE, "PremierFA"}
+        assert member.display_name == "FA | nickm"
