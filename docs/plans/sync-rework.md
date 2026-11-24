@@ -1,6 +1,6 @@
 # Sync rework plan
 
-Status on 2026-11-24. In progress. A1 is PR 34, A2 is PR 36, and B is PR 37. The operator ruled on 2026-11-24 to build C and D now, to land nothing until the stack through D is built, and to replace the test-server lanes with the checklist in `docs/plans/sync-rework-test-checklist.md`. Appendix F records the rulings and Appendix G records what execution found.
+Status on 2026-11-24. In progress. The stack is A1 (PR 34), A2 (PR 36), B (PR 37), the captain fix (PR 41), the GM cut fix (PR 42), then C, which is being built, then D. The GM check for `/admin sync nonplaying` is PR 44, beside B. The sign-ups-closed fix is PR 40, off `master`. Nothing lands until the stack through D is built. The hand-run checks are in `docs/plans/sync-rework-test-checklist.md`. Appendix F records the rulings and Appendix G records what execution found.
 
 The Discord sync commands and the nightly task get three changes for league staff and members.
 They read the right season's rows, so a member who has not declared intent yet is never stripped.
@@ -109,7 +109,7 @@ Discord has no control skill, so each lane names its driver. The drivers are a r
 - [ ] Lane 3. Probe lane. Resolve every member whose only row is S27 with status DR or FR. Save `a1-gone.log`. Pass when every one counts as non-playing.
 - [ ] Lane 4. Probe lane with S27's end date moved into the future in memory. Save `a1-preflip.log`. Pass when every RO to FA member resolves to the S27 row and every PF to DE member resolves to the S28 row.
 - [ ] Lane 5. Probe lane with sign-ups marked closed in memory. Save `a1-closed.log`. Pass when no member resolves to an S27 row.
-- [ ] Lane 6. Probe lane. Resolve every member with an S27-only active row and a declared "not returning" for S28. Save `a1-not-returning.log`. Pass when every one resolves to non-playing (12 members on 2026-11-23) and no member with `missing` true does.
+- [ ] Lane 6. Probe lane. Resolve every member with an S27-only active row and a declared "not returning" for S28. Save `a1-not-returning.log`. Pass when every one resolves to non-playing once S27 has ended (15 members on 2026-11-24) and no member with `missing` true does.
 - [ ] Lane 7. Operator lane. Run `/admin sync member` on the test server for a member with a league player row. Save `a1-member-row.png`. Pass when the reply is the success card and the member's roles are unchanged.
 - [ ] Lane 8. Operator lane. Run `/admin sync member` for a member with no row in any season. Save `a1-member-none.png`. Pass when the member loses league roles and gets the welcome roles.
 - [ ] Lane 9. Operator lane. Run `/admin sync nonplaying dryrun:True` on the test server. Save `a1-nonplaying-dry.png`. Pass when the run finishes and no member's roles change.
@@ -146,7 +146,7 @@ Discord has no control skill, so each lane names its driver. The drivers are a r
 - [ ] In those three functions, when `agm_franchise` is set, call `apply_agm_role_updates` so the member keeps the AGM role and the franchise role, and write the nickname with the franchise prefix. Keep the status roles the function already applies.
 - [ ] Remove the "records need to be reconciled by hand" warning in `update_league_player_discord`. An AGM with FA status is a normal off-season state.
 - [ ] Remove the "PermFA in Waiting" role in `update_draft_eligible_discord`.
-- [ ] In `_intent_to_play_flow`, after `declare_intent` succeeds, look the member up with `effective_player` and call `update_league_player_discord` with the result. A returning player gets the new row's roles. A player who declared "not returning" becomes non-playing at once, unless a rostered row in an unfinished season still holds. Fix the return annotation of `declare_intent` to `LeaguePlayer | Deleted`. A nickname that is too long must not turn the reply into an error.
+- [ ] In `_intent_to_play_flow`, after `declare_intent` succeeds, look the member up with `effective_player` and call `update_league_player_discord` with the result. A returning player gets the new row's roles. A player who declared "not returning" becomes non-playing once their older row's season has ended. Until then that row holds. Fix the return annotation of `declare_intent` to `LeaguePlayer | Deleted`. A nickname that is too long must not turn the reply into an error.
 
 **You see.**
 
@@ -621,7 +621,7 @@ The operator answered these on 2026-11-23.
 | Decision | Answer | Lands in |
 |---|---|---|
 | Which row applies when a member has two | A rostered row holds until its season's end date. Otherwise the newest row applies | A1 |
-| When a member becomes non-playing | Only after a declared "not returning", or after sign-ups close | A1, F |
+| When a member becomes non-playing | Only after a declared "not returning", or after sign-ups close, and in both cases only once their older row's season has ended | A1, F |
 | Pending-intent members while sign-ups are open | Synced from the older row | A1 |
 | What happens at sign-up close | The nightly run strips everyone without a new row. No staff step | F |
 | AGM with a non-rostered status | Keeps the franchise tag, the franchise role, and the AGM role. Status roles still apply | A2 |
@@ -645,7 +645,7 @@ The operator answered these on 2026-11-23.
 - **Eleven other callers of `next_signup_season` catch the wrong exception for that 404.** They will show an API error once sign-ups close on 2026-12-30. Filed as https://github.com/RSC-NA/rsc/issues/35. It is outside this plan's PRs.
 - **`tests/sync_fakes.py` from A2 has a fake member whose roles and nickname change when written.** B, C, and D reuse it for the rule that a second sync sends no request.
 - **The Intent to Play DM buttons and `/admin intents set` record an answer without a sync.** A2 covers `/intent declare` only. The nightly run catches the rest.
-- **A free agent in a season still being played who declares "not returning" becomes non-playing at once.** Only a rostered row holds. This matters at the next overlap and waits for the operator's ruling.
+- **A free agent in a season still being played who declared "not returning" used to become non-playing at once.** The operator ruled on 2026-11-24 that any older row holds until its season ends. A1 has that rule since head `5147b78`.
 - **B's writer takes two calls per member, one for roles and one for the nickname.** Today a name that is too long raises after the roles are written, and callers rely on that. C merges the two calls and must keep that outcome.
 - **The summary line carries the guild tag first.** It reads `[RSC 3v3] Sync summary. kind=players ...`. `elapsed_s` leaves out the wait for the confirm button.
 - **C's "You see" line holds only when no request is retried and no nickname is refused.** With a refused nickname the count of `edit` requests exceeds `changed` by one for that member.
@@ -654,3 +654,7 @@ The operator answered these on 2026-11-23.
 - **A1's guard stops an empty player read only.** A read that is short for another reason, such as the previous season's lookup returning nothing, is not detected and would expose the pending members again. The dry-run list in E and a candidate count in F's confirm step are the places to add a stronger check.
 - **The root did not run the full swarm the plan describes.** For A1, A2, and B the root read each diff and reran the gates and the offline or read-only checks. No lane has run against Discord. An Opus reviewer then read the trail and the three diffs, and its flags are the three items above plus the A2 rule change below.
 - **The root corrected A2's request rule after the operator's go and before giving A2's verdict.** The operator has not yet ruled on that change.
+- **The dispatcher strips a GM whose row is Dropped, Former, or Banned.** `update_league_player_discord` sends those statuses to the non-playing path with no GM check, so the nightly run, `/admin sync players`, and `/admin sync member` remove that GM's franchise role and tag. No production GM has such a row on 2026-11-23 (measured). D's table treats a franchise's GM as management whatever the row's status. PR 44 added `franchise_staff`, which gives the GM map in the one franchise read the syncs already make.
+- **The free agent sync has no GM rule.** If the API gives a cut GM the Free Agent status, the next sync adds the FA roles and the `FA |` tag back, against the ruling in Appendix F. Which status the API gives is not checked. D's GM rule covers it either way.
+- **`master` moved on 2026-11-24.** PR 43 and one more commit landed. The stack merges `master` once, when D is code-ready.
+- **`/tmp` was wiped on the night of 2026-11-23.** The lane logs under `/tmp/swarm-*` are gone. Evidence from 2026-11-24 on is under `.audit/evidence/` in the main checkout, which git ignores.

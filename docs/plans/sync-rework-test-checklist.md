@@ -51,6 +51,28 @@ Do not run `/admin sync nonplaying` on production after sign-ups close until the
 - [ ] **Test server.** Run one `/transactions` sign and one cut. Both still apply the roles and the nickname they did before.
 - [ ] **Test server, optional.** Set `RSC_LAB_BOT_TOKEN`, `RSC_LAB_GUILD_ID`, and `RSC_LAB_MEMBER_ID`, stop the test bot, and run `uv run python scripts/sync_lab.py fresh-to-de`. It prints the member's starting roles, final roles, and the requests it sent, and exits with 0. The lab has only run against a stand-in for Discord so far.
 
+## PR 40, sign-ups closed
+
+Run these after sign-ups close on 2026-12-30 21:59 ET, or on the test server against a league with no open sign-ups.
+
+- [ ] **Production.** Run `/signup` as a member. The reply says sign-ups are closed. It is not an API error.
+- [ ] **Production.** Run the sign-up status and intent status commands. Each reports on the current season. Neither shows an API error.
+- [ ] **Production.** Run `/admin stats intents` and `/admin stats signups`. Both report on the current season.
+- [ ] **Production.** Before running `/admin intents populate`, confirm the current season is the one you mean. After sign-ups close it falls back to the current season and then adds and removes the "Intent Missing" role.
+
+## PR 41 and PR 42, captain and GM cut
+
+- [ ] **Test server.** Set a team's captain twice in a row. The captain holds the Captain role after both.
+- [ ] **Test server.** Change the captain to another player. The old captain loses the role and the new one gains it.
+- [ ] **Test server.** Cut a GM who holds "Free Agent" or a tier FA role. The command shows no error. The GM keeps the franchise role and tag and holds no FA role.
+- [ ] **Test server.** Cut a player who is not a GM. They get "Free Agent", the tier FA role, and the `FA |` tag, as before.
+
+## PR 44, GM check in the non-playing sync
+
+- [ ] **Test server.** Run `/admin sync nonplaying` with a GM who has no player row. The GM keeps the franchise role, the League role, and the franchise tag.
+- [ ] **Test server.** Remove that GM's franchise role and tag by hand, then run the command again. Both come back.
+- [ ] **Test server.** Run it with a plain member who has no row. They lose league roles, as before.
+
 ## Later PRs
 
-The checks for C, D, and the extra fixes are added to this file as each one is built.
+The checks for C and D are added to this file as each one is built.
