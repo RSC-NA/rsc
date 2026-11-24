@@ -1,6 +1,6 @@
 # Sync rework plan
 
-Status on 2026-11-23. In progress. A1 is PR 34 and A2 is PR 36. B is PR 37. All three passed the root's checks and wait for the operator's test-server lanes. C waits for two production summary lines from B. Appendix G records what execution found.
+Status on 2026-11-24. In progress. A1 is PR 34, A2 is PR 36, and B is PR 37. The operator ruled on 2026-11-24 to build C and D now, to land nothing until the stack through D is built, and to replace the test-server lanes with the checklist in `docs/plans/sync-rework-test-checklist.md`. Appendix F records the rulings and Appendix G records what execution found.
 
 The Discord sync commands and the nightly task get three changes for league staff and members.
 They read the right season's rows, so a member who has not declared intent yet is never stripped.
@@ -85,7 +85,7 @@ Discord has no control skill, so each lane names its driver. The drivers are a r
 
 **Build.**
 
-- [ ] Add the pure function `pick_effective_row(rows, seasons, now, signups_open)` in `rsc/leagues/effective.py`. It takes one member's rows from at most two seasons and returns one row or `None`. The rule has three steps in order. A rostered row (RO, RN, IR, AR, UG) in a season whose `end_date` has not passed wins. Otherwise the newest season's row wins. Otherwise the older season's row wins while sign-ups for the newer season are open, unless the member declared "not returning". `None` means non-playing. So a member with an active older row becomes non-playing in two cases only, a declared "not returning" or closed sign-ups.
+- [ ] Add the pure function `pick_effective_row(rows, seasons, now, signups_open)` in `rsc/leagues/effective.py`. It takes one member's rows from at most two seasons and returns one row or `None`. The rule has three steps in order. A rostered row (RO, RN, IR, AR, UG) in a season whose `end_date` has not passed wins. Otherwise the newest season's row wins. Otherwise the older season's row wins while its own season has not ended. Otherwise the older season's row wins while sign-ups for the newer season are open, unless the member declared "not returning". `None` means non-playing. So a member with an active older row becomes non-playing in two cases only, and only after that row's season has ended. The cases are a declared "not returning" and closed sign-ups.
 - [ ] Add `effective_players(guild)` and `effective_player(guild, discord_id)` in `rsc/leagues/leagues.py`. They read the default season. While `next_signup_season` returns a season, they also read that season and the season numbered one below it. They treat the API's 404 for no open sign-ups as "no sign-up season". While sign-ups are open they also read `player_intents` for the sign-up season once per run. A declared "not returning" is an intent row with `missing` false and `returning` false. A row with `missing` true is no declaration.
 - [ ] Replace `paged_players(guild=guild)` with `effective_players(guild)` in the nightly task and in `/admin sync players`.
 - [ ] Replace the `players(guild, discord_id=member.id, limit=1)` lookup in `/admin sync member` with `effective_player`.
@@ -243,7 +243,7 @@ Discord has no control skill, so each lane names its driver. The drivers are a r
 
 - [ ] Root's clean verdict at the exact head SHA.
 - [ ] Rebased onto its parent after the verdict, patch-id unchanged.
-- [ ] The operator lands it, deploys, and pastes one nightly `Sync summary.` line and one `/admin sync players` line from production into Appendix A. C does not start before those two lines exist.
+- [ ] The operator lands it, deploys, and pastes one nightly `Sync summary.` line and one `/admin sync players` line from production into Appendix A. The operator ruled on 2026-11-24 that C and D are built before those lines exist. The lines still decide whether C's speedup was worth its risk.
 
 ## Send one request per changed member (C)
 
@@ -628,6 +628,14 @@ The operator answered these on 2026-11-23.
 | Leftover roles in the matrix | Remove all of them, with "Subbed Out" tied to `sub_status` | D |
 | Sync on change | Website events. No interval job. The website work is an issue on `RSC-NA/web-rsc-website` | G |
 | F | Kept, before G | F |
+| A2's request rule | One extra request is allowed on a Draft Eligible sync of a member who holds "PermFA in Waiting". Ruled 2026-11-24 | A2 |
+| A failed role sync after `/intent declare` | The member always sees the success card, and the error is logged. Ruled 2026-11-24 | A2 |
+| A member in a season still being played who declares "not returning" | Their row holds until that season's end date. Ruled 2026-11-24 | A1 |
+| When C starts | C and D are built now, without waiting for production summary lines. Ruled 2026-11-24 | C, D |
+| Landing | Nothing lands until the stack through D is built and checked. Ruled 2026-11-24 | All |
+| Live checks | The PRs land on the offline checks. The test-server lanes become a written checklist the operator can run. A sync that goes wrong is corrected by a later sync. Ruled 2026-11-24 | All |
+| Extra fixes | The GM check in `/admin sync nonplaying`, issue 35, issue 38, and issue 39 each get their own PR. Ruled 2026-11-24 | Outside the lettered PRs |
+| A cut GM | Does not become a free agent, because a GM cannot be rostered by another franchise. Ruled 2026-11-24 | Issue 39, D |
 
 ## Appendix G. Findings during execution
 
