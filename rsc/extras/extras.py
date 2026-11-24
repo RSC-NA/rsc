@@ -70,6 +70,7 @@ class ExtrasMixIn(RSCMixIn):
 
     @app_commands.command(name="8ball", description="Ask the magic 8 ball a question")
     @app_commands.guild_only
+    @app_commands.describe(question="Your question. It must end with a question mark")
     async def _magic_8ball(self, interaction: discord.Interaction, question: str):
         """Ask 8 ball a question.
 
@@ -82,6 +83,7 @@ class ExtrasMixIn(RSCMixIn):
 
     @app_commands.command(name="roll", description="Roll a random number")
     @app_commands.guild_only
+    @app_commands.describe(number="Roll a number between 1 and this number")
     async def _roll_number(self, interaction: discord.Interaction, number: int = 100):
         """Roll a random number.
 
@@ -100,6 +102,7 @@ class ExtrasMixIn(RSCMixIn):
 
     @app_commands.command(name="rps", description="Rock, Paper, Scissors")
     @app_commands.guild_only
+    @app_commands.describe(your_choice="Your throw")
     async def _rock_paper_scissors(self, interaction: discord.Interaction, your_choice: RPSOptions):
         """Play Rock Paper Scissors."""
         author = interaction.user

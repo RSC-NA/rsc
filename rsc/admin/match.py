@@ -66,6 +66,9 @@ class AdminMatchMixIn(AdminMixIn):
 
     @_matches.command(name="create", description="Create a regular season RSC match")
     @app_commands.autocomplete(home_team=TeamMixIn.teams_autocomplete, away_team=TeamMixIn.teams_autocomplete)
+    @app_commands.describe(
+        match_type="Match type", format="Match format", home_team="Home team name", away_team="Away team name", day="Match day"
+    )
     async def _matches_create_cmd(
         self,
         interaction: discord.Interaction,
@@ -162,6 +165,7 @@ class AdminMatchMixIn(AdminMixIn):
     # Matches Group Commands
     @_matches.command(name="playoff", description="Create an RSC playoff match")
     @app_commands.autocomplete(home_team=TeamMixIn.teams_autocomplete, away_team=TeamMixIn.teams_autocomplete)
+    @app_commands.describe(round="Playoff round", format="Match format", home_team="Home team name", away_team="Away team name")
     async def _matches_playoff_cmd(
         self,
         interaction: discord.Interaction,

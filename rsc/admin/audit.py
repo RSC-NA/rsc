@@ -153,6 +153,13 @@ class AdminAuditMixIn(AdminMixIn):
 
     @_stats.command(name="search", description="Search server audit log for an action")
     @app_commands.autocomplete(action=audit_action_autocomplete)
+    @app_commands.describe(
+        action="Audit log action to search for",
+        before="Only entries before this date (ISO 8601, e.g. 2025-04-20)",
+        after="Only entries after this date (ISO 8601, e.g. 2025-04-20)",
+        user="Only entries made by this member",
+        limit="Max number of entries to show (Max: 100)",
+    )
     async def _admin_audit_search_cmd(
         self,
         interaction: discord.Interaction,

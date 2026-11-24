@@ -1120,6 +1120,12 @@ class UtilsMixIn(RSCMixIn):
         description="Get all users with the specified role(s). (Max 4 roles)",
     )
     @app_commands.guild_only
+    @app_commands.describe(
+        role="Role to list the members of",
+        role2="Only list members who also have this role",
+        role3="Only list members who also have this role",
+        role4="Only list members who also have this role",
+    )
     async def _getallwithrole(
         self,
         interaction: discord.Interaction,
@@ -1220,10 +1226,10 @@ class UtilsMixIn(RSCMixIn):
                 ephemeral=True,
             )
 
-    @app_commands.command(name="bulkaddrole", description="Add a role a list of user(s) or another role")
+    @app_commands.command(name="bulkaddrole", description="Add a role to a list of user(s) or another role")
     @app_commands.describe(
         role="Discord role to add",
-        members='Space delimited discord IDs to apply role. (Example: "138778232802508801 352600418062303244") (Optional)',
+        members='Space delimited discord IDs to apply role. (Example: "138778232802508801 352600418062303244")',
         to_role="Add the role to everyone in this role. (Optional)",
     )
     @app_commands.guild_only
@@ -1289,7 +1295,7 @@ class UtilsMixIn(RSCMixIn):
             )
         await interaction.edit_original_response(embed=embed, view=None)
 
-    @app_commands.command(name="removerole", description="Remove a role to the specified user")
+    @app_commands.command(name="removerole", description="Remove a role from the specified user")
     @app_commands.describe(role="Discord role to remove", member="Player discord name")
     @app_commands.checks.has_permissions(manage_roles=True)
     @app_commands.checks.bot_has_permissions(manage_roles=True)
@@ -1333,7 +1339,7 @@ class UtilsMixIn(RSCMixIn):
                 ephemeral=True,
             )
 
-    @app_commands.command(name="bulkremoverole", description="Remove a role a list of user(s)")
+    @app_commands.command(name="bulkremoverole", description="Remove a role from a list of user(s)")
     @app_commands.describe(
         role="Discord role to remove",
         members='Space delimited discord IDs to remove role. (Example: "138778232802508801 352600418062303244")',

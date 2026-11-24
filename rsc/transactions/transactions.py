@@ -838,7 +838,7 @@ class TransactionMixIn(RSCMixIn):
     @_transactions.command(name="sign", description="Sign a player to the specified team")
     @app_commands.describe(
         player="Player to sign",
-        team="Team the player is being sign on",
+        team="Team the player is being signed to",
         notes="Transaction notes (Optional)",
         override="Admin only override",
     )
@@ -941,7 +941,7 @@ class TransactionMixIn(RSCMixIn):
     @app_commands.autocomplete(team=TeamMixIn.teams_autocomplete)
     @app_commands.describe(
         player="RSC Discord Member",
-        team="Name of team player resigning player",
+        team="Team the player is re-signing with",
         notes="Transaction notes (Optional)",
         announce="Announce to server (Default: True)",
         override="Admin only override",
@@ -1035,7 +1035,7 @@ class TransactionMixIn(RSCMixIn):
     @app_commands.describe(
         player_in="Player being subbed in on the team",
         player_out="Player being subbed out on the team",
-        notes="Substitation notes (Optional)",
+        notes="Substitution notes (Optional)",
         override="Admin only override",
     )
     async def _transactions_substitute(
@@ -1192,7 +1192,7 @@ class TransactionMixIn(RSCMixIn):
 
     @_transactions.command(
         name="announcetrade",
-        description="Announce a trade between two franchises to the transaction chanenl",
+        description="Announce a trade between two franchises to the transaction channel",
     )
     async def _transactions_announcetrade(self, interaction: discord.Interaction):
         guild = interaction.guild
@@ -1230,7 +1230,11 @@ class TransactionMixIn(RSCMixIn):
         name="trade",
         description="Process a trade between franchises",
     )
-    @app_commands.describe(override="Admin only override")
+    @app_commands.describe(
+        override="Admin only override",
+        notes="Transaction notes (Default: the trade text)",
+        announce="Announce the trade in the transactions channel",
+    )
     async def _transactions_trade_cmd(
         self,
         interaction: discord.Interaction,
@@ -1345,7 +1349,15 @@ class TransactionMixIn(RSCMixIn):
         name="captain",
         description="Promote player(s) to captain of their team",
     )
-    @app_commands.describe(player="RSC Discord Member")
+    @app_commands.describe(
+        player="RSC Discord Member",
+        player1="Another player to make captain",
+        player2="Another player to make captain",
+        player3="Another player to make captain",
+        player4="Another player to make captain",
+        player5="Another player to make captain",
+        player6="Another player to make captain",
+    )
     async def _transactions_captain(
         self,
         interaction: discord.Interaction,

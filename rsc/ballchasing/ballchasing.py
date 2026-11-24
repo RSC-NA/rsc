@@ -312,6 +312,7 @@ class BallchasingMixIn(RSCMixIn):
 
     @_ballchasing.command(name="key", description="Configure the Ballchasing API key for the server")
     @app_commands.checks.has_permissions(manage_guild=True)
+    @app_commands.describe(key="Ballchasing API key")
     async def _bc_key(self, interaction: discord.Interaction, key: str):
         guild = interaction.guild
         if not guild:
@@ -386,6 +387,7 @@ class BallchasingMixIn(RSCMixIn):
         description="Configure the ballchasing management role (Ex: @Stats Committee)",
     )
     @app_commands.checks.has_permissions(manage_guild=True)
+    @app_commands.describe(role="Role that may use override on /reportmatch")
     async def _bc_management_role(self, interaction: discord.Interaction, role: discord.Role):
         if not interaction.guild:
             return
@@ -400,6 +402,7 @@ class BallchasingMixIn(RSCMixIn):
         description="Configure the logging channel for Ballchasing commands (Ex: #stats-committee)",
     )
     @app_commands.checks.has_permissions(manage_guild=True)
+    @app_commands.describe(channel="Text channel for ballchasing logs and report failures")
     async def _bc_log_channel(self, interaction: discord.Interaction, channel: discord.TextChannel):
         if not interaction.guild:
             return
@@ -414,6 +417,7 @@ class BallchasingMixIn(RSCMixIn):
         description="Configure the score reporting category for the server",
     )
     @app_commands.checks.has_permissions(manage_guild=True)
+    @app_commands.describe(category="Category that holds the tier score reporting channels")
     async def _bc_score_category(self, interaction: discord.Interaction, category: discord.CategoryChannel):
         if not interaction.guild:
             return
@@ -495,7 +499,7 @@ class BallchasingMixIn(RSCMixIn):
         home="Home team name",
         away="Away team name",
         day="Match day (Optional)",
-        override="Admin or stats only override",
+        override="Report a match you are not on. Needs Manage Server or the ballchasing manager role",
     )
     @app_commands.guild_only
     async def _reportmatch_cmd(

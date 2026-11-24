@@ -135,6 +135,12 @@ class WelcomeMixIn(RSCMixIn):
         name="roles",
         description="Modify the roles a user receives when joining the server",
     )
+    @app_commands.describe(
+        role1="Role to give new members",
+        role2="Another role to give new members",
+        role3="Another role to give new members",
+        role4="Another role to give new members",
+    )
     async def _rsc_welcome_roles(
         self,
         interaction: discord.Interaction,

@@ -212,8 +212,9 @@ class TeamMixIn(RSCMixIn):
 
     _captains = app_commands.Group(name="captains", description="Get information on team captains", guild_only=True)
 
-    @_captains.command(name="team", description="Team to query")
+    @_captains.command(name="team", description="Display the captain of a team")
     @app_commands.autocomplete(team=teams_autocomplete)
+    @app_commands.describe(team="Team name")
     async def _captains_team(
         self,
         interaction: discord.Interaction,

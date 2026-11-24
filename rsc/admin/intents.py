@@ -133,6 +133,7 @@ class AdminIntentsMixIn(AdminMixIn):
         name="missingrole",
         description="Configure the Intent to Play missing discord role",
     )
+    @app_commands.describe(role="Role given to players with a missing intent")
     async def _intents_set_missing_role_cmd(self, interaction: discord.Interaction, role: discord.Role):
         guild = interaction.guild
         if not guild:
@@ -151,6 +152,7 @@ class AdminIntentsMixIn(AdminMixIn):
         name="missingchannel",
         description="Configure the Intent to Play missing channel",
     )
+    @app_commands.describe(channel="Channel the missing intent ping is posted in")
     async def _intents_set_missing_channel_cmd(self, interaction: discord.Interaction, channel: discord.TextChannel):
         guild = interaction.guild
         if not guild:

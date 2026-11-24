@@ -492,6 +492,7 @@ class RSC(
 
     @RSCSettingsMixIn.rsc_settings.command(name="key", description="Configure the RSC API key.")
     @bot_owner_required()
+    @app_commands.describe(key="RSC API key")
     async def _rsc_set_key(self, interaction: discord.Interaction, key: str):
         if not interaction.guild:
             return
@@ -506,6 +507,7 @@ class RSC(
 
     @RSCSettingsMixIn.rsc_settings.command(name="url", description="Configure the RSC API web address.")
     @bot_owner_required()
+    @app_commands.describe(url="Base web address of the RSC API")
     async def _rsc_set_url(self, interaction: discord.Interaction, url: str):
         if not interaction.guild:
             return
@@ -520,6 +522,7 @@ class RSC(
 
     @RSCSettingsMixIn.rsc_settings.command(name="modmailbot", description="Configure the ModMail bot players are directed to.")
     @bot_owner_required()
+    @app_commands.describe(member="The ModMail bot's Discord account")
     async def _rsc_set_modmail_bot(self, interaction: discord.Interaction, member: discord.Member | discord.User):
         if not interaction.guild:
             return
@@ -646,6 +649,7 @@ class RSC(
         description="Modify the log level of the bot (Development Feature)",
     )
     @bot_owner_required()
+    @app_commands.describe(level="Log level to set")
     async def _rsc_dev_loglevel(self, interaction: discord.Interaction, level: LogLevel):
         logging.getLogger("red.rsc").setLevel(level)
         logging.getLogger("ballchasing").setLevel(level)
@@ -664,7 +668,7 @@ class RSC(
         )
         await interaction.response.send_message(embed=embed)
 
-    @app_commands.command(name="help", description="Display a help for RSC Bot or a specific command.")
+    @app_commands.command(name="help", description="Display help for RSC Bot or a specific command.")
     @app_commands.describe(command="Display help for a specific command.")
     @app_commands.autocomplete(command=command_autocomplete)
     @app_commands.guild_only

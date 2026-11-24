@@ -36,6 +36,7 @@ class StatsMixIn(RSCMixIn):
     # App Commands
 
     @_standings_group.command(name="franchise", description="Display franchise standings for season")
+    @app_commands.describe(season="Season number (Default: current season)")
     async def _franchise_standings_cmd(self, interaction: discord.Interaction, season: int | None = None):
         guild = interaction.guild
         if not guild:
@@ -100,6 +101,7 @@ class StatsMixIn(RSCMixIn):
 
     @_standings_group.command(name="tier", description="Display tier standings for season")
     @app_commands.autocomplete(tier=TierMixIn.tier_autocomplete)
+    @app_commands.describe(tier="League tier", season="Season number (Default: current season)")
     async def _tier_standings_cmd(self, interaction: discord.Interaction, tier: str, season: int | None = None):
         guild = interaction.guild
         if not guild:
@@ -262,7 +264,11 @@ class StatsMixIn(RSCMixIn):
         return standings_page_url(site, league_id=league_id, season_id=season_id, tier=tier)
 
     @app_commands.command(name="playerstats", description="Display RSC stats for a player")
-    @app_commands.describe(player="RSC Discord Member")
+    @app_commands.describe(
+        player="RSC Discord Member",
+        season="Season number (Default: current season)",
+        postseason="Show post season stats instead of regular season stats",
+    )
     @app_commands.guild_only
     async def _player_stats_cmd(
         self,
@@ -310,6 +316,11 @@ class StatsMixIn(RSCMixIn):
     @app_commands.command(name="teamstats", description="Display RSC stats for an RSC team")
     @app_commands.autocomplete(team=TeamMixIn.teams_autocomplete)
     @app_commands.guild_only
+    @app_commands.describe(
+        team="Team name",
+        postseason="Title the card as post season. The stats shown are the same either way",
+        season="Season number (Default: current season)",
+    )
     async def _team_stats_cmd(
         self,
         interaction: discord.Interaction,

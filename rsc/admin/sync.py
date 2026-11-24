@@ -584,7 +584,7 @@ class AdminSyncMixIn(AdminMixIn):
 
     @_sync.command(
         name="transactionchannels",
-        description="Check if all franchise transaction channels. If not, create them.",
+        description="Check if all franchise transaction channels exist. If not, create them.",
     )
     @app_commands.describe(
         category="Guild category that holds all franchise transaction channels",
@@ -956,7 +956,7 @@ class AdminSyncMixIn(AdminMixIn):
 
     @_sync.command(
         name="member",
-        description="Sync an individual members from the API to discord",
+        description="Sync an individual member from the API to discord",
     )
     @app_commands.describe(member="RSC Discord member to sync")
     async def _sync_member_cmd(self, interaction: discord.Interaction, member: discord.Member):
@@ -1250,7 +1250,7 @@ class AdminSyncMixIn(AdminMixIn):
 
     @_sync.command(
         name="drafteligible",
-        description="Sync all draft eligibile players in discord",
+        description="Sync all draft eligible players in discord",
     )
     @app_commands.describe(dryrun="Do not modify any users.")
     async def _sync_drafteligible_cmd(self, interaction: discord.Interaction, dryrun: bool = False):

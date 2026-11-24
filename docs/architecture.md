@@ -104,11 +104,12 @@ The tier, franchise and team name caches are also updated as a side effect of an
 
 ## Permissions
 
-Three layers, from coarse to strict:
+Four layers, from coarse to strict:
 
 1. **`default_permissions`** on a command or group controls who *sees* it in Discord. Server admins can override this per server in Discord's Integrations settings, so it is not security.
 2. **`elevated_role_required(*positions)`** in [rsc/checks.py](../rsc/checks.py) allows members with Manage Server, or members the RSC API says hold one of the given staff positions in this league. API failures deny access.
-3. **`bot_owner_required()`** restricts to Red's bot owners. Used for settings that could break the bot or leak data, such as API credentials and the event cursor.
+3. **`configured_role_required(label, role)`** allows members with Manage Server, or members holding a role the server configured in the bot, such as the Numbers Committee role. With no role configured, only Manage Server passes.
+4. **`bot_owner_required()`** restricts to Red's bot owners. Used for settings that could break the bot or leak data, such as API credentials and the event cursor.
 
 Some features add their own role checks (for example, the ballchasing manager role, GM/AGM checks in transactions). The module pages list who can run each command.
 
@@ -171,7 +172,7 @@ Loggers are named `red.rsc.<module>` and wrapped in `GuildLogAdapter` ([rsc/logs
 | [rsc/core.py](../rsc/core.py) | The `RSC` cog: mixin list, lifecycle, web server, `/rsc` settings, `/help`, `/whatami` |
 | [rsc/abc.py](../rsc/abc.py) | `RSCMixIn` contract, `CompositeMetaClass`, `api_client()` |
 | [rsc/settings.py](../rsc/settings.py) | Holder for the `/rsc` group |
-| [rsc/checks.py](../rsc/checks.py) | `bot_owner_required`, `elevated_role_required` |
+| [rsc/checks.py](../rsc/checks.py) | `bot_owner_required`, `elevated_role_required`, `configured_role_required` |
 | [rsc/const.py](../rsc/const.py) | Role names, timeouts, URLs, role permission sets, Discord copy |
 | [rsc/enums.py](../rsc/enums.py) | Enums mirroring API values (status, staff positions, transaction types, …) |
 | [rsc/embeds.py](../rsc/embeds.py), [rsc/views.py](../rsc/views.py) | Shared embeds and views |

@@ -52,7 +52,7 @@ class AdminMembersMixIn(AdminMixIn):
         default_permissions=discord.Permissions(manage_guild=True),
     )
 
-    @_members.command(name="namehistory", description="Get an RSC discord members API name history")
+    @_members.command(name="namehistory", description="Get an RSC discord member's API name history")
     @app_commands.describe(
         member="RSC discord member",
     )
@@ -452,7 +452,7 @@ class AdminMembersMixIn(AdminMixIn):
     @_members.command(name="create", description="Create an RSC member in the API")
     @app_commands.describe(
         member="Discord member being added",
-        rsc_name="RSC player name (Defaults to members display name)",
+        rsc_name="RSC player name (Defaults to member's display name)",
     )
     async def _member_create(
         self,
@@ -586,7 +586,7 @@ class AdminMembersMixIn(AdminMixIn):
     @app_commands.describe(
         player_type="New or Former Player",
         member="Discord member being added",
-        rsc_name="RSC player name (Defaults to members display name)",
+        rsc_name="RSC player name (Defaults to member's display name)",
         tracker="Rocket league tracker link",
         platform="Preferred platform",
         override="Admin override",
@@ -773,7 +773,7 @@ class AdminMembersMixIn(AdminMixIn):
         description="Report current season league players who are no longer in the discord server",
     )
     @app_commands.describe(
-        status="Only check league players with this status. Defaults to every status except Former, Banned, and Dropped.",
+        status="Only check league players with this status. Default: all except Former, Banned and Dropped",
     )
     async def _admin_member_notinserver_cmd(self, interaction: discord.Interaction, status: Status | None = None):
         guild = interaction.guild
