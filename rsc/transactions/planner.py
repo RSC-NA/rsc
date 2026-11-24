@@ -79,13 +79,13 @@ ROSTERED = Rule(
 INACTIVE_RESERVE = replace(ROSTERED, holds=frozenset({const.LEAGUE_ROLE, const.IR_ROLE}))
 UNSIGNED_GM = Rule(
     holds=frozenset({const.LEAGUE_ROLE}),
-    leaves=frozenset({const.AGM_ROLE, const.PERM_FA_WAITING_ROLE, const.SUBBED_OUT_ROLE}),
+    leaves=frozenset({const.AGM_ROLE, const.SUBBED_OUT_ROLE}),
     seat=SeatSource.GM,
     tier=TierRoles.TIER,
 )
 NON_PLAYING_GM = Rule(
     holds=frozenset({const.LEAGUE_ROLE}),
-    leaves=frozenset({const.IR_ROLE, const.PERM_FA_WAITING_ROLE, const.SUBBED_OUT_ROLE}),
+    leaves=frozenset({const.SUBBED_OUT_ROLE}),
     seat=SeatSource.GM,
 )
 FREE_AGENT = Rule(
