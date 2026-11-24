@@ -83,6 +83,7 @@ Delete its page, remove it from `docs/modules/README.md`, and remove its rows fr
 
 ## Step 4: check
 
+- After changing commands, run `uv run python -m rsc.command_reference` to regenerate `docs/commands.md`. `tests/test_command_reference.py` fails until you do.
 - `grep -rn "<old command or key name>" docs rsc/*/README.md` returns nothing stale.
 - Every relative link you added points at a file that exists.
 - Tell the user which doc files you changed and why, in one or two lines. Don't commit unless they ask.

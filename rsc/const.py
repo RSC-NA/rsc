@@ -69,6 +69,9 @@ MATCH_CHECK_IN_CHANNEL = "match-check-in"
 # by this name at click time, so a rename here must match the class name.
 RSC_COG_NAME = "RSC"
 
+# Left out of /help and the generated command reference.
+HIDDEN_COMMANDS = ["feet"]
+
 # Animated application emoji shown on live combine and Dev League lobby cards.
 # Uploaded from rsc/resources/emoji/live.gif (scripts/make_live_emoji.py) if the
 # application doesn't have it yet.
