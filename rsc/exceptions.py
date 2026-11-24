@@ -86,6 +86,14 @@ class SignupsClosedError(ApiError, codes={ErrorCodeEnum.SIGNUPS_CLOSED}):
     """The season is not taking signups right now"""
 
 
+class NoSignupSeasonError(SignupsClosedError, NotFoundError, codes={ErrorCodeEnum.NO_SIGNUP_SEASON}):
+    """No season is taking signups right now.
+
+    The signup season lookup answers with this 404 where the signup actions answer
+    405 `signups_closed`. A caller asking "are signups open?" wants one answer for both.
+    """
+
+
 class PlayerNotInLeagueError(ApiError, codes={ErrorCodeEnum.PLAYER_NOT_IN_LEAGUE}):
     """The player is already out of the league"""
 
