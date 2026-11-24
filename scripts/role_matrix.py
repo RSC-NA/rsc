@@ -3,6 +3,7 @@
 
     uv run python scripts/role_matrix.py [--agm] [--sub-status N] [--random N] [--json out.json]
     uv run python scripts/role_matrix.py --compare before.json after.json
+    uv run python scripts/role_matrix.py --bench 1540 [--runs R] [--json out.json]
 
 Each column is one role function call: every league status, a rostered captain,
 a Draft Eligible row with no tier, a Free Agent and a Draft Eligible sync with
@@ -34,8 +35,13 @@ runs without editing this file:
     git archive <ref> rsc | tar -x -C /tmp/base
     PYTHONPATH=/tmp/base uv run python scripts/role_matrix.py --json base.json
 
-`--compare` prints final state differences and request counts separately, and
-exits 1 when any member's final roles, nickname or error differ.
+`--compare` prints final state differences and request count differences
+separately, and exits 1 when any member's final roles, nickname or error differ.
+
+`--bench N` times N status syncs that change nothing instead of printing the
+matrix. It settles N members with one sync each, then times a second sync of
+all of them, `--runs` times over, and prints the median and spread of the CPU
+seconds with the requests sent and errors raised in the timed runs.
 
 The fake's refusals are a model of Discord's rules, not a recording of them.
 """
@@ -45,7 +51,9 @@ import asyncio
 import hashlib
 import json
 import logging
+import statistics
 import sys
+import time
 from collections.abc import Awaitable, Callable, Iterable
 from dataclasses import dataclass
 from pathlib import Path
@@ -298,7 +306,7 @@ def captain(flag: bool) -> Run:
     return run
 
 
-CASES: dict[str, Run] = {
+STATUS_SYNCS: dict[str, Run] = {
     **{status.value: status_sync(status) for status in Status},
     "RO+c": status_sync(Status.ROSTERED, captain=True),
     "DE-t": status_sync(Status.DRAFT_ELIGIBLE, tier=None),
@@ -307,6 +315,9 @@ CASES: dict[str, Run] = {
     "no-LP": status_sync(None),
     "no+w": status_sync(None, welcome=True),
     "npGM": nonplaying_gm,
+}
+CASES: dict[str, Run] = {
+    **STATUS_SYNCS,
     "sign": sign,
     "cut": cut(OTHER_GM_ID),
     "cutGM": cut(MEMBER_ID),
@@ -352,6 +363,51 @@ async def measure(agm: bool, sub_status: int, random_count: int) -> dict:
         "variants": {name: {"held": list(variant.held), "nick": variant.nick} for name, variant in variants.items()},
         "results": results,
     }
+
+
+async def bench(count: int, runs: int, agm: bool, sub_status: int) -> dict:
+    setup = Setup(BETA if agm else None, sub_status)
+    guilds = {name: make_guild(VARIANTS[name]) for name in ("all", "none")}
+    labels = list(STATUS_SYNCS)
+    members = []
+    for number in range(count):
+        run = STATUS_SYNCS[labels[number % len(labels)]]
+        name = "all" if number // len(labels) % 2 else "none"
+        member = make_member(guilds[name], VARIANTS[name])
+        await requests_sent(run, guilds[name], member, setup)
+        members.append((run, guilds[name], member))
+    # Each guild served one member id to many members. With no cached member the writer reads the member's own roles.
+    for guild in guilds.values():
+        guild.get_member = MagicMock(return_value=None)
+
+    cpu_s, requests, errors = [], 0, 0
+    for _ in range(runs):
+        started = time.process_time()
+        for run, guild, member in members:
+            sent, error = await requests_sent(run, guild, member, setup)
+            requests += sent
+            errors += error is not None
+        cpu_s.append(time.process_time() - started)
+    return {
+        "roles_py": roles.__file__,
+        "agm": agm,
+        "sub_status": sub_status,
+        "syncs": count,
+        "cpu_s": cpu_s,
+        "requests": requests,
+        "errors": errors,
+    }
+
+
+def print_bench(result: dict) -> None:
+    cpu_s = result["cpu_s"]
+    print(f"rsc code      {result['roles_py']}")
+    print(f"member        {'an AGM of Beta' if result['agm'] else 'not an AGM'}")
+    print(f"sub status    {result['sub_status']}")
+    print(f"syncs         {result['syncs']} per run, each of a member an earlier sync already settled")
+    print(f"CPU seconds   median {statistics.median(cpu_s):.3f}, lowest {min(cpu_s):.3f}, highest {max(cpu_s):.3f}, over {len(cpu_s)} runs")
+    print(f"requests      {result['requests']} sent in the timed runs")
+    print(f"errors        {result['errors']} raised in the timed runs")
 
 
 def print_matrix(matrix: dict) -> None:
@@ -406,6 +462,19 @@ def state_differences(before: dict, after: dict) -> list[str]:
     return differences
 
 
+def request_differences(before: dict, after: dict) -> list[str]:
+    differences = []
+    for label, variants in after["results"].items():
+        for name, new in variants.items():
+            old = before["results"].get(label, {}).get(name)
+            if old and (old["requests"], old["repeat_requests"]) != (new["requests"], new["repeat_requests"]):
+                differences.append(
+                    f"{label}/{name} requests {old['requests']} became {new['requests']}, "
+                    f"repeat {old['repeat_requests']} became {new['repeat_requests']}"
+                )
+    return differences
+
+
 def print_comparison(before: dict, after: dict) -> bool:
     print(f"before        {before['roles_py']}")
     print(f"after         {after['roles_py']}")
@@ -417,6 +486,11 @@ def print_comparison(before: dict, after: dict) -> bool:
     print(f"Final state differences: {len(differences) or 'none'}, across {cases} cases")
     for difference in differences:
         print(f"  {difference}")
+    counts = request_differences(before, after)
+    print()
+    print(f"Request count differences: {len(counts) or 'none'}, across {cases} cases")
+    for count in counts:
+        print(f"  {count}")
 
     labels = [label for label in before["results"] if label in after["results"]]
     width = 7
@@ -440,6 +514,8 @@ def main() -> int:
     parser.add_argument("--random", type=int, default=0, metavar="N", help="Also run N members who start with random roles.")
     parser.add_argument("--json", type=Path, metavar="FILE", help="Also write the whole result to FILE.")
     parser.add_argument("--compare", type=Path, nargs=2, metavar=("BEFORE", "AFTER"), help="Compare two files written by --json.")
+    parser.add_argument("--bench", type=int, metavar="N", help="Time N status syncs that change nothing, instead of the matrix.")
+    parser.add_argument("--runs", type=int, default=5, metavar="R", help="How many times --bench times its N syncs.")
     args = parser.parse_args()
 
     if args.compare:
@@ -447,8 +523,12 @@ def main() -> int:
         return 0 if print_comparison(before, after) else 1
 
     logging.disable(logging.CRITICAL)
-    matrix = asyncio.run(measure(args.agm, args.sub_status, args.random))
-    print_matrix(matrix)
+    if args.bench:
+        matrix = asyncio.run(bench(args.bench, args.runs, args.agm, args.sub_status))
+        print_bench(matrix)
+    else:
+        matrix = asyncio.run(measure(args.agm, args.sub_status, args.random))
+        print_matrix(matrix)
     if args.json:
         args.json.write_text(json.dumps(matrix, indent=2) + "\n")
     return 0
