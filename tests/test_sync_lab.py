@@ -9,7 +9,7 @@ import pytest
 from rsc import const
 from rsc.enums import Status
 
-from .sync_fakes import DESERT_ROLE, MEMBER_ID, OCEAN_ROLE, discord_requests, forget_writes, role_names, sync_guild, sync_member
+from .sync_fakes import DESERT_ROLE, MEMBER_ID, OCEAN_ROLE, discord_requests, forget_writes, role_names, sync_guild, sync_member, sync_role
 
 SCRIPT = Path(__file__).parent.parent / "scripts" / "sync_lab.py"
 LAB_ENV = {"RSC_LAB_BOT_TOKEN": "token", "RSC_LAB_GUILD_ID": "1234", "RSC_LAB_MEMBER_ID": "5678"}
@@ -91,22 +91,23 @@ class TestScenarios:
         return await lab.sync(guild, fetch, scenario, chosen)
 
     @pytest.mark.parametrize(
-        ("name", "roles", "nick"),
+        ("name", "roles", "nick", "requests"),
         [
-            ("fresh-to-de", {const.LEAGUE_ROLE, const.DRAFT_ELIGIBLE, "Elite"}, "DE | nickm"),
-            ("de-to-rostered", {const.LEAGUE_ROLE, "Elite", DESERT_ROLE}, "LAB | nickm"),
-            ("rostered-to-fa", {const.LEAGUE_ROLE, "Elite", const.FREE_AGENT_ROLE, "EliteFA"}, "FA | nickm"),
-            ("no-change", {const.LEAGUE_ROLE, const.DRAFT_ELIGIBLE, "Elite"}, "DE | nickm"),
+            ("fresh-to-de", {const.LEAGUE_ROLE, const.DRAFT_ELIGIBLE, "Elite"}, "DE | nickm", {"edit": 1}),
+            ("de-to-rostered", {const.LEAGUE_ROLE, "Elite", DESERT_ROLE}, "LAB | nickm", {"edit": 1}),
+            ("rostered-to-fa", {const.LEAGUE_ROLE, "Elite", const.FREE_AGENT_ROLE, "EliteFA"}, "FA | nickm", {"edit": 1}),
+            ("no-change", {const.LEAGUE_ROLE, const.DRAFT_ELIGIBLE, "Elite"}, "DE | nickm", {}),
         ],
     )
-    async def test_a_scenario_ends_in_its_expected_state(self, guild, name, roles, nick):
+    async def test_a_scenario_ends_in_its_expected_state_in_at_most_one_request(self, guild, name, roles, nick, requests):
         member = sync_member(guild, held=[const.SPECTATOR_ROLE, "PremierFA"], nick="OLD | nickm")
 
         outcome = await self._play(guild, member, lab.SCENARIOS[name])
 
         assert outcome.matches
         assert (role_names(member), member.display_name) == (roles, nick)
-        assert sum(outcome.summary_requests.values()) == discord_requests(member)
+        assert outcome.summary_requests == requests
+        assert discord_requests(member) == sum(requests.values())
 
     @pytest.mark.parametrize(
         ("state", "status"),
@@ -130,10 +131,9 @@ class TestScenarios:
         assert (role_names(member), member.display_name) == (set(), "nickm")
         assert outcome.summary is None
 
-    async def test_the_owner_keeps_their_nickname_and_gets_the_roles(self, guild):
+    async def test_the_owner_keeps_their_nickname_and_gets_the_roles_in_one_request(self, guild):
         guild.owner_id = MEMBER_ID
-        member = sync_member(guild, nick="nickm")
-        member.edit.side_effect = discord.Forbidden(MagicMock(status=403, reason="Forbidden"), "Missing Permissions")
+        member = sync_member(guild, nick="nickm", nickname_refused=True)
 
         outcome = await self._play(guild, member, lab.SCENARIOS["nick-forbidden"])
 
@@ -142,6 +142,41 @@ class TestScenarios:
         assert member.display_name == "nickm"
         assert role_names(member) == {const.LEAGUE_ROLE, const.DRAFT_ELIGIBLE, "Elite"}
         assert "failed=1" in outcome.summary
+        assert outcome.summary_requests == {"edit": 1}
+
+    async def test_roles_the_lab_does_not_manage_are_reported_and_survive_the_sync(self, guild):
+        member = sync_member(guild, held=[const.GM_ROLE])
+        member.roles = [guild.default_role, *member.roles, sync_role("Server Booster", 3)]
+
+        outcome = await self._play(guild, member, lab.SCENARIOS["fresh-to-de"])
+
+        assert outcome.matches
+        assert outcome.start_other_roles == outcome.final_other_roles == {const.GM_ROLE, "Server Booster"}
+
+    async def test_a_sync_that_drops_a_role_the_lab_does_not_manage_fails_the_scenario(self, guild):
+        member = sync_member(guild, held=[const.GM_ROLE])
+        applied = member.edit.side_effect
+
+        async def drops_the_gm_role(*, roles, **fields):
+            await applied(roles=[role for role in roles if role.name != const.GM_ROLE], **fields)
+
+        member.edit.side_effect = drops_the_gm_role
+
+        outcome = await self._play(guild, member, lab.SCENARIOS["fresh-to-de"])
+
+        assert not outcome.matches
+        assert (outcome.start_other_roles, outcome.final_other_roles) == ({const.GM_ROLE}, set())
+
+    async def test_a_member_the_bot_does_not_outrank_keeps_their_nickname_and_role_and_gets_the_roles(self, guild):
+        member = sync_member(guild, nick="nickm", nickname_refused=True)
+        member.roles = [sync_role("Admin", 1000)]
+
+        outcome = await self._play(guild, member, lab.SCENARIOS["nick-outranked"])
+
+        assert outcome.matches
+        assert member.display_name == "nickm"
+        assert role_names(member) == {"Admin", const.LEAGUE_ROLE, const.DRAFT_ELIGIBLE, "Elite"}
+        assert outcome.summary_requests == {"edit": 1}
 
     async def test_nick_forbidden_is_refused_for_anyone_but_the_owner(self, guild):
         member = sync_member(guild)

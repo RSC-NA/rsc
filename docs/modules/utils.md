@@ -21,7 +21,7 @@ The rest of the package is code other modules call: the bot's single rate-limite
 |---|---|
 | Send any DM | `self._dm_helper.enqueue(...)` ([dm.py](../../rsc/utils/dm.py)). Never create a second `DMHelper`; for time-sensitive DMs pass `urgent=True`. |
 | A required league role by name | `utils.get_league_role`, `get_gm_role`, `get_agm_role`, `get_free_agent_role`, `get_permfa_role`, `get_devleague_role`, `get_muted_role`, `get_ir_role`, `get_captain_role`, `get_tier_role`, `get_tier_fa_role`, and others in [utils.py](../../rsc/utils/utils.py). Each raises `ValueError` if the role is missing. |
-| Set a player's nickname | `update_discord_name(member, name, prefix)`: builds `PREFIX \| name accolades`, raises `DiscordNameTooLong` over 32 characters, and skips the edit if nothing changed. |
+| Set a player's nickname | `update_discord_name(member, name, prefix)`: builds `PREFIX \| name accolades`, raises `DiscordNameTooLong` over 32 characters, and skips the edit if nothing changed. `discord_name_change` is the same check without the write: it returns the nickname, or `None` if nothing changed. The role sync uses it to send the nickname with the roles. |
 | Turn a display name back into an RSC name | `rsc_name_from_display_name` / `rsc_name_from_member` (strip franchise prefix and trailing accolade emoji). Treat the result as a search term, not a key. |
 | Read or rewrite accolades in a nickname | `member_accolades`, `strip_discord_accolades`, `format_discord_prefix`. |
 | Find a franchise role | `franchise_role_from_name`, `franchise_role_from_league_player`, `franchise_role_from_model`, `franchise_role_from_disord_member`. |

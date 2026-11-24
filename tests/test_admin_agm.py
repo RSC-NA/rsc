@@ -487,13 +487,15 @@ class TestAgmWithoutARosterSpot:
         if status in STATUS_ROLE:
             assert STATUS_ROLE[status] in held
 
-    async def test_adds_each_role_once(self, status):
+    async def test_lists_each_role_once_in_one_request(self, status):
         member = sync_member(sync_guild(), nick="nickm")
 
         await _sync(member, status, agm_franchise())
 
-        added = [role.name for call in member.add_roles.await_args_list for role in call.args]
-        assert sorted(added) == sorted(set(added))
+        (sent,) = member.edit.await_args_list
+        listed = [role.name for role in sent.kwargs["roles"]]
+        assert sorted(listed) == sorted(set(listed))
+        assert {const.LEAGUE_ROLE, const.AGM_ROLE, OCEAN_ROLE} <= set(listed)
 
     @pytest.mark.parametrize("held", [(), ROLE_NAMES], ids=["no roles", "every role"])
     async def test_second_sync_sends_no_requests(self, status, held):

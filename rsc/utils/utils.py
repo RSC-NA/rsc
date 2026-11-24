@@ -24,7 +24,7 @@ from rsc.embeds import (
 from rsc.enums import BulkRoleAction, DiscordPermType, DiscordPermValue, TransactionType
 from rsc.exceptions import DiscordNameTooLong
 from rsc.logs import GuildLogAdapter
-from rsc.transactions.writer import apply_member_changes
+from rsc.transactions.writer import write_nickname
 from rsc.transformers import GreedyMemberTransformer
 from rsc.types import Accolades
 from rsc.utils import filters
@@ -80,7 +80,12 @@ async def valid_emoji_name(name: str) -> bool:
     return bool(re.match("[0-9A-Za-z_]+", name))
 
 
-async def update_discord_name(member: discord.Member, name: str, prefix: str | None = None) -> None:
+async def discord_name_change(member: discord.Member, name: str, prefix: str | None = None) -> str | None:
+    """The nickname that gives a member this name and prefix, or `None` when they already show it.
+
+    The member's accolades are kept. Raises `DiscordNameTooLong` when the
+    nickname would pass Discord's limit.
+    """
     accolades = await member_accolades(member)
     final = f"{name} {accolades}".strip()
     if prefix:
@@ -94,9 +99,15 @@ async def update_discord_name(member: discord.Member, name: str, prefix: str | N
 
     if final == member.display_name:
         log.debug(f"Name is unchanged for {member.id}: {final}", guild=member.guild)
-        return
+        return None
 
-    await apply_member_changes(member, nick=final)
+    return final
+
+
+async def update_discord_name(member: discord.Member, name: str, prefix: str | None = None) -> None:
+    nick = await discord_name_change(member, name, prefix)
+    if nick is not None:
+        await write_nickname(member, nick)
 
 
 async def resize_image(img_data: bytes, height: int, width: int, imgtype: str):
