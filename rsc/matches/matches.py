@@ -55,7 +55,7 @@ class MatchMixIn(RSCMixIn):
 
     @app_commands.command(
         name="schedule",
-        description="Display your team or another teams entire schedule",
+        description="Display your team or another team's entire schedule",
     )
     @app_commands.autocomplete(team=TeamMixIn.teams_autocomplete)
     @app_commands.describe(

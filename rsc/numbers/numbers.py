@@ -7,6 +7,7 @@ from rscapi.models.paginated_player_mmr_list import PaginatedPlayerMMRList
 from rscapi.models.player_mmr import PlayerMMR
 
 from rsc.abc import RSCMixIn
+from rsc.checks import configured_role_required
 from rsc.embeds import ApiExceptionErrorEmbed, BlueEmbed, GreenEmbed, YellowEmbed
 from rsc.exceptions import RscException
 from rsc.pagination import iter_pages
@@ -25,22 +26,6 @@ class NumberMixIn(RSCMixIn):
         self.config.init_custom("Numbers", 1)
         self.config.register_custom("Numbers", **defaults_guild)
         super().__init__()
-
-    # Access Control
-    async def has_numbers_perms(self, interaction: discord.Interaction):
-        if not (interaction.guild and isinstance(interaction.user, discord.Member)):
-            return False
-
-        if interaction.user.guild_permissions.manage_guild:
-            log.debug("Member has manage guild permissions")
-            return True
-
-        role = await self._get_numbers_role(interaction.guild)
-        if role in interaction.user.roles:
-            log.debug("Member in numbers committee")
-            return True
-        log.debug("Member NOT in numbers committee")
-        return False
 
     # Top Level Group
 
@@ -74,7 +59,8 @@ class NumberMixIn(RSCMixIn):
 
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-    @_numbers.command(name="role", description="Configure the Number Committee role")
+    @_numbers.command(name="role", description="Configure the Numbers Committee role")
+    @app_commands.describe(role="Discord role for the Numbers Committee")
     @app_commands.checks.has_permissions(manage_guild=True)
     async def _set_numbers_role_cmd(self, interaction: discord.Interaction, role: discord.Role):
         guild = interaction.guild
@@ -89,8 +75,9 @@ class NumberMixIn(RSCMixIn):
         )
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-    @_numbers.command(name="peaks", description="Display player MMR peaks for a psyonix season")
-    @app_commands.describe(player="RSC Discord Member", psyonix_season="Pysonix season to display")
+    @_numbers.command(name="peaks", description="Display player MMR peaks for a Psyonix season")
+    @app_commands.describe(player="RSC Discord Member", psyonix_season="Psyonix season to display")
+    @configured_role_required("Numbers Committee", lambda cog, guild: cog._get_numbers_role(guild))
     async def _numbers_peaks_cmd(
         self,
         interaction: discord.Interaction,
@@ -99,9 +86,6 @@ class NumberMixIn(RSCMixIn):
     ):
         if not interaction.guild:
             return None
-
-        if not await self.has_numbers_perms(interaction):
-            return
 
         await interaction.response.defer(ephemeral=True)
 
@@ -146,9 +130,10 @@ class NumberMixIn(RSCMixIn):
 
     @_numbers.command(
         name="gamesplayed",
-        description="Display tracker games played for a pysonix season",
+        description="Display tracker games played for a Psyonix season",
     )
-    @app_commands.describe(player="RSC Discord Member", psyonix_season="Pysonix season to display")
+    @app_commands.describe(player="RSC Discord Member", psyonix_season="Psyonix season to display")
+    @configured_role_required("Numbers Committee", lambda cog, guild: cog._get_numbers_role(guild))
     async def _numbers_gamesplayed_cmd(
         self,
         interaction: discord.Interaction,
@@ -157,9 +142,6 @@ class NumberMixIn(RSCMixIn):
     ):
         if not interaction.guild:
             return None
-
-        if not await self.has_numbers_perms(interaction):
-            return
 
         await interaction.response.defer(ephemeral=True)
 

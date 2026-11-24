@@ -146,6 +146,7 @@ class CombineMixIn(CombineManagerMixIn, RSCMixIn):
 
     @_combines.command(name="lobbyinfo", description="Get your active combines game lobby info")
     @active_combines
+    @app_commands.describe(lobby_id="Look up this lobby instead of your active one")
     async def _combines_lobby_info_cmd(self, interaction: discord.Interaction, lobby_id: int | None = None):
         guild = interaction.guild
         if not guild:
@@ -202,7 +203,7 @@ class CombineMixIn(CombineManagerMixIn, RSCMixIn):
     @_combines.command(name="active", description="Display active combine games")
     @app_commands.autocomplete(tier=TierMixIn.tier_autocomplete)
     @app_commands.describe(
-        player="Only show games with containing discord member (Optional)",
+        player="Only show games containing this discord member (Optional)",
         tier="Only show games with average tier (Optional)",
     )
     async def _combines_active_cmd(

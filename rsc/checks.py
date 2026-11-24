@@ -1,6 +1,7 @@
 import logging
+from collections.abc import Awaitable, Callable
 from functools import wraps
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypeVar
 
 import discord
 
@@ -12,6 +13,15 @@ if TYPE_CHECKING:
     from rsc.abc import RSCMixIn
 
 log = logging.getLogger("red.rsc.checks")
+
+CogT = TypeVar("CogT")
+
+
+async def _refuse(interaction: discord.Interaction) -> None:
+    await interaction.response.send_message(
+        embed=ErrorEmbed(description="You do not have permission to run this command."),
+        ephemeral=True,
+    )
 
 
 def bot_owner_required():
@@ -71,10 +81,7 @@ def elevated_role_required(*positions: StaffPositions):
                 held = frozenset()
 
             if not (held & allowed):
-                return await interaction.response.send_message(
-                    embed=ErrorEmbed(description="You do not have permission to run this command."),
-                    ephemeral=True,
-                )
+                return await _refuse(interaction)
 
             return await f(cls, interaction, *args, **kwargs)
 
@@ -82,5 +89,34 @@ def elevated_role_required(*positions: StaffPositions):
         # wrapped command, so there is otherwise no way to tell a gated command apart.
         elevated_role_wrapper.__rsc_elevated_positions__ = frozenset(allowed)  # ty: ignore[unresolved-attribute]
         return elevated_role_wrapper
+
+    return decorator
+
+
+def configured_role_required(label: str, role: Callable[[CogT, discord.Guild], Awaitable[discord.Role | None]]):
+    """Restrict an app command to guild managers or holders of a role the guild configured.
+
+    `role` looks up the guild's configured role, or None when none is set, in which
+    case only guild managers pass. `label` names the role on the command reference page.
+    Pass `role` as a lambda when the getter is defined later in the class body.
+    """
+
+    def decorator(f):  # noqa: ANN001
+        @wraps(f)
+        async def configured_role_wrapper(cls: CogT, interaction: discord.Interaction, *args, **kwargs):
+            guild = interaction.guild
+            if not (guild and isinstance(interaction.user, discord.Member)):
+                return None
+
+            if not interaction.user.guild_permissions.manage_guild:
+                required = await role(cls, guild)
+                if not (required and required in interaction.user.roles):
+                    return await _refuse(interaction)
+
+            return await f(cls, interaction, *args, **kwargs)
+
+        # Marker so the command reference can show this gate.
+        configured_role_wrapper.__rsc_configured_role__ = label  # ty: ignore[unresolved-attribute]
+        return configured_role_wrapper
 
     return decorator

@@ -82,6 +82,7 @@ class ParamDoc:
 class Access:
     permissions: frozenset[str]
     staff_positions: frozenset[StaffPositions]
+    configured_role: str | None
     owner_only: bool
     dm_allowed: bool
 
@@ -137,14 +138,21 @@ def render(docs: Sequence[TopLevelDoc]) -> str:
 def who_can_run(access: Access) -> str:
     if access.owner_only:
         return "Bot owner only"
-    if access.staff_positions:
-        positions = ", ".join(sorted(p.full_name for p in access.staff_positions))
-        gate = f"Manage Server, or staff position: {positions}"
+    if gate := _role_gate(access):
         others = _permission_labels(access.permissions - {"manage_guild"})
         return f"{_join(others)} and either {gate}" if others else gate
     if access.permissions:
         return _join(_permission_labels(access.permissions))
     return "Anyone"
+
+
+def _role_gate(access: Access) -> str | None:
+    if access.staff_positions:
+        positions = ", ".join(sorted(p.full_name for p in access.staff_positions))
+        return f"Manage Server, or staff position: {positions}"
+    if access.configured_role:
+        return f"Manage Server, or the {access.configured_role} role"
+    return None
 
 
 def _leaves(node: AppCommand) -> Iterator[app_commands.Command[Any, ..., Any]]:
@@ -177,6 +185,7 @@ def _access(command: app_commands.Command[Any, ..., Any], root: AppCommand) -> A
     return Access(
         permissions=frozenset(permissions),
         staff_positions=frozenset(StaffPositions(v) for v in getattr(callback, "__rsc_elevated_positions__", ())),
+        configured_role=getattr(callback, "__rsc_configured_role__", None),
         owner_only=getattr(callback, "__rsc_owner_only__", False),
         dm_allowed=not (command.guild_only or root.guild_only),
     )
@@ -218,7 +227,7 @@ def _param_description(p: ParamDoc) -> str:
         parts.append(f"One of: {', '.join(p.choices)}")
     if p.autocomplete:
         parts.append("Suggestions as you type")
-    if p.default is not None:
+    if p.default is not None and "default" not in p.description.lower():
         parts.append(f"Default: {p.default}")
     parts = [part for part in parts if part]
     return " ".join([*(_sentence(part) for part in parts[:-1]), *parts[-1:]])

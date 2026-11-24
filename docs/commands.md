@@ -18,8 +18,8 @@ Server admins can change who sees a command under Server Settings > Integrations
 | [/ask](#ask) | Ask a question about RSC rules, players, teams or schedules | 1 |
 | [/assign](#assign) | Assign the current modmail to a specific group | 1 |
 | [/ballchasing](#ballchasing) | Ballchasing commands and configuration | 8 |
-| [/bulkaddrole](#bulkaddrole) | Add a role a list of user(s) or another role | 1 |
-| [/bulkremoverole](#bulkremoverole) | Remove a role a list of user(s) | 1 |
+| [/bulkaddrole](#bulkaddrole) | Add a role to a list of user(s) or another role | 1 |
+| [/bulkremoverole](#bulkremoverole) | Remove a role from a list of user(s) | 1 |
 | [/captains](#captains) | Get information on team captains | 3 |
 | [/clearallavailability](#clearallavailability) | Clear free agent availability for all tiers | 1 |
 | [/clearavailability](#clearavailability) | Clear free agent availability for a specified tier | 1 |
@@ -37,7 +37,7 @@ Server admins can change who sees a command under Server Settings > Integrations
 | [/getid](#getid) | Lookup discord member account identifiers | 1 |
 | [/getmassid](#getmassid) | Mass lookup version of /getid. | 1 |
 | [/getreactlist](#getreactlist) | Get a list of users who reacted to a message | 1 |
-| [/help](#help) | Display a help for RSC Bot or a specific command. | 1 |
+| [/help](#help) | Display help for RSC Bot or a specific command. | 1 |
 | [/intent](#intent) | Declare or check status of player intent to play | 3 |
 | [/leagueinfo](#leagueinfo) | Show league and current season information | 1 |
 | [/leagues](#leagues) | Show all RSC leagues | 1 |
@@ -50,14 +50,14 @@ Server admins can change who sees a command under Server Settings > Integrations
 | [/playerinfo](#playerinfo) | Display league information about a player | 1 |
 | [/playerstats](#playerstats) | Display RSC stats for a player | 1 |
 | [/playoffs](#playoffs) | Display the playoff hunt for a tier | 1 |
-| [/removerole](#removerole) | Remove a role to the specified user | 1 |
+| [/removerole](#removerole) | Remove a role from the specified user | 1 |
 | [/reportmatch](#reportmatch) | Report the results of your RSC match | 1 |
 | [/resolve](#resolve) | Send resolved message to a modmail thread | 1 |
 | [/roll](#roll) | Roll a random number | 1 |
 | [/roster](#roster) | Get roster for a team | 1 |
 | [/rps](#rps) | Rock, Paper, Scissors | 1 |
 | [/rsc](#rsc) | RSC API Configuration | 18 |
-| [/schedule](#schedule) | Display your team or another teams entire schedule | 1 |
+| [/schedule](#schedule) | Display your team or another team's entire schedule | 1 |
 | [/season](#season) | Display current RSC season for league | 1 |
 | [/serverinfo](#serverinfo) | Display information about the discord server | 1 |
 | [/setchannelperm](#setchannelperm) | Modify channel permissions for a role or member | 1 |
@@ -85,7 +85,7 @@ Ask the magic 8 ball a question
 
 | Option | Type | Required | Description |
 |---|---|---|---|
-| `question` | Text | Yes |  |
+| `question` | Text | Yes | Your question. It must end with a question mark |
 
 ## /accolades
 
@@ -99,7 +99,7 @@ Add a combine cup trophy
 
 | Option | Type | Required | Description |
 |---|---|---|---|
-| `player` | Member | Yes |  |
+| `player` | Member | Yes | Player who won the combine cup |
 
 ### /accolades adddevleague
 
@@ -109,7 +109,7 @@ Add a dev league championship trophy
 
 | Option | Type | Required | Description |
 |---|---|---|---|
-| `player` | Member | Yes |  |
+| `player` | Member | Yes | Player who won the dev league championship |
 
 ### /accolades addstar
 
@@ -119,7 +119,7 @@ Add a star for MVP/All-Star season
 
 | Option | Type | Required | Description |
 |---|---|---|---|
-| `player` | Member | Yes |  |
+| `player` | Member | Yes | Player who earned the star |
 
 ### /accolades addtrophy
 
@@ -129,7 +129,7 @@ Add a trophy for a championship win
 
 | Option | Type | Required | Description |
 |---|---|---|---|
-| `player` | Member | Yes |  |
+| `player` | Member | Yes | Player who won the championship |
 
 ### /accolades masstrophy
 
@@ -139,7 +139,7 @@ Add multiple trophies at once by discord IDs
 
 | Option | Type | Required | Description |
 |---|---|---|---|
-| `trophy` | Text | Yes | One of: Championship, Star, Dev League, Combine Cup |
+| `trophy` | Text | Yes | Accolade to add to every member you list. One of: Championship, Star, Dev League, Combine Cup |
 
 ## /accounts
 
@@ -202,11 +202,11 @@ Search server audit log for an action
 
 | Option | Type | Required | Description |
 |---|---|---|---|
-| `action` | Whole number | No | Suggestions as you type |
-| `before` | Text | No |  |
-| `after` | Text | No |  |
-| `user` | Member | No |  |
-| `limit` | Whole number | No | Default: 20 |
+| `action` | Whole number | No | Audit log action to search for. Suggestions as you type |
+| `before` | Text | No | Only entries before this date (ISO 8601, e.g. 2025-04-20) |
+| `after` | Text | No | Only entries after this date (ISO 8601, e.g. 2025-04-20) |
+| `user` | Member | No | Only entries made by this member |
+| `limit` | Whole number | No | Max number of entries to show (Max: 100). Default: 20 |
 
 ### /admin bulkretire
 
@@ -331,7 +331,7 @@ DM players who have not completed the activity check
 
 ### /admin inactivecheck manual
 
-Manually change a players activity check status
+Manually change a player's activity check status
 
 **Who can run it:** Manage Server
 
@@ -339,7 +339,7 @@ Manually change a players activity check status
 |---|---|---|---|
 | `player` | Member | Yes | RSC discord member |
 | `status` | Whole number | Yes | Active or Not Active. One of: NotActive, Active |
-| `override` | True/False | No | Default: False |
+| `override` | True/False | No | Admin only override. Default: False |
 
 ### /admin inactivecheck ping
 
@@ -371,7 +371,7 @@ Create a channel and ping for inactive check. (DE players only)
 
 | Option | Type | Required | Description |
 |---|---|---|---|
-| `category` | Channel | Yes |  |
+| `category` | Channel | Yes | Category to create the inactivity-check channel in |
 
 ### /admin inactivecheck stop
 
@@ -414,7 +414,7 @@ Configure the Intent to Play missing channel
 
 | Option | Type | Required | Description |
 |---|---|---|---|
-| `channel` | Channel | Yes |  |
+| `channel` | Channel | Yes | Channel the missing intent ping is posted in |
 
 ### /admin intents missingmsg
 
@@ -430,7 +430,7 @@ Configure the Intent to Play missing discord role
 
 | Option | Type | Required | Description |
 |---|---|---|---|
-| `role` | Role | Yes |  |
+| `role` | Role | Yes | Role given to players with a missing intent |
 
 ### /admin intents ping
 
@@ -482,11 +482,11 @@ Create a regular season RSC match
 
 | Option | Type | Required | Description |
 |---|---|---|---|
-| `match_type` | Text | Yes | One of: REGULAR, PRESEASON, POSTSEASON, FINALS, ANY |
-| `format` | Text | Yes | One of: GAME_SERIES, BEST_OF_THREE, BEST_OF_FIVE, BEST_OF_SEVEN |
-| `home_team` | Text | Yes | Suggestions as you type |
-| `away_team` | Text | Yes | Suggestions as you type |
-| `day` | Whole number | No | Default: 0 |
+| `match_type` | Text | Yes | Match type. One of: REGULAR, PRESEASON, POSTSEASON, FINALS, ANY |
+| `format` | Text | Yes | Match format. One of: GAME_SERIES, BEST_OF_THREE, BEST_OF_FIVE, BEST_OF_SEVEN |
+| `home_team` | Text | Yes | Home team name. Suggestions as you type |
+| `away_team` | Text | Yes | Away team name. Suggestions as you type |
+| `day` | Whole number | No | Match day. Default: 0 |
 
 ### /admin matches fix
 
@@ -509,10 +509,10 @@ Create an RSC playoff match
 
 | Option | Type | Required | Description |
 |---|---|---|---|
-| `round` | Whole number | Yes | One of: PLAYOFF, WILDCARD, QUARTERFINALS, SEMIFINALS, FINALS |
-| `format` | Text | Yes | One of: GAME_SERIES, BEST_OF_THREE, BEST_OF_FIVE, BEST_OF_SEVEN |
-| `home_team` | Text | Yes | Suggestions as you type |
-| `away_team` | Text | Yes | Suggestions as you type |
+| `round` | Whole number | Yes | Playoff round. One of: PLAYOFF, WILDCARD, QUARTERFINALS, SEMIFINALS, FINALS |
+| `format` | Text | Yes | Match format. One of: GAME_SERIES, BEST_OF_THREE, BEST_OF_FIVE, BEST_OF_SEVEN |
+| `home_team` | Text | Yes | Home team name. Suggestions as you type |
+| `away_team` | Text | Yes | Away team name. Suggestions as you type |
 
 ### /admin members changename
 
@@ -536,7 +536,7 @@ Create an RSC member in the API
 | Option | Type | Required | Description |
 |---|---|---|---|
 | `member` | Member | Yes | Discord member being added |
-| `rsc_name` | Text | No | RSC player name (Defaults to members display name) |
+| `rsc_name` | Text | No | RSC player name (Defaults to member's display name) |
 
 ### /admin members delete
 
@@ -569,12 +569,12 @@ Fetch a list of members based on specified criteria.
 | `rsc_name` | Text | No | RSC in-game player name (Do not include prefix) |
 | `discord_username` | Text | No | Player discord username without discriminator |
 | `discord_id` | Text | No | Player discord ID |
-| `limit` | Whole number | No | Number of results to return (Default: 10, Max: 64). Default: 10 |
-| `offset` | Whole number | No | Return results starting at specified offset (Default: 0). Default: 0 |
+| `limit` | Whole number | No | Number of results to return (Default: 10, Max: 64) |
+| `offset` | Whole number | No | Return results starting at specified offset (Default: 0) |
 
 ### /admin members namehistory
 
-Get an RSC discord members API name history
+Get an RSC discord member's API name history
 
 **Who can run it:** Manage Server
 
@@ -590,7 +590,7 @@ Report current season league players who are no longer in the discord server
 
 | Option | Type | Required | Description |
 |---|---|---|---|
-| `status` | Text | No | Only check league players with this status. Defaults to every status except Former, Banned, and…. One of: DRAFT_ELIGIBLE, FREE_AGENT, ROSTERED, RENEWED, IR, WAIVERS, AGMIR, FORMER, BANNED, UNSIGNED_GM, PERM_FA, PERMFA_W, WAIVER_CLAIM, WAIVER_RELEASE, DROPPED |
+| `status` | Text | No | Only check league players with this status. Default: all except Former, Banned and Dropped. One of: DRAFT_ELIGIBLE, FREE_AGENT, ROSTERED, RENEWED, IR, WAIVERS, AGMIR, FORMER, BANNED, UNSIGNED_GM, PERM_FA, PERMFA_W, WAIVER_CLAIM, WAIVER_RELEASE, DROPPED |
 
 ### /admin members patch
 
@@ -619,7 +619,7 @@ Sign a player up for the latest RSC season
 |---|---|---|---|
 | `player_type` | Text | Yes | New or Former Player. One of: NEW, FORMER |
 | `member` | Member | Yes | Discord member being added |
-| `rsc_name` | Text | No | RSC player name (Defaults to members display name) |
+| `rsc_name` | Text | No | RSC player name (Defaults to member's display name) |
 | `tracker` | Text | No | Rocket league tracker link |
 | `platform` | Text | No | Preferred platform. One of: STEAM, PLAYSTATION, XBOX, EPIC, SWITCH. Default: STEAM |
 | `override` | True/False | No | Admin override. Default: False |
@@ -711,7 +711,7 @@ Review and retire league players who are no longer in the server
 
 | Option | Type | Required | Description |
 |---|---|---|---|
-| `apply` | True/False | No | Actually retire the listed players. Defaults to a dry run that only shows them. Default: False |
+| `apply` | True/False | No | Actually retire the listed players. Defaults to a dry run that only shows them. |
 
 ### /admin settings
 
@@ -745,7 +745,7 @@ RSC sign-up statistics
 
 ### /admin sync drafteligible
 
-Sync all draft eligibile players in discord
+Sync all draft eligible players in discord
 
 **Who can run it:** Manage Server
 
@@ -771,7 +771,7 @@ Sync all free agent players in discord
 
 ### /admin sync member
 
-Sync an individual members from the API to discord
+Sync an individual member from the API to discord
 
 **Who can run it:** Manage Server
 
@@ -818,7 +818,7 @@ Check if all tier roles and channels exist. If not, create them.
 
 ### /admin sync transactionchannels
 
-Check if all franchise transaction channels. If not, create them.
+Check if all franchise transaction channels exist. If not, create them.
 
 **Who can run it:** Manage Server
 
@@ -859,7 +859,7 @@ Configure the score reporting category for the server
 
 | Option | Type | Required | Description |
 |---|---|---|---|
-| `category` | Channel | Yes |  |
+| `category` | Channel | Yes | Category that holds the tier score reporting channels |
 
 ### /ballchasing key
 
@@ -869,7 +869,7 @@ Configure the Ballchasing API key for the server
 
 | Option | Type | Required | Description |
 |---|---|---|---|
-| `key` | Text | Yes |  |
+| `key` | Text | Yes | Ballchasing API key |
 
 ### /ballchasing log
 
@@ -879,7 +879,7 @@ Configure the logging channel for Ballchasing commands (Ex: #stats-committee)
 
 | Option | Type | Required | Description |
 |---|---|---|---|
-| `channel` | Channel | Yes |  |
+| `channel` | Channel | Yes | Text channel for ballchasing logs and report failures |
 
 ### /ballchasing manager
 
@@ -889,7 +889,7 @@ Configure the ballchasing management role (Ex: @Stats Committee)
 
 | Option | Type | Required | Description |
 |---|---|---|---|
-| `role` | Role | Yes |  |
+| `role` | Role | Yes | Role that may use override on /reportmatch |
 
 ### /ballchasing ping
 
@@ -906,7 +906,7 @@ Find missing matches in ballchasing
 | Option | Type | Required | Description |
 |---|---|---|---|
 | `matchday` | Whole number | No | Match day to report (Optional: Defaults to current match day) |
-| `matchtype` | Text | No | Match type to find. (Default: Regular Season). One of: REGULAR, PRESEASON, POSTSEASON, FINALS, ANY. Default: REGULAR |
+| `matchtype` | Text | No | Match type to find. (Default: Regular Season). One of: REGULAR, PRESEASON, POSTSEASON, FINALS, ANY |
 
 ### /ballchasing settings
 
@@ -926,19 +926,19 @@ Configure the top level ballchasing group for RSC
 
 ## /bulkaddrole
 
-Add a role a list of user(s) or another role
+Add a role to a list of user(s) or another role
 
 **Who can run it:** Manage Roles
 
 | Option | Type | Required | Description |
 |---|---|---|---|
 | `role` | Role | Yes | Discord role to add |
-| `members` | Text | No | Space delimited discord IDs to apply role. (Example: "138778232802508801 352600418062303244")… |
+| `members` | Text | No | Space delimited discord IDs to apply role. (Example: "138778232802508801 352600418062303244") |
 | `to_role` | Role | No | Add the role to everyone in this role. (Optional) |
 
 ## /bulkremoverole
 
-Remove a role a list of user(s)
+Remove a role from a list of user(s)
 
 **Who can run it:** Manage Roles
 
@@ -963,13 +963,13 @@ Display captains of all teams in a franchise
 
 ### /captains team
 
-Team to query
+Display the captain of a team
 
 **Who can run it:** Anyone
 
 | Option | Type | Required | Description |
 |---|---|---|---|
-| `team` | Text | Yes | Suggestions as you type |
+| `team` | Text | Yes | Team name. Suggestions as you type |
 
 ### /captains tier
 
@@ -1072,7 +1072,7 @@ Display active combine games
 
 | Option | Type | Required | Description |
 |---|---|---|---|
-| `player` | Member | No | Only show games with containing discord member (Optional) |
+| `player` | Member | No | Only show games containing this discord member (Optional) |
 | `tier` | Text | No | Only show games with average tier (Optional). Suggestions as you type |
 
 ### /combines checkin
@@ -1095,7 +1095,7 @@ Get your active combines game lobby info
 
 | Option | Type | Required | Description |
 |---|---|---|---|
-| `lobby_id` | Whole number | No |  |
+| `lobby_id` | Whole number | No | Look up this lobby instead of your active one |
 
 ## /dates
 
@@ -1205,7 +1205,7 @@ Display draft eligible players
 |---|---|---|---|
 | `tier` | Text | Yes | Tier to search. Suggestions as you type |
 | `season` | Whole number | No | RSC Season (Default: current) |
-| `limit` | Whole number | No | Max number of results to display (Default: 50). Default: 50 |
+| `limit` | Whole number | No | Max number of results to display (Default: 50) |
 
 ## /franchises
 
@@ -1257,10 +1257,10 @@ Get all users with the specified role(s). (Max 4 roles)
 
 | Option | Type | Required | Description |
 |---|---|---|---|
-| `role` | Role | Yes |  |
-| `role2` | Role | No |  |
-| `role3` | Role | No |  |
-| `role4` | Role | No |  |
+| `role` | Role | Yes | Role to list the members of |
+| `role2` | Role | No | Only list members who also have this role |
+| `role3` | Role | No | Only list members who also have this role |
+| `role4` | Role | No | Only list members who also have this role |
 
 ## /getid
 
@@ -1293,11 +1293,11 @@ Get a list of users who reacted to a message
 | `channel` | Channel | Yes | Channel containing the message |
 | `message_id` | Text | Yes | The discord message ID to fetch reacts from |
 | `filter` | Text | No | Only list users who reacted with this emoji |
-| `by_tier` | True/False | No | Group users by their tier role (Default: False). Default: False |
+| `by_tier` | True/False | No | Group users by their tier role (Default: False) |
 
 ## /help
 
-Display a help for RSC Bot or a specific command.
+Display help for RSC Bot or a specific command.
 
 **Who can run it:** Anyone
 
@@ -1569,7 +1569,7 @@ Issue a strike to a player
 |---|---|---|---|
 | `member` | Member | Yes | Discord member to strike |
 | `rule` | Text | Yes | Strike rule # |
-| `action` | Text | No | Perform a optional moderator action afterwards (Ex: Mute). One of: MUTE, KICK, BAN |
+| `action` | Text | No | Perform an optional moderator action afterwards (Ex: Mute). One of: MUTE, KICK, BAN |
 | `days` | Whole number | No | Number of days. Default: 0 |
 | `hours` | Whole number | No | Number of hours. Default: 0 |
 | `minutes` | Whole number | No | Number of minutes. Default: 0 |
@@ -1580,35 +1580,35 @@ Configuration and commands for Numbers Committee
 
 ### /numbers gamesplayed
 
-Display tracker games played for a pysonix season
+Display tracker games played for a Psyonix season
 
-**Who can run it:** Anyone
+**Who can run it:** Manage Server, or the Numbers Committee role
 
 | Option | Type | Required | Description |
 |---|---|---|---|
 | `player` | Member | Yes | RSC Discord Member |
-| `psyonix_season` | Whole number | Yes | Pysonix season to display |
+| `psyonix_season` | Whole number | Yes | Psyonix season to display |
 
 ### /numbers peaks
 
-Display player MMR peaks for a psyonix season
+Display player MMR peaks for a Psyonix season
 
-**Who can run it:** Anyone
+**Who can run it:** Manage Server, or the Numbers Committee role
 
 | Option | Type | Required | Description |
 |---|---|---|---|
 | `player` | Member | Yes | RSC Discord Member |
-| `psyonix_season` | Whole number | No | Pysonix season to display |
+| `psyonix_season` | Whole number | No | Psyonix season to display |
 
 ### /numbers role
 
-Configure the Number Committee role
+Configure the Numbers Committee role
 
 **Who can run it:** Manage Server
 
 | Option | Type | Required | Description |
 |---|---|---|---|
-| `role` | Role | Yes |  |
+| `role` | Role | Yes | Discord role for the Numbers Committee |
 
 ### /numbers settings
 
@@ -1641,8 +1641,8 @@ Display RSC stats for a player
 | Option | Type | Required | Description |
 |---|---|---|---|
 | `player` | Member | No | RSC Discord Member |
-| `season` | Whole number | No |  |
-| `postseason` | True/False | No | Default: False |
+| `season` | Whole number | No | Season number (Default: current season) |
+| `postseason` | True/False | No | Show post season stats instead of regular season stats. Default: False |
 
 ## /playoffs
 
@@ -1658,7 +1658,7 @@ Display the playoff hunt for a tier
 
 ## /removerole
 
-Remove a role to the specified user
+Remove a role from the specified user
 
 **Who can run it:** Manage Roles
 
@@ -1678,7 +1678,7 @@ Report the results of your RSC match
 | `home` | Text | Yes | Home team name. Suggestions as you type |
 | `away` | Text | Yes | Away team name. Suggestions as you type |
 | `day` | Whole number | No | Match day (Optional) |
-| `override` | True/False | No | Admin or stats only override. Default: False |
+| `override` | True/False | No | Report a match you are not on. Needs Manage Server or the ballchasing manager role. Default: False |
 
 ## /resolve
 
@@ -1694,7 +1694,7 @@ Roll a random number
 
 | Option | Type | Required | Description |
 |---|---|---|---|
-| `number` | Whole number | No | Default: 100 |
+| `number` | Whole number | No | Roll a number between 1 and this number. Default: 100 |
 
 ## /roster
 
@@ -1714,7 +1714,7 @@ Rock, Paper, Scissors
 
 | Option | Type | Required | Description |
 |---|---|---|---|
-| `your_choice` | Text | Yes | One of: rock, paper, scissors |
+| `your_choice` | Text | Yes | Your throw. One of: rock, paper, scissors |
 
 ## /rsc
 
@@ -1805,7 +1805,7 @@ Configure the RSC API key.
 
 | Option | Type | Required | Description |
 |---|---|---|---|
-| `key` | Text | Yes |  |
+| `key` | Text | Yes | RSC API key |
 
 ### /rsc league
 
@@ -1821,7 +1821,7 @@ Modify the log level of the bot (Development Feature)
 
 | Option | Type | Required | Description |
 |---|---|---|---|
-| `level` | Text | Yes | One of: CRITICAL, ERROR, WARNING, INFO, DEBUG |
+| `level` | Text | Yes | Log level to set. One of: CRITICAL, ERROR, WARNING, INFO, DEBUG |
 
 ### /rsc modmailbot
 
@@ -1831,7 +1831,7 @@ Configure the ModMail bot players are directed to.
 
 | Option | Type | Required | Description |
 |---|---|---|---|
-| `member` | Member | Yes |  |
+| `member` | Member | Yes | The ModMail bot's Discord account |
 
 ### /rsc settings
 
@@ -1863,18 +1863,18 @@ Configure the RSC API web address.
 
 | Option | Type | Required | Description |
 |---|---|---|---|
-| `url` | Text | Yes |  |
+| `url` | Text | Yes | Base web address of the RSC API |
 
 ## /schedule
 
-Display your team or another teams entire schedule
+Display your team or another team's entire schedule
 
 **Who can run it:** Anyone
 
 | Option | Type | Required | Description |
 |---|---|---|---|
 | `team` | Text | No | Get the schedule for a specific team (Optional). Suggestions as you type |
-| `preseason` | True/False | No | Include preseason matches (Default: False). Default: False |
+| `preseason` | True/False | No | Include preseason matches (Default: False) |
 
 ## /season
 
@@ -1935,7 +1935,7 @@ Display franchise standings for season
 
 | Option | Type | Required | Description |
 |---|---|---|---|
-| `season` | Whole number | No |  |
+| `season` | Whole number | No | Season number (Default: current season) |
 
 ### /standings tier
 
@@ -1945,8 +1945,8 @@ Display tier standings for season
 
 | Option | Type | Required | Description |
 |---|---|---|---|
-| `tier` | Text | Yes | Suggestions as you type |
-| `season` | Whole number | No |  |
+| `tier` | Text | Yes | League tier. Suggestions as you type |
+| `season` | Whole number | No | Season number (Default: current season) |
 
 ## /teams
 
@@ -1980,9 +1980,9 @@ Display RSC stats for an RSC team
 
 | Option | Type | Required | Description |
 |---|---|---|---|
-| `team` | Text | Yes | Suggestions as you type |
-| `postseason` | True/False | No | Default: False |
-| `season` | Whole number | No |  |
+| `team` | Text | Yes | Team name. Suggestions as you type |
+| `postseason` | True/False | No | Title the card as post season. The stats shown are the same either way. Default: False |
+| `season` | Whole number | No | Season number (Default: current season) |
 
 ## /thread
 
@@ -2085,7 +2085,7 @@ Delete a tracker (Must have zero MMR pulls)
 
 ### /trackers link
 
-Link a tracker from player
+Link a tracker to a player
 
 **Who can run it:** Manage Server, or staff position: Admin, Numbers, Numbers Head
 
@@ -2124,8 +2124,8 @@ Display number of outdated RSC tracker links
 
 | Option | Type | Required | Description |
 |---|---|---|---|
-| `status` | Text | No | Tracker status to query (Default: Pulled). One of: NEW, STALE, PULLED, FAILED, MISSING, REPULL, INVALID. Default: PULLED |
-| `days` | Whole number | No | Number of days since last update (Default: 90). Default: 90 |
+| `status` | Text | No | Tracker status to query (Default: Pulled). One of: NEW, STALE, PULLED, FAILED, MISSING, REPULL, INVALID |
+| `days` | Whole number | No | Number of days since last update (Default: 90) |
 
 ### /trackers recent
 
@@ -2135,7 +2135,7 @@ Show most recent RL tracker pulls
 
 | Option | Type | Required | Description |
 |---|---|---|---|
-| `status` | Text | No | Tracker status to query (Default: Pulled). One of: NEW, STALE, PULLED, FAILED, MISSING, REPULL, INVALID. Default: PULLED |
+| `status` | Text | No | Tracker status to query (Default: Pulled). One of: NEW, STALE, PULLED, FAILED, MISSING, REPULL, INVALID |
 
 ### /trackers stats
 
@@ -2166,7 +2166,7 @@ Perform a generic announcement to the transactions channel.
 
 ### /transactions announcetrade
 
-Announce a trade between two franchises to the transaction chanenl
+Announce a trade between two franchises to the transaction channel
 
 **Who can run it:** Manage Roles
 
@@ -2179,12 +2179,12 @@ Promote player(s) to captain of their team
 | Option | Type | Required | Description |
 |---|---|---|---|
 | `player` | Member | Yes | RSC Discord Member |
-| `player1` | Member | No |  |
-| `player2` | Member | No |  |
-| `player3` | Member | No |  |
-| `player4` | Member | No |  |
-| `player5` | Member | No |  |
-| `player6` | Member | No |  |
+| `player1` | Member | No | Another player to make captain |
+| `player2` | Member | No | Another player to make captain |
+| `player3` | Member | No | Another player to make captain |
+| `player4` | Member | No | Another player to make captain |
+| `player5` | Member | No | Another player to make captain |
+| `player6` | Member | No | Another player to make captain |
 
 ### /transactions cut
 
@@ -2196,7 +2196,7 @@ Release a player from their team
 |---|---|---|---|
 | `player` | Member | Yes | Player to cut |
 | `notes` | Text | No | Transaction notes (Optional) |
-| `announce` | True/False | No | Announce to server (Default: True). Default: True |
+| `announce` | True/False | No | Announce to server (Default: True) |
 | `override` | True/False | No | Admin only override. Default: False |
 
 ### /transactions cutmsg
@@ -2217,7 +2217,7 @@ Process a draft pick and announce it
 | `team` | Text | Yes | Team name. Suggestions as you type |
 | `round` | Whole number | Yes | Round player was drafted in |
 | `pick` | Whole number | Yes | Pick number |
-| `override` | True/False | No | Admin only override (Default: False). Default: False |
+| `override` | True/False | No | Admin only override (Default: False) |
 
 ### /transactions expire
 
@@ -2247,7 +2247,7 @@ Fetch transaction history
 | `executor` | Member | No | Transaction Executor (Optional) |
 | `season` | Whole number | No | RSC Season Number. Example: "19" (Optional) |
 | `type` | Text | No | Transaction Type (Optional). One of: NONE, CUT, PICKUP, TRADE, PLAYER_TRADE, SUBSTITUTION, TEMP_FA, PROMOTION, RELEGATION, RESIGN, INACTIVE_RESERVE, RETIRE, WAIVER_RELEASE, AGM_IR, IR_RETURN, IR_CUT, DRAFT, PATCH, INTENT_TO_PLAY, SIGN_UP, PERMANENT_FA_SIGN_UP |
-| `limit` | Whole number | No | Max number of transactions to display (Default: 10). Default: 10 |
+| `limit` | Whole number | No | Max number of transactions to display (Default: 10) |
 
 ### /transactions ir
 
@@ -2260,7 +2260,7 @@ Modify inactive reserve status of a player
 | `action` | Whole number | Yes | Inactive Reserve Action. One of: MOVE, RETURN |
 | `player` | Member | Yes | RSC Discord Member |
 | `notes` | Text | No | Transaction notes (Optional) |
-| `announce` | True/False | No | Announce to transactions channel (Default: True). Default: True |
+| `announce` | True/False | No | Announce to transactions channel (Default: True) |
 | `override` | True/False | No | Admin only override. Default: False |
 
 ### /transactions leaderboard
@@ -2273,7 +2273,7 @@ Display transaction committee leaderboard
 |---|---|---|---|
 | `season` | Whole number | No | RSC Season Number. Example: "23" (Default: Current Season) |
 | `transaction_type` | Text | No | Transaction Type (Optional). One of: NONE, CUT, PICKUP, TRADE, PLAYER_TRADE, SUBSTITUTION, TEMP_FA, PROMOTION, RELEGATION, RESIGN, INACTIVE_RESERVE, RETIRE, WAIVER_RELEASE, AGM_IR, IR_RETURN, IR_CUT, DRAFT, PATCH, INTENT_TO_PLAY, SIGN_UP, PERMANENT_FA_SIGN_UP |
-| `no_draft` | True/False | No | Exclude draft transactions (Default: False). Default: False |
+| `no_draft` | True/False | No | Exclude draft transactions (Default: False) |
 
 ### /transactions logchannel
 
@@ -2312,9 +2312,9 @@ Re-sign a player to their team.
 | Option | Type | Required | Description |
 |---|---|---|---|
 | `player` | Member | Yes | RSC Discord Member |
-| `team` | Text | Yes | Name of team player resigning player. Suggestions as you type |
+| `team` | Text | Yes | Team the player is re-signing with. Suggestions as you type |
 | `notes` | Text | No | Transaction notes (Optional) |
-| `announce` | True/False | No | Announce to server (Default: True). Default: True |
+| `announce` | True/False | No | Announce to server (Default: True) |
 | `override` | True/False | No | Admin only override. Default: False |
 
 ### /transactions retire
@@ -2327,8 +2327,8 @@ Retire a player from the league
 |---|---|---|---|
 | `player` | Member | Yes | RSC discord member to retire |
 | `notes` | Text | No | Transaction notes (Optional) |
-| `override` | True/False | No | Admin only override (Default: False). Default: False |
-| `announce` | True/False | No | Announce to transactions channel (Default: True). Default: True |
+| `override` | True/False | No | Admin only override (Default: False) |
+| `announce` | True/False | No | Announce to transactions channel (Default: True) |
 
 ### /transactions role
 
@@ -2355,7 +2355,7 @@ Sign a player to the specified team
 | Option | Type | Required | Description |
 |---|---|---|---|
 | `player` | Member | Yes | Player to sign |
-| `team` | Text | Yes | Team the player is being sign on. Suggestions as you type |
+| `team` | Text | Yes | Team the player is being signed to. Suggestions as you type |
 | `notes` | Text | No | Transaction notes (Optional) |
 | `override` | True/False | No | Admin only override. Default: False |
 
@@ -2369,7 +2369,7 @@ Substitute a player on a team
 |---|---|---|---|
 | `player_in` | Member | Yes | Player being subbed in on the team |
 | `player_out` | Member | Yes | Player being subbed out on the team |
-| `notes` | Text | No | Substitation notes (Optional) |
+| `notes` | Text | No | Substitution notes (Optional) |
 | `override` | True/False | No | Admin only override. Default: False |
 
 ### /transactions sublist
@@ -2441,9 +2441,9 @@ Process a trade between franchises
 
 | Option | Type | Required | Description |
 |---|---|---|---|
-| `notes` | Text | No |  |
+| `notes` | Text | No | Transaction notes (Default: the trade text) |
 | `override` | True/False | No | Admin only override. Default: False |
-| `announce` | True/False | No | Default: True |
+| `announce` | True/False | No | Announce the trade in the transactions channel. Default: True |
 
 ### /transactions transactionchannel
 
@@ -2513,10 +2513,10 @@ Modify the roles a user receives when joining the server
 
 | Option | Type | Required | Description |
 |---|---|---|---|
-| `role1` | Role | Yes |  |
-| `role2` | Role | No |  |
-| `role3` | Role | No |  |
-| `role4` | Role | No |  |
+| `role1` | Role | Yes | Role to give new members |
+| `role2` | Role | No | Another role to give new members |
+| `role3` | Role | No | Another role to give new members |
+| `role4` | Role | No | Another role to give new members |
 
 ### /welcome settings
 

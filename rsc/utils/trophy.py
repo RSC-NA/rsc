@@ -34,6 +34,7 @@ class TrophyMixIn(RSCMixIn):
     # Settings
 
     @_accolades.command(name="addtrophy", description="Add a trophy for a championship win")
+    @app_commands.describe(player="Player who won the championship")
     async def _accolades_add_trophy_cmd(self, interaction: discord.Interaction, player: discord.Member):
         guild = interaction.guild
         if not guild:
@@ -51,6 +52,7 @@ class TrophyMixIn(RSCMixIn):
         return await interaction.response.send_message(f"Added a trophy for {player.mention}.", ephemeral=True)
 
     @_accolades.command(name="adddevleague", description="Add a dev league championship trophy")
+    @app_commands.describe(player="Player who won the dev league championship")
     async def _accolades_add_dev_league_cmd(self, interaction: discord.Interaction, player: discord.Member):
         guild = interaction.guild
         if not guild:
@@ -69,6 +71,7 @@ class TrophyMixIn(RSCMixIn):
         return await interaction.response.send_message(f"Added dev league trophy for {player.mention}.", ephemeral=True)
 
     @_accolades.command(name="addstar", description="Add a star for MVP/All-Star season")
+    @app_commands.describe(player="Player who earned the star")
     async def _accolades_add_star_cmd(self, interaction: discord.Interaction, player: discord.Member):
         guild = interaction.guild
         if not guild:
@@ -87,6 +90,7 @@ class TrophyMixIn(RSCMixIn):
         return await interaction.response.send_message(f"Added dev league trophy for {player.mention}.", ephemeral=True)
 
     @_accolades.command(name="addcombinecup", description="Add a combine cup trophy")
+    @app_commands.describe(player="Player who won the combine cup")
     async def _accolades_add_combine_cup_cmd(self, interaction: discord.Interaction, player: discord.Member):
         guild = interaction.guild
         if not guild:
@@ -113,6 +117,7 @@ class TrophyMixIn(RSCMixIn):
             app_commands.Choice(name="Combine Cup", value=const.COMBINE_CUP_EMOJI),
         ]
     )
+    @app_commands.describe(trophy="Accolade to add to every member you list")
     async def _accolades_mass_trophy_cmd(self, interaction: discord.Interaction, trophy: str):
         guild = interaction.guild
         if not guild:

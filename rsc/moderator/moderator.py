@@ -77,7 +77,7 @@ class ModeratorMixIn(RSCMixIn):
     @app_commands.describe(
         member="Discord member to strike",
         rule="Strike rule #",
-        action="Perform a optional moderator action afterwards (Ex: Mute)",
+        action="Perform an optional moderator action afterwards (Ex: Mute)",
         days="Number of days",
         hours="Number of hours",
         minutes="Number of minutes",

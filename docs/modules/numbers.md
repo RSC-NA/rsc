@@ -40,15 +40,14 @@ None.
 
 ## How it works
 
-- [numbers.py](../../rsc/numbers/numbers.py): `NumberMixIn`, the commands, `has_numbers_perms()`, the MMR helpers and Config.
+- [numbers.py](../../rsc/numbers/numbers.py): `NumberMixIn`, the commands, the MMR helpers and Config.
 
 `mmr_pulls()` calls `NumbersApi.numbers_mmr_list` and pages through every result. It accepts filters for pull date, Discord member, RSC ID range and Psyonix season, though the commands only use member and season. `calculate_mmr_peaks()` takes the maximum `*_season_peak` per playlist. `filter_no_games_played_mmr_pulls()` drops pulls with no games in any playlist and pulls whose three games-played counts match one already kept.
 
-`has_numbers_perms()` passes members with Manage Server or the configured role. It is a separate check from the API staff positions used by [trackers](./trackers.md), so the Numbers role here does not need to match the API's Numbers position.
+`peaks` and `gamesplayed` are gated by `configured_role_required` from [rsc/checks.py](../../rsc/checks.py), which passes members with Manage Server or the configured role and tells everyone else they do not have permission. It is a separate check from the API staff positions used by [trackers](./trackers.md), so the Numbers role here does not need to match the API's Numbers position.
 
 ## Gotchas
 
-- A member without permission who runs `peaks` or `gamesplayed` gets no reply at all; Discord shows "The application did not respond".
 - If the API call fails, the command posts the error and then errors out itself, so a second failure appears in the bot log.
 - `gamesplayed` with no pulls for the season sends empty columns, which Discord may reject.
 - The module logs under `red.rsc.transactions`, not `red.rsc.numbers`.

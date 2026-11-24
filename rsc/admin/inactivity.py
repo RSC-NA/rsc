@@ -77,6 +77,7 @@ class AdminInactivityMixIn(AdminMixIn):
         name="start",
         description="Create a channel and ping for inactive check. (DE players only)",
     )
+    @app_commands.describe(category="Category to create the inactivity-check channel in")
     async def _admin_inactive_check_start_cmd(self, interaction: discord.Interaction, category: discord.CategoryChannel):
         guild = interaction.guild
         if not guild:
@@ -209,8 +210,8 @@ class AdminInactivityMixIn(AdminMixIn):
             ephemeral=True,
         )
 
-    @_inactive.command(name="manual", description="Manually change a players activity check status")
-    @app_commands.describe(player="RSC discord member", status="Active or Not Active")
+    @_inactive.command(name="manual", description="Manually change a player's activity check status")
+    @app_commands.describe(player="RSC discord member", status="Active or Not Active", override="Admin only override")
     async def _admin_inactive_check_manual_cmd(
         self,
         interaction: discord.Interaction,

@@ -3,13 +3,14 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import discord
 import pytest
 
-from rsc.checks import elevated_role_required
+from rsc.checks import configured_role_required, elevated_role_required
 from rsc.enums import StaffPositions
 from rsc.exceptions import RscException
 from rsc.members.members import ELEVATED_ROLE_TTL, MemberMixIn
+from rsc.numbers.numbers import NumberMixIn
 from rsc.trackers.trackers import TrackerMixIn
 
-from .utils import api_error, api_exception, subcommands
+from .utils import api_error, api_exception, command_callback, subcommands
 
 TRACKER_POSITIONS = (
     StaffPositions.ADMIN,
@@ -31,9 +32,10 @@ def _create_mixin(**attrs):
     return m
 
 
-def _mock_interaction(guild, *, manage_guild: bool, user_id: int = 1234):
+def _mock_interaction(guild, *, manage_guild: bool, user_id: int = 1234, roles=()):
     user = MagicMock(spec=discord.Member)
     user.id = user_id
+    user.roles = list(roles)
     user.guild_permissions = MagicMock()
     user.guild_permissions.manage_guild = manage_guild
 
@@ -163,6 +165,82 @@ class TestElevatedRoleRequired:
 
         assert await cmd(mixin, interaction) is None
         assert not called["hit"]
+
+
+def _role_guarded(configured: discord.Role | None):
+    """A command body behind the configured role check, plus a flag recording invocation."""
+    called = {"hit": False}
+
+    @configured_role_required("Numbers Committee", AsyncMock(return_value=configured))
+    async def cmd(cls, interaction):
+        called["hit"] = True
+        return "ran"
+
+    return cmd, called
+
+
+def _assert_refused(interaction):
+    interaction.response.send_message.assert_awaited_once()
+    kwargs = interaction.response.send_message.await_args.kwargs
+    assert kwargs["ephemeral"] is True
+    assert kwargs["embed"].description == "You do not have permission to run this command."
+
+
+class TestConfiguredRoleRequired:
+    async def test_manage_guild_passes_without_the_role(self, mock_guild):
+        cmd, called = _role_guarded(MagicMock(spec=discord.Role))
+        interaction = _mock_interaction(mock_guild, manage_guild=True)
+
+        assert await cmd(object(), interaction) == "ran"
+        assert called["hit"]
+
+    async def test_role_holder_passes(self, mock_guild):
+        committee = MagicMock(spec=discord.Role)
+        cmd, called = _role_guarded(committee)
+        interaction = _mock_interaction(mock_guild, manage_guild=False, roles=[committee])
+
+        assert await cmd(object(), interaction) == "ran"
+        assert called["hit"]
+        interaction.response.send_message.assert_not_awaited()
+
+    async def test_others_are_refused(self, mock_guild):
+        cmd, called = _role_guarded(MagicMock(spec=discord.Role))
+        interaction = _mock_interaction(mock_guild, manage_guild=False, roles=[MagicMock(spec=discord.Role)])
+
+        await cmd(object(), interaction)
+
+        assert not called["hit"]
+        _assert_refused(interaction)
+
+    async def test_no_role_configured_refuses_non_managers(self, mock_guild):
+        cmd, called = _role_guarded(None)
+        interaction = _mock_interaction(mock_guild, manage_guild=False)
+
+        await cmd(object(), interaction)
+
+        assert not called["hit"]
+        _assert_refused(interaction)
+
+
+class TestNumbersCommandsGated:
+    @pytest.mark.parametrize(("name", "kwargs"), [("peaks", {}), ("gamesplayed", {"psyonix_season": 30})])
+    async def test_non_committee_member_gets_an_answer(self, mock_guild, name, kwargs):
+        """Members outside the committee used to get no reply at all."""
+        saved = NumberMixIn.__abstractmethods__
+        NumberMixIn.__abstractmethods__ = frozenset()
+        try:
+            mixin = object.__new__(NumberMixIn)
+        finally:
+            NumberMixIn.__abstractmethods__ = saved
+        mixin._get_numbers_role = AsyncMock(return_value=MagicMock(spec=discord.Role))
+        mixin.mmr_pulls = AsyncMock(return_value=[])
+        interaction = _mock_interaction(mock_guild, manage_guild=False)
+
+        command = subcommands(NumberMixIn._numbers)[name]
+        await command_callback(command)(mixin, interaction, player=MagicMock(spec=discord.Member), **kwargs)
+
+        _assert_refused(interaction)
+        mixin.mmr_pulls.assert_not_awaited()
 
 
 class TestElevatedPositionsCache:

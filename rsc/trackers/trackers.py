@@ -111,7 +111,7 @@ class TrackerMixIn(RSCMixIn):
             )
         await interaction.followup.send(embed=embed, ephemeral=False)
 
-    @_trackers.command(name="link", description="Link a tracker from player")
+    @_trackers.command(name="link", description="Link a tracker to a player")
     @app_commands.describe(tracker_id="Tracker API ID", player="RSC Discord Member")
     @elevated_role_required(*TRACKER_POSITIONS)
     async def _trackers_link_cmd(self, interaction: discord.Interaction, tracker_id: int, player: discord.Member):
