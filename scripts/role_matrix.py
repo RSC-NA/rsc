@@ -61,7 +61,6 @@ from rscapi.models.transaction_franchise import TransactionFranchise
 from rscapi.models.transaction_response import TransactionResponse
 from rscapi.models.transaction_team import TransactionTeam
 
-# Appended, so a checkout named in PYTHONPATH is imported instead of this one.
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 
 from rsc.enums import Status
@@ -154,9 +153,11 @@ def make_member(guild: MagicMock, variant: Variant) -> MagicMock:
     member.guild = guild
     member.display_name = variant.nick
     member.mention = f"<@{MEMBER_ID}>"
-    member.roles = [guild.default_role, *(role for role in guild.roles if role.name in variant.held)]
     member.requests = 0
-    type(member).top_role = property(lambda self: max(self.roles, key=lambda role: role.position))
+    held = {role for role in guild.roles if role.name in variant.held}
+    # Discord lists a member's roles lowest first, with @everyone at the bottom.
+    type(member).roles = property(lambda self: sorted([guild.default_role, *held], key=lambda role: role.position))
+    type(member).top_role = property(lambda self: self.roles[-1])
 
     def refuse() -> None:
         raise discord.Forbidden(MagicMock(status=403, reason="Forbidden"), "Missing Permissions")
@@ -169,13 +170,12 @@ def make_member(guild: MagicMock, variant: Variant) -> MagicMock:
     async def remove_roles(*removed: MagicMock, reason: str | None = None) -> None:
         for role in removed:
             change_role(role)
-            member.roles = [held for held in member.roles if held is not role]
+            held.discard(role)
 
     async def add_roles(*added: MagicMock, reason: str | None = None) -> None:
         for role in added:
             change_role(role)
-            if role not in member.roles:
-                member.roles = [*member.roles, role]
+            held.add(role)
 
     async def edit(*, nick: str = MISSING, roles: Iterable[MagicMock] = MISSING, reason: str | None = None) -> None:
         member.requests += 1
@@ -183,13 +183,13 @@ def make_member(guild: MagicMock, variant: Variant) -> MagicMock:
         if nick is not MISSING and nickname_refused:
             refuse()
         if roles is not MISSING:
-            listed = list(roles)
+            listed = set(roles)
             if guild.default_role in listed:
                 raise ValueError("The request listed @everyone as a role.")
-            held = member.roles[1:]
-            if any(role >= guild.me.top_role for role in (*listed, *held) if (role in listed) != (role in held)):
+            if any(role >= guild.me.top_role for role in listed ^ held):
                 refuse()
-            member.roles = [guild.default_role, *listed]
+            held.clear()
+            held.update(listed)
         if nick is not MISSING:
             member.display_name = nick
 
