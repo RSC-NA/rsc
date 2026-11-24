@@ -1,6 +1,8 @@
 from dataclasses import dataclass, field
 
+import discord
 from pydantic import BaseModel, Field
+from rscapi.models.franchise_list import FranchiseList
 
 from rsc.enums import MatchFormat, MatchType
 
@@ -29,6 +31,22 @@ class DepartedReport:
     labels: dict[int, str] = field(default_factory=dict)
     total_active: int = 0
     aborted: str | None = None
+
+
+@dataclass
+class NonPlayingSyncPlan:
+    """Everything `/admin sync nonplaying` would change, worked out before anyone confirms.
+
+    Right after a season rolls over, everyone who has not declared intent has no
+    league player in the new season, so a run can strip hundreds of active
+    players. Staff see `losing_prefix` before confirming for that reason.
+    """
+
+    total: int = 0
+    targets: list[tuple[discord.Member, FranchiseList | None]] = field(default_factory=list)
+    losing_prefix: list[discord.Member] = field(default_factory=list)
+    agm_role: discord.Role | None = None
+    stale_agms: list[discord.Member] = field(default_factory=list)
 
 
 class CreateMatchData(BaseModel):

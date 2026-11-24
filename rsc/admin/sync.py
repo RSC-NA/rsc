@@ -5,9 +5,11 @@ from typing import TYPE_CHECKING
 import discord
 from discord.ext import tasks
 from redbot.core import app_commands
+from rscapi.models.franchise_list import FranchiseList
 
 from rsc import const
 from rsc.admin import AdminMixIn
+from rsc.admin.models import NonPlayingSyncPlan
 from rsc.admin.views import ConfirmSyncView
 from rsc.embeds import (  # YellowEmbed,
     ApiExceptionErrorEmbed,
@@ -40,6 +42,16 @@ log = GuildLogAdapter(logger)
 
 
 SYNC_LOOP_TIME = time(hour=7)  # 7:00 AM UTC
+
+# Mentions listed in one embed field. Discord caps a field value at 1024 characters.
+MENTION_LIST_LIMIT = 20
+
+
+def _mention_list(members: list[discord.Member]) -> str:
+    listed = "\n".join(m.mention for m in members[:MENTION_LIST_LIMIT])
+    if len(members) > MENTION_LIST_LIMIT:
+        listed += f"\n...and {len(members) - MENTION_LIST_LIMIT} more"
+    return listed
 
 
 class AdminSyncMixIn(AdminMixIn):
@@ -732,47 +744,79 @@ class AdminSyncMixIn(AdminMixIn):
         if not guild:
             return
 
-        sync_view = ConfirmSyncView(interaction)
-        await sync_view.prompt()
+        # Working out the plan pages every API member, far past the 3 second
+        # window to answer the command.
+        await interaction.response.defer(ephemeral=True)
 
+        # The AGM map is fetched once for the whole run. Non-playing AGMs are the
+        # population this command exists to get right, and they have no league
+        # player to read a franchise off.
         try:
             log.debug("Fetching tiers", guild=guild)
             tiers: list[Tier] = await self.tiers(guild)
-        except RscException as exc:
-            return await interaction.edit_original_response(embed=ApiExceptionErrorEmbed(exc))
-
-        # Wait for confirmation
-        await sync_view.wait()
-
-        if not sync_view.result:
-            return
-
-        default_roles = await self._get_welcome_roles(guild)
-
-        # Fetched once for the whole run. Non-playing AGMs are the population
-        # this command exists to get right, and they have no league player to
-        # read a franchise off.
-        try:
             log.debug("Fetching AGMs", guild=guild)
             agm_map = await self.agm_franchise_map(guild)
+            plan = await self._plan_nonplaying_sync(guild, agm_map)
         except RscException as exc:
             return await interaction.edit_original_response(embed=ApiExceptionErrorEmbed(exc))
         except RuntimeError as exc:
             return await interaction.edit_original_response(embed=ExceptionErrorEmbed(exc_message=str(exc)))
 
-        log.debug("Fetching all members", guild=guild)
-        total = 0
+        preview = self._nonplaying_preview_embed(plan)
+        if dryrun:
+            preview.set_footer(text="Dry run. Nothing was changed.")
+            return await interaction.edit_original_response(embed=preview)
+
+        sync_view = ConfirmSyncView(interaction)
+        await sync_view.prompt(embed=preview)
+        await sync_view.wait()
+        if not sync_view.result:
+            return
+
+        default_roles = await self._get_welcome_roles(guild)
         synced = 0
-        # Members the loop below already reconciled, so the reverse sweep does
-        # not spend a second Discord call removing a role it just removed.
-        reconciled: set[int] = set()
+        for m, agm_franchise in plan.targets:
+            log.debug("Syncing non-playing member: %s (%d)", m.display_name, m.id, guild=guild)
+            try:
+                await update_nonplaying_discord(
+                    guild=guild, member=m, tiers=tiers, default_roles=default_roles, agm_franchise=agm_franchise
+                )
+            except (ValueError, AttributeError) as exc:
+                await interaction.followup.send(content=str(exc), ephemeral=True)
+            synced += 1
+
+        if plan.agm_role:
+            for m in plan.stale_agms:
+                log.info("Removing stale AGM role: %s (%d)", m.display_name, m.id, guild=guild)
+                await m.remove_roles(plan.agm_role, reason="API has no AGM record for this member")
+
+        log.debug("Total Members: %d", plan.total, guild=guild)
+        log.debug("Total Synced: %d", synced, guild=guild)
+
+        embed = BlueEmbed(
+            title="Non-Playing Sync",
+            description="All non-playing RSC members have been synced.",
+        )
+        if plan.stale_agms:
+            embed.add_field(
+                name=f"Stale AGM Roles ({len(plan.stale_agms)})",
+                value=f"Removed the AGM role from:\n{_mention_list(plan.stale_agms)}",
+                inline=False,
+            )
+        embed.set_footer(text=f"Synced {synced}/{plan.total} RSC member(s).")
+        await interaction.edit_original_response(embed=embed)
+
+    async def _plan_nonplaying_sync(self, guild: discord.Guild, agm_map: dict[int, FranchiseList]) -> NonPlayingSyncPlan:
+        """Work out who `/admin sync nonplaying` would change. Reads only."""
+        plan = NonPlayingSyncPlan()
         api_member: RSCMember
         async for api_member in self.paged_members(guild=guild, per_page=250):
-            total += 1
+            plan.total += 1
             if not api_member.discord_id:
                 continue
 
-            # Check if member in league
+            # A member with no league player in the current season lands here,
+            # which right after a rollover is everyone yet to declare intent.
             lp = await self.league_player_from_member(guild, api_member)
             if lp and lp.status != Status.DROPPED:
                 continue
@@ -781,20 +825,11 @@ class AdminSyncMixIn(AdminMixIn):
             if not m:
                 continue
 
-            log.debug("Syncing non-playing member: %s (%d)", m.display_name, m.id, guild=guild)
-
-            if not dryrun:
-                try:
-                    await update_nonplaying_discord(
-                        guild=guild, member=m, tiers=tiers, default_roles=default_roles, agm_franchise=agm_map.get(m.id)
-                    )
-                    reconciled.add(m.id)
-                except (ValueError, AttributeError) as exc:
-                    await interaction.followup.send(content=str(exc), ephemeral=True)
-            synced += 1
-
-        log.debug("Total Members: %d", total, guild=guild)
-        log.debug("Total Synced: %d", synced, guild=guild)
+            agm_franchise = agm_map.get(m.id)
+            plan.targets.append((m, agm_franchise))
+            # `update_nonplaying_discord` strips any prefix from a non-AGM.
+            if agm_franchise is None and await utils.get_prefix(m):
+                plan.losing_prefix.append(m)
 
         # Reverse sweep.
         #
@@ -805,38 +840,42 @@ class AdminSyncMixIn(AdminMixIn):
         #
         # Only the role comes off here. A stale AGM who is still a rostered
         # player legitimately keeps their franchise role and prefix; `/admin sync
-        # players` owns the rest of their state.
-        stale_agms: list[discord.Member] = []
+        # players` owns the rest of their state. Members the loop syncs are left
+        # out, since `update_nonplaying_discord` already removes their role.
         try:
-            agm_role = await utils.get_agm_role(guild)
+            plan.agm_role = await utils.get_agm_role(guild)
         except ValueError as exc:
             log.warning(f"Skipping stale AGM sweep: {exc}", guild=guild)
         else:
-            for m in agm_role.members:
-                if m.id in agm_map or m.id in reconciled:
-                    continue
-                log.info("Removing stale AGM role: %s (%d)", m.display_name, m.id, guild=guild)
-                stale_agms.append(m)
-                if not dryrun:
-                    await m.remove_roles(agm_role, reason="API has no AGM record for this member")
+            planned = {m.id for m, _ in plan.targets}
+            plan.stale_agms = [m for m in plan.agm_role.members if m.id not in agm_map and m.id not in planned]
 
+        return plan
+
+    @staticmethod
+    def _nonplaying_preview_embed(plan: NonPlayingSyncPlan) -> discord.Embed:
         embed = BlueEmbed(
-            title="Non-Playing Sync",
-            description="All non-playing RSC members have been synced.",
+            title="Non-Playing Sync Preview",
+            description=(
+                f"**{len(plan.targets)}** of {plan.total} RSC member(s) have no league player this season, or were dropped. "
+                "Each will lose their tier and player roles, and anyone who is not an AGM also loses their franchise role "
+                "and the prefix on their nickname.\n\n"
+                "Right after a season rolls over, this includes every player who has not declared intent yet."
+            ),
         )
-        if stale_agms:
-            verb = "Would remove" if dryrun else "Removed"
-            # Capped so a large sweep cannot blow the 1024 character field limit.
-            listed = "\n".join(m.mention for m in stale_agms[:20])
-            if len(stale_agms) > 20:
-                listed += f"\n...and {len(stale_agms) - 20} more"
+        if plan.losing_prefix:
             embed.add_field(
-                name=f"Stale AGM Roles ({len(stale_agms)})",
-                value=f"{verb} the AGM role from:\n{listed}",
+                name=f"Losing a Prefix ({len(plan.losing_prefix)})",
+                value=_mention_list(plan.losing_prefix),
                 inline=False,
             )
-        embed.set_footer(text=f"Synced {synced}/{total} RSC member(s).")
-        await interaction.edit_original_response(embed=embed)
+        if plan.stale_agms:
+            embed.add_field(
+                name=f"Stale AGM Roles ({len(plan.stale_agms)})",
+                value=f"Would remove the AGM role from:\n{_mention_list(plan.stale_agms)}",
+                inline=False,
+            )
+        return embed
 
     @_sync.command(
         name="players",
