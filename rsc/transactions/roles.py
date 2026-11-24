@@ -14,6 +14,7 @@ from rscapi.models.transaction_response import TransactionResponse
 from rsc import const
 from rsc.enums import Status
 from rsc.logs import GuildLogAdapter
+from rsc.transactions import planner
 from rsc.transactions.writer import NicknameRefusedError, apply_member_changes
 from rsc.utils import utils
 
@@ -288,81 +289,106 @@ async def agm_franchise_role(guild: discord.Guild, franchise: Franchise | Franch
     return await utils.franchise_role_from_name(guild, franchise.name)
 
 
-async def apply_agm_role_updates(
-    guild: discord.Guild,
-    member: discord.Member,
-    agm_franchise: Franchise | FranchiseList | None,
-    roles_to_add: list[discord.Role],
-    roles_to_remove: list[discord.Role],
-    manage_franchise_roles: bool = True,
-) -> discord.Role | None:
-    """Fold the AGM reconcile into a caller's pending role batch.
+async def status_role(guild: discord.Guild, name: str) -> discord.Role:
+    """The guild's role for a name the planner gives. A name that is not a status role is a tier role or a tier FA role."""
+    match name:
+        case const.LEAGUE_ROLE:
+            return await utils.get_league_role(guild)
+        case const.FORMER_PLAYER_ROLE:
+            return await utils.get_former_player_role(guild)
+        case const.FREE_AGENT_ROLE:
+            return await utils.get_free_agent_role(guild)
+        case const.PERM_FA_ROLE:
+            return await utils.get_permfa_role(guild)
+        case const.PERM_FA_WAITING_ROLE:
+            return await utils.get_permfa_waiting_role(guild)
+        case const.DRAFT_ELIGIBLE:
+            return await utils.get_draft_eligible_role(guild)
+        case const.IR_ROLE:
+            return await utils.get_ir_role(guild)
+        case const.CAPTAIN_ROLE:
+            return await utils.get_captain_role(guild)
+        case const.AGM_ROLE:
+            return await utils.get_agm_role(guild)
+        case _ if name.endswith("FA"):
+            return await utils.get_tier_fa_role(guild, name.removesuffix("FA"))
+        case _:
+            return await utils.get_tier_role(guild, name)
 
-    The API is authoritative in both directions: an AGM who lost the role gets
-    it back, and a member the API no longer lists loses it. Merging into the
-    caller's lists rather than writing directly keeps this to the one bulk
-    add/remove pair every sync helper already makes.
 
-    `manage_franchise_roles` is False on the rostered path, where the roster --
-    not franchise staff -- owns the franchise role and the nickname prefix.
+def member_state(member: discord.Member) -> planner.MemberState:
+    return planner.MemberState(frozenset(role.name for role in member.roles), member.display_name)
 
-    Returns the AGM's franchise role when one was resolved.
-    """
-    agm_role = await utils.get_agm_role(guild)
 
-    if not agm_franchise:
-        if agm_role in member.roles:
-            roles_to_remove.append(agm_role)
-        return None
+def league_player_row(league_player: LeaguePlayer, team: planner.Seat | None = None) -> planner.Row:
+    return planner.Row(
+        name=league_player.player.name,
+        tier=(league_player.tier.name or None) if league_player.tier else None,
+        captain=bool(league_player.captain),
+        team=team,
+    )
 
-    if agm_role not in member.roles and agm_role not in roles_to_add:
-        roles_to_add.append(agm_role)
 
-    # Added here rather than left to the caller's role sweep: those sweeps only
-    # iterate roles the member already has, so an AGM who lost the league role
-    # would never get it back.
-    league_role = await utils.get_league_role(guild)
-    if league_role not in member.roles and league_role not in roles_to_add:
-        roles_to_add.append(league_role)
+async def agm_seat(
+    guild: discord.Guild, member: discord.Member, franchise: Franchise | FranchiseList | None
+) -> tuple[planner.Seat | None, list[discord.Role]]:
+    """An AGM's seat on their franchise, and the franchise role when the guild has one."""
+    if not franchise:
+        return None, []
 
-    if not manage_franchise_roles:
-        return None
-
-    # Resolved before anything is stripped so a lookup failure leaves the
-    # member's existing franchise roles alone instead of orphaning them.
-    agm_frole = await agm_franchise_role(guild, agm_franchise)
-    if not agm_frole:
+    role = await agm_franchise_role(guild, franchise)
+    if not role:
         log.error(
-            f"Unable to find franchise role for AGM {member.display_name} ({member.id}) on {agm_franchise.name}. "
+            f"Unable to find franchise role for AGM {member.display_name} ({member.id}) on {franchise.name}. "
             "Leaving their existing franchise roles in place.",
             guild=guild,
         )
-        return None
-
-    if agm_frole not in member.roles and agm_frole not in roles_to_add:
-        roles_to_add.append(agm_frole)
-
-    # An AGM keeps the one franchise role the API gives them and loses every other.
-    for r in await utils.franchise_role_list_from_disord_member(member):
-        if r != agm_frole and r not in roles_to_remove:
-            roles_to_remove.append(r)
-
-    return agm_frole
+    return planner.Seat(role.name if role else None, franchise.prefix, agm_rsc_name(member, franchise)), [role] if role else []
 
 
-async def keep_only_agm_franchise_role(
-    guild: discord.Guild,
-    member: discord.Member,
-    agm_franchise: Franchise | FranchiseList | None,
-    roles_to_add: list[discord.Role],
-    roles_to_remove: list[discord.Role],
+async def role_changes(
+    guild: discord.Guild, member: discord.Member, plan: planner.Plan, resolved: Iterable[discord.Role] = ()
+) -> tuple[list[discord.Role], list[discord.Role]]:
+    """The roles to remove and to add so the member holds exactly the plan's roles.
+
+    `resolved` holds roles the caller already has. A role to add that is not
+    among them is looked up in the guild, which raises `ValueError` when the
+    guild does not have it.
+    """
+    held = {role.name for role in member.roles}
+    known = {role.name: role for role in resolved}
+    remove = [role for role in member.roles if role.name not in plan.roles]
+    add = [known.get(name) or await status_role(guild, name) for name in sorted(plan.roles - held)]
+    return remove, add
+
+
+async def send_changes(
+    member: discord.Member, remove: list[discord.Role], add: list[discord.Role], nickname: planner.Rename | planner.StripPrefix
 ) -> None:
-    if agm_franchise:
-        await apply_agm_role_updates(
-            guild=guild, member=member, agm_franchise=agm_franchise, roles_to_add=roles_to_add, roles_to_remove=roles_to_remove
-        )
-    else:
-        roles_to_remove.extend(await utils.franchise_role_list_from_disord_member(member))
+    if isinstance(nickname, planner.Rename):
+        await apply_roles_and_name(member, remove=remove, add=add, name=nickname.name, prefix=nickname.prefix)
+        return
+
+    new_nick = await utils.remove_prefix(member)
+    if new_nick == member.display_name:
+        await apply_member_changes(member, remove=remove, add=add)
+        return
+
+    if len(new_nick) > 32 or not new_nick:
+        await apply_member_changes(member, remove=remove, add=add)
+        if new_nick:
+            raise ValueError(f"Discord name is too long: {len(new_nick)} characters")
+        raise ValueError(f"Error changing name. Empty or <1 characters: {member.mention}")
+
+    await apply_member_changes(member, remove=remove, add=add, nick=new_nick)
+
+
+async def sync_to_plan(guild: discord.Guild, member: discord.Member, plan: planner.Plan, resolved: Iterable[discord.Role] = ()) -> None:
+    remove, add = await role_changes(guild, member, plan, resolved)
+    try:
+        await send_changes(member, remove, add, plan.nickname)
+    except NicknameRefusedError as exc:
+        log.warning(f"Unable to update nickname {member.display_name} ({member.id}): {exc}")
 
 
 async def update_nonplaying_discord(
@@ -386,108 +412,27 @@ async def update_nonplaying_discord(
     Keyword only and deliberately not defaulted: a call site that forgets it
     should fail loudly rather than quietly strip someone's AGM state.
     """
-    # Bulk remove/add to help avoid rate limit
-    roles_to_remove: list[discord.Role] = []
-    roles_to_add: list[discord.Role] = []
-
-    is_agm = agm_franchise is not None
-
-    await apply_agm_role_updates(
-        guild=guild,
-        member=member,
-        agm_franchise=agm_franchise,
-        roles_to_add=roles_to_add,
-        roles_to_remove=roles_to_remove,
+    agm, resolved = await agm_seat(guild, member, agm_franchise)
+    welcome = default_roles or []
+    plan = planner.plan_member(
+        planner.NoRow.NON_PLAYING,
+        member_state(member),
+        agm=agm,
+        tiers=[tier.name for tier in tiers],
+        welcome=[role.name for role in welcome],
     )
+    if not agm_franchise:
+        return await sync_to_plan(guild, member, plan, welcome)
 
-    # Remove any old franchise role if it exists. The AGM case is handled above,
-    # which keeps the one franchise role the API gives them.
-    if not is_agm:
-        roles_to_remove.extend(await utils.franchise_role_list_from_disord_member(member))
-
-    for r in member.roles:
-        # Find tier roles
-        for tier in tiers:
-            if r in roles_to_remove:
-                continue
-
-            if r.name.replace("FA", "").lower() == tier.name.lower():
-                roles_to_remove.append(r)
-
-        # All player roles
-        match r.name:
-            case const.LEAGUE_ROLE:
-                # Don't remove league role if AGM. The add case is handled above
-                # so that an AGM missing the role also gets it back.
-                if not is_agm:
-                    roles_to_remove.append(r)
-            case const.FREE_AGENT_ROLE:
-                roles_to_remove.append(r)
-            case const.IR_ROLE:
-                roles_to_remove.append(r)
-            case const.PERM_FA_ROLE:
-                roles_to_remove.append(r)
-            case const.DRAFT_ELIGIBLE:
-                roles_to_remove.append(r)
-            # case const.DEV_LEAGUE_ROLE:
-            #     roles_to_remove.append(r)
-            case const.CAPTAIN_ROLE:
-                roles_to_remove.append(r)
-            case const.SUBBED_OUT_ROLE:
-                roles_to_remove.append(r)
-            case const.PERM_FA_WAITING_ROLE:
-                roles_to_remove.append(r)
-
-    # Default Roles
-    if default_roles:
-        for r in default_roles:
-            if r not in member.roles:
-                roles_to_add.append(r)  # noqa: PERF401
-
-    # Determine Former Player by prefix. An AGM keeps a franchise prefix as
-    # staff, not as a leftover from playing, so it says nothing about them.
-    if not is_agm and await utils.get_prefix(member):
-        former_player_role = await utils.get_former_player_role(guild)
-        if former_player_role not in member.roles:
-            roles_to_add.append(former_player_role)
-
-    # Update nickname
-    if agm_franchise:
-        # Restore the franchise prefix rather than merely leaving it alone: an
-        # AGM whose prefix was stripped has no other path back to it.
-        #
-        # ValueError is swallowed alongside a refused nickname because the roles
-        # are already written when either is raised. `/transactions retire` does
-        # not wrap this call, so letting a 32 character nickname raise would
-        # report the whole retire as failed after the API mutation had gone through.
-        try:
-            log.debug(f"Restoring AGM prefix ({member.id}): {agm_franchise.prefix}", guild=guild)
-            await apply_roles_and_name(
-                member,
-                remove=roles_to_remove,
-                add=roles_to_add,
-                name=agm_rsc_name(member, agm_franchise),
-                prefix=agm_franchise.prefix,
-            )
-        except (NicknameRefusedError, ValueError) as exc:
-            log.error(f"Unable to restore AGM nickname {member.display_name} ({member.id}): {exc}", guild=guild)
-        return
-
-    new_nick = await utils.remove_prefix(member)
-    if new_nick == member.display_name:
-        await apply_member_changes(member, remove=roles_to_remove, add=roles_to_add)
-        return
-
-    if len(new_nick) > 32 or not new_nick:
-        await apply_member_changes(member, remove=roles_to_remove, add=roles_to_add)
-        if new_nick:
-            raise ValueError(f"Discord name is too long: {len(new_nick)} characters")
-        raise ValueError(f"Error changing name. Empty or <1 characters: {member.mention}")
-
+    remove, add = await role_changes(guild, member, plan, [*resolved, *welcome])
+    # ValueError is swallowed alongside a refused nickname because the roles
+    # are already written when either is raised. `/transactions retire` does
+    # not wrap this call, so letting a 32 character nickname raise would
+    # report the whole retire as failed after the API mutation had gone through.
     try:
-        await apply_member_changes(member, remove=roles_to_remove, add=roles_to_add, nick=new_nick)
-    except NicknameRefusedError as exc:
-        log.warning(f"Unable to update nickname {member.display_name} ({member.id}): {exc}")
+        await send_changes(member, remove, add, plan.nickname)
+    except (NicknameRefusedError, ValueError) as exc:
+        log.error(f"Unable to restore AGM nickname {member.display_name} ({member.id}): {exc}", guild=guild)
 
 
 async def update_nonplaying_gm_discord(
@@ -502,83 +447,19 @@ async def update_nonplaying_gm_discord(
     if franchise.gm.discord_id != player.id:
         raise ValueError(f"{player.display_name} ({player.id}) is not the GM of {franchise.name}.")
 
-    roles_to_remove: list[discord.Role] = []
-    roles_to_add: list[discord.Role] = []
-
-    # Remove old tier roles and tier FA role
-    if tiers:
-        for r in player.roles:
-            for tier in tiers:
-                if r in roles_to_remove:
-                    continue
-
-                if r.name.endswith("FA") or r.name.lower() == tier.name.lower():
-                    roles_to_remove.append(r)
-
-    # Remove Spectator
-    spec_role = await utils.get_spectator_role(guild)
-    if spec_role in player.roles:
-        roles_to_remove.append(spec_role)
-
-    # Remove Former Player
-    former_role = await utils.get_former_player_role(guild)
-    if former_role in player.roles:
-        roles_to_remove.append(former_role)
-
-    # PermFA role
-    permfa_role = await utils.get_permfa_role(guild)
-    if permfa_role in player.roles:
-        roles_to_remove.append(permfa_role)
-
-    # FA Role:
-    fa_role = await utils.get_free_agent_role(guild)
-    if fa_role in player.roles:
-        roles_to_remove.append(fa_role)
-
-    # Draft Eligible role
-    de_role = await utils.get_draft_eligible_role(guild)
-    if de_role in player.roles:
-        roles_to_remove.append(de_role)
-
-    # League Role
-    league_role = await utils.get_league_role(guild)
-    if league_role not in player.roles:
-        roles_to_add.append(league_role)
-
-    # Remove Captain
-    captain_role = await utils.get_captain_role(guild)
-    if captain_role in player.roles:
-        roles_to_remove.append(captain_role)
-
-    # A franchise's GM cannot also be one of its AGMs -- the API rejects it -- so
-    # a leftover AGM role here is stale.
-    agm_role = await utils.get_agm_role(guild)
-    if agm_role in player.roles:
-        roles_to_remove.append(agm_role)
-
-    # Add franchise role
     frole = await utils.franchise_role_from_model(guild, franchise=franchise)
-    if frole and frole not in player.roles:
-        roles_to_add.append(frole)
-    elif not frole:
-        raise ValueError(f"New franchise role not found for {player.display_name} ({player.id})")
-
-    # Remove any old franchise role if it exists
-    old_froles = await utils.franchise_role_list_from_disord_member(player)
-    if old_froles:
-        # Don't remove current franchise if present
-        if frole in old_froles:
-            old_froles.remove(frole)
-        roles_to_remove.extend(old_froles)
-
+    plan = planner.plan_member(
+        planner.NoRow.NON_PLAYING_GM,
+        member_state(player),
+        gm=planner.Seat(frole.name, franchise.prefix, franchise.gm.rsc_name),
+        tiers=[tier.name for tier in tiers],
+    )
     if not franchise.gm.rsc_name:
-        await apply_member_changes(player, remove=roles_to_remove, add=roles_to_add)
+        remove, add = await role_changes(guild, player, plan, [frole])
+        await apply_member_changes(player, remove=remove, add=add)
         raise ValueError("Franchise GM has no name in API...")
 
-    try:
-        await apply_roles_and_name(player, remove=roles_to_remove, add=roles_to_add, name=franchise.gm.rsc_name, prefix=franchise.prefix)
-    except NicknameRefusedError as exc:
-        log.warning(f"Unable to update nickname {player.display_name} ({player.id}): {exc}")
+    await sync_to_plan(guild, player, plan, [frole])
 
 
 async def update_unsigned_gm_discord(
@@ -594,90 +475,16 @@ async def update_unsigned_gm_discord(
     if not league_player.tier:
         raise AttributeError(f"{player.display_name} ({player.id}) has no tier data.")
 
-    roles_to_remove: list[discord.Role] = []
-    roles_to_add: list[discord.Role] = []
-
-    # Remove old tier roles and tier FA role
-    if tiers:
-        for r in player.roles:
-            for tier in tiers:
-                if r in roles_to_remove:
-                    continue
-
-                if r.name.endswith("FA") or (r.name.lower() == tier.name.lower() and r.name.lower() != league_player.tier.name.lower()):
-                    roles_to_remove.append(r)
-
-    # Remove Spectator
-    spec_role = await utils.get_spectator_role(guild)
-    if spec_role in player.roles:
-        roles_to_remove.append(spec_role)
-
-    # Remove Former Player
-    former_role = await utils.get_former_player_role(guild)
-    if former_role in player.roles:
-        roles_to_remove.append(former_role)
-
-    # PermFA role
-    permfa_role = await utils.get_permfa_role(guild)
-    if permfa_role in player.roles:
-        roles_to_remove.append(permfa_role)
-
-    # FA Role:
-    fa_role = await utils.get_free_agent_role(guild)
-    if fa_role in player.roles:
-        roles_to_remove.append(fa_role)
-
-    # Draft Eligible role
-    de_role = await utils.get_draft_eligible_role(guild)
-    if de_role in player.roles:
-        roles_to_remove.append(de_role)
-
-    # League Role
-    league_role = await utils.get_league_role(guild)
-    if league_role not in player.roles:
-        roles_to_add.append(league_role)
-
-    # Remove Captain
-    captain_role = await utils.get_captain_role(guild)
-    if captain_role in player.roles:
-        roles_to_remove.append(captain_role)
-
-    # IR Role
-    ir_role = await utils.get_ir_role(guild)
-    if ir_role in player.roles:
-        roles_to_remove.append(ir_role)
-
-    # Verify player has tier role
     tier_role = await utils.get_tier_role(guild, name=league_player.tier.name)
-    if not tier_role:
-        raise ValueError(f"Tier role not found: {league_player.tier.name}")
-
-    if tier_role not in player.roles:
-        roles_to_add.append(tier_role)
-
-    # Add franchise role
     frole = await utils.franchise_role_from_model(guild, franchise=franchise)
-    if frole and frole not in player.roles:
-        # Add franchise role if it's not already there
-        if frole not in player.roles:
-            roles_to_add.append(frole)
-    elif not frole:
-        raise ValueError(f"New franchise role not found for {player.display_name} ({player.id})")
-
-    # Remove any old franchise role if it exists
-    old_froles = await utils.franchise_role_list_from_disord_member(player)
-    if old_froles:
-        # Don't remove current franchise if present
-        if frole in old_froles:
-            old_froles.remove(frole)
-        roles_to_remove.extend(old_froles)
-
-    try:
-        await apply_roles_and_name(
-            player, remove=roles_to_remove, add=roles_to_add, name=league_player.player.name, prefix=franchise.prefix
-        )
-    except NicknameRefusedError as exc:
-        log.warning(f"Unable to update nickname {player.display_name} ({player.id}): {exc}")
+    plan = planner.plan_member(
+        Status.UNSIGNED_GM,
+        member_state(player),
+        row=league_player_row(league_player),
+        gm=planner.Seat(frole.name, franchise.prefix),
+        tiers=[tier.name for tier in tiers],
+    )
+    await sync_to_plan(guild, player, plan, [tier_role, frole])
 
 
 async def update_rostered_discord(
@@ -700,117 +507,40 @@ async def update_rostered_discord(
     if not league_player.team.franchise:
         raise AttributeError(f"{player.display_name} ({player.id}) has no franchise data.")
 
-    # Do not sync dropped players
-    if league_player.status == Status.DROPPED:
-        return
-
-    roles_to_remove: list[discord.Role] = []
-    roles_to_add: list[discord.Role] = []
-
-    # AGM role only. The roster owns the franchise role and the prefix here, so
-    # a rostered AGM already has both -- but the AGM role itself still has to
-    # track the API, since nothing else reconciles it for a rostered member.
-    await apply_agm_role_updates(
-        guild=guild,
-        member=player,
-        agm_franchise=agm_franchise,
-        roles_to_add=roles_to_add,
-        roles_to_remove=roles_to_remove,
-        manage_franchise_roles=False,
-    )
-
-    # Remove old tier roles and tier FA role on discord.Member
-    if tiers:
-        for r in player.roles:
-            for tier in tiers:
-                if r in roles_to_remove:
-                    continue
-
-                if r.name.endswith("FA") or (r.name.lower() == tier.name.lower() and r.name.lower() != league_player.tier.name.lower()):
-                    roles_to_remove.append(r)
-
-    # Remove Spectator
-    spec_role = await utils.get_spectator_role(guild)
-    if spec_role in player.roles:
-        roles_to_remove.append(spec_role)
-
-    # Remove Former Player
-    former_role = await utils.get_former_player_role(guild)
-    if former_role in player.roles:
-        roles_to_remove.append(former_role)
-
-    # PermFA role
-    permfa_role = await utils.get_permfa_role(guild)
-    if permfa_role in player.roles:
-        roles_to_remove.append(permfa_role)
-
-    # IR
-    #
-    # `league_player.status`, not `player.status`: `player` is a discord.Member,
-    # whose `status` is online/idle/offline and never equals a league Status. As
-    # written before, the IR role was never added and always removed -- which hit
-    # AGM IR members in particular.
-    ir_role = await utils.get_ir_role(guild)
-    if league_player.status in [Status.IR, Status.AGMIR] and ir_role not in player.roles:
-        roles_to_add.append(ir_role)
-    elif ir_role in player.roles:
-        roles_to_remove.append(ir_role)
-
-    # FA Role:
-    fa_role = await utils.get_free_agent_role(guild)
-    if fa_role in player.roles:
-        roles_to_remove.append(fa_role)
-
-    # Draft Eligible role
-    de_role = await utils.get_draft_eligible_role(guild)
-    if de_role in player.roles:
-        roles_to_remove.append(de_role)
-
-    # League Role
-    league_role = await utils.get_league_role(guild)
-    if league_role not in player.roles:
-        roles_to_add.append(league_role)
-
-    # Captain
-    captain_role = await utils.get_captain_role(guild)
-    if league_player.captain and captain_role not in player.roles:
-        roles_to_add.append(captain_role)
-    elif not league_player.captain and captain_role in player.roles:
-        roles_to_remove.append(captain_role)
-
-    # Add franchise role
     frole = await utils.franchise_role_from_league_player(guild, league_player)
-    if frole and frole not in player.roles:
-        # Add franchise role if it's not already there
-        if frole not in player.roles:
-            roles_to_add.append(frole)
-    elif not frole:
-        raise ValueError(f"New franchise role not found for {player.display_name} ({player.id})")
+    plan = planner.plan_member(
+        Status(league_player.status),
+        member_state(player),
+        row=league_player_row(league_player, planner.Seat(frole.name, league_player.team.franchise.prefix)),
+        # The roster owns the franchise role and the tag here, so an AGM's seat only brings the AGM role.
+        agm=planner.Seat(None, agm_franchise.prefix) if agm_franchise else None,
+        tiers=[tier.name for tier in tiers],
+    )
+    await sync_to_plan(guild, player, plan, [frole])
 
-    # Remove any old franchise role if it exists
-    old_froles = await utils.franchise_role_list_from_disord_member(player)
-    if old_froles:
-        # Don't remove current franchise if present
-        if frole in old_froles:
-            old_froles.remove(frole)
-        roles_to_remove.extend(old_froles)
 
-    # PermFA Waiting
-    permfa_waiting_role = await utils.get_permfa_waiting_role(guild)
-    if permfa_waiting_role in player.roles:
-        roles_to_remove.append(permfa_waiting_role)
+async def sync_unsigned_player(
+    guild: discord.Guild,
+    player: discord.Member,
+    league_player: LeaguePlayer,
+    tiers: list[Tier],
+    agm_franchise: Franchise | FranchiseList | None,
+    devleague: bool = False,
+) -> None:
+    agm, resolved = await agm_seat(guild, player, agm_franchise)
+    dev_league_role = discord.utils.get(guild.roles, name=const.DEV_LEAGUE_ROLE) if devleague else None
+    if dev_league_role:
+        resolved.append(dev_league_role)
 
-    # Verify player has tier role
-    tier_role = await utils.get_tier_role(guild, name=league_player.tier.name)
-    if tier_role and tier_role not in player.roles:
-        roles_to_add.append(tier_role)
-
-    try:
-        await apply_roles_and_name(
-            player, remove=roles_to_remove, add=roles_to_add, name=league_player.player.name, prefix=league_player.team.franchise.prefix
-        )
-    except NicknameRefusedError as exc:
-        log.warning(f"Unable to update nickname {player.display_name} ({player.id}): {exc}")
+    plan = planner.plan_member(
+        Status(league_player.status),
+        member_state(player),
+        row=league_player_row(league_player),
+        agm=agm,
+        tiers=[tier.name for tier in tiers],
+        devleague=dev_league_role is not None,
+    )
+    await sync_to_plan(guild, player, plan, resolved)
 
 
 async def update_free_agent_discord(
@@ -828,91 +558,7 @@ async def update_free_agent_discord(
     if not league_player.tier:
         raise AttributeError(f"{player.display_name} ({player.id}) has no tier data.")
 
-    roles_to_remove: list[discord.Role] = []
-    roles_to_add: list[discord.Role] = []
-
-    # Remove old tier roles and tier FA role on discord.Member
-    if tiers:
-        for r in player.roles:
-            for tier in tiers:
-                if r in roles_to_remove:
-                    continue
-
-                if (
-                    r.name.replace("FA", "").lower() == tier.name.lower()
-                    and r.name.replace("FA", "").lower() != league_player.tier.name.lower()
-                ):
-                    roles_to_remove.append(r)
-
-    await keep_only_agm_franchise_role(guild, player, agm_franchise, roles_to_add, roles_to_remove)
-
-    # Remove Spectator
-    spec_role = await utils.get_spectator_role(guild)
-    if spec_role in player.roles:
-        roles_to_remove.append(spec_role)
-
-    # Remove Former Player
-    former_role = await utils.get_former_player_role(guild)
-    if former_role in player.roles:
-        roles_to_remove.append(former_role)
-
-    # League Role:
-    league_role = await utils.get_league_role(guild)
-    if league_role not in player.roles and league_role not in roles_to_add:
-        roles_to_add.append(league_role)
-
-    # IR Role
-    ir_role = await utils.get_ir_role(guild)
-    if ir_role in player.roles:
-        roles_to_remove.append(ir_role)
-
-    # Remove captain
-    captain_role = await utils.get_captain_role(guild)
-    if captain_role in player.roles:
-        roles_to_remove.append(captain_role)
-
-    # Update tier role, handle promotion case
-    tier_role = await utils.get_tier_role(guild, league_player.tier.name)
-    if tier_role not in player.roles:
-        roles_to_add.append(tier_role)
-
-    # Free agent roles
-    if league_player.status == Status.FREE_AGENT:
-        fa_role = await utils.get_free_agent_role(guild)
-        if fa_role not in player.roles:
-            roles_to_add.append(fa_role)
-    elif league_player.status == Status.PERM_FA:
-        fa_role = await utils.get_permfa_role(guild)
-        if fa_role not in player.roles:
-            roles_to_add.append(fa_role)
-
-    # Tier FA role
-    tier_fa_role = await utils.get_tier_fa_role(guild, league_player.tier.name)
-    if tier_fa_role not in player.roles:
-        roles_to_add.append(tier_fa_role)
-
-    # Dev League
-    if devleague:
-        dev_league_role = discord.utils.get(guild.roles, name=const.DEV_LEAGUE_ROLE)
-        if dev_league_role and dev_league_role not in player.roles:
-            roles_to_add.append(dev_league_role)
-
-    # PermFA Waiting
-    permfa_waiting_role = await utils.get_permfa_waiting_role(guild)
-    if permfa_waiting_role in player.roles:
-        roles_to_remove.append(permfa_waiting_role)
-
-    if agm_franchise:
-        prefix = agm_franchise.prefix
-    elif league_player.status == Status.PERM_FA:
-        prefix = "PFA"
-    else:
-        prefix = "FA"
-
-    try:
-        await apply_roles_and_name(player, remove=roles_to_remove, add=roles_to_add, name=league_player.player.name, prefix=prefix)
-    except NicknameRefusedError as exc:
-        log.warning(f"Unable to update nickname {player.display_name} ({player.id}): {exc}")
+    await sync_unsigned_player(guild, player, league_player, tiers, agm_franchise, devleague)
 
 
 async def update_draft_eligible_discord(
@@ -927,88 +573,10 @@ async def update_draft_eligible_discord(
     if league_player.status != Status.DRAFT_ELIGIBLE:
         raise ValueError(f"{player.display_name} ({player.id}) is not draft eligible.")
 
-    roles_to_remove: list[discord.Role] = []
-    roles_to_add: list[discord.Role] = []
-
-    # Remove old tier roles and tier FA role on discord.Member
-    if tiers and league_player.tier and league_player.tier.name:
-        for r in player.roles:
-            for tier in tiers:
-                if r in roles_to_remove:
-                    continue
-
-                if r.name.replace("FA", "").lower() == tier.name.lower() and r.name.lower() != league_player.tier.name.lower():
-                    roles_to_remove.append(r)
-    elif tiers:
+    if tiers and not (league_player.tier and league_player.tier.name):
         log.warning(f"{player.display_name} ({player.id}) has no tier data.", guild=guild)
-        for r in player.roles:
-            for tier in tiers:
-                if r.name.replace("FA", "").lower() == tier.name.lower():
-                    roles_to_remove.append(r)  # noqa: PERF401
 
-    await keep_only_agm_franchise_role(guild, player, agm_franchise, roles_to_add, roles_to_remove)
-
-    # Remove Spectator
-    spec_role = await utils.get_spectator_role(guild)
-    if spec_role in player.roles:
-        roles_to_remove.append(spec_role)
-
-    # Remove Former Player
-    former_role = await utils.get_former_player_role(guild)
-    if former_role in player.roles:
-        roles_to_remove.append(former_role)
-
-    # League Role:
-    league_role = await utils.get_league_role(guild)
-    if league_role not in player.roles and league_role not in roles_to_add:
-        roles_to_add.append(league_role)
-
-    # PermFA Role:
-    permfa_role = await utils.get_permfa_role(guild)
-    if permfa_role in player.roles:
-        roles_to_remove.append(permfa_role)
-
-    # Remove captain
-    captain_role = await utils.get_captain_role(guild)
-    if captain_role in player.roles:
-        roles_to_remove.append(captain_role)
-
-    # Update tier role, handle promotion case
-    if league_player.tier and league_player.tier.name:
-        tier_role = await utils.get_tier_role(guild, league_player.tier.name)
-        if tier_role not in player.roles:
-            roles_to_add.append(tier_role)
-
-    # IR Role
-    ir_role = await utils.get_ir_role(guild)
-    if ir_role in player.roles:
-        roles_to_remove.append(ir_role)
-
-    # Free agent roles
-    fa_role = await utils.get_free_agent_role(guild)
-    if fa_role in player.roles:
-        roles_to_remove.append(fa_role)
-
-    permfa_waiting_role = await utils.get_permfa_waiting_role(guild)
-    if permfa_waiting_role in player.roles:
-        roles_to_remove.append(permfa_waiting_role)
-
-    # Draft Eligible
-    de_role = await utils.get_draft_eligible_role(guild)
-    if de_role not in player.roles:
-        roles_to_add.append(de_role)
-
-    # Dev League
-    if devleague:
-        dev_league_role = discord.utils.get(guild.roles, name=const.DEV_LEAGUE_ROLE)
-        if dev_league_role and dev_league_role not in player.roles:
-            roles_to_add.append(dev_league_role)
-
-    prefix = agm_franchise.prefix if agm_franchise else "DE"
-    try:
-        await apply_roles_and_name(player, remove=roles_to_remove, add=roles_to_add, name=league_player.player.name, prefix=prefix)
-    except NicknameRefusedError as exc:
-        log.warning(f"Unable to update nickname {player.display_name} ({player.id}): {exc}")
+    await sync_unsigned_player(guild, player, league_player, tiers, agm_franchise, devleague)
 
 
 async def update_permfa_waiting_discord(
@@ -1022,71 +590,7 @@ async def update_permfa_waiting_discord(
     if league_player.status != Status.PERMFA_W:
         raise ValueError(f"{player.display_name} ({player.id}) is not a permfa in waiting...")
 
-    roles_to_remove: list[discord.Role] = []
-    roles_to_add: list[discord.Role] = []
-
-    # PermFA waiting should have no tier roles yet
-    if tiers:
-        for r in player.roles:
-            for tier in tiers:
-                if r in roles_to_remove:
-                    continue
-
-                if r.name.replace("FA", "").lower() == tier.name.lower():
-                    roles_to_remove.append(r)
-
-    await keep_only_agm_franchise_role(guild, player, agm_franchise, roles_to_add, roles_to_remove)
-
-    # Remove Spectator
-    spec_role = await utils.get_spectator_role(guild)
-    if spec_role in player.roles:
-        roles_to_remove.append(spec_role)
-
-    # Remove Former Player
-    former_role = await utils.get_former_player_role(guild)
-    if former_role in player.roles:
-        roles_to_remove.append(former_role)
-
-    # League Role:
-    league_role = await utils.get_league_role(guild)
-    if league_role not in player.roles and league_role not in roles_to_add:
-        roles_to_add.append(league_role)
-
-    # IR Role
-    ir_role = await utils.get_ir_role(guild)
-    if ir_role in player.roles:
-        roles_to_remove.append(ir_role)
-
-    # Remove captain
-    captain_role = await utils.get_captain_role(guild)
-    if captain_role in player.roles:
-        roles_to_remove.append(captain_role)
-
-    # Free agent roles
-    fa_role = await utils.get_free_agent_role(guild)
-    if fa_role in player.roles:
-        roles_to_remove.append(fa_role)
-
-    # Draft Eligible
-    de_role = await utils.get_draft_eligible_role(guild)
-    if de_role in player.roles:
-        roles_to_remove.append(de_role)
-
-    # PermFA role:
-    permfa_role = await utils.get_permfa_role(guild)
-    if permfa_role in player.roles:
-        roles_to_remove.append(permfa_role)
-
-    # Add PermFA Waiting role
-    permfa_waiting_role = await utils.get_permfa_waiting_role(guild)
-    if permfa_waiting_role not in player.roles:
-        roles_to_add.append(permfa_waiting_role)
-
-    prefix = agm_franchise.prefix if agm_franchise else "PFW"
-    try:
-        await apply_roles_and_name(player, remove=roles_to_remove, add=roles_to_add, name=league_player.player.name, prefix=prefix)
-    except NicknameRefusedError as exc:
-        log.warning(f"Unable to update nickname {player.display_name} ({player.id}): {exc}")
+    await sync_unsigned_player(guild, player, league_player, tiers, agm_franchise)
 
 
 async def update_league_player_discord(
