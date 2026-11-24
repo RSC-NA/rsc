@@ -186,7 +186,7 @@ The module also reads settings owned by other modules:
 
 ## Background work
 
-- **Daily Discord role sync** (`sync_discord_roles`, [sync.py](../../rsc/admin/sync.py)). A `tasks.loop` at 07:00 UTC. For every member with an effective league player row, it re-applies roles, nickname, Dev League role and AGM franchise state with `update_league_player_discord`. When Discord refuses the change for one member, the loop logs a warning that names the member and goes on to the next. **It only runs for guild `395806681994493964`, the `NIGHTLY_GUILD_ID` constant.** It restarts itself if it crashes.
+- **Daily Discord role sync** (`sync_discord_roles`, [sync.py](../../rsc/admin/sync.py)). A `tasks.loop` at 07:00 UTC. For every member with an effective league player row, it re-applies roles, nickname, Dev League role and AGM franchise state with `update_league_player_discord`. When Discord refuses the change for one member, the loop logs a warning that names the member and goes on to the next. It ends with a `Sync summary.` log line (see *Sync summary line* below). **It only runs for guild `395806681994493964`, the `NIGHTLY_GUILD_ID` constant.** It restarts itself if it crashes.
 - **Daily departed-player audit** (`retire_audit_loop`, [retire.py](../../rsc/admin/retire.py)). A `tasks.loop` at 09:00 UTC. For every guild that has the audit on, the API configured and an events channel set, it posts a report of active league players who are no longer in the server. It only reports and never retires. It restarts itself if it crashes.
 - **PermFA poll close timers** ([permfa_poll.py](../../rsc/admin/permfa_poll.py)). These are one-off `asyncio` tasks rather than a loop: one per open poll, sleeping until the deadline. At expiry, or after `/admin permfa close`, a sweep edits every poll DM to show the final answer and remove the buttons, pausing 1 second between edits. `setup()` re-arms the timers on each start, and sweeps straight away any poll that expired while the bot was down. `cog_unload` cancels them.
 - **Persistent activity check view.** On startup, `setup_persistent_activity_check` re-attaches `InactiveCheckView` to the stored `ActivityCheckMsgId`, so the channel buttons keep working after a restart. If `#inactivity-check` no longer exists, it clears the stored ID instead.
@@ -262,6 +262,13 @@ All role and nickname changes go through `rsc.transactions.roles` (`update_leagu
   4. After that end date the older row holds only while sign-ups are open, and not after the member declared "not returning".
 
   A member with no row after these steps is non-playing. So a member with an active older row becomes non-playing only after that row's season has ended, and then only after a declared "not returning" or when sign-ups close.
+- *Sync summary line.* The daily role sync and `/admin sync players`, `nonplaying`, `member`, `freeagent` and `drafteligible` each log one INFO line when they end, also when they end with an error. An example:
+
+  ```
+  [RSC 3v3] Sync summary. kind=players visited=369 changed=12 requests={'remove_role': 9, 'add_role': 14, 'edit': 6} failed=1 api_s=4.210 discord_s=31.774 elapsed_s=37.102
+  ```
+
+  `kind` is `nightly` or the command's name. `visited` counts the server members the run looked at, on a dry run too. `changed` counts the members it sent at least one Discord request for. `requests` counts Discord requests by type: one for each role removed, one for each role added, and one `edit` for each nickname change. `failed` counts the members a request raised for, so a member whose roles applied and whose nickname Discord refused is in both `changed` and `failed`. `api_s` is the time spent waiting on RSC API reads, `discord_s` the time spent in those Discord requests, and `elapsed_s` the whole run without the wait for the confirm button. Progress bar edits and other replies are in `elapsed_s` only. A command that staff decline at the prompt still logs a line, with `visited=0`. The counting lives in [writer.py](../../rsc/transactions/writer.py) in [transactions](./transactions.md).
 - *AGM add and remove* change the API before touching Discord, so a failure leaves Discord untouched and the command can simply be re-run. `add_agm` is idempotent.
 
 ## Gotchas

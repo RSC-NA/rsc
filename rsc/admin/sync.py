@@ -1,6 +1,8 @@
+import functools
 import logging
+from collections.abc import Callable, Coroutine
 from datetime import time
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Concatenate, ParamSpec, TypeVar
 
 import discord
 from discord.ext import tasks
@@ -28,6 +30,7 @@ from rsc.transactions.roles import (
     update_nonplaying_discord,
     update_nonplaying_gm_discord,
 )
+from rsc.transactions.writer import SyncKind, api_pages, api_read, apply_member_changes, member_visited, sync_run, waiting_for_staff
 from rsc.utils import images, utils
 from rsc.views import CancelView
 
@@ -42,6 +45,23 @@ log = GuildLogAdapter(logger)
 
 SYNC_LOOP_TIME = time(hour=7)  # 7:00 AM UTC
 NIGHTLY_GUILD_ID = 395806681994493964
+
+Cog = TypeVar("Cog")
+Options = ParamSpec("Options")
+Reply = TypeVar("Reply")
+SyncCommand = Callable[Concatenate[Cog, discord.Interaction, Options], Coroutine[Any, Any, Reply]]
+
+
+def logs_sync_summary(kind: SyncKind) -> Callable[[SyncCommand[Cog, Options, Reply]], SyncCommand[Cog, Options, Reply]]:
+    def decorator(command: SyncCommand[Cog, Options, Reply]) -> SyncCommand[Cog, Options, Reply]:
+        @functools.wraps(command)
+        async def run(self: Cog, interaction: discord.Interaction, *args: Options.args, **kwargs: Options.kwargs) -> Reply:
+            with sync_run(kind, interaction.guild):
+                return await command(self, interaction, *args, **kwargs)
+
+        return run
+
+    return decorator
 
 
 class AdminSyncMixIn(AdminMixIn):
@@ -63,89 +83,91 @@ class AdminSyncMixIn(AdminMixIn):
             if guild.id != NIGHTLY_GUILD_ID:
                 continue
 
-            # Get list of all tiers
-            try:
-                log.debug("Fetching tiers", guild=guild)
-                tiers: list[Tier] = await self.tiers(guild)
-            except RscException as exc:
-                # `tiers` is read unconditionally below, so this must skip the
-                # guild rather than fall through to an UnboundLocalError.
-                log.exception("Error fetching tiers. Skipping guild.", guild=guild, exc_info=exc)
-                continue
-
-            # One request answers AGM membership for the whole league. Resolving
-            # it per member would be a full franchise list each time.
-            try:
-                log.debug("Fetching AGMs", guild=guild)
-                agm_map = await self.agm_franchise_map(guild)
-            except (RscException, RuntimeError) as exc:
-                log.exception("Error fetching AGMs. Skipping guild.", guild=guild, exc_info=exc)
-                continue
-
-            log.debug("Fetching league players", guild=guild)
-            total = 0
-            synced = 0
-            api_player: LeaguePlayer
-
-            # Rostered
-            async for api_player in self.effective_players(guild):
-                total += 1
-                if not api_player.player.discord_id:
+            with sync_run(SyncKind.NIGHTLY, guild):
+                # Get list of all tiers
+                try:
+                    log.debug("Fetching tiers", guild=guild)
+                    tiers: list[Tier] = await api_read(self.tiers(guild))
+                except RscException as exc:
+                    # `tiers` is read unconditionally below, so this must skip the
+                    # guild rather than fall through to an UnboundLocalError.
+                    log.exception("Error fetching tiers. Skipping guild.", guild=guild, exc_info=exc)
                     continue
 
-                m = guild.get_member(api_player.player.discord_id)
-                if not m:
-                    if api_player.status not in [Status.DROPPED, Status.FORMER]:
+                # One request answers AGM membership for the whole league. Resolving
+                # it per member would be a full franchise list each time.
+                try:
+                    log.debug("Fetching AGMs", guild=guild)
+                    agm_map = await api_read(self.agm_franchise_map(guild))
+                except (RscException, RuntimeError) as exc:
+                    log.exception("Error fetching AGMs. Skipping guild.", guild=guild, exc_info=exc)
+                    continue
+
+                log.debug("Fetching league players", guild=guild)
+                total = 0
+                synced = 0
+                api_player: LeaguePlayer
+
+                # Rostered
+                async for api_player in api_pages(self.effective_players(guild)):
+                    total += 1
+                    if not api_player.player.discord_id:
+                        continue
+
+                    m = guild.get_member(api_player.player.discord_id)
+                    if not m:
+                        if api_player.status not in [Status.DROPPED, Status.FORMER]:
+                            log.warning(
+                                "League player not in guild: %d",
+                                api_player.player.discord_id,
+                                guild=guild,
+                            )
+                        continue
+
+                    franchise = None
+                    if api_player.status == Status.UNSIGNED_GM:
+                        # Get Franchise information
+                        flist = await api_read(self.franchises(guild=guild, gm_discord_id=m.id))
+                        if not flist:
+                            log.error("Unsigned GM has no franchise in API: %s (%d)", m.display_name, m.id, guild=guild)
+                            continue
+                        franchise = flist.pop(0)
+
+                    add_devleague_role = await self.should_get_devleague_role(m)
+                    log.debug(f"Add Dev League Role: {add_devleague_role}")
+
+                    log.debug("Syncing Player: %s (%d)", m.display_name, m.id, guild=guild)
+                    synced += 1
+                    member_visited()
+                    try:
+                        await update_league_player_discord(
+                            guild=guild,
+                            player=m,
+                            league_player=api_player,
+                            franchise=franchise,
+                            tiers=tiers,
+                            devleague=add_devleague_role,
+                            agm_franchise=agm_map.get(m.id),
+                        )
+                    except DiscordNameTooLong as exc:
+                        # The roles are already applied at this point, only the
+                        # nickname was skipped. An API name nobody can fit in 32
+                        # characters is not a bug, so log it without a traceback.
                         log.warning(
-                            "League player not in guild: %d",
-                            api_player.player.discord_id,
+                            "Unable to update nickname for %s (%d): %s",
+                            m.display_name,
+                            m.id,
+                            exc,
                             guild=guild,
                         )
-                    continue
+                    except (ValueError, AttributeError) as exc:
+                        log.exception("Error syncing player: %s (%d)", m.display_name, m.id, guild=guild, exc_info=exc)
+                    except discord.HTTPException as exc:
+                        log.warning("Discord refused the sync of %s (%d): %s", m.display_name, m.id, exc, guild=guild)
 
-                franchise = None
-                if api_player.status == Status.UNSIGNED_GM:
-                    # Get Franchise information
-                    flist = await self.franchises(guild=guild, gm_discord_id=m.id)
-                    if not flist:
-                        log.error("Unsigned GM has no franchise in API: %s (%d)", m.display_name, m.id, guild=guild)
-                        continue
-                    franchise = flist.pop(0)
-
-                add_devleague_role = await self.should_get_devleague_role(m)
-                log.debug(f"Add Dev League Role: {add_devleague_role}")
-
-                log.debug("Syncing Player: %s (%d)", m.display_name, m.id, guild=guild)
-                synced += 1
-                try:
-                    await update_league_player_discord(
-                        guild=guild,
-                        player=m,
-                        league_player=api_player,
-                        franchise=franchise,
-                        tiers=tiers,
-                        devleague=add_devleague_role,
-                        agm_franchise=agm_map.get(m.id),
-                    )
-                except DiscordNameTooLong as exc:
-                    # The roles are already applied at this point, only the
-                    # nickname was skipped. An API name nobody can fit in 32
-                    # characters is not a bug, so log it without a traceback.
-                    log.warning(
-                        "Unable to update nickname for %s (%d): %s",
-                        m.display_name,
-                        m.id,
-                        exc,
-                        guild=guild,
-                    )
-                except (ValueError, AttributeError) as exc:
-                    log.exception("Error syncing player: %s (%d)", m.display_name, m.id, guild=guild, exc_info=exc)
-                except discord.HTTPException as exc:
-                    log.warning("Discord refused the sync of %s (%d): %s", m.display_name, m.id, exc, guild=guild)
-
-            log.debug("Total Players: %d", total, guild=guild)
-            log.debug("Total Synced: %d", synced, guild=guild)
-            log.info("Finished syncing league players", guild=guild)
+                log.debug("Total Players: %d", total, guild=guild)
+                log.debug("Total Synced: %d", synced, guild=guild)
+                log.info("Finished syncing league players", guild=guild)
 
     @sync_discord_roles.before_loop
     async def before_sync_discord_roles(self):
@@ -731,6 +753,7 @@ class AdminSyncMixIn(AdminMixIn):
         description="Sync all non playing discord members. (Long Execution Time)",
     )
     @app_commands.describe(dryrun="Do not modify any users.")
+    @logs_sync_summary(SyncKind.NONPLAYING)
     async def _sync_nonplaying_cmd(self, interaction: discord.Interaction, dryrun: bool = False):
         guild = interaction.guild
         if not guild:
@@ -741,12 +764,13 @@ class AdminSyncMixIn(AdminMixIn):
 
         try:
             log.debug("Fetching tiers", guild=guild)
-            tiers: list[Tier] = await self.tiers(guild)
+            tiers: list[Tier] = await api_read(self.tiers(guild))
         except RscException as exc:
             return await interaction.edit_original_response(embed=ApiExceptionErrorEmbed(exc))
 
         # Wait for confirmation
-        await sync_view.wait()
+        with waiting_for_staff():
+            await sync_view.wait()
 
         if not sync_view.result:
             return
@@ -758,7 +782,7 @@ class AdminSyncMixIn(AdminMixIn):
         # read a franchise off.
         try:
             log.debug("Fetching AGMs", guild=guild)
-            agm_map = await self.agm_franchise_map(guild)
+            agm_map = await api_read(self.agm_franchise_map(guild))
         except RscException as exc:
             return await interaction.edit_original_response(embed=ApiExceptionErrorEmbed(exc))
         except RuntimeError as exc:
@@ -766,7 +790,7 @@ class AdminSyncMixIn(AdminMixIn):
 
         try:
             log.debug("Fetching league players", guild=guild)
-            playing = {row.player.discord_id async for row in self.effective_players(guild) if is_playing(row)}
+            playing = {row.player.discord_id async for row in api_pages(self.effective_players(guild)) if is_playing(row)}
         except RscException as exc:
             return await interaction.edit_original_response(embed=ApiExceptionErrorEmbed(exc))
 
@@ -783,7 +807,7 @@ class AdminSyncMixIn(AdminMixIn):
         # not spend a second Discord call removing a role it just removed.
         reconciled: set[int] = set()
         api_member: RSCMember
-        async for api_member in self.paged_members(guild=guild, per_page=250):
+        async for api_member in api_pages(self.paged_members(guild=guild, per_page=250)):
             total += 1
             if not api_member.discord_id:
                 continue
@@ -796,6 +820,7 @@ class AdminSyncMixIn(AdminMixIn):
                 continue
 
             log.debug("Syncing non-playing member: %s (%d)", m.display_name, m.id, guild=guild)
+            member_visited()
 
             if not dryrun:
                 try:
@@ -831,8 +856,9 @@ class AdminSyncMixIn(AdminMixIn):
                     continue
                 log.info("Removing stale AGM role: %s (%d)", m.display_name, m.id, guild=guild)
                 stale_agms.append(m)
+                member_visited()
                 if not dryrun:
-                    await m.remove_roles(agm_role, reason="API has no AGM record for this member")
+                    await apply_member_changes(m, remove=[agm_role], reason="API has no AGM record for this member")
 
         embed = BlueEmbed(
             title="Non-Playing Sync",
@@ -857,6 +883,7 @@ class AdminSyncMixIn(AdminMixIn):
         description="Sync all league players in discord members. (Long Execution Time)",
     )
     @app_commands.describe(dryrun="Do not modify any users.")
+    @logs_sync_summary(SyncKind.PLAYERS)
     async def _sync_players_cmd(self, interaction: discord.Interaction, dryrun: bool = False):
         guild = interaction.guild
         if not guild:
@@ -867,12 +894,13 @@ class AdminSyncMixIn(AdminMixIn):
 
         try:
             log.debug("Fetching tiers", guild=guild)
-            tiers: list[Tier] = await self.tiers(guild)
+            tiers: list[Tier] = await api_read(self.tiers(guild))
         except RscException as exc:
             return await interaction.edit_original_response(embed=ApiExceptionErrorEmbed(exc))
 
         # Wait for confirmation
-        await sync_view.wait()
+        with waiting_for_staff():
+            await sync_view.wait()
 
         if not sync_view.result:
             return
@@ -880,7 +908,7 @@ class AdminSyncMixIn(AdminMixIn):
         # One request for the whole run, not one per player.
         try:
             log.debug("Fetching AGMs", guild=guild)
-            agm_map = await self.agm_franchise_map(guild)
+            agm_map = await api_read(self.agm_franchise_map(guild))
         except RscException as exc:
             return await interaction.edit_original_response(embed=ApiExceptionErrorEmbed(exc))
         except RuntimeError as exc:
@@ -892,7 +920,7 @@ class AdminSyncMixIn(AdminMixIn):
         api_player: LeaguePlayer
 
         # Rostered
-        async for api_player in self.effective_players(guild):
+        async for api_player in api_pages(self.effective_players(guild)):
             total += 1
             if not api_player.player.discord_id:
                 log.warning("League player has no discord id: %d", api_player.id, guild=guild)
@@ -919,7 +947,7 @@ class AdminSyncMixIn(AdminMixIn):
             franchise = None
             if api_player.status == Status.UNSIGNED_GM:
                 # Get Franchise information
-                flist = await self.franchises(guild=guild, gm_discord_id=m.id)
+                flist = await api_read(self.franchises(guild=guild, gm_discord_id=m.id))
                 if not flist:
                     return await interaction.followup.send(
                         embed=ErrorEmbed(description=f"{m.mention} is an un-signed GM but franchise could not be found in API."),
@@ -929,6 +957,7 @@ class AdminSyncMixIn(AdminMixIn):
 
             log.debug("Syncing player: %s (%d)", m.display_name, m.id, guild=guild)
             synced += 1
+            member_visited()
             if not dryrun:
                 try:
                     await update_league_player_discord(
@@ -973,6 +1002,7 @@ class AdminSyncMixIn(AdminMixIn):
         description="Sync an individual members from the API to discord",
     )
     @app_commands.describe(member="RSC Discord member to sync")
+    @logs_sync_summary(SyncKind.MEMBER)
     async def _sync_member_cmd(self, interaction: discord.Interaction, member: discord.Member):
         guild = interaction.guild
         if not guild:
@@ -981,12 +1011,14 @@ class AdminSyncMixIn(AdminMixIn):
         await interaction.response.defer()
         try:
             default_roles = await self._get_welcome_roles(guild=guild)
-            lp = await self.effective_player(guild, member.id)
-            tiers = await self.tiers(guild)
+            lp = await api_read(self.effective_player(guild, member.id))
+            tiers = await api_read(self.tiers(guild))
             # One list answers both "are they a GM" and "are they an AGM".
-            all_franchises = await self.franchises(guild=guild)
+            all_franchises = await api_read(self.franchises(guild=guild))
         except RscException as exc:
             return await interaction.followup.send(embed=ApiExceptionErrorEmbed(exc), ephemeral=False)
+
+        member_visited()
 
         agm_franchise = next(
             (f for f in all_franchises if any(a.discord_id == member.id for a in (f.agms or []))),
@@ -1014,7 +1046,7 @@ class AdminSyncMixIn(AdminMixIn):
                 return await interaction.followup.send(embed=ExceptionErrorEmbed(exc_message=str(exc)))
         elif lp.status == Status.UNSIGNED_GM:
             # Get Franchise information
-            flist = await self.franchises(guild=guild, gm_discord_id=member.id)
+            flist = await api_read(self.franchises(guild=guild, gm_discord_id=member.id))
             if not flist:
                 return await interaction.followup.send(
                     embed=ErrorEmbed(description=f"{member.mention} is an un-signed GM but franchise could not be found in API."),
@@ -1055,6 +1087,7 @@ class AdminSyncMixIn(AdminMixIn):
         description="Sync all free agent players in discord",
     )
     @app_commands.describe(dryrun="Do not modify any users.")
+    @logs_sync_summary(SyncKind.FREE_AGENT)
     async def _sync_freeagent_cmd(self, interaction: discord.Interaction, dryrun: bool = False):
         guild = interaction.guild
         if not guild:
@@ -1062,10 +1095,11 @@ class AdminSyncMixIn(AdminMixIn):
 
         sync_view = ConfirmSyncView(interaction)
         await sync_view.prompt()
-        total_fa = await self.total_players(guild, status=Status.FREE_AGENT)
-        total_pfa = await self.total_players(guild, status=Status.PERM_FA)
-        tiers: list[Tier] = await self.tiers(guild)
-        await sync_view.wait()
+        total_fa = await api_read(self.total_players(guild, status=Status.FREE_AGENT))
+        total_pfa = await api_read(self.total_players(guild, status=Status.PERM_FA))
+        tiers: list[Tier] = await api_read(self.tiers(guild))
+        with waiting_for_staff():
+            await sync_view.wait()
 
         if not sync_view.result:
             return
@@ -1089,7 +1123,7 @@ class AdminSyncMixIn(AdminMixIn):
             )
 
         try:
-            agm_map = await self.agm_franchise_map(guild)
+            agm_map = await api_read(self.agm_franchise_map(guild))
         except RscException as exc:
             return await interaction.edit_original_response(embed=ApiExceptionErrorEmbed(exc))
         except RuntimeError as exc:
@@ -1121,7 +1155,7 @@ class AdminSyncMixIn(AdminMixIn):
 
         idx = 0
         player: LeaguePlayer
-        async for player in self.paged_players(guild, status=Status.FREE_AGENT):
+        async for player in api_pages(self.paged_players(guild, status=Status.FREE_AGENT)):
             # Check if cancelled
             if progress_view.cancelled:
                 loading_embed.title = "Sync Cancelled"
@@ -1145,6 +1179,7 @@ class AdminSyncMixIn(AdminMixIn):
                 )
                 continue
             log.debug("Syncing FA: %s", m.display_name, guild=guild)
+            member_visited()
 
             # Check if dry run
             if not dryrun:
@@ -1198,7 +1233,7 @@ class AdminSyncMixIn(AdminMixIn):
         )
         await interaction.edit_original_response(embed=loading_embed, attachments=[dFile], view=progress_view)
 
-        async for player in self.paged_players(guild, status=Status.PERM_FA):
+        async for player in api_pages(self.paged_players(guild, status=Status.PERM_FA)):
             # Check if cancelled
             if progress_view.cancelled:
                 loading_embed.title = "Sync Cancelled"
@@ -1220,6 +1255,7 @@ class AdminSyncMixIn(AdminMixIn):
                 )
                 continue
             log.debug(f"Syncing PermFA: {m.display_name}", guild=guild)
+            member_visited()
 
             # Check if dry run
             if not dryrun:
@@ -1274,6 +1310,7 @@ class AdminSyncMixIn(AdminMixIn):
         description="Sync all draft eligibile players in discord",
     )
     @app_commands.describe(dryrun="Do not modify any users.")
+    @logs_sync_summary(SyncKind.DRAFT_ELIGIBLE)
     async def _sync_drafteligible_cmd(self, interaction: discord.Interaction, dryrun: bool = False):
         guild = interaction.guild
         if not guild:
@@ -1281,9 +1318,10 @@ class AdminSyncMixIn(AdminMixIn):
 
         sync_view = ConfirmSyncView(interaction)
         await sync_view.prompt()
-        plist = [p async for p in self.paged_players(guild, status=Status.DRAFT_ELIGIBLE)]
-        tiers: list[Tier] = await self.tiers(guild)
-        await sync_view.wait()
+        plist = [p async for p in api_pages(self.paged_players(guild, status=Status.DRAFT_ELIGIBLE))]
+        tiers: list[Tier] = await api_read(self.tiers(guild))
+        with waiting_for_staff():
+            await sync_view.wait()
 
         if not sync_view.result:
             return
@@ -1307,7 +1345,7 @@ class AdminSyncMixIn(AdminMixIn):
             )
 
         try:
-            agm_map = await self.agm_franchise_map(guild)
+            agm_map = await api_read(self.agm_franchise_map(guild))
         except RscException as exc:
             return await interaction.edit_original_response(embed=ApiExceptionErrorEmbed(exc))
         except RuntimeError as exc:
@@ -1355,6 +1393,7 @@ class AdminSyncMixIn(AdminMixIn):
                 log.warning(f"Couldn't find DE in guild: {player.player.name} ({player.player.discord_id})")
                 continue
             log.debug(f"Updating DE: {m.display_name}")
+            member_visited()
 
             if not dryrun:
                 try:

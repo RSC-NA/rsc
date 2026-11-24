@@ -27,6 +27,7 @@ At **DEBUG**, the [LLM assistant](modules/llm.md) logs each full OpenAI request,
 | Is a guild configured? | `/rsc settings` in that guild: API key, URL, league, ModMail bot, time zone |
 | Did startup finish? | Log line `Finished preparing caches.` after each load or reconnect |
 | Did a guild fail setup? | Log lines `Setup Error`, `Unhandled error preparing guild`, or `has no league configured`, prefixed with the guild name |
+| Did a role sync run, and what did it do? | Log line `Sync summary.` from `red.rsc.transactions.writer`, one for each nightly run and each `/admin sync` member command. The [admin](modules/admin.md) page explains its fields |
 | Is the webhook server up? | `curl -s -o /dev/null -w '%{http_code}\n' -X POST localhost:8008/league_player_update` on the host should print `501` |
 | Is the events feed flowing? | See the [events](modules/events.md) page for its status command |
 

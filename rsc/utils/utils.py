@@ -24,6 +24,7 @@ from rsc.embeds import (
 from rsc.enums import BulkRoleAction, DiscordPermType, DiscordPermValue, TransactionType
 from rsc.exceptions import DiscordNameTooLong
 from rsc.logs import GuildLogAdapter
+from rsc.transactions.writer import apply_member_changes
 from rsc.transformers import GreedyMemberTransformer
 from rsc.types import Accolades
 from rsc.utils import filters
@@ -95,8 +96,7 @@ async def update_discord_name(member: discord.Member, name: str, prefix: str | N
         log.debug(f"Name is unchanged for {member.id}: {final}", guild=member.guild)
         return
 
-    log.debug(f"Updating {member.id} nickname to {final}", guild=member.guild)
-    await member.edit(nick=final)
+    await apply_member_changes(member, nick=final)
 
 
 async def resize_image(img_data: bytes, height: int, width: int, imgtype: str):
