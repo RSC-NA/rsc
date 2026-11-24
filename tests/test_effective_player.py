@@ -74,6 +74,29 @@ class TestPickEffectiveRow:
 
         assert pick_effective_row([old], SEASONS, S27_BEING_PLAYED, signups_open=True, not_returning=True) is old
 
+    def test_a_not_returning_free_agent_keeps_their_row_until_their_season_ends(self):
+        old = _row(S27, "FA")
+
+        assert pick_effective_row([old], SEASONS, S27_BEING_PLAYED, signups_open=True, not_returning=True) is old
+
+    def test_a_not_returning_free_agent_is_non_playing_once_their_season_has_ended(self):
+        old = _row(S27, "FA")
+
+        assert pick_effective_row([old], SEASONS, S27_ENDED, signups_open=True, not_returning=True) is None
+
+    def test_a_not_returning_dropped_member_keeps_the_dropped_row_and_stays_non_playing(self):
+        old = _row(S27, "DR")
+
+        picked = pick_effective_row([old], SEASONS, S27_BEING_PLAYED, signups_open=True, not_returning=True)
+
+        assert picked is old
+        assert not is_playing(picked)
+
+    def test_the_older_row_holds_until_its_season_ends_when_sign_ups_close_first(self):
+        old = _row(S27, "FA")
+
+        assert pick_effective_row([old], SEASONS, S27_BEING_PLAYED, signups_open=False) is old
+
     def test_a_row_in_the_only_season_read_is_the_newest_row(self):
         only = _row(S28, "DE")
 
