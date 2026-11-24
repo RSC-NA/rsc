@@ -38,11 +38,7 @@ STALE_AGM = const.AGM_ROLE
 
 # For each standing: the status roles it gives, the roles it leaves on a member who holds them, and the tag.
 ROSTERED = ({LEAGUE, "Premier", OCEAN_ROLE}, {SUBBED_OUT}, "OCE")
-FREE_AGENT = (
-    {LEAGUE, const.FREE_AGENT_ROLE, "Premier", "PremierFA"},
-    {const.PERM_FA_ROLE, const.DRAFT_ELIGIBLE, SUBBED_OUT, STALE_AGM},
-    "FA",
-)
+FREE_AGENT = ({LEAGUE, const.FREE_AGENT_ROLE, "Premier", "PremierFA"}, {SUBBED_OUT, STALE_AGM}, "FA")
 WAIVERS = (
     {LEAGUE, "Premier", "PremierFA"},
     {const.FREE_AGENT_ROLE, const.PERM_FA_ROLE, const.DRAFT_ELIGIBLE, SUBBED_OUT, STALE_AGM},
@@ -57,11 +53,7 @@ EXPECTED: dict[Status | NoRow, tuple[set[str], set[str], str | None]] = {
     Status.UNSIGNED_GM: ({LEAGUE, "Premier", OCEAN_ROLE}, {STALE_AGM, const.PERM_FA_WAITING_ROLE, SUBBED_OUT}, "OCE"),
     NoRow.NON_PLAYING_GM: ({LEAGUE, OCEAN_ROLE}, {const.IR_ROLE, const.PERM_FA_WAITING_ROLE, SUBBED_OUT}, "OCE"),
     Status.FREE_AGENT: FREE_AGENT,
-    Status.PERM_FA: (
-        {LEAGUE, const.PERM_FA_ROLE, "Premier", "PremierFA"},
-        {const.FREE_AGENT_ROLE, const.DRAFT_ELIGIBLE, SUBBED_OUT, STALE_AGM},
-        "PFA",
-    ),
+    Status.PERM_FA: ({LEAGUE, const.PERM_FA_ROLE, "Premier", "PremierFA"}, {SUBBED_OUT, STALE_AGM}, "PFA"),
     Status.WAIVERS: WAIVERS,
     Status.WAIVER_CLAIM: WAIVERS,
     Status.WAIVER_RELEASE: WAIVERS,

@@ -90,14 +90,14 @@ NON_PLAYING_GM = Rule(
 )
 FREE_AGENT = Rule(
     holds=frozenset({const.LEAGUE_ROLE, const.FREE_AGENT_ROLE}),
-    leaves=frozenset({const.PERM_FA_ROLE, const.DRAFT_ELIGIBLE, const.SUBBED_OUT_ROLE, const.AGM_ROLE}),
+    leaves=frozenset({const.SUBBED_OUT_ROLE, const.AGM_ROLE}),
     prefix="FA",
     tier=TierRoles.TIER_AND_FA,
     dev_league=True,
 )
 PERM_FA = Rule(
     holds=frozenset({const.LEAGUE_ROLE, const.PERM_FA_ROLE}),
-    leaves=frozenset({const.FREE_AGENT_ROLE, const.DRAFT_ELIGIBLE, const.SUBBED_OUT_ROLE, const.AGM_ROLE}),
+    leaves=frozenset({const.SUBBED_OUT_ROLE, const.AGM_ROLE}),
     prefix="PFA",
     tier=TierRoles.TIER_AND_FA,
     dev_league=True,
