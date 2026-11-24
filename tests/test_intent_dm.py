@@ -509,6 +509,21 @@ class TestCallbackSignupWindow:
         assert embed.description is not None
         assert str(MODMAIL_ID) in embed.description
 
+    async def test_no_season_taking_signups_reads_as_closed_not_as_a_failed_click(self, no_signup_season_lookup):
+        cog = _mock_cog()
+        cog.next_signup_season.side_effect = no_signup_season_lookup
+        interaction = _mock_interaction(cog)
+
+        await IntentDMButton(GUILD_ID, SEASON, returning=True).callback(interaction)
+
+        cog.declare_intent.assert_not_awaited()
+        interaction.followup.send.assert_not_awaited()
+        embed = _final_embed(interaction)
+        assert embed.title is not None
+        assert "Signups Are Closed" in embed.title
+        assert embed.description is not None
+        assert str(MODMAIL_ID) in embed.description
+
     async def test_no_signup_season_records_nothing(self):
         cog = _mock_cog(season=None)
         interaction = _mock_interaction(cog)

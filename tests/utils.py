@@ -64,6 +64,18 @@ def api_exception(
     return raw_api_exception(status, json.dumps(body))
 
 
+# What production sends for `GET /seasons/signup_season/` when no season in the league is taking sign-ups
+NO_SIGNUP_SEASON_BODY = json.dumps(
+    {
+        "message": "Signups are closed. No upcoming season is currently accepting signups.",
+        "extra": {},
+        "type": "NoSignupSeasonException",
+        "status_code": 404,
+        "code": "no_signup_season",
+    }
+)
+
+
 def raw_api_exception(status: int, body: str) -> ApiException:
     response = RESTResponse(SimpleNamespace(status=status, reason=HTTPStatus(status).phrase, headers={}))
     response.data = body.encode()
