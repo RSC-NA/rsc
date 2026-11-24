@@ -69,6 +69,7 @@ if TYPE_CHECKING:
     from rsc.combines.models import CombinesLobby
     from rsc.developer.recorder import ExceptionRecorder
     from rsc.events.models import EventPage, LeagueEventData
+    from rsc.franchises.franchises import FranchiseStaff
     from rsc.lobbies.runner import LobbyRunner
     from rsc.matches.views import MatchCard, PendingSeriesCard
     from rsc.utils.dm import DMHelper
@@ -303,6 +304,9 @@ class RSCMixIn(ABC):
 
     @abstractmethod
     async def agm_franchise_map(self, guild: discord.Guild) -> dict[int, FranchiseList]: ...
+
+    @abstractmethod
+    async def franchise_staff(self, guild: discord.Guild) -> "FranchiseStaff": ...
 
     # League
 

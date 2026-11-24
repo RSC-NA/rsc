@@ -684,6 +684,7 @@ def _franchise_with_agms(id, name, *agm_ids):
     f = MagicMock(spec=FranchiseList)
     f.id = id
     f.name = name
+    f.gm = None
     f.agms = [_agm_member(i) for i in agm_ids]
     return f
 
@@ -859,6 +860,7 @@ class TestAgmFranchiseMap:
         f = MagicMock(spec=FranchiseList)
         f.id = 7
         f.name = "The Ocean"
+        f.gm = None
         f.agms = None
         mixin = _create_mixin()
         mixin.franchises = AsyncMock(return_value=[f])
@@ -884,3 +886,25 @@ class TestAgmFranchiseMap:
 
         with pytest.raises(RuntimeError, match="Refusing to build an AGM map"):
             await mixin.agm_franchise_map(mock_guild)
+
+
+class TestFranchiseStaff:
+    async def test_keys_every_gm_and_agm_from_a_single_list_call(self, mock_guild):
+        ocean = _franchise_with_agms(7, "The Ocean", 111)
+        ocean.gm = _agm_member(10)
+        desert = _franchise_with_agms(9, "The Desert")
+        desert.gm = _agm_member(20)
+        mixin = _create_mixin()
+        mixin.franchises = AsyncMock(return_value=[ocean, desert])
+
+        staff = await mixin.franchise_staff(mock_guild)
+
+        assert staff.gms == {10: ocean, 20: desert}
+        assert staff.agms == {111: ocean}
+        assert mixin.franchises.await_count == 1
+
+    async def test_leaves_out_a_franchise_with_no_gm(self, mock_guild):
+        mixin = _create_mixin()
+        mixin.franchises = AsyncMock(return_value=[_franchise_with_agms(7, "The Ocean")])
+
+        assert (await mixin.franchise_staff(mock_guild)).gms == {}
